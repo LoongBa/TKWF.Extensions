@@ -43,4 +43,22 @@
   <ItemGroup>
     <PackageReference Include="MinVer" PrivateAssets="all" />
   </ItemGroup>
+
+  <!--
+    _PushToRefs: 编译后自动推送 DLL 到本仓库 build\refs\，供消费者 DLL 模式引用。
+    对齐主框架 _TKWF 的 _PushToRefs 机制（消费者经 $(TKWExtRoot)build\refs\ 引用扩展 DLL）。
+  -->
+  <Target Name="_PushToRefs" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(NoBuild)' != 'true'">
+    <PropertyGroup>
+      <_RefsDir>$(MSBuildThisFileDirectory)build\refs\</_RefsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(_RefsDir)" />
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="$(_RefsDir)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).xml"
+          DestinationFolder="$(_RefsDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(TargetDir)$(TargetName).xml')" />
+  </Target>
 </Project>

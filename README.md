@@ -33,9 +33,9 @@ _TKWF.Extensions/                     ← 本仓库
 
 ```
 _TKWF.Extensions/
-├── _Framework/               # 扩展包源码（按扩展组织）
-│   ├── Permissions/          # 权限扩展（主框架 V4.9.72 迁出候选）
-│   ├── Navigation/           # 导航扩展（主框架 V4.9.74 迁出候选）
+├── _Framework/               # 扩展包源码（按扩展组织，各扩展含自身 README + docs 使用指南）
+│   ├── Permissions/          # 权限扩展（主框架 V4.9.72 迁出候选；docs/ 含使用指南）
+│   ├── Navigation/           # 导航扩展（主框架 V4.9.74 迁出候选；docs/ 含使用指南）
 │   └── Tagging/              # 标签扩展（V4.9.79 迁出，首个独立扩展）
 │       ├── TKWF.Ext.Tagging.csproj
 │       ├── README.md         # 标签提取引擎技术规范
@@ -44,14 +44,14 @@ _TKWF.Extensions/
 │       └── *.cs              # ITagService / TagService / 流水线 / 初始化器
 ├── _Tests/                   # 扩展测试（一组扩展一个测试项目）
 │   └── Extension.Tagging.Tests/
-├── docs/                     # 扩展文档体系
+├── docs/                     # 扩展仓库级文档（跨扩展通用）
 │   ├── AGENTS.md             # Agents 路由指南
 │   ├── 目录结构与版本管理规则.md
 │   ├── 扩展规划和跟踪执行.md   # 扩展路线图 + 跟踪（README 见下）
 │   ├── adr/                  # 扩展 ADR（ADR-{扩展名称}-{title}.md，独立于主框架 ADR01-39）
 │   ├── 模板/                  # 文档模板
 │   └── 草稿/
-├── Directory.Build.props     # TKWFRoot + MinVer + 打包属性
+├── Directory.Build.props     # TKWFRoot + MinVer + 打包属性 + _PushToRefs
 ├── Directory.Packages.props  # CPM 集中包版本
 ├── .gitignore
 └── TKWF.Extensions.slnx      # 扩展解决方案（不进入主框架 slnx）

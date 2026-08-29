@@ -20,7 +20,7 @@
 | 目录怎么组织？版本怎么管理？跨仓库引用？ | `docs/目录结构与版本管理规则.md` |
 | 扩展路线图、跟踪执行状态？ | `docs/扩展规划和跟踪执行.md` |
 | 扩展机制基座（TKWFExtension/三钩子/扩展包发现）？ | 主框架 `_TKWF/docs/D17-*.md` + `ADR37-39` |
-| 某个扩展怎么用？ | `_Framework/{扩展名}/README.md` 或 `docs/G17A-*.md` / `docs/G17B-*.md`（扩展指南区） |
+| 某个扩展怎么用？ | `_Framework/{扩展名}/README.md`（Tags）；`_Framework/{扩展名}/docs/`（各扩展使用指南，如 Permissions/Navigation） |
 | 当前迭代的开发方案、审核报告？ | 各扩展独立文档（`{扩展名}-开发方案.md` / `{扩展名}-审核报告.md`） |
 | 架构决策记录（为什么选 X 不选 Y）？ | `docs/adr/` |
 | 文档模板？ | `docs/模板/` |

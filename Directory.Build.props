@@ -1,0 +1,46 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      MinVer：从最近的 git tag 自动推导版本号。
+      - git tag v4.9.6 → 版本 4.9.6
+      - v4.9.6 之后有提交 → 版本 4.9.6-preview.N
+      - 无 tag → 0.0.0-preview.N
+    -->
+    <MinVerDefaultPreReleaseIdentifiers>preview.0</MinVerDefaultPreReleaseIdentifiers>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+
+    <Authors>LoongBa.cn 龙爸出品</Authors>
+    <Company>LoongBa.cn</Company>
+
+    <!-- 输出 XML 文档文件（NuGet 包需要、IDE 智能提示需要） -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- 抑制"公共成员缺少 XML 注释"警告，不强迫为全量 API 写注释 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- NuGet 打包公共属性 -->
+    <RepositoryUrl>https://github.com/LoongBa/TKWF.Extensions</RepositoryUrl>
+    <PackageTags>TKWF;Extension;LoongBa</PackageTags>
+    <Copyright>Copyright © LoongBa.cn 2026</Copyright>
+  </PropertyGroup>
+
+  <!--
+    定义 TKWFRoot：相对路径指向主框架 _TKWF（与本仓库同级），不依赖环境变量。
+    扩展包通过 $(TKWFRoot)_Framework\... ProjectReference 引用主框架源码。
+    （对齐 DMP-Lite 的跨仓库引用模式）
+  -->
+  <PropertyGroup>
+    <TKWFRoot>$([MSBuild]::EnsureTrailingSlash('$(MSBuildThisFileDirectory)..\_TKWF\'))</TKWFRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Link="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
+    MinVer 包：编译期版本推导，不产生运行时依赖。
+    版本号由父级 Directory.Packages.props 中的 CPM 统一管理。
+  -->
+  <ItemGroup>
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

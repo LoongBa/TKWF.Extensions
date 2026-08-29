@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/_Framework/" />
+  <Folder Name="/_Framework/Tagging/">
+    <Project Path="_Framework/Tagging/TKWF.Ext.Tagging.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/" />
+  <Folder Name="/_Tests/Extension.Tagging.Tests/">
+    <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
+  </Folder>
+</Solution>

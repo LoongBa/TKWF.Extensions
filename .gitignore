@@ -1,0 +1,45 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.userosscache
+*.sln.docstates
+build/refs/
+
+# Test results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+*.ncov
+.ncprev
+junit.xml
+coverage.cobertura.xml
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+.ionide/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User-specific
+*.user
+*.suo
+*_i.c
+*_p.c
+*.nupkg
+*.snupkg
+
+# Secrets
+.env
+.env.local
+appsettings*.local.json

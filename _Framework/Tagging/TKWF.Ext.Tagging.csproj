@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Tagging</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.Tagging</PackageId>
+    <Description>TKWF 扩展：标签服务（TagService + ITagService）——从框架核心迁出（D17 模式 3）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+  </ItemGroup>
+
+  <!-- V4.9.79：单元测试访问 internal 默认实现 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Tagging.Tests" />
+  </ItemGroup>
+
+</Project>

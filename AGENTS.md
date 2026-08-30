@@ -145,6 +145,55 @@ _Tests/Extension.{扩展名}.Tests/
 └── *.cs
 ```
 
+### 扩展使用 SG1/xCodeGen（框架原生开发方式）
+
+> **实践思路**（V0.2.0 起）：扩展模块**可以**采用框架原生开发方式——引入 SG1 分析器 + xCodeGen 生成 DTO/DataService/Conditions/IDomainEntity 实现，与业务领域项目使用同一套开发模式（tkwf-entity / tkwf-service skill）。这使扩展获得自动建表、REST/GraphQL API 暴露、Dto 自动裁剪等框架能力，减少手写样板代码。
+>
+> **与"预编译库"模式的关系**：两种模式并存——简单横切扩展（如 Tagging，纯内存服务）保持预编译库；有持久化 + 管理 API 的扩展（如 Permissions V0.2.0）可升级为 SG1 原生。
+
+**csproj 接线要点**（对齐 DMP-Lite 消费模式，`$(TKWFRoot)` 定义于仓库根 `Directory.Build.props`）：
+
+```xml
+<ItemGroup>
+  <!-- ① 框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
+  <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+
+  <!-- ② SG1 分析器：用预编译 DLL（不用 ProjectReference+OutputItemType="Analyzer"——
+        Roslyn 增量缓存可能导致生成器不执行，DMP-Lite 已验证；用 build\refs 预编译 DLL 生成器稳定执行） -->
+  <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
+  <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+
+  <!-- ③ VS FastUpToDateCheck：让 VS 识别 SG 依赖（ReferenceOutputAssembly=false 不产生运行时引用） -->
+  <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+                    ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+</ItemGroup>
+
+<!-- ④ SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+<PropertyGroup>
+  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+</PropertyGroup>
+<ItemGroup>
+  <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+</ItemGroup>
+
+<!-- ⑤ xCodeGen（可选，仅 Debug 触发）：定义配置路径走 D1 集中化 -->
+<PropertyGroup>
+  <_XCG_ConfigPath>$(MSBuildProjectDirectory)\.xCodeGen\{扩展名}.xCodeGen.json</_XCG_ConfigPath>
+</PropertyGroup>
+```
+
+**实体编写要点**（按 `tkwf-entity` skill）：
+- 实体标注 `[DomainGenerateCode(UserType = nameof({扩展名}UserInfo), DefaultPageSize = 50)]`，`partial class`
+- **不手写** `IDomainEntity`/`IsFromPersistentSource`（SG1 自动生成）
+- 用 FreeSql `[Column]` 特性（`IsPrimary`/`IsIdentity`/`Position`），不用 BCL `[Key]`/`[DatabaseGenerated]`
+- 扩展自建 `{扩展名}UserInfo : SimpleUserInfo` 作为通用用户类型（扩展不知道消费方 UserInfo 类型）
+
+**注意**：
+- SG1 自诊断门禁（V4.9.15+）编译语义判断，不依赖 `TKWFRole`——扩展无需设 TKWFRole 即可接入
+- `build\refs\` 需在主框架编译后生成（`_PushToRefs` 目标自动推送）
+- 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存
+
 ---
 
 ## 变更记录
@@ -152,3 +201,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 日期 | 版本 | 变更内容 |
 |------|------|---------|
 | 2026-08-30 | v0.1.0 | 初始版本——对齐主仓库 Agents_TKWF.md 规范，适配扩展仓库独立版本/公开私有边界 |
+| 2026-08-30 | — | §8 新增「扩展使用 SG1/xCodeGen（框架原生开发方式）」实践思路（V0.2.0 起） |

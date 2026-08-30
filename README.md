@@ -44,11 +44,12 @@ _TKWF.Extensions/
 │       └── *.cs              # ITagService / TagService / 流水线 / 初始化器
 ├── _Tests/                   # 扩展测试（一组扩展一个测试项目）
 │   └── Extension.Tagging.Tests/
-├── docs/                     # 扩展仓库级文档（跨扩展通用）
+├── docs/                     # 扩展仓库级文档（公开：指南/规则/模板）
 │   ├── AGENTS.md             # Agents 路由指南
 │   ├── 目录结构与版本管理规则.md
-│   ├── 扩展规划和跟踪执行.md   # 扩展路线图 + 跟踪（README 见下）
-│   ├── adr/                  # 扩展 ADR（ADR-{扩展名称}-{title}.md，独立于主框架 ADR01-39）
+│   ├── Permissions/          # 权限扩展指南（使用指南）
+│   ├── Navigation/           # 导航扩展指南（使用指南）
+│   ├── Tagging/              # 标签扩展（文档/指南）
 │   ├── 模板/                  # 文档模板
 │   └── 草稿/
 ├── Directory.Build.props     # TKWFRoot + MinVer + 打包属性 + _PushToRefs
@@ -57,6 +58,8 @@ _TKWF.Extensions/
 └── TKWF.Extensions.slnx      # 扩展解决方案（不进入主框架 slnx）
 ```
 
+> 📦 **扩展迭代开发/ADR/总览跟踪**（内部工作产物）存放于**主框架私有仓库** `_TKWF/docs/03_扩展模块/`（不公开）；本公开仓库存**代码 + 测试 + 指南**。边界详见 `docs/目录结构与版本管理规则.md`。
+
 ---
 
 ## 快速开始（新增一个扩展包）
@@ -64,7 +67,7 @@ _TKWF.Extensions/
 1. **建项目**：`_Framework/{扩展名}/TKWF.Ext.{扩展名}.csproj`（net10.0，引用 `$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj`）
 2. **注册 slnx**：`TKWF.Extensions.slnx` 加 Folder + Project
 3. **建测试**：`_Tests/Extension.{扩展名}.Tests/`（xunit.v3，引用本仓库扩展 + 主框架测试依赖）
-4. **写文档**：`docs/扩展规划和跟踪执行.md` 登记 + 开发方案 → 审核报告 → ADR
+4. **写文档**：扩展迭代开发/ADR 登记到主框架私有 `_TKWF/docs/03_扩展模块/`（开发方案 → 审核报告 → ADR）；使用指南放本仓库 `docs/{扩展名}/`
 5. **接线**：扩展初始化器继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性（SG1 编译期发现，主框架启动时三钩子自动接线）
 
 > 详细规则见 `docs/目录结构与版本管理规则.md` + `docs/AGENTS.md`。
@@ -73,11 +76,11 @@ _TKWF.Extensions/
 
 ## 扩展规划与跟踪
 
-当前扩展进度、路线图、决策记录 → **`docs/扩展规划和跟踪执行.md`**（唯一跟踪入口）。
+扩展路线图、各扩展迭代/ADR（内部工作产物，不公开）→ **主框架私有仓库** [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](../_TKWF/docs/03_扩展模块/总览和跟踪.md)（唯一跟踪入口）。
 
 | 扩展 | 状态 | 版本 | 说明 |
 |------|:----:|------|------|
-| Tags（Tagging） | ✅ 已迁出 | v4.9.79 | 标签提取/匹配/格式化（从框架核心迁出，D17 模式 3） |
+| Tags（Tagging） | ✅ 已迁出 | v0.1.0（独立起点） | 标签提取/匹配/格式化（从框架核心迁出，D17 模式 3） |
 
 ---
 

@@ -9,7 +9,8 @@
 - 仓库：TKWF.Extensions — TKWF 业务扩展包仓库
 - 定位：`TKWF.Ext.*` 扩展（Tags/Permissions/Navigation 等）独立开发、独立版本，不进入主框架 slnx
 - 主框架：`../_TKWF/`（TKW.Framework，经 `$(TKWFRoot)` ProjectReference 引用）
-- 扩展进度：`docs/扩展规划和跟踪执行.md`
+- 扩展进度：主框架私有 `docs/03_扩展模块/总览和跟踪.md`（扩展迭代/跟踪不公开；公开仓库存代码/指南）
+- 本仓库文档：`docs/`（指南/模板/规则）
 
 ---
 
@@ -18,11 +19,10 @@
 | 遇到问题 | 去读 |
 |---------|------|
 | 目录怎么组织？版本怎么管理？跨仓库引用？ | `docs/目录结构与版本管理规则.md` |
-| 扩展路线图、跟踪执行状态？ | `docs/扩展规划和跟踪执行.md` |
+| 扩展路线图、跟踪执行状态？ | 主框架私有 `../_TKWF/docs/03_扩展模块/总览和跟踪.md` |
 | 扩展机制基座（TKWFExtension/三钩子/扩展包发现）？ | 主框架 `_TKWF/docs/D17-*.md` + `ADR37-39` |
-| 某个扩展怎么用？ | `_Framework/{扩展名}/README.md`（Tags）；`_Framework/{扩展名}/docs/`（各扩展使用指南，如 Permissions/Navigation） |
-| 当前迭代的开发方案、审核报告？ | 各扩展独立文档（`{扩展名}-开发方案.md` / `{扩展名}-审核报告.md`） |
-| 架构决策记录（为什么选 X 不选 Y）？ | `docs/adr/` |
+| 某个扩展怎么用？ | `_Framework/{扩展名}/README.md`（Tags）；`docs/{扩展名}/`（使用指南） |
+| 架构决策记录（为什么选 X 不选 Y）？ | 主框架私有 `../_TKWF/docs/03_扩展模块/{扩展名}/ADR/` |
 | 文档模板？ | `docs/模板/` |
 | 讨论中未定稿？ | `docs/草稿/` |
 

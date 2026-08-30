@@ -1,0 +1,47 @@
+{
+  "TargetProject": "..\\TKWF.Ext.Permissions.csproj",
+  "EnableSkipUnchanged": true,
+  "OutputRoot": "Generated",
+  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+
+  "Artifacts": {
+    "Entity": {
+      "Scope": "Entity",
+      "Template": "Entity.cshtml",
+      "OutputPattern": "{ClassName}.g.cs",
+      "OutputDir": "..\\Entities",
+      "SkeletonTemplate": "EntityEmpty.cshtml",
+      "SkeletonPattern": "{ClassName}.biz.cs",
+      "SkeletonDir": "..\\Entities"
+    },
+    "Dto": {
+      "Scope": "Entity",
+      "Template": "Dto.cshtml",
+      "OutputPattern": "{ClassName}Dto.g.cs",
+      "OutputDir": "..\\Entities\\DTOs",
+      "SkeletonTemplate": "DtoEmpty.cshtml",
+      "SkeletonPattern": "{ClassName}Dto.cs",
+      "SkeletonDir": "..\\Entities\\DTOs"
+    },
+    "Conditions": {
+      "Scope": "Entity",
+      "Template": "Conditions.cshtml",
+      "OutputPattern": "{ClassName}Conditions.g.cs",
+      "OutputDir": "..\\Entities\\Conditions"
+    },
+    "DataService": {
+      "Scope": "Entity",
+      "Template": "DataService.cshtml",
+      "OutputPattern": "{ClassName}DataService.g.cs",
+      "OutputDir": "..\\DataServices",
+      "SkeletonTemplate": "DataServiceEmpty.cshtml",
+      "SkeletonPattern": "{ClassName}DataService.cs",
+      "SkeletonDir": "..\\DataServices"
+    }
+  },
+
+  "CustomSettings": {
+    "EnableLogging": "true",
+    "AutoManagedFields": "Id,CreateTime,UpdateTime,IsDeleted,TenantId,UId"
+  }
+}

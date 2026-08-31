@@ -218,6 +218,18 @@ CREATE TABLE [PermissionGrant] (
 - **当前状态**：`InitializeAsync` 实现 `SeedAdminRoleName` 幂等预置（仅缺失记录插入，不覆盖既有授予/撤销）。
 - **演进方向**：预置系统权限（如 `Admin.All`）、默认角色授权映射。
 
+### 4. 后续开发项（待规划）
+
+| 项 | 说明 | 优先级 |
+|----|------|:---:|
+| **编译期权限名校验** | ADR38 D7——SG 扫描 `Define()` 字符串常量（见 §六.2） | 中 |
+| **角色→权限映射内置** | 当前 `("User", UserIdString)` 单 provider；`IPermissionStore` 可扩展角色 provider，但扩展未内置 | 中 |
+| **种子高级化** | 预置 `Admin.All` 系统权限 + 默认角色授权映射（见 §六.3） | 低 |
+| **生产建表迁移工具** | 当前仅参考 SQL；接入 FluentMigrator/EF Migrations 正式迁移（见 §五.4） | 低 |
+| **消费方集成验证** | `[GenerateController]` 生成的 REST 管理 API 需在真实消费方端到端验证（当前仅编译期 InterfaceNames 记录） | 中 |
+| **Navigation 迁出** | Navigation 依赖 Permissions，待 Permissions 稳定后迁出至扩展仓库（主框架 `总览和跟踪.md` §3.2） | 待定 |
+| **发布 tag** | V0.1.0~V0.4.0 均未打 tag——须征得同意后发布 | 高 |
+
 ---
 
 ## 七、AI Agent 协作契约 (AI Agent Prompting Guide)

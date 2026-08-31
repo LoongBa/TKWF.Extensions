@@ -1,0 +1,66 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Core.Hosting;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Hosting;
+using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Session;
+using TKW.Framework.Enumerations;
+
+namespace TKWF.Ext.Permissions.Consumer.Tests;
+
+/// <summary>
+/// V0.7.0 (W4)：消费方宿主初始化器——模拟真实消费方的 <see cref="DomainHostInitializerBase{TUserInfo}"/> 子类。
+/// <para>作用：
+/// ① SG1b 经 <c>ScanHostInitializerUserType</c> 从此类闭合泛型参数推断具体 TUser（<see cref="ConsumerUserInfo"/>），
+///    从而为扩展的 <c>[GenerateController(FromDataService=true)]</c> DataService 在消费方生成控制器；
+/// ② 消费方侧启动接线（本测试不真正跑宿主，仅借其类型存在供 SG1 编译期识别）。</para>
+/// </summary>
+public sealed class ConsumerHostInitializer : DomainHostInitializerBase<ConsumerUserInfo>
+{
+    protected override IProjectMetaContext OnRegisterInfrastructureServices(
+        IServiceCollection services, IConfiguration? configuration, IDomainHostOptions options)
+        => new ConsumerMetaContext();
+
+    protected override DomainUserHelperBase<ConsumerUserInfo> OnRegisterDomainServices(
+        IServiceCollection services, IConfiguration? configuration)
+        => new ConsumerUserHelper();
+}
+
+/// <summary>消费方最小元数据上下文（无业务实体/服务——本测试仅验证扩展控制器生成）。</summary>
+public sealed class ConsumerMetaContext : IProjectMetaContext
+{
+    public IReadOnlyList<ClassMetadata> AllMetadatas => [];
+    public IReadOnlyList<ClassMetadata> Entities => [];
+    public IReadOnlyList<ClassMetadata> Views => [];
+    public IReadOnlyList<ClassMetadata> Services => [];
+    public IReadOnlyList<ClassMetadata> DataServices => [];
+    public IReadOnlyList<ClassMetadata> Controllers => [];
+    public IReadOnlyList<ClassMetadata> Decorators => [];
+    public IReadOnlyList<EnumMetadata> Enums => [];
+    public ProjectConfiguration Configuration => null!;
+    public MetadataChangeLog ChangeLog => null!;
+    public string MetadataSchemaVersion => "1.0";
+
+    public ClassMetadata FindByClassName(string className) => null!;
+    public IEnumerable<ClassMetadata> FindByNamespace(string @namespace) => [];
+    public IEnumerable<DomainServiceRegistration> GetServiceRegistrations() => [];
+    public IEnumerable<EventHandlerRegistration> GetEventHandlerRegistrations() => [];
+    public IEnumerable<string> GetTenantScopedEntityClassNames() => [];
+    public void ValidateRuntimeGates(RuntimeGateOptions options) { }
+    public MethodMetadata? GetMethodMeta(string classFullName, string methodName) => null;
+    public IReadOnlyDictionary<string, PropertyMetadata> GetPropertyMap(string className)
+        => new Dictionary<string, PropertyMetadata>();
+}
+
+/// <summary>消费方最小用户助手（测试不实际登录，仅满足抽象方法）。</summary>
+public sealed class ConsumerUserHelper : DomainUserHelperBase<ConsumerUserInfo>
+{
+    protected override Task<ConsumerUserInfo> OnNewGuestSessionCreatedAsync(SessionInfo session)
+        => Task.FromResult(new ConsumerUserInfo("guest", "Guest"));
+
+    protected override Task<ConsumerUserInfo> OnLoginByPasswordAsync(
+        DomainUser<ConsumerUserInfo> user, string userName, string credential, EnumLoginFrom loginFrom)
+        => Task.FromResult(new ConsumerUserInfo(userName, userName));
+}

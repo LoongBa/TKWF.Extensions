@@ -82,12 +82,19 @@ namespace TKWF.Ext.Permissions
         }
 
         /// <summary>
-        /// 系统就绪后初始化（V0.4.0 G3）：幂等预置默认 admin 角色授权。
-        /// <para>经 <see cref="IServiceProviderAware.ServiceProvider"/> 解析 <see cref="PermissionGrantEntityDataService"/>，
-        /// 对 <see cref="IPermissionDefinitionRepository"/> 中的每个已定义权限，若 admin 角色尚未被授予则授予。
-        /// 幂等：仅当记录不存在时插入，绝不覆盖消费方已设置的授予/撤销。</para>
-        /// <para>通过 <see cref="PermissionOptions.SeedAdminRoleName"/> 控制种子角色；空字符串 = 禁用种子。
-        /// 未注册 <see cref="IEntityDAC{TEntity}"/>（无真实持久化）时跳过。</para>
+        /// 系统就绪后初始化（V0.4.0 G3 + V0.7.0 增强）。
+        /// <list type="bullet">
+        /// <item><b>V0.7.0 W1（自建表）</b>：扩展实体 <c>PermissionGrant</c> 不在消费方 <c>SyncTables</c> 范围
+        /// （只扫消费方 assembly）——此处复用 <see cref="ITableStructureSynchronizer"/> 对扩展自身程序集主动
+        /// <see cref="ITableStructureSynchronizer.SyncStructure"/>（幂等建表：创建缺失表/列）。未注册实现时静默跳过
+        /// （InMemory/NoOp 场景无影响）。</item>
+        /// <item><b>V0.4.0 G3 + V0.7.0 W3（种子）</b>：幂等预置默认 admin 角色 <see cref="PermissionNames.AdminAll"/>
+        /// 系统权限（替代 V0.4.0 的逐权限授予——Admin.All 拥有者对全部权限放行，未来新增权限自动覆盖）。
+        /// 幂等：仅当记录不存在时授予，绝不覆盖消费方已设置的授予/撤销。</item>
+        /// </list>
+        /// <para>经 <see cref="IServiceProviderAware.ServiceProvider"/> 解析 <see cref="PermissionGrantEntityDataService"/>
+        /// 与 <see cref="ITableStructureSynchronizer"/>。通过 <see cref="PermissionOptions.SeedAdminRoleName"/> 控制种子角色；
+        /// 空字符串 = 禁用种子。未注册 <see cref="IEntityDAC{TEntity}"/>（无真实持久化）时跳过。</para>
         /// </summary>
         public override async Task InitializeAsync()
         {
@@ -97,27 +104,25 @@ namespace TKWF.Ext.Permissions
             using var scope = ServiceProvider.CreateScope();
             var scoped = scope.ServiceProvider;
 
+            // ── V0.7.0 W1：扩展自建表（幂等，未注册 synchronizer 时跳过）──
+            // 扩展实体不在消费方 SyncTables 范围（只扫 GetType().Assembly）——主动建扩展自己的表。
+            // FreeSqlTableStructureSynchronizer.CodeFirst.SyncStructure 幂等：仅创建缺失表/列。
+            var synchronizer = scoped.GetService<ITableStructureSynchronizer>();
+            if (synchronizer != null)
+                synchronizer.SyncStructure(typeof(PermissionGrantEntity).Assembly);
+
             // 真实持久化未接线（未注册 IEntityDAC）→ 跳过种子（NoOp 模式下无意义）
             var dataService = scoped.GetService<PermissionGrantEntityDataService>();
             if (dataService is null) return;
-
-            var repository = scoped.GetService<IPermissionDefinitionRepository>();
-            if (repository is null) return;
 
             var options = scoped.GetService<IOptions<PermissionOptions>>()?.Value;
             var seedRole = options?.SeedAdminRoleName;
             if (string.IsNullOrWhiteSpace(seedRole)) return;
 
-            foreach (var definition in repository.GetAll())
-            {
-                var name = definition.Name;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-
-                // 幂等：仅当记录不存在时授予，不覆盖既有授予/撤销
-                var existing = await dataService.GetGrantAsync(name, "Role", seedRole);
-                if (existing is null)
-                    await dataService.SetGrantAsync(name, "Role", seedRole, isGranted: true);
-            }
+            // ── V0.7.0 W3：种子高级化——预置 admin 角色 Admin.All 系统权限（替代逐权限授予）──
+            var existingSystem = await dataService.GetGrantAsync(PermissionNames.AdminAll, "Role", seedRole);
+            if (existingSystem is null)
+                await dataService.SetGrantAsync(PermissionNames.AdminAll, "Role", seedRole, isGranted: true);
         }
     }
 
@@ -179,8 +184,8 @@ namespace TKWF.Ext.Permissions
 
         private async Task<bool> IsGrantedCoreAsync(string permissionName)
         {
-            // fail-closed：权限名未定义 → 拒绝
-            if (string.IsNullOrWhiteSpace(permissionName) || !_repository.Contains(permissionName))
+            // fail-closed：权限名为空 → 拒绝
+            if (string.IsNullOrWhiteSpace(permissionName))
                 return false;
 
             // 解析当前用户（ambient AOP 上下文——PermissionFilter 触发时 StaticDomainInterceptor 已 push）
@@ -189,6 +194,15 @@ namespace TKWF.Ext.Permissions
             var userId = user?.UserIdString;
             if (string.IsNullOrEmpty(userId))
                 return false; // 未认证/无用户上下文 → 拒绝（与 AuthorityFilter 未认证拦截一致）
+
+            // V0.7.0 W3：系统权限 Admin.All——用户或任一角色拥有 → 对所有权限放行
+            // （系统权限是隐式定义，不依赖贡献者声明，不走下方 _repository.Contains 校验）
+            if (await HasSystemPermissionAsync(userId, user!).ConfigureAwait(false))
+                return true;
+
+            // fail-closed：权限名未定义 → 拒绝
+            if (!_repository.Contains(permissionName))
+                return false;
 
             // 1. 用户级检查（显式授权优先）
             var userResult = await _store.GetAsync(permissionName, "User", userId).ConfigureAwait(false);
@@ -205,6 +219,25 @@ namespace TKWF.Ext.Permissions
             }
 
             return false; // 用户未授权 + 角色未授权 → fail-closed
+        }
+
+        /// <summary>
+        /// V0.7.0 W3：检查用户或任一角色是否拥有系统权限 <see cref="PermissionNames.AdminAll"/>。
+        /// 拥有者对所有已定义权限放行。用户级优先，其次任一角色。
+        /// </summary>
+        private async Task<bool> HasSystemPermissionAsync(string userId, TUserInfo user)
+        {
+            var userSystem = await _store.GetAsync(PermissionNames.AdminAll, "User", userId).ConfigureAwait(false);
+            if (userSystem.IsGranted) return true;
+
+            var roles = await _roleProvider.GetRolesAsync(user).ConfigureAwait(false);
+            foreach (var role in roles)
+            {
+                var roleSystem = await _store.GetAsync(PermissionNames.AdminAll, "Role", role).ConfigureAwait(false);
+                if (roleSystem.IsGranted) return true;
+            }
+
+            return false;
         }
     }
 

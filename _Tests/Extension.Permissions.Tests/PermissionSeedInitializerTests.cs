@@ -6,9 +6,9 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.Permissions.Tests;
 
 /// <summary>
-/// V0.4.0（G3）：PermissionExtensionInitializer.InitializeAsync 种子初始化测试。
-/// <para>覆盖要点：IServiceProviderAware 注入；幂等预置 admin 角色全权限；
-/// 仅插入缺失记录（不覆盖既有授予/撤销）；空角色名禁用种子；
+/// V0.4.0（G3）+ V0.7.0（W3）：PermissionExtensionInitializer.InitializeAsync 种子初始化测试。
+/// <para>覆盖要点：IServiceProviderAware 注入；V0.7.0 起预置 admin 角色 Admin.All 系统权限
+/// （替代 V0.4.0 的逐权限授予）；仅插入缺失记录（不覆盖既有授予/撤销）；空角色名禁用种子；
 /// 未注册 IEntityDAC（真实持久化未接线）时跳过。</para>
 /// </summary>
 public class PermissionSeedInitializerTests
@@ -50,7 +50,7 @@ public class PermissionSeedInitializerTests
     }
 
     [Fact]
-    public async Task InitializeAsync_SeedsAdminRole_AllDefinedPermissions()
+    public async Task InitializeAsync_SeedsAdminRole_AdminAllSystemPermission()
     {
         var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create", "Order.Delete");
         var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
@@ -59,12 +59,14 @@ public class PermissionSeedInitializerTests
 
         using var scope = sp.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-        var orderCreate = await svc.GetGrantAsync("Order.Create", RoleProvider, "admin");
-        var orderDelete = await svc.GetGrantAsync("Order.Delete", RoleProvider, "admin");
-        Assert.NotNull(orderCreate);
-        Assert.True(orderCreate!.IsGranted);
-        Assert.NotNull(orderDelete);
-        Assert.True(orderDelete!.IsGranted);
+        var adminAll = await svc.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
+        Assert.NotNull(adminAll);
+        Assert.True(adminAll!.IsGranted);
+
+        // V0.7.0：种子只预置 Admin.All 系统权限，不再逐权限授予
+        var grants = await svc.GetByProviderAsync(RoleProvider, "admin");
+        Assert.Single(grants);
+        Assert.Equal(PermissionNames.AdminAll, grants[0].PermissionName);
     }
 
     [Fact]
@@ -91,15 +93,15 @@ public class PermissionSeedInitializerTests
         using (var scope = sp.CreateScope())
         {
             var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-            // 消费方先显式撤销（记录已存在，IsGranted=false）
-            await svc.SetGrantAsync("Order.Create", RoleProvider, "admin", isGranted: false);
+            // 消费方先显式撤销 Admin.All（记录已存在，IsGranted=false）
+            await svc.SetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", isGranted: false);
         }
 
         await initializer.InitializeAsync();
 
         using var verifyScope = sp.CreateScope();
         var verifySvc = verifyScope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-        var grant = await verifySvc.GetGrantAsync("Order.Create", RoleProvider, "admin");
+        var grant = await verifySvc.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
         Assert.NotNull(grant);
         Assert.False(grant!.IsGranted); // 未被种子覆盖
     }

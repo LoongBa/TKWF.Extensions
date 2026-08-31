@@ -1,6 +1,6 @@
 # TKWF.Ext.Permissions 权限扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 (权限管理 Service + 种子初始化 + xCodeGen 生成) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.7.0 (建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化) | **框架**: .NET 10
 
 **核心约束**: 细粒度权限、fail-closed 安全语义、ORM 无关持久化、SG1 声明式实体
 
@@ -152,6 +152,8 @@ public class MyService
 | **`PermissionGrantEntityDto`** | 权限授予 DTO（xCodeGen 生成 record） | 内置，`IDomainDto<PermissionGrantEntity>` 实现 |
 | **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询 + REST 管理 API） | 内置，`DomainDataServiceBase<,>` 非泛型版 + `[GenerateController(FromDataService=true)]` |
 | **`PermissionOptions`** | 配置（`TKWF:Permissions` 节，含 `SeedAdminRoleName`） | 内置，SG1 `GeneratedOptionsBindings` 自动绑定 |
+| **`IRoleProvider<TUserInfo>`** | 角色提供者——为权限检查器解析用户角色列表（V0.6.0） | `DefaultRoleProvider<TUserInfo>`（内部，从 `IUserInfo.Roles` 解析；消费方可 DI 覆盖） |
+| **`PermissionNames`** | 系统权限名常量（V0.7.0，含 `Admin.All` 通配） | 内置，静态常量 |
 
 ---
 
@@ -181,10 +183,10 @@ public class MyService
 
 ### 4. 生产部署（建表迁移）
 
-`PermissionGrant` 扩展实体不在 `FreeSqlTableStructureSynchronizer` 自动建表范围（`SyncTables` 只扫消费方 assembly）——**生产部署需含建表迁移脚本**：
+`PermissionGrant` 扩展实体不在 `FreeSqlTableStructureSynchronizer` 自动建表范围（`SyncTables` 只扫消费方 assembly）——**生产部署需含建表迁移脚本**（V0.7.0 W2，随 NuGet 发布至 `scripts\PermissionGrant.sql`）：
 
 ```sql
--- PermissionGrant 表结构（参考）
+-- PermissionGrant 表结构（参考，完整脚本见包内 scripts\PermissionGrant.sql）
 CREATE TABLE [PermissionGrant] (
     [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
     [PermissionName] NVARCHAR(200) NOT NULL,
@@ -195,7 +197,7 @@ CREATE TABLE [PermissionGrant] (
 );
 ```
 
-开发期可通过 `FreeSql结构同步` lazy 建表兜底（`[Table]` + `[Column]` 特性驱动），但生产环境建议使用正式迁移工具（如 FluentMigrator、EF Core Migrations）管理表结构变更。
+**V0.7.0 W1 扩展自建表**：注册了 `ITableStructureSynchronizer`（FreeSql）时，扩展 `InitializeAsync` 会对 `PermissionGrantEntity` 所在程序集主动 `SyncStructure`（幂等建表，创建缺失表/列）——开发环境自动建表，生产环境仍建议用 `scripts\PermissionGrant.sql` 正式迁移（DBA/CI 执行）。
 
 ---
 
@@ -208,27 +210,42 @@ CREATE TABLE [PermissionGrant] (
 - **V0.4.0（G2）**：`[GenerateController(FromDataService=true)]`——消费方 SG1 自动生成 REST 管理 API（subdomain `Permissions`）。
 - **V0.4.0（G3）**：种子初始化——`PermissionOptions.SeedAdminRoleName` 幂等预置 admin 角色全权限。
 
+### 1b. V0.5.0：编译期权限名校验（已规划）
+
+- **状态**：ADR + 开发方案已编写（`PermissionNameValidatorGenerator` + `PERM001` Warning），实施待启动。
+
+### 1c. V0.6.0：角色→权限映射内置（已实施）
+
+- **新增 `IRoleProvider<TUserInfo>`**：为权限检查器解析用户角色列表；默认实现 `DefaultRoleProvider<TUserInfo>` 从 `IUserInfo.Roles` 解析（消费方可 DI 覆盖）。
+- **`PermissionChecker<TUserInfo>` 改造**：用户+角色双重检查——用户级显式授予优先；未授予时回退角色级判定（任一角色授予即通过）；fail-closed 不变。
+
+### 1d. V0.7.0：建表迁移工具 + 消费方集成验证 + Admin.All（已实施）
+
+- **W1 扩展自建表**：`InitializeAsync` 复用 `ITableStructureSynchronizer` 对扩展程序集主动 `SyncStructure`（幂等建表）。
+- **W2 SQL 迁移脚本**：`scripts\PermissionGrant.sql` 随 NuGet 发布（生产 DBA/CI 迁移）。
+- **W3 Admin.All 系统权限**：`PermissionNames.AdminAll`——用户/任一角色拥有即对所有已定义权限放行；种子预置 admin 角色 Admin.All（替代 V0.4.0 逐权限授予）。
+- **W4 消费方集成验证**：`_Tests/Extension.Permissions.Consumer` 激活 SG1b 验证控制器接口名在消费方记录 + 三钩子接线 + TryAdd 语义。
+
 ### 2. 编译期权限名校验（ADR38 D7）
 
 - **当前状态**：贡献者 `Define()` 是运行时方法，SG 看不到体内字符串 → 未知权限名只能运行时 fail-closed 兜底。
 - **演进方向**：若需编译期校验，需 SG 扩展（如 Source Generator 扫描 `Define()` 中的字符串常量）或静态分析工具。
+- **V0.5.0 状态**：ADR + 开发方案已编写（`PermissionNameValidatorGenerator` + `PERM001` Warning 诊断），实施待启动。
 
-### 3. 种子初始化（已实施，V0.4.0 G3）
+### 3. 种子初始化（V0.4.0 G3 + V0.7.0 W3）
 
-- **当前状态**：`InitializeAsync` 实现 `SeedAdminRoleName` 幂等预置（仅缺失记录插入，不覆盖既有授予/撤销）。
-- **演进方向**：预置系统权限（如 `Admin.All`）、默认角色授权映射。
+- **当前状态**：`InitializeAsync` 幂等预置 admin 角色 <see cref="PermissionNames.AdminAll"/> 系统权限（V0.7.0 起，替代 V0.4.0 的逐权限授予）——Admin.All 拥有者对全部已定义权限放行，未来新增权限自动覆盖。
+- **演进方向**：默认角色授权映射（角色→权限的种子配置化）、成员级权限（Member provider）。
 
 ### 4. 后续开发项（待规划）
 
 | 项 | 说明 | 优先级 |
 |----|------|:---:|
-| **编译期权限名校验** | ADR38 D7——SG 扫描 `Define()` 字符串常量（见 §六.2） | 中 |
-| **角色→权限映射内置** | 当前 `("User", UserIdString)` 单 provider；`IPermissionStore` 可扩展角色 provider，但扩展未内置 | 中 |
-| **种子高级化** | 预置 `Admin.All` 系统权限 + 默认角色授权映射（见 §六.3） | 低 |
-| **生产建表迁移工具** | 当前仅参考 SQL；接入 FluentMigrator/EF Migrations 正式迁移（见 §五.4） | 低 |
-| **消费方集成验证** | `[GenerateController]` 生成的 REST 管理 API 需在真实消费方端到端验证（当前仅编译期 InterfaceNames 记录） | 中 |
+| **V0.5.0 编译期权限名校验** | ADR38 D7——SG 扫描 `Define()` 字符串常量（见 §六.2） | 中 |
+| **成员级权限（Member provider）** | `IPermissionStore` 已支持任意 provider；`PermissionChecker` 扩展成员级判定 | 低 |
+| **默认角色授权映射** | 角色→权限的种子配置化（`PermissionOptions` 支持） | 低 |
 | **Navigation 迁出** | Navigation 依赖 Permissions，待 Permissions 稳定后迁出至扩展仓库（主框架 `总览和跟踪.md` §3.2） | 待定 |
-| **发布 tag** | V0.1.0~V0.4.0 均未打 tag——须征得同意后发布 | 高 |
+| **发布 tag** | V0.1.0~V0.6.0 已发布；后续迭代完成须征得同意后打 tag | — |
 
 ---
 
@@ -289,7 +306,7 @@ CREATE TABLE [PermissionGrant] (
 
 ### 6. 测试基线
 
-- **34/34 通过**（xunit.v3）：初始化器 3 + PermissionChecker 8 + EntityDACPermissionStore 9 + DataService 9 + SeedInitializer 5。
+- **51/51 通过**（xunit.v3）：单元测试 47（初始化器 3 + PermissionChecker 8 + EntityDACPermissionStore 9 + DataService 9 + SeedInitializer 5 + Role/Admin.All 13）+ 消费方集成验证 4。
 - 测试桩 `InMemoryEntityDac`/`StubDomainUser` 是各测试文件私有内部类——新增测试可复用但需自行内嵌。
 
 ### 7. 版本与发布

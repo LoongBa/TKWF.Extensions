@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.Permissions.Consumer.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 本仓库扩展（Permissions）+ 主框架（TKWFRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="..\..\_Framework\Permissions\TKWF.Ext.Permissions.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- V0.7.0 (W4)：消费方集成验证——激活 SG1 分析器（build/refs 预编译 DLL），
+       验证 [GenerateController] 在真实消费方生成控制器 + [PermissionContributor] 被 SG1 发现 -->
+  <ItemGroup>
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <!-- SG1 生成文件排除物理编译（避免重复 Decorator 冲突，对齐扩展 csproj） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- 消费方引用扩展 DLL：扩展 DataService 为 public（跨程序集 SG 发现所需），
+       SG1b 在消费方推断 TUser 后生成控制器——CTRL006（业务 Service 建议 internal）在消费方同样属预期 -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);TKWF_SG1b_CTRL003;TKWF_SG1b_CTRL006;TKWF_SG1a_WRN_001;CS0436</NoWarn>
+  </PropertyGroup>
+
+</Project>

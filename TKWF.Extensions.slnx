@@ -13,4 +13,7 @@
   <Folder Name="/_Tests/Extension.Permissions.Tests/">
     <Project Path="_Tests/Extension.Permissions.Tests/TKWF.Ext.Permissions.Tests.csproj" />
   </Folder>
+  <Folder Name="/_Tests/Extension.Permissions.Consumer/">
+    <Project Path="_Tests/Extension.Permissions.Consumer/TKWF.Ext.Permissions.Consumer.Tests.csproj" />
+  </Folder>
 </Solution>

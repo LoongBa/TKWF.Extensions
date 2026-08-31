@@ -170,4 +170,67 @@ public class PermissionCheckerRoleTests
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
+
+    // ────────────────────── V0.7.0 Admin.All 系统权限测试 ──────────────────────
+
+    /// <summary>角色拥有 Admin.All → 任意已定义权限放行（含未显式授权者）。</summary>
+    [Fact]
+    public async Task RoleHasAdminAll_GrantsAnyDefinedPermission()
+    {
+        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
+        var store = new StubPermissionStore();
+        store.Grant(PermissionNames.AdminAll, RoleProvider, RoleAdmin, isGranted: true);
+        var checker = CreateChecker(store);
+
+        // 权限已定义但未单独授权——Admin.All 拥有者放行
+        Assert.True(await checker.IsGrantedAsync(DefinedPermission));
+    }
+
+    /// <summary>用户级拥有 Admin.All → 任意已定义权限放行。</summary>
+    [Fact]
+    public async Task UserHasAdminAll_GrantsAnyDefinedPermission()
+    {
+        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
+        var store = new StubPermissionStore();
+        store.Grant(PermissionNames.AdminAll, UserProvider, UserId, isGranted: true);
+        var checker = CreateChecker(store);
+
+        Assert.True(await checker.IsGrantedAsync(DefinedPermission));
+    }
+
+    /// <summary>任一角色拥有 Admin.All → 放行（多角色任一命中）。</summary>
+    [Fact]
+    public async Task MultipleRoles_OneHasAdminAll_Grants()
+    {
+        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin, RoleEditor);
+        var store = new StubPermissionStore();
+        store.Grant(PermissionNames.AdminAll, RoleProvider, RoleEditor, isGranted: true);
+        var checker = CreateChecker(store);
+
+        Assert.True(await checker.IsGrantedAsync(DefinedPermission));
+    }
+
+    /// <summary>无任何 Admin.All 且权限未授权 → fail-closed。</summary>
+    [Fact]
+    public async Task NoAdminAll_NoGrant_FailClosed()
+    {
+        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
+        var store = new StubPermissionStore(); // 无 Admin.All，无授权
+        var checker = CreateChecker(store);
+
+        Assert.False(await checker.IsGrantedAsync(DefinedPermission));
+    }
+
+    /// <summary>Admin.All 拥有者对未定义权限也放行（系统权限是隐式定义，不走贡献者校验）。</summary>
+    [Fact]
+    public async Task AdminAll_GrantsUndefinedPermissionName()
+    {
+        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
+        var store = new StubPermissionStore();
+        store.Grant(PermissionNames.AdminAll, RoleProvider, RoleAdmin, isGranted: true);
+        var checker = CreateChecker(store);
+
+        // 未在仓库定义的权限名——Admin.All 拥有者仍放行
+        Assert.True(await checker.IsGrantedAsync("System.UndefinedPermission"));
+    }
 }

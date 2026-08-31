@@ -58,6 +58,14 @@
   <!-- V4.9.72 (W6): 单元测试访问 internal 默认实现（InMemoryPermissionDefinitionRepository/PermissionChecker/NoOpPermissionStore） -->
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Permissions.Tests" />
+    <!-- V0.7.0 (W4): 消费方集成验证测试访问 internal 默认实现（端到端权限检查） -->
+    <InternalsVisibleTo Include="TKWF.Ext.Permissions.Consumer.Tests" />
+  </ItemGroup>
+
+  <!-- V0.7.0 (W2): 生产建表迁移脚本随 NuGet 打包（scripts\PermissionGrant.sql），
+       消费方/DBA 从包内 scripts\ 目录取用执行 -->
+  <ItemGroup>
+    <None Include="scripts\PermissionGrant.sql" Pack="true" PackagePath="scripts\" />
   </ItemGroup>
 
   <!-- V0.4.0 (G2): 扩展为预编译库——DataService 标记 [GenerateController] 但自身无具体 TUser，

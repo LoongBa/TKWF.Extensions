@@ -21,5 +21,9 @@ namespace TKWF.Ext.Permissions
 
         /// <summary>权限缓存 TTL 秒数。</summary>
         public int CacheTtlSeconds { get; init; } = 300;
+
+        /// <summary>种子初始化的默认 admin 角色名（V0.4.0 G3）。
+        /// 启动时幂等预置该角色的全部已定义权限；空字符串/空白 = 禁用种子。</summary>
+        public string SeedAdminRoleName { get; init; } = "admin";
     }
 }

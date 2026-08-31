@@ -60,4 +60,12 @@
     <InternalsVisibleTo Include="TKWF.Ext.Permissions.Tests" />
   </ItemGroup>
 
+  <!-- V0.4.0 (G2): 扩展为预编译库——DataService 标记 [GenerateController] 但自身无具体 TUser，
+       控制器由消费方 SG1b 经 ReferencedAssemblySymbols 发现生成（ControllerGenerator L1002 设计）。
+       以下 SG1b 诊断是预期：CTRL003（无 TUser 本地推断失败）+ CTRL006（业务 Service 建议 internal——
+       但扩展 DataService 必须 public 供消费方生成代码跨程序集引用，同框架内置类型豁免原则 L894-897）。 -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);TKWF_SG1b_CTRL003;TKWF_SG1b_CTRL006</NoWarn>
+  </PropertyGroup>
+
 </Project>

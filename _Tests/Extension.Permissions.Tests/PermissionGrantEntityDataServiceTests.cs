@@ -27,7 +27,8 @@ public class PermissionGrantEntityDataServiceTests
         Assert.Equal(Provider, dto.ProviderName);
         Assert.Equal(Key, dto.ProviderKey);
         Assert.True(dto.IsGranted);
-        Assert.True(dto.IsFromPersistentSource);
+        // 新插入实体非来自持久源（IsFromPersistentSource 由框架读路径统一置位，写路径不置位）
+        Assert.False(dto.IsFromPersistentSource);
         Assert.Equal(1, dac.InsertCallCount);
         Assert.Equal(0, dac.UpdateCallCount);
     }

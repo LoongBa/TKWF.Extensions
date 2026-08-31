@@ -15,7 +15,7 @@ namespace TKWF.Ext.Permissions
     /// 全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
     [Table("PermissionGrant")]
-    [DomainGenerateCode(DefaultPageSize = 50)]
+    [DomainGenerateCode(DefaultPageSize = 50, SubDomain = "Permissions", SubDomainRoutePrefix = "/Permissions")]
     public partial class PermissionGrantEntity
     {
         /// <summary>主键（自增）。</summary>

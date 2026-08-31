@@ -9,34 +9,34 @@
       "Scope": "Entity",
       "Template": "Entity.cshtml",
       "OutputPattern": "{ClassName}.g.cs",
-      "OutputDir": "..\\Entities",
+      "OutputDir": "..\\..\\Entities",
       "SkeletonTemplate": "EntityEmpty.cshtml",
       "SkeletonPattern": "{ClassName}.biz.cs",
-      "SkeletonDir": "..\\Entities"
+      "SkeletonDir": "..\\..\\Entities"
     },
     "Dto": {
       "Scope": "Entity",
       "Template": "Dto.cshtml",
       "OutputPattern": "{ClassName}Dto.g.cs",
-      "OutputDir": "..\\Entities\\DTOs",
+      "OutputDir": "..\\..\\Entities\\DTOs",
       "SkeletonTemplate": "DtoEmpty.cshtml",
       "SkeletonPattern": "{ClassName}Dto.cs",
-      "SkeletonDir": "..\\Entities\\DTOs"
+      "SkeletonDir": "..\\..\\Entities\\DTOs"
     },
     "Conditions": {
       "Scope": "Entity",
       "Template": "Conditions.cshtml",
       "OutputPattern": "{ClassName}Conditions.g.cs",
-      "OutputDir": "..\\Entities\\Conditions"
+      "OutputDir": "..\\..\\Entities\\Conditions"
     },
     "DataService": {
       "Scope": "Entity",
       "Template": "DataService.cshtml",
       "OutputPattern": "{ClassName}DataService.g.cs",
-      "OutputDir": "..\\DataServices",
+      "OutputDir": "..\\..\\DataServices",
       "SkeletonTemplate": "DataServiceEmpty.cshtml",
       "SkeletonPattern": "{ClassName}DataService.cs",
-      "SkeletonDir": "..\\DataServices"
+      "SkeletonDir": "..\\..\\DataServices"
     }
   },
 

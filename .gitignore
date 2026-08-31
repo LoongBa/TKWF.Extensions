@@ -3,6 +3,9 @@ bin/
 obj/
 *.user
 *.suo
+
+# xCodeGen 生成文件（.g.cs 不入库，构建时自动重新生成；对齐 DMP-Lite 模式）
+*.g.cs
 *.userprefs
 *.userosscache
 *.sln.docstates

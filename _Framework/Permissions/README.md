@@ -1,6 +1,6 @@
 # TKWF.Ext.Permissions 权限扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 (权限管理 Service) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 (权限管理 Service + 种子初始化 + xCodeGen 生成) | **框架**: .NET 10
 
 **核心约束**: 细粒度权限、fail-closed 安全语义、ORM 无关持久化、SG1 声明式实体
 
@@ -148,10 +148,10 @@ public class MyService
 | **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ `EntityDACPermissionStore`（扩展自带，ORM 无关） |
 | **`PermissionFilterAttribute<TUserInfo>`** | 方法级权限门（`[RequirePermission]`） | 内置，注册到 Tier-S |
 | **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现 |
-| **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
-| **`PermissionGrantDto`** | 权限授予 DTO（手写骨架） | 内置，`IDomainDto<PermissionGrantEntity>` 实现 |
-| **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询） | 内置，`DomainDataServiceBase<,>` 非泛型版 |
-| **`PermissionOptions`** | 配置（`TKWF:Permissions` 节） | 内置，SG1 `GeneratedOptionsBindings` 自动绑定 |
+| **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]`（SubDomain=Permissions） |
+| **`PermissionGrantEntityDto`** | 权限授予 DTO（xCodeGen 生成 record） | 内置，`IDomainDto<PermissionGrantEntity>` 实现 |
+| **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询 + REST 管理 API） | 内置，`DomainDataServiceBase<,>` 非泛型版 + `[GenerateController(FromDataService=true)]` |
+| **`PermissionOptions`** | 配置（`TKWF:Permissions` 节，含 `SeedAdminRoleName`） | 内置，SG1 `GeneratedOptionsBindings` 自动绑定 |
 
 ---
 
@@ -201,19 +201,21 @@ CREATE TABLE [PermissionGrant] (
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### 1. V0.3.0：权限管理 Service（已实施）
+### 1. V0.3.0 / V0.4.0：权限管理 Service（已实施）
 
-- **当前状态**：手写 `PermissionGrantDto` + `PermissionGrantEntityDataService`（DMP-Lite `.cs` 骨架模式）已实施。
-- **后续**：修复 xCodeGen 环境后可生成 `.g.cs` 覆盖手写骨架；评估 `.g.cs` 入库策略。
+- **V0.3.0**：手写 `PermissionGrantDto` + `PermissionGrantEntityDataService`（DMP-Lite `.cs` 骨架模式）已实施。
+- **V0.4.0（G1）**：xCodeGen 环境修复，生成 `PermissionGrantEntityDto`（record）+ `.g.cs`（CRUD）；业务方法迁入 `.cs` 骨架，手写 DTO/DataService 移除。`.cs` 骨架入库、`.g.cs` 不入库（Debug 构建自动重新生成）。
+- **V0.4.0（G2）**：`[GenerateController(FromDataService=true)]`——消费方 SG1 自动生成 REST 管理 API（subdomain `Permissions`）。
+- **V0.4.0（G3）**：种子初始化——`PermissionOptions.SeedAdminRoleName` 幂等预置 admin 角色全权限。
 
 ### 2. 编译期权限名校验（ADR38 D7）
 
 - **当前状态**：贡献者 `Define()` 是运行时方法，SG 看不到体内字符串 → 未知权限名只能运行时 fail-closed 兜底。
 - **演进方向**：若需编译期校验，需 SG 扩展（如 Source Generator 扫描 `Define()` 中的字符串常量）或静态分析工具。
 
-### 3. 种子初始化
+### 3. 种子初始化（已实施，V0.4.0 G3）
 
-- **当前状态**：`InitializeAsync` 为空实现。
+- **当前状态**：`InitializeAsync` 实现 `SeedAdminRoleName` 幂等预置（仅缺失记录插入，不覆盖既有授予/撤销）。
 - **演进方向**：预置系统权限（如 `Admin.All`）、默认角色授权映射。
 
 ---
@@ -240,4 +242,4 @@ CREATE TABLE [PermissionGrant] (
 
 - **归档日期**: 2026-08-31
 - **维护团队**: play / TKW Framework Team
-- **审批状态**: 定稿 (V0.3.0)
+- **审批状态**: 定稿 (V0.4.0)

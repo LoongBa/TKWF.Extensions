@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -23,7 +24,7 @@ namespace TKWF.Ext.Permissions
     /// <para>命名空间 <c>TKWF.Ext.Permissions</c>（D17 §5.1 设计 + 包名约定 §4.6）。</para>
     /// </summary>
     [TKWFExtension("Permissions", "1.0.0", Description = "权限管理扩展——细粒度权限定义/检查（IPermissionChecker + RequirePermission）")]
-    public class PermissionExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
+    public class PermissionExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>, IServiceProviderAware
         where TUserInfo : class, IUserInfo, new()
     {
         /// <summary>扩展名称（对齐 [TKWFExtension] Name）。</summary>
@@ -31,6 +32,9 @@ namespace TKWF.Ext.Permissions
 
         /// <summary>扩展描述。</summary>
         public override string Description => "权限管理扩展——细粒度权限定义/检查";
+
+        /// <summary>注入的 IServiceProvider（InitializeExtensionsAsync 阶段设置，V4.9.76 D2）。</summary>
+        public IServiceProvider? ServiceProvider { get; set; }
 
         /// <summary>
         /// 注册权限服务 + 从 ProjectMetaContext 桥收集权限贡献者定义。
@@ -75,8 +79,44 @@ namespace TKWF.Ext.Permissions
             builder.Add<PermissionFilterAttribute<TUserInfo>>(FilterTier.Security);
         }
 
-        /// <summary>系统就绪后初始化（V4.9.72 空实现——真实种子/初始化留后续迭代）。</summary>
-        public override Task InitializeAsync() => Task.CompletedTask;
+        /// <summary>
+        /// 系统就绪后初始化（V0.4.0 G3）：幂等预置默认 admin 角色授权。
+        /// <para>经 <see cref="IServiceProviderAware.ServiceProvider"/> 解析 <see cref="PermissionGrantEntityDataService"/>，
+        /// 对 <see cref="IPermissionDefinitionRepository"/> 中的每个已定义权限，若 admin 角色尚未被授予则授予。
+        /// 幂等：仅当记录不存在时插入，绝不覆盖消费方已设置的授予/撤销。</para>
+        /// <para>通过 <see cref="PermissionOptions.SeedAdminRoleName"/> 控制种子角色；空字符串 = 禁用种子。
+        /// 未注册 <see cref="IEntityDAC{TEntity}"/>（无真实持久化）时跳过。</para>
+        /// </summary>
+        public override async Task InitializeAsync()
+        {
+            // 无 DI 容器（未实现 IServiceProviderAware 或未注入）→ 跳过
+            if (ServiceProvider is null) return;
+
+            using var scope = ServiceProvider.CreateScope();
+            var scoped = scope.ServiceProvider;
+
+            // 真实持久化未接线（未注册 IEntityDAC）→ 跳过种子（NoOp 模式下无意义）
+            var dataService = scoped.GetService<PermissionGrantEntityDataService>();
+            if (dataService is null) return;
+
+            var repository = scoped.GetService<IPermissionDefinitionRepository>();
+            if (repository is null) return;
+
+            var options = scoped.GetService<IOptions<PermissionOptions>>()?.Value;
+            var seedRole = options?.SeedAdminRoleName;
+            if (string.IsNullOrWhiteSpace(seedRole)) return;
+
+            foreach (var definition in repository.GetAll())
+            {
+                var name = definition.Name;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                // 幂等：仅当记录不存在时授予，不覆盖既有授予/撤销
+                var existing = await dataService.GetGrantAsync(name, "Role", seedRole);
+                if (existing is null)
+                    await dataService.SetGrantAsync(name, "Role", seedRole, isGranted: true);
+            }
+        }
     }
 
     /// <summary>

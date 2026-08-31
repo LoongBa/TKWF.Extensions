@@ -238,6 +238,53 @@ CREATE TABLE [PermissionGrant] (
 
 6. **`[Table]` 保留**：BCL `[Table("PermissionGrant")]` 不可删除——`FreeSqlTableStructureSynchronizer` 依赖它发现实体建表。
 
+---
+
+## 八、维护备忘与回归防护 (Maintenance Memo)
+
+> 本节记录 V0.3.0/V0.4.0 开发中踩过的坑与关键机制，**修改/重构前必读**，避免回归。
+
+### 1. xCodeGen 双文件模式（DMP-Lite）
+
+| 文件 | 角色 | 入库 | 覆盖策略 |
+|------|------|:---:|---------|
+| `Entities/**/*.biz.cs`、`DataServices/*.cs` | 业务扩展骨架（partial） | ✅ 入库 | **仅首次生成，绝不覆盖**（`xCodeGen.Core/Engine.cs` L203-204 双保险：存在即跳过 + `Write(overwrite:false)`） |
+| `**/*.g.cs` | 机械 CRUD/DTO 逻辑 | ❌ 不入库（`.gitignore` 含 `*.g.cs`） | 每次 Debug 构建经 `_XCG_Run`（`TKWF.Domain.targets` AfterBuild）按需重新生成 |
+
+- **业务方法只写在 `.cs` 骨架**，禁止改 `.g.cs`（会被覆盖）。
+- `.g.cs` 缺失时 Debug 构建自动补全；Release/无 `_XCG_ConfigPath` 时不生成（骨架文件已入库不受影响）。
+- 手动强制重新生成：`dotnet run --project "$TKWFRoot_xCodeGen\xCodeGen.Cli" -- gen -j .xCodeGen\permissions.xCodeGen.json --force`。
+
+### 2. DataService 关键约束
+
+- **必须 `public`**：扩展为预编译库，控制器/DataService 由**消费方 SG1** 经 `ReferencedAssemblySymbols` 发现生成（`ControllerGenerator.cs` L1002 设计）——internal 会导致消费方生成代码无法跨程序集引用。
+- **`[GenerateController(FromDataService=true)]`**：扩展自身**不生成**控制器（无具体 TUser），由消费方生成；`CTRL003`/`CTRL006` 是**预期诊断**，已在 csproj `<NoWarn>` 抑制，勿移除。
+- **主构造函数模式**：生成的骨架用主构造函数 `(IDomainUser user, IEntityDAC<TEntity> dac)`，业务方法直接使用参数 `dac`/`user`（不要另建字段——会被 `.g.cs` 的 `sealed partial` 冲突）。
+
+### 3. DTO 命名与持久状态语义
+
+- 生成 DTO 是 **`PermissionGrantEntityDto`**（record，`init` 属性，`TKWF.Ext.Permissions.DTOs`），**不是**手写 `PermissionGrantDto`——测试/文档引用以 `PermissionGrantEntityDto` 为准。
+- **`IsFromPersistentSource` 语义**：由框架**读路径**（`DomainReadOnlyDataServiceBase`）取数后统一置位 true；**写路径（Insert/Update）不置位**。新插入实体返回的 DTO 该标志 = false。测试断言勿硬编码 true。
+
+### 4. SubDomain 传导（管理 API 路由）
+
+- 实体 `[DomainGenerateCode(SubDomain="Permissions", SubDomainRoutePrefix="/Permissions")]` → 消费方生成的 REST 管理 API subdomain。
+- 修改 SubDomain 后需 **`dotnet build -t:Rebuild`** 清 obj 缓存（SG 元数据增量缓存可能导致不生效）。
+
+### 5. 骨架文件缺 using
+
+- xCodeGen 生成的 `.biz.cs`/`Dto.cs` 骨架**不自带** `System.Collections.Generic`——含 `List<ValidationResult>` 的 partial 方法实现须手动补 `using`，否则 CS0246 → CS0759 连锁报错（已修，勿删）。
+
+### 6. 测试基线
+
+- **34/34 通过**（xunit.v3）：初始化器 3 + PermissionChecker 8 + EntityDACPermissionStore 9 + DataService 9 + SeedInitializer 5。
+- 测试桩 `InMemoryEntityDac`/`StubDomainUser` 是各测试文件私有内部类——新增测试可复用但需自行内嵌。
+
+### 7. 版本与发布
+
+- 扩展独立版本（MinVer），tag 前缀 `v`，**须征得同意**才打 tag。当前未打 tag（V0.3.0/V0.4.0 未发布）。
+- 生产建表：`PermissionGrant` 不在 `SyncTables` 自动建表范围，需迁移脚本（见 §五.4）。
+
 ### 文档信息
 
 - **归档日期**: 2026-08-31

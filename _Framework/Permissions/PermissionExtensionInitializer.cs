@@ -67,6 +67,8 @@ namespace TKWF.Ext.Permissions
             // TryAddScoped：消费方自定义 IPermissionStore 优先；若未注册，回退 NoOp（fail-closed）
             services.TryAddScoped<IPermissionStore, NoOpPermissionStore>();
             services.TryAddScoped<IPermissionDefinitionRepository>(_ => repository);
+            // V0.6.0：角色提供者——TryAddScoped（消费方可自定义覆盖，如从角色服务/外部身份提供商解析）
+            services.TryAddScoped<IRoleProvider<TUserInfo>, DefaultRoleProvider<TUserInfo>>();
             services.TryAddScoped<IPermissionChecker, PermissionChecker<TUserInfo>>();
 
             // V0.3.0：权限管理 Service——TryAddScoped（消费方可自定义覆盖）
@@ -145,22 +147,23 @@ namespace TKWF.Ext.Permissions
     /// <summary>
     /// V4.9.72 (W2，M1 修复)：默认权限检查器——基于权限定义仓库（fail-closed：未知权限名 → 拒绝）
     /// + 权限存储（经 <see cref="IPermissionStore"/> 真实解析）+ ambient 当前用户（<c>DomainUserContext.CurrentAopUser</c>）。
-    /// <para><b>M1 修复（V4.9.72 审核）</b>：早期版本恒返回 false（未接通 store 与用户上下文），
-    /// 导致默认 checker 完全不可用。现泛型化 <c>PermissionChecker&lt;TUserInfo&gt;</c>，
-    /// 经 IVT 访问 <c>DomainUserContext.CurrentAopUser</c>（AOP 拦截时 push 的当前 DomainUser 实例）
-    /// 解析当前用户 <c>UserIdString</c>，调 <c>IPermissionStore.GetAsync(name, "User", userId)</c> 真实判定。</para>
-    /// <para>providers 约定：主谓用户权限 <c>("User", UserIdString)</c>；消费方可扩展 store 支持角色/成员 providers。</para>
+    /// <para><b>V0.6.0 角色→权限映射</b>：新增 <see cref="IRoleProvider{TUserInfo}"/> 依赖，
+    /// 支持用户+角色双重检查——用户级显式授予优先；未授予时回退角色级判定（任一角色授予即通过）。
+    /// fail-closed：用户未授权 + 角色未授权 → 拒绝。</para>
+    /// <para>providers 约定：用户权限 <c>("User", UserIdString)</c>；角色权限 <c>("Role", roleName)</c>。</para>
     /// </summary>
     internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker
         where TUserInfo : class, IUserInfo, new()
     {
         private readonly IPermissionDefinitionRepository _repository;
         private readonly IPermissionStore _store;
+        private readonly IRoleProvider<TUserInfo> _roleProvider;
 
-        public PermissionChecker(IPermissionDefinitionRepository repository, IPermissionStore store)
+        public PermissionChecker(IPermissionDefinitionRepository repository, IPermissionStore store, IRoleProvider<TUserInfo> roleProvider)
         {
             _repository = repository;
             _store = store;
+            _roleProvider = roleProvider;
         }
 
         public async Task<bool> IsGrantedAsync(string permissionName)
@@ -182,12 +185,26 @@ namespace TKWF.Ext.Permissions
 
             // 解析当前用户（ambient AOP 上下文——PermissionFilter 触发时 StaticDomainInterceptor 已 push）
             var current = DomainUserContext.CurrentAopUser as DomainUser<TUserInfo>;
-            var userId = current?.UserInfo?.UserIdString;
+            var user = current?.UserInfo;
+            var userId = user?.UserIdString;
             if (string.IsNullOrEmpty(userId))
                 return false; // 未认证/无用户上下文 → 拒绝（与 AuthorityFilter 未认证拦截一致）
 
-            var result = await _store.GetAsync(permissionName, "User", userId).ConfigureAwait(false);
-            return result.IsGranted;
+            // 1. 用户级检查（显式授权优先）
+            var userResult = await _store.GetAsync(permissionName, "User", userId).ConfigureAwait(false);
+            if (userResult.IsGranted) return true; // 用户显式授予
+
+            // 2. 角色级检查（兜底——用户未授权时回退角色判定）
+            //    PermissionGrantResult 无 NotFound 状态，Denied 既表示"显式撤销"也表示"未设置"，
+            //    因此统一回退角色检查，不在此处短路。
+            var roles = await _roleProvider.GetRolesAsync(user!).ConfigureAwait(false);
+            foreach (var role in roles)
+            {
+                var roleResult = await _store.GetAsync(permissionName, "Role", role).ConfigureAwait(false);
+                if (roleResult.IsGranted) return true; // 任一角色授予即通过
+            }
+
+            return false; // 用户未授权 + 角色未授权 → fail-closed
         }
     }
 

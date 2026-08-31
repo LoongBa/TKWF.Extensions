@@ -38,12 +38,12 @@ public class PermissionCheckerTests
     }
 
     /// <summary>构造含权限定义的 checker（默认仓库含 DefinedPermission）。</summary>
-    private static PermissionChecker<SimpleUserInfo> CreateChecker(StubPermissionStore? store = null, bool withDefinedPermission = true)
+    private static PermissionChecker<SimpleUserInfo> CreateChecker(StubPermissionStore? store = null, bool withDefinedPermission = true, IRoleProvider<SimpleUserInfo>? roleProvider = null)
     {
         var repository = new InMemoryPermissionDefinitionRepository();
         if (withDefinedPermission)
             repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
-        return new PermissionChecker<SimpleUserInfo>(repository, store ?? new StubPermissionStore());
+        return new PermissionChecker<SimpleUserInfo>(repository, store ?? new StubPermissionStore(), roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }
 
     private static IDisposable SetAmbientUser(string? userId)

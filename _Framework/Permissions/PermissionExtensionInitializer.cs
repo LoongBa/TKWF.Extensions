@@ -64,6 +64,9 @@ namespace TKWF.Ext.Permissions
             services.TryAddScoped<IPermissionStore, NoOpPermissionStore>();
             services.TryAddScoped<IPermissionDefinitionRepository>(_ => repository);
             services.TryAddScoped<IPermissionChecker, PermissionChecker<TUserInfo>>();
+
+            // V0.3.0：权限管理 Service——TryAddScoped（消费方可自定义覆盖）
+            services.TryAddScoped<PermissionGrantEntityDataService>();
         }
 
         /// <summary>注册权限过滤器到 Tier-S（Security，与 AuthorityFilter 同层，S→F→O 排序自动生效）。</summary>

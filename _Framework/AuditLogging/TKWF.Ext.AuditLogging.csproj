@@ -22,9 +22,6 @@
     <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
 
-    <!-- 权限抽象引用（依赖倒置——接口/契约在 Abstractions） -->
-    <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
-
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 

@@ -24,6 +24,14 @@
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+
+    <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+
+    <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->
@@ -31,6 +39,20 @@
     <PackageReference Include="FreeSql" />
     <PackageReference Include="MailKit" />
   </ItemGroup>
+
+  <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- SG1 化：xCodeGen 配置路径 -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\.xCodeGen\emailing.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
 
   <!-- 测试项目访问 internal（FreeSqlEmailRecordStore、SmtpEmailSender） -->
   <ItemGroup>

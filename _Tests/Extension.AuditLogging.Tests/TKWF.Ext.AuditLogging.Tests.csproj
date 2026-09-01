@@ -27,11 +27,17 @@
     <Using Include="Xunit" />
     <Using Include="Microsoft.Extensions.DependencyInjection" />
     <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+    <Using Include="TKW.Framework.Enumerations" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- 本仓库扩展（AuditLogging）+ 主框架（TKWFRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\AuditLogging\TKWF.Ext.AuditLogging.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
   </ItemGroup>

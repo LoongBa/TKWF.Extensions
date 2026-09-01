@@ -24,6 +24,9 @@
   <Folder Name="/_Framework/Identity/">
     <Project Path="_Framework/Identity/TKWF.Ext.Identity.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Account/">
+    <Project Path="_Framework/Account/TKWF.Ext.Account.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -48,5 +51,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Identity.Tests/">
     <Project Path="_Tests/Extension.Identity.Tests/TKWF.Ext.Identity.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Account.Tests/">
+    <Project Path="_Tests/Extension.Account.Tests/TKWF.Ext.Account.Tests.csproj" />
   </Folder>
 </Solution>

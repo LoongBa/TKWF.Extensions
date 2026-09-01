@@ -3,6 +3,9 @@
   <Folder Name="/_Framework/Permissions.Abstractions/">
     <Project Path="_Framework/Permissions.Abstractions/TKWF.Ext.Permissions.Abstractions.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Permissions.Validation/">
+    <Project Path="_Framework/Permissions.Validation/TKWF.Ext.Permissions.Validation.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Permissions/">
     <Project Path="_Framework/Permissions/TKWF.Ext.Permissions.csproj" />
   </Folder>
@@ -36,6 +39,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Permissions.Consumer/">
     <Project Path="_Tests/Extension.Permissions.Consumer/TKWF.Ext.Permissions.Consumer.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Permissions.Validation.Tests/">
+    <Project Path="_Tests/Extension.Permissions.Validation.Tests/TKWF.Ext.Permissions.Validation.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.AuditLogging.Tests/">
     <Project Path="_Tests/Extension.AuditLogging.Tests/TKWF.Ext.AuditLogging.Tests.csproj" />

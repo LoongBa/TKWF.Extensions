@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.Permissions.Validation.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 被测 Analyzer + 被扫描的 Abstractions（测试源码需引用其特性类型）
+         + 主框架 Domain（RequirePermissionAttribute 基类 DomainFlagAttribute + IUserInfo） -->
+    <ProjectReference Include="..\..\_Framework\Permissions.Validation\TKWF.Ext.Permissions.Validation.csproj" />
+    <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

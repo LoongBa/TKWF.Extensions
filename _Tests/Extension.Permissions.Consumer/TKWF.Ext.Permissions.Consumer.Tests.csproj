@@ -44,6 +44,13 @@
                       ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
+  <!-- V0.8.0 (W4)：编译期权限名校验 Analyzer 接线——扩展侧 DiagnosticAnalyzer（PERM001，非生成器），
+       经 ProjectReference+OutputItemType=Analyzer 挂载（诊断器可靠执行；SG 生成器才需 build/refs 预编译） -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\_Framework\Permissions.Validation\TKWF.Ext.Permissions.Validation.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
   <!-- SG1 生成文件排除物理编译（避免重复 Decorator 冲突，对齐扩展 csproj） -->
   <PropertyGroup>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>

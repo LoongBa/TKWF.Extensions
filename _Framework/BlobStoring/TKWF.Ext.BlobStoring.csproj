@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.BlobStoring</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.BlobStoring</PackageId>
+    <Description>TKWF 扩展：二进制大对象存储（本地文件系统、FreeSql 记录持久化）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+
+    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+
+    <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+
+    <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->
+  <ItemGroup>
+    <PackageReference Include="FreeSql" />
+  </ItemGroup>
+
+  <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- SG1 化：xCodeGen 配置路径 -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\.xCodeGen\blobstoring.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
+
+  <!-- 测试项目访问 internal（LocalStorageService、FreeSqlBlobRecordStore） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.BlobStoring.Tests" />
+  </ItemGroup>
+
+</Project>

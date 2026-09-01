@@ -18,6 +18,9 @@
   <Folder Name="/_Framework/Emailing/">
     <Project Path="_Framework/Emailing/TKWF.Ext.Emailing.csproj" />
   </Folder>
+  <Folder Name="/_Framework/BlobStoring/">
+    <Project Path="_Framework/BlobStoring/TKWF.Ext.BlobStoring.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -36,5 +39,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Emailing.Tests/">
     <Project Path="_Tests/Extension.Emailing.Tests/TKWF.Ext.Emailing.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.BlobStoring.Tests/">
+    <Project Path="_Tests/Extension.BlobStoring.Tests/TKWF.Ext.BlobStoring.Tests.csproj" />
   </Folder>
 </Solution>

@@ -178,7 +178,7 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 - Admin 系统角色种子（幂等）
 
 ### V0.2.0（规划）
-- `IPasswordResetFlow` / `IAccountLockoutPolicy` 默认实现（主框架仅接口）
+- **`IAccountPasswordManager` 适配器**（`IPasswordResetFlow`/`IAccountLockoutPolicy` 默认实现已由 `TKWF.Ext.Account` V0.1.0 提供）
 - 与 Permissions 深度集成（自定义 `IRoleProvider` 实时查库）
 - 多租户用户隔离
 - 用户注册/登录 API 层（复用框架 `AuthController`）

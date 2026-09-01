@@ -26,11 +26,13 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.10" />
     <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
     <!-- 实体声明式（FreeSql [Column] 特性），对齐主框架 _TKWF CPM 版本 -->
     <PackageVersion Include="FreeSql" Version="3.5.311" />
+    <PackageVersion Include="FreeSql.Provider.Sqlite" Version="3.5.311" />
   </ItemGroup>
 </Project>

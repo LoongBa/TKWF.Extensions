@@ -9,6 +9,9 @@
   <Folder Name="/_Framework/Tagging/">
     <Project Path="_Framework/Tagging/TKWF.Ext.Tagging.csproj" />
   </Folder>
+  <Folder Name="/_Framework/AuditLogging/">
+    <Project Path="_Framework/AuditLogging/TKWF.Ext.AuditLogging.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -18,5 +21,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Permissions.Consumer/">
     <Project Path="_Tests/Extension.Permissions.Consumer/TKWF.Ext.Permissions.Consumer.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.AuditLogging.Tests/">
+    <Project Path="_Tests/Extension.AuditLogging.Tests/TKWF.Ext.AuditLogging.Tests.csproj" />
   </Folder>
 </Solution>

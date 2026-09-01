@@ -68,7 +68,7 @@ _TKWF.Extensions/
 2. **注册 slnx**：`TKWF.Extensions.slnx` 加 Folder + Project
 3. **建测试**：`_Tests/Extension.{扩展名}.Tests/`（xunit.v3，引用本仓库扩展 + 主框架测试依赖）
 4. **写文档**：扩展迭代开发/ADR 登记到主框架私有 `_TKWF/docs/03_扩展模块/`（开发方案 → 审核报告 → ADR）；使用指南放本仓库 `docs/{扩展名}/`
-5. **接线**：扩展初始化器继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性（SG1 编译期发现，主框架启动时三钩子自动接线）
+5. **接线**：扩展初始化器继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性（SG1 编译期发现生成能力清单；**启用须消费方在领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明**——发现不自动启用，V4.9.85）
 
 > 详细规则见 `docs/目录结构与版本管理规则.md` + `docs/AGENTS.md`。
 
@@ -114,5 +114,5 @@ Copyright © LoongBa.cn 2026 · MIT
 
 ## 相关仓库
 
-- [TKW.Framework（主框架）](https://github.com/LoongBa/TKW.Framework) — 领域框架 + 扩展机制（`TKWFExtensionAttribute` + `ExtensionInitializer` 三钩子 + SG1 发现）
+- [TKW.Framework（主框架）](https://github.com/LoongBa/TKW.Framework) — 领域框架 + 扩展机制（`TKWFExtensionAttribute` + `ExtensionInitializer` 三钩子 + SG1 发现 + `[TKWFEnabledExtension]` 白名单启用）
 - [LoongBa-Scaffold](https://github.com/LoongBa/LoongBa-Scaffold) — 本文档体系脚手架来源

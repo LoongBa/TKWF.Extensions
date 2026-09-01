@@ -56,14 +56,14 @@
 
 ### 1. 宿主集成 (Hosting)
 
-消费方引用 `TKWF.Ext.Settings` 包，扩展经 `[TKWFExtension]` 被 SG1 自动发现，三钩子自动接线——**无需手动注册**：
+消费方引用 `TKWF.Ext.Settings` 包，扩展经 `[TKWFExtension]` 被 SG1 编译期发现（生成能力清单）。**V4.9.85 起发现不自动启用**——消费方须在自身领域初始化器上声明白名单，三钩子才接线：
 
 ```csharp
-// 消费方 .csproj
-<ProjectReference Include="..\Framework\Settings\TKWF.Ext.Settings.csproj" />
+[TKWFEnabledExtension(typeof(SettingsExtensionInitializer<>))]
+public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-自动注册：`ISettingStore`（默认 `FreeSqlSettingStore`）+ `ISettingManager`（默认 `SettingManager`）。
+白名单声明后自动注册：`ISettingStore`（默认 `FreeSqlSettingStore`）+ `ISettingManager`（默认 `SettingManager`）。
 
 ### 2. 读写设置
 
@@ -125,7 +125,7 @@ TryAdd 语义确保消费方实现优先。
 | **`SettingEntity`** | 设置表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`SettingsUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
 | **`SettingsOptions`** | 配置选项（`TKWF:Settings` 节） | 内置 |
-| **`SettingsExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现 |
+| **`SettingsExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 
 ---
 

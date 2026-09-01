@@ -36,4 +36,4 @@
 - **扩展 ADR 命名**：`ADR-{扩展名称}-{title}.md`（不走主框架 ADR01-39 序号），三问必填
 - **Commit 纪律**：避免频繁，积累后统一提交（一次迭代 1-4 个）
 - **Tag 纪律**：必须有开发方案 + 审核报告且征得同意，才能打 tag
-- **扩展初始化器**：继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性 → SG1 编译期发现 → 主框架启动三钩子自动接线（ConfigureServices/ConfigureFilters/InitializeAsync）
+- **扩展初始化器**：继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性 → SG1 编译期发现（生成能力清单）；**启用须消费方在领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明**（发现不自动启用，V4.9.85 ADR47），声明后三钩子自动接线（ConfigureServices/ConfigureFilters/InitializeAsync）

@@ -54,14 +54,14 @@
 
 ### 1. 宿主集成 (Hosting)
 
-消费方引用 `TKWF.Ext.AuditLogging` 包，扩展经 `[TKWFExtension]` 被 SG1 自动发现，三钩子自动接线——**无需手动注册**：
+消费方引用 `TKWF.Ext.AuditLogging` 包，扩展经 `[TKWFExtension]` 被 SG1 编译期发现（生成能力清单）。**V4.9.85 起发现不自动启用**——消费方须在自身领域初始化器上声明白名单，三钩子才接线：
 
 ```csharp
-// 消费方 .csproj
-<ProjectReference Include="..\Framework\AuditLogging\TKWF.Ext.AuditLogging.csproj" />
+[TKWFEnabledExtension(typeof(AuditLoggingExtensionInitializer<>))]
+public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-自动注册：`IAuditLogStore`（默认 `FreeSqlAuditLogStore`）。
+白名单声明后自动注册：`IAuditLogStore`（默认 `FreeSqlAuditLogStore`）。
 
 ### 2. 启用审计日志过滤器
 
@@ -120,7 +120,7 @@ TryAdd 语义确保消费方实现优先。
 | **`AuditLogEntity`** | 审计日志表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`AuditLoggingUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
 | **`AuditLoggingOptions`** | 配置选项（`TKWF:AuditLogging` 节） | 内置 |
-| **`AuditLoggingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现 |
+| **`AuditLoggingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 
 ---
 

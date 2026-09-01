@@ -55,14 +55,14 @@
 
 ### 1. 宿主集成 (Hosting)
 
-消费方引用 `TKWF.Ext.Emailing` 包，扩展经 `[TKWFExtension]` 被 SG1 自动发现，三钩子自动接线——**无需手动注册**：
+消费方引用 `TKWF.Ext.Emailing` 包，扩展经 `[TKWFExtension]` 被 SG1 编译期发现（生成能力清单）。**V4.9.85 起发现不自动启用**——消费方须在自身领域初始化器上声明白名单，三钩子才接线：
 
 ```csharp
-// 消费方 .csproj
-<ProjectReference Include="..\Framework\Emailing\TKWF.Ext.Emailing.csproj" />
+[TKWFEnabledExtension(typeof(EmailingExtensionInitializer<>))]
+public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-自动注册：`IEmailSender`（默认 `SmtpEmailSender`）+ `IEmailRecordStore`（默认 `FreeSqlEmailRecordStore`）。
+白名单声明后自动注册：`IEmailSender`（默认 `SmtpEmailSender`）+ `IEmailRecordStore`（默认 `FreeSqlEmailRecordStore`）。
 
 ### 2. 发送邮件
 
@@ -125,7 +125,7 @@ TryAdd 语义确保消费方实现优先。
 | **`EmailRecordEntity`** | 邮件记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`EmailingUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
 | **`EmailingOptions`** | 配置选项（`TKWF:Emailing` 节） | 内置 |
-| **`EmailingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现 |
+| **`EmailingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 
 ---
 

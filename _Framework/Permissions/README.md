@@ -48,14 +48,14 @@
 
 ### 1. 宿主集成 (Hosting)
 
-消费方引用 `TKWF.Ext.Permissions` 包，扩展经 `[TKWFExtension]` 被 SG1 自动发现，三钩子自动接线——**无需手动注册**：
+消费方引用 `TKWF.Ext.Permissions` 包，扩展经 `[TKWFExtension]` 被 SG1 编译期发现（生成能力清单）。**V4.9.85 起发现不自动启用**——消费方须在自身领域初始化器上声明白名单，三钩子才接线：
 
 ```csharp
-// 消费方 .csproj
-<ProjectReference Include="..\Framework\Permissions\TKWF.Ext.Permissions.csproj" />
+[TKWFEnabledExtension(typeof(PermissionExtensionInitializer<>))]
+public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-自动注册：`IPermissionChecker`（默认 `PermissionChecker<TUserInfo>`）+ `IPermissionStore`（默认 NoOp）+ `IPermissionDefinitionRepository` + `PermissionFilterAttribute`（Tier-S）。
+白名单声明后自动注册：`IPermissionChecker`（默认 `PermissionChecker<TUserInfo>`）+ `IPermissionStore`（默认 NoOp）+ `IPermissionDefinitionRepository` + `PermissionFilterAttribute`（Tier-S）。
 
 ### 2. 声明权限定义（贡献者）
 
@@ -147,7 +147,7 @@ public class MyService
 | **`IPermissionChecker`** | 运行时权限检查（fail-closed） | `PermissionChecker<TUserInfo>`（内部，泛型化） |
 | **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ `EntityDACPermissionStore`（扩展自带，ORM 无关） |
 | **`PermissionFilterAttribute<TUserInfo>`** | 方法级权限门（`[RequirePermission]`） | 内置，注册到 Tier-S |
-| **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现 |
+| **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 | **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]`（SubDomain=Permissions） |
 | **`PermissionGrantEntityDto`** | 权限授予 DTO（xCodeGen 生成 record） | 内置，`IDomainDto<PermissionGrantEntity>` 实现 |
 | **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询 + REST 管理 API） | 内置，`DomainDataServiceBase<,>` 非泛型版 + `[GenerateController(FromDataService=true)]` |

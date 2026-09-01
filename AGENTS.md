@@ -129,7 +129,7 @@ public class TaggingInitializer : ExtensionInitializer<MyUserInfo>
 }
 ```
 
-- `[TKWFExtension]` 特性 + 继承 `ExtensionInitializer<TUserInfo>` → SG1 编译期发现 → 主框架启动时三钩子自动接线
+- `[TKWFExtension]` 特性 + 继承 `ExtensionInitializer<TUserInfo>` → SG1 编译期发现（生成能力清单）；**是否启用由消费方在领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明决定**（发现不自动启用，IsEnabled 默认 false）。消费方声明后三钩子自动接线
 - 三钩子：`ConfigureServices`（DI 注册）、`ConfigureFilters`（过滤器注册）、`InitializeAsync`（异步初始化）
 
 ### 项目模板
@@ -150,6 +150,8 @@ _Tests/Extension.{扩展名}.Tests/
 > **实践思路**（V0.2.0 起）：扩展模块**可以**采用框架原生开发方式——引入 SG1 分析器 + xCodeGen 生成 DTO/DataService/Conditions/IDomainEntity 实现，与业务领域项目使用同一套开发模式（tkwf-entity / tkwf-service skill）。这使扩展获得自动建表、REST/GraphQL API 暴露、Dto 自动裁剪等框架能力，减少手写样板代码。
 >
 > **与"预编译库"模式的关系**：两种模式并存——简单横切扩展（如 Tagging，纯内存服务）保持预编译库；有持久化 + 管理 API 的扩展（如 Permissions V0.2.0）可升级为 SG1 原生。
+>
+> **扩展启用（V4.9.85）**：扩展 DLL 被消费方引用后，SG1 经 `ReferencedAssemblySymbols` 发现 `[TKWFExtension]` 初始化器（生成能力清单）；但**发现 ≠ 启用**——扩展的 `IsEnabled` 默认 false，三钩子默认不执行。消费方须在自身 `DomainHostInitializerBase<T>` 派生类上标注 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明（AllowMultiple），扩展才真正启用、三钩子才执行。未声明 → 发现但默认不启用。
 
 **csproj 接线要点**（对齐 DMP-Lite 消费模式，`$(TKWFRoot)` 定义于仓库根 `Directory.Build.props`）：
 
@@ -192,7 +194,7 @@ _Tests/Extension.{扩展名}.Tests/
 **注意**：
 - SG1 自诊断门禁（V4.9.15+）编译语义判断，不依赖 `TKWFRole`——扩展无需设 TKWFRole 即可接入
 - `build\refs\` 需在主框架编译后生成（`_PushToRefs` 目标自动推送）
-- 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存
+- 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存。发现 ≠ 启用：消费方须 `[TKWFEnabledExtension]` 白名单声明后三钩子才执行（V4.9.85 ADR47）
 
 ---
 
@@ -202,3 +204,4 @@ _Tests/Extension.{扩展名}.Tests/
 |------|------|---------|
 | 2026-08-30 | v0.1.0 | 初始版本——对齐主仓库 Agents_TKWF.md 规范，适配扩展仓库独立版本/公开私有边界 |
 | 2026-08-30 | — | §8 新增「扩展使用 SG1/xCodeGen（框架原生开发方式）」实践思路（V0.2.0 起） |
+| 2026-09-01 | — | v4.9.85："发现即启用"改为"发现不自动启用"，消费方须 `[TKWFEnabledExtension]` 白名单声明；§8 补充白名单概念 |

@@ -1,10 +1,11 @@
 using System.Threading.Tasks;
 
-namespace TKWF.Ext.Permissions
+namespace TKWF.Ext.Permissions.Abstractions
 {
     /// <summary>
     /// V4.9.72 (扩展机制业务模块 W2)：权限存储——持久化角色/用户权限值（对齐 D17 §5.1.2）。
     /// <para>V4.9.72 仅定义接口 + 默认 NoOp 实现；真实持久化（数据库/权限分配管理）留后续迭代。</para>
+    /// <para>V4.9.85 (ADR48 D7)：迁移至 Abstractions 项目（依赖倒置）。</para>
     /// </summary>
     public interface IPermissionStore
     {

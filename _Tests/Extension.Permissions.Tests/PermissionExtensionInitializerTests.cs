@@ -3,6 +3,7 @@ using System.Linq;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions.Tests;
 
@@ -23,7 +24,6 @@ public class PermissionExtensionInitializerTests
 
         Assert.NotNull(attr);
         Assert.Equal("Permissions", attr.Name);
-        Assert.Equal("1.0.0", attr.Version);
     }
 
     [Fact]

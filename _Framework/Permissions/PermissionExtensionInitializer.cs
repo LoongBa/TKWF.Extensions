@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions
 {
@@ -23,7 +24,7 @@ namespace TKWF.Ext.Permissions
     /// </list>
     /// <para>命名空间 <c>TKWF.Ext.Permissions</c>（D17 §5.1 设计 + 包名约定 §4.6）。</para>
     /// </summary>
-    [TKWFExtension("Permissions", "1.0.0", Description = "权限管理扩展——细粒度权限定义/检查（IPermissionChecker + RequirePermission）")]
+    [TKWFExtension("Permissions")]
     public class PermissionExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>, IServiceProviderAware
         where TUserInfo : class, IUserInfo, new()
     {

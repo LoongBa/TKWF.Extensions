@@ -38,7 +38,6 @@ public class TaggingExtensionInitializerTests
 
         Assert.NotNull(attr);
         Assert.Equal("Tagging", attr.Name);
-        Assert.Equal("1.0.0", attr.Version);
     }
 
     [Fact]

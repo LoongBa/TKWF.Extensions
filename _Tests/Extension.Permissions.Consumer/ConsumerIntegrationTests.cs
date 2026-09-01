@@ -1,5 +1,6 @@
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions.Consumer.Tests;
 

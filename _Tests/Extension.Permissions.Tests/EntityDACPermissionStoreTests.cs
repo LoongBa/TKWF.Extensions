@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions.Tests;
 

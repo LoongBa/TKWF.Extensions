@@ -1,4 +1,4 @@
-namespace TKWF.Ext.Permissions
+namespace TKWF.Ext.Permissions.Abstractions
 {
     /// <summary>权限检查逻辑（同一 <see cref="RequirePermissionAttribute"/> 内多个权限名的判定方式）。</summary>
     public enum PermissionLogic

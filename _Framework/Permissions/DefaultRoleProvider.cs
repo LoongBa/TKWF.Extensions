@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions
 {

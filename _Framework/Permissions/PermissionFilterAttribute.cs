@@ -7,6 +7,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interception;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions
 {

@@ -7,6 +7,7 @@ using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Session;
 using TKW.Framework.Enumerations;
+using TKWF.Ext.Permissions;
 
 namespace TKWF.Ext.Permissions.Consumer.Tests;
 
@@ -16,7 +17,11 @@ namespace TKWF.Ext.Permissions.Consumer.Tests;
 /// ① SG1b 经 <c>ScanHostInitializerUserType</c> 从此类闭合泛型参数推断具体 TUser（<see cref="ConsumerUserInfo"/>），
 ///    从而为扩展的 <c>[GenerateController(FromDataService=true)]</c> DataService 在消费方生成控制器；
 /// ② 消费方侧启动接线（本测试不真正跑宿主，仅借其类型存在供 SG1 编译期识别）。</para>
+/// <para>V4.9.85 (ADR47)：消费方显式启用 Permissions 扩展——<see cref="TKWFEnabledExtensionAttribute"/>
+/// 声明后，SG1b 将 Permissions 的能力清单（GeneratedControllerCatalog）聚合进本消费方的
+/// 领域权威注册（GeneratedControllerRegistrations.InterfaceNames），扩展服务接口才能在消费方暴露。</para>
 /// </summary>
+[TKWFEnabledExtension(typeof(PermissionExtensionInitializer<>))]
 public sealed class ConsumerHostInitializer : DomainHostInitializerBase<ConsumerUserInfo>
 {
     protected override IProjectMetaContext OnRegisterInfrastructureServices(
@@ -50,6 +55,8 @@ public sealed class ConsumerMetaContext : IProjectMetaContext
     public IEnumerable<string> GetTenantScopedEntityClassNames() => [];
     public void ValidateRuntimeGates(RuntimeGateOptions options) { }
     public MethodMetadata? GetMethodMeta(string classFullName, string methodName) => null;
+    /// <summary>V4.9.85 (ADR48 D4): 消费方测试无扩展初始化器实例——返回空。</summary>
+    public IReadOnlyList<object> CreateExtensionInstances() => [];
     public IReadOnlyDictionary<string, PropertyMetadata> GetPropertyMap(string className)
         => new Dictionary<string, PropertyMetadata>();
 }

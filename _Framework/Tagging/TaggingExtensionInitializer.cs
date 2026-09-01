@@ -22,7 +22,7 @@ namespace TKWF.Ext.Tagging;
 /// </list>
 /// <para>命名空间 <c>TKWF.Ext.Tagging</c>（D17 §5.1 设计 + 包名约定 §4.6）。</para>
 /// </summary>
-[TKWFExtension("Tagging", "1.0.0", Description = "标签服务扩展——标签提取/匹配/格式化（从框架核心迁出，D17 模式 3）")]
+[TKWFExtension("Tagging")]
 public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {

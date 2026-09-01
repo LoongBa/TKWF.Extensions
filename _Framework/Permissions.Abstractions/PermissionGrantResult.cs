@@ -1,4 +1,4 @@
-namespace TKWF.Ext.Permissions
+namespace TKWF.Ext.Permissions.Abstractions
 {
     /// <summary>
     /// V4.9.72 (扩展机制业务模块 W2)：权限授予结果——<see cref="IPermissionStore.GetAsync"/> 的返回值。

@@ -1,3 +1,5 @@
+using TKWF.Ext.Permissions.Abstractions;
+
 namespace TKWF.Ext.Permissions.Consumer.Tests;
 
 /// <summary>

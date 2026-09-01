@@ -1,7 +1,7 @@
 using System;
 using TKW.Framework.Domain.Interception;
 
-namespace TKWF.Ext.Permissions
+namespace TKWF.Ext.Permissions.Abstractions
 {
     /// <summary>
     /// V4.9.72 (扩展机制业务模块 W3)：方法级权限声明标记。
@@ -12,6 +12,7 @@ namespace TKWF.Ext.Permissions
     /// 方法级和控制器级标记同时生效（两者均需通过检查）。
     /// 支持多个 <c>[RequirePermission]</c> 作用于同一方法（<c>AllowMultiple=true</c>）。
     /// </para>
+    /// <para>V4.9.85 (ADR48 D7)：迁移至 Abstractions 项目（依赖倒置），替代 Navigation→Permissions 实现耦合。</para>
     /// </summary>
     /// <remarks>
     /// 使用前需注册 <c>IPermissionChecker</c> 到 DI 容器（由 <see cref="PermissionExtensionInitializer{TUserInfo}"/>

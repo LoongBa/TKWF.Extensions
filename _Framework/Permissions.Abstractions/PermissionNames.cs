@@ -1,9 +1,10 @@
-namespace TKWF.Ext.Permissions
+namespace TKWF.Ext.Permissions.Abstractions
 {
     /// <summary>
     /// V0.7.0：权限系统内置权限名常量。
     /// <para>系统权限（如 <see cref="AdminAll"/>）是隐式定义——不依赖 <see cref="IPermissionDefinitionContributor"/> 声明，
     /// <see cref="PermissionChecker{TUserInfo}"/> 在权限名校验之前先行判定：拥有者对所有权限放行。</para>
+    /// <para>V4.9.85 (ADR48 D7)：迁移至 Abstractions 项目（依赖倒置）。</para>
     /// </summary>
     public static class PermissionNames
     {

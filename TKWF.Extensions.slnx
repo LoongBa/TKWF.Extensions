@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/_Framework/" />
+  <Folder Name="/_Framework/Permissions.Abstractions/">
+    <Project Path="_Framework/Permissions.Abstractions/TKWF.Ext.Permissions.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Permissions/">
     <Project Path="_Framework/Permissions/TKWF.Ext.Permissions.csproj" />
   </Folder>

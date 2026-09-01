@@ -1,8 +1,29 @@
 # TKWF.Extensions
 
-> **TKWF 扩展仓库**：所有 TKWF 业务扩展（`TKWF.Ext.*`）的独立仓库。
+> TKWF 业务扩展仓库——权限、导航、身份、审计、设置、邮件、存储、账户、数据字典等。
 >
-> 扩展包与主框架 **TKW.Framework**（`_TKWF/`）解耦——扩展代码、扩展测试、扩展文档独立演进，不进入主框架解决方案（`TKW.Framework.slnx`）。
+> 扩展与主框架 **[TKW.Framework](https://github.com/LoongBa/TKW.Framework)** 解耦：扩展代码、测试、使用指南独立演进，不进入主框架 `TKW.Framework.slnx`。
+
+---
+
+## 扩展一览
+
+| 扩展 | 版本 | 说明 | Tag |
+|------|------|------|-----|
+| **Permissions** | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001） | `v0.7.0` |
+| **Permissions.Abstractions** | V0.1.0 | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | — |
+| **Permissions.Validation** | V0.8.0 | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合） | — |
+| **Identity** | V0.1.0 | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证 | `Identity/v0.1.0` |
+| **Account** | V0.1.0 | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐） | `Account/v0.1.0` |
+| **Navigation** | V0.1.0 | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出） | `Navigation/v0.1.0` |
+| **AuditLogging** | V0.1.0 | 审计日志 FreeSql 存储 + SG1 实体 | `AuditLogging/v0.1.0` |
+| **Settings** | V0.1.0 | 全局/用户级配置持久化 + 分层读取 | `Settings/v0.1.0` |
+| **BlobStoring** | V0.1.0 | 二进制大对象本地文件系统存储 + FreeSql 记录 | `BlobStoring/v0.1.0` |
+| **Emailing** | V0.1.0 | SMTP/MailKit 邮件发送 + FreeSql 发送记录 | `Emailing/v0.1.0` |
+| **DataDictionary** | V0.1.0 | 数据字典集中管理（定义 + 项 + 按编码查询） | `DataDictionary/v0.1.0` |
+| **Tagging** | V0.1.0 | 标签提取 / 匹配 / 格式化（从框架核心迁出） | `v0.1.0` |
+
+> 全量 **289 测试全绿**——`dotnet test` 零失败。
 
 ---
 
@@ -11,21 +32,9 @@
 | 项 | 说明 |
 |----|------|
 | 主框架 | [`_TKWF/`](https://github.com/LoongBa/TKW.Framework)（TKW.Framework 领域框架） |
-| 本仓库 | TKWF 业务扩展包（`TKWF.Ext.*`）——权限、导航、标签、身份、审计等 |
-| 关系 | 扩展 **ProjectReference 引用主框架源码**（`$(TKWFRoot)`，跨仓库编译期依赖），**不进入主框架 slnx** |
-| 版本 | MinVer 自动管理（git tag 即版本，前缀 `v`）——与主框架版本**独立** |
-
-### 引用模式
-
-```
-_TKWF.Extensions/                     ← 本仓库
-├── Directory.Build.props             ← 定义 TKWFRoot = ../_TKWF/
-└── _Framework/
-    └── Tagging/
-        └── TKWF.Ext.Tagging.csproj   ← <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
-```
-
-扩展包编译时通过 `$(TKWFRoot)`（MSBuild 属性，相对路径指向同级 `_TKWF/`，不依赖环境变量——对齐 DMP-Lite 跨仓库引用模式）引用主框架。主框架发布 NuGet 后可选切换为 PackageReference。
+| 本仓库 | TKWF 业务扩展包（`TKWF.Ext.*`）——独立版本，与主框架版本无关 |
+| 引用模式 | 扩展经 `$(TKWFRoot)` ProjectReference 引用主框架源码（跨仓库编译期依赖）；主框架发布 NuGet 后可切 PackageReference |
+| 版本管理 | MinVer 自动管理（git tag 即版本）；各扩展独立版本（各打各的 tag，命名空间前缀如 `Identity/v0.1.0`） |
 
 ---
 
@@ -33,78 +42,138 @@ _TKWF.Extensions/                     ← 本仓库
 
 ```
 _TKWF.Extensions/
-├── _Framework/               # 扩展包源码（按扩展组织，各扩展含自身 README + docs 使用指南）
-│   ├── Permissions/          # 权限扩展（主框架 V4.9.72 迁出候选；docs/ 含使用指南）
-│   ├── Navigation/           # 导航扩展（主框架 V4.9.74 迁出候选；docs/ 含使用指南）
-│   └── Tagging/              # 标签扩展（V4.9.79 迁出，首个独立扩展）
-│       ├── TKWF.Ext.Tagging.csproj
-│       ├── README.md         # 标签提取引擎技术规范
-│       ├── Matchers/         # 匹配器家族
-│       ├── Processors/       # 后处理器（互斥裁剪/默认兜底）
-│       └── *.cs              # ITagService / TagService / 流水线 / 初始化器
-├── _Tests/                   # 扩展测试（一组扩展一个测试项目）
+├── _Framework/                     # 扩展源码（每个扩展一个项目）
+│   ├── Permissions/                 # 权限扩展（V0.7.0：定义/检查/存储/管理 API/Admin.All）
+│   ├── Permissions.Abstractions/    # 权限契约抽象（ADR48 D7 依赖倒置）
+│   ├── Permissions.Validation/       # PERM001 编译期校验 Analyzer（V0.8.0，扩展侧）
+│   ├── Identity/                     # 用户 + 角色 + 用户角色分配 + 凭据验证
+│   ├── Account/                      # 账户锁定 + 密码重置流程（主框架缺口补齐）
+│   ├── Navigation/                  # 菜单数据模型 + 贡献机制 + 权限过滤
+│   ├── AuditLogging/                # 审计日志 FreeSql 存储
+│   ├── Settings/                    # 设置管理 FreeSql 存储 + 分层读取
+│   ├── BlobStoring/                 # 二进制存储（本地文件系统 + FreeSql 记录）
+│   ├── Emailing/                    # SMTP/MailKit 邮件发送
+│   ├── DataDictionary/              # 数据字典集中管理
+│   └── Tagging/                     # 标签提取引擎（零分配 + AOT 兼容）
+├── _Tests/                          # 测试（一组扩展一个测试项目）
+│   ├── Extension.Permissions.Tests/
+│   ├── Extension.Permissions.Consumer/    # 消费方集成验证
+│   ├── Extension.Permissions.Validation.Tests/  # Analyzer 单测
+│   ├── Extension.Identity.Tests/
+│   ├── Extension.Account.Tests/
+│   ├── Extension.Navigation.Tests/
+│   ├── Extension.AuditLogging.Tests/
+│   ├── Extension.Settings.Tests/
+│   ├── Extension.BlobStoring.Tests/
+│   ├── Extension.Emailing.Tests/
+│   ├── Extension.DataDictionary.Tests/
 │   └── Extension.Tagging.Tests/
-├── docs/                     # 扩展仓库级文档（公开：指南/规则/模板）
-│   ├── AGENTS.md             # Agents 路由指南
-│   ├── 目录结构与版本管理规则.md
-│   ├── Permissions/          # 权限扩展指南（使用指南）
-│   ├── Navigation/           # 导航扩展指南（使用指南）
-│   ├── Tagging/              # 标签扩展（文档/指南）
-│   ├── 模板/                  # 文档模板
-│   └── 草稿/
-├── Directory.Build.props     # TKWFRoot + MinVer + 打包属性 + _PushToRefs
-├── Directory.Packages.props  # CPM 集中包版本
-├── .gitignore
-└── TKWF.Extensions.slnx      # 扩展解决方案（不进入主框架 slnx）
+├── docs/                           # 公开使用指南（每个扩展一份）
+│   ├── Permissions/权限扩展-使用指南.md
+│   ├── Identity/身份管理扩展-使用指南.md
+│   ├── Account/账户管理扩展-使用指南.md
+│   ├── Navigation/导航扩展-使用指南.md
+│   ├── AuditLogging/审计日志扩展-使用指南.md
+│   ├── Settings/设置管理扩展-使用指南.md
+│   ├── BlobStoring/二进制存储扩展-使用指南.md
+│   ├── Emailing/邮件发送扩展-使用指南.md
+│   ├── DataDictionary/数据字典扩展-使用指南.md
+│   └── Tagging/标签服务扩展-使用指南.md
+├── Directory.Build.props           # TKWFRoot + MinVer + 打包属性
+├── Directory.Packages.props         # CPM 集中包版本
+├── AGENTS.md                        # 扩展仓库开发规则（AI Agent 与人工开发者必读）
+└── TKWF.Extensions.slnx            # 扩展解决方案
 ```
 
-> 📦 **扩展迭代开发/ADR/总览跟踪**（内部工作产物）存放于**主框架私有仓库** `_TKWF/docs/03_扩展模块/`（不公开）；本公开仓库存**代码 + 测试 + 指南**。边界详见 `docs/目录结构与版本管理规则.md`。
+> 扩展迭代开发方案 / 审核报告 / ADR / 总览跟踪存放于**主框架私有仓库** `_TKWF/docs/03_扩展模块/`（不公开）；本公开仓库存**代码 + 测试 + 使用指南**。
 
 ---
 
-## 快速开始（新增一个扩展包）
+## 架构模式
 
-1. **建项目**：`_Framework/{扩展名}/TKWF.Ext.{扩展名}.csproj`（net10.0，引用 `$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj`）
-2. **注册 slnx**：`TKWF.Extensions.slnx` 加 Folder + Project
-3. **建测试**：`_Tests/Extension.{扩展名}.Tests/`（xunit.v3，引用本仓库扩展 + 主框架测试依赖）
-4. **写文档**：扩展迭代开发/ADR 登记到主框架私有 `_TKWF/docs/03_扩展模块/`（开发方案 → 审核报告 → ADR）；使用指南放本仓库 `docs/{扩展名}/`
-5. **接线**：扩展初始化器继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性（SG1 编译期发现生成能力清单；**启用须消费方在领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明**——发现不自动启用，V4.9.85）
-
-> 详细规则见 `docs/目录结构与版本管理规则.md` + `docs/AGENTS.md`。
-
----
-
-## 扩展规划与跟踪
-
-扩展路线图、各扩展迭代/ADR（内部工作产物，不公开）→ **主框架私有仓库** [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](../_TKWF/docs/03_扩展模块/总览和跟踪.md)（唯一跟踪入口）。
-
-| 扩展 | 状态 | 版本 | 说明 |
-|------|:----:|------|------|
-| Tags（Tagging） | ✅ 已迁出 | v0.1.0（独立起点） | 标签提取/匹配/格式化（从框架核心迁出，D17 模式 3） |
-
----
-
-## 版本管理一览
+所有扩展遵循统一架构模式（异常静默 + TryAddScoped + SG1 声明式实体）：
 
 ```
-MinVer 风格：V{major}.{minor}.{patch}（git tag 前缀 v）
+扩展项目（net10.0）
+├── Entity（partial class + [Table] + [DomainGenerateCode] + FreeSql [Column]）
+├── Store 抽象 + FreeSql 实现（internal sealed + 异常静默）
+├── Manager 门面（internal sealed + 聚合查询）
+├── ExtensionInitializer（[TKWFExtension] + TryAddScoped 三钩子）
+└── README.md（技术规范）
 
-扩展包独立版本：与主框架 _TKWF 版本独立（各打各的 tag）
-开发方案命名：{扩展名称}-开发方案.md
-审核报告命名：{扩展名称}-审核报告.md
-ADR 命名：ADR-{扩展名称}-{title}.md
+测试项目（xunit.v3 + FreeSql SQLite 内存）
+├── ConsumerHostInitializer（[TKWFEnabledExtension] 白名单样板）
+└── 测试类（Store CRUD + Manager 聚合 + Initializer DI + 异常静默）
+```
 
-Tag 纪律：必须有开发方案 + 审核报告，且征得同意
+### 扩展启用（v4.9.85+ 必需）
+
+扩展不再"发现即启用"——消费方须在领域初始化器上显式声明白名单：
+
+```csharp
+using TKWF.Ext.Identity;
+
+[TKWFEnabledExtension(typeof(IdentityExtensionInitializer<>))]
+public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
+```
+
+声明后扩展三钩子（`ConfigureServices`/`ConfigureFilters`/`InitializeAsync`）自动接线。
+
+### 依赖倒置（ADR48 D7）
+
+扩展间依赖走 `.Abstractions`（接口/契约），不引用实现项目——L2 门控硬约束（`TKWF0022` Error）。
+
+```
+Navigation → Permissions.Abstractions（✅ 合法）
+Navigation → Permissions（❌ TKWF0022 Error）
 ```
 
 ---
 
-## 适用场景 / 边界
+## 快速开始
 
-- ✅ TKWF 官方业务扩展（D17 Phase 4：Identity / AuditLogging / Settings / BlobStoring / Emailing / Account / Tagging）
-- ✅ 第三方开发者基于 TKWF 的扩展（可独立仓库，不强制入本仓库）
-- ❌ 主框架核心（Domain / Core / SG / Infrastructure）——留在 `_TKWF/`
-- ❌ 扩展机制基座本身（D17/ADR37-39）——主框架文档，不受本仓库约束
+### 消费方引用扩展
+
+```xml
+<!-- 消费方 .csproj -->
+<ProjectReference Include="..\..\_Framework\Identity\TKWF.Ext.Identity.csproj" />
+```
+
+### 启用 + 使用
+
+```csharp
+// 1. 白名单声明（v4.9.85+）
+[TKWFEnabledExtension(typeof(IdentityExtensionInitializer<>))]
+public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
+
+// 2. 注入 + 使用
+public class AuthService(IUserManager userManager)
+{
+    public async Task<UserEntity?> LoginAsync(string name, string password)
+        => await userManager.VerifyCredentialsAsync(name, password);
+}
+```
+
+---
+
+## 版本管理
+
+```
+MinVer：V{major}.{minor}.{patch}（git tag 命名空间前缀，如 Identity/v0.1.0）
+
+扩展包独立版本：与主框架 _TKWF 版本完全独立
+Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
+```
+
+---
+
+## 扩展规划
+
+P0（必须）：**9/11 已实施**——Identity / Account / Navigation / AuditLogging / Settings / BlobStoring / Emailing / DataDictionary / Tagging + Permissions（V0.7.0 + V0.8.0 编译期校验）
+
+P0 剩余：**PrintTemplates**（打印模板，需先写 ADR 定模板引擎选型 Scriban vs RazorLight + 版本化策略）
+
+路线图与跟踪详见主框架私有 [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](https://github.com/LoongBa/TKW.Framework/blob/master/docs/03_扩展模块/总览和跟踪.md)。
 
 ---
 
@@ -114,5 +183,5 @@ Copyright © LoongBa.cn 2026 · MIT
 
 ## 相关仓库
 
-- [TKW.Framework（主框架）](https://github.com/LoongBa/TKW.Framework) — 领域框架 + 扩展机制（`TKWFExtensionAttribute` + `ExtensionInitializer` 三钩子 + SG1 发现 + `[TKWFEnabledExtension]` 白名单启用）
-- [LoongBa-Scaffold](https://github.com/LoongBa/LoongBa-Scaffold) — 本文档体系脚手架来源
+- [TKW.Framework（主框架）](https://github.com/LoongBa/TKW.Framework) — 领域框架 + 扩展机制（`TKWFExtensionAttribute` + `ExtensionInitializer` 三钩子 + SG1 发现 + `[TKWFEnabledExtension]` 白名单启用 + 三层门控 ADR50）
+- [LoongBa-Scaffold](https://github.com/LoongBa/LoongBa-Scaffold) — 文档体系脚手架来源

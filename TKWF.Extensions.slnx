@@ -30,6 +30,9 @@
   <Folder Name="/_Framework/Account/">
     <Project Path="_Framework/Account/TKWF.Ext.Account.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Navigation/">
+    <Project Path="_Framework/Navigation/TKWF.Ext.Navigation.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -54,6 +57,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.BlobStoring.Tests/">
     <Project Path="_Tests/Extension.BlobStoring.Tests/TKWF.Ext.BlobStoring.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Navigation.Tests/">
+    <Project Path="_Tests/Extension.Navigation.Tests/TKWF.Ext.Navigation.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Identity.Tests/">
     <Project Path="_Tests/Extension.Identity.Tests/TKWF.Ext.Identity.Tests.csproj" />

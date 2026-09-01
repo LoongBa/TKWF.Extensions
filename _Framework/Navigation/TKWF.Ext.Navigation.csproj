@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Navigation</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.Navigation</PackageId>
+    <Description>TKWF 扩展：菜单数据模型与贡献机制（MenuItemDefinition + IMenuContributor + IMenuManager 权限过滤）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <!-- V4.9.85 (ADR48 D7)：Navigation 引用 Permissions.Abstractions（依赖倒置），不引用 Permissions 实现项目 -->
+    <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- V4.9.74 (W6): 单元测试访问 internal 默认实现（MenuDefinitionRepository/MenuManager） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Navigation.Tests" />
+  </ItemGroup>
+
+</Project>

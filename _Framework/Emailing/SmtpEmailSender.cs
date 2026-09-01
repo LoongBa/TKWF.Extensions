@@ -63,7 +63,11 @@ namespace TKWF.Ext.Emailing
                 var mimeMessage = BuildMimeMessage(message, opts);
 
                 using var client = new SmtpClient();
-                await client.ConnectAsync(opts.SmtpHost, opts.SmtpPort, MailKit.Security.SecureSocketOptions.StartTls, ct);
+                // V0.1.1（评审修复）：SSL 模式可配置——UseSsl=true 用 SslOnConnect（465 隐式），否则 StartTls（587 标准）
+                var socketOptions = opts.UseSsl
+                    ? MailKit.Security.SecureSocketOptions.SslOnConnect
+                    : MailKit.Security.SecureSocketOptions.StartTls;
+                await client.ConnectAsync(opts.SmtpHost, opts.SmtpPort, socketOptions, ct);
                 await client.AuthenticateAsync(opts.SmtpUser, opts.SmtpPassword, ct);
                 await client.SendAsync(mimeMessage, ct);
                 await client.DisconnectAsync(true, ct);

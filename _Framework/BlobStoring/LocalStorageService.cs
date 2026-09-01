@@ -24,7 +24,7 @@ namespace TKWF.Ext.BlobStoring
         }
 
         /// <inheritdoc />
-        public async Task<BlobInfo> UploadAsync(string name, Stream content, string? contentType = null, CancellationToken ct = default)
+        public async Task<BlobInfo?> UploadAsync(string name, Stream content, string? contentType = null, CancellationToken ct = default)
         {
             if (content == null) throw new ArgumentNullException(nameof(content));
 
@@ -56,8 +56,8 @@ namespace TKWF.Ext.BlobStoring
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Blob 上传失败: Name={Name}", name);
-                // 返回空信息，不抛出异常
-                return new BlobInfo { Name = name, Path = "", ContentType = contentType, Size = 0 };
+                // V0.1.1（评审修复）：返回 null 而非空 BlobInfo——调用方可区分成功/失败（null=失败）
+                return null!;
             }
         }
 

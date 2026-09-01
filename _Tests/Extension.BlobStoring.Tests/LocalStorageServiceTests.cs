@@ -122,8 +122,8 @@ public class LocalStorageServiceTests : IDisposable
         // Act — should not throw
         var result = await service2.UploadAsync("test.txt", content, "text/plain");
 
-        // Assert
-        Assert.NotNull(result);
+        // Assert — V0.1.1 评审修复：失败返回 null（区分成功/失败）
+        Assert.Null(result);
         Assert.Single(logger.Warnings);
         Assert.Contains("Blob 上传失败", logger.Warnings[0]);
     }

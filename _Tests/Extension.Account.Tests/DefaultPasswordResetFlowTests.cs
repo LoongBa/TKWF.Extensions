@@ -163,6 +163,23 @@ public class DefaultPasswordResetFlowTests
     }
 
     [Fact]
+    public async Task CompleteReset_SetPasswordFails_CodeStillMarkedUsed_NoReplay()
+    {
+        // V0.1.1 评审修复：先 MarkUsed 后 SetPassword——即使密码落地失败，码也已标记已用（防重放攻击）
+        var fsql = CreateFreeSql();
+        var manager = new FakePasswordManager { SetResult = false }; // 模拟密码落地失败
+        var flow = CreateFlow(fsql, manager);
+        await flow.InitiateResetAsync("alice", CancellationToken.None);
+        var saved = fsql.Select<PasswordResetCodeEntity>().First();
+
+        var result = await flow.CompleteResetAsync("alice", saved.ResetCode, "HASH", "SALT", CancellationToken.None);
+
+        Assert.False(result.Success);
+        var updated = fsql.Select<PasswordResetCodeEntity>().Where(p => p.Id == saved.Id).First();
+        Assert.True(updated.IsUsed); // 码已标记已用——不可重放
+    }
+
+    [Fact]
     public async Task CompleteReset_NoPasswordManager_ReturnsFailure()
     {
         var fsql = CreateFreeSql();

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -74,7 +75,7 @@ namespace TKWF.Ext.Permissions.Validation
                     if (defineMethod?.DeclaringSyntaxReferences is not { Length: > 0 } refs) return;
                     if (refs[0].GetSyntax() is not MethodDeclarationSyntax defineSyntax) return;
                     foreach (var name in ExtractPermissionNames(defineSyntax))
-                        state.DeclaredNames.Add(name);
+                        state.DeclaredNames.TryAdd(name, 0);
                 }, SymbolKind.NamedType);
 
                 // 2. 语法动作：收集 [RequirePermission] 参数字符串（含位置）
@@ -95,7 +96,7 @@ namespace TKWF.Ext.Permissions.Validation
 
                     foreach (var (location, name) in state.RequireUsages)
                     {
-                        if (!state.DeclaredNames.Contains(name))
+                        if (!state.DeclaredNames.ContainsKey(name))
                             endContext.ReportDiagnostic(Diagnostic.Create(Rule, location, name));
                     }
                 });
@@ -138,14 +139,16 @@ namespace TKWF.Ext.Permissions.Validation
             return false;
         }
 
-        /// <summary>编译内共享校验状态（跨符号/语法/结束动作）。</summary>
+        /// <summary>编译内共享校验状态（跨符号/语法/结束动作）。
+        /// <para>并发安全（V0.8.1 修复）：EnableConcurrentExecution 下符号/语法动作并发执行——
+        /// DeclaredNames 用 ConcurrentDictionary（键集合），RequireUsages 用 ConcurrentBag。</para></summary>
         private sealed class ValidationState
         {
-            /// <summary>源码贡献者已声明的权限名集合。</summary>
-            public HashSet<string> DeclaredNames { get; } = new(StringComparer.Ordinal);
+            /// <summary>源码贡献者已声明的权限名集合（ConcurrentDictionary 作并发 Set，V0.8.1）。</summary>
+            public ConcurrentDictionary<string, byte> DeclaredNames { get; } = new(StringComparer.Ordinal);
 
-            /// <summary>[RequirePermission] 使用位置 + 权限名。</summary>
-            public List<(Location Location, string Name)> RequireUsages { get; } = new();
+            /// <summary>[RequirePermission] 使用位置 + 权限名（ConcurrentBag，V0.8.1）。</summary>
+            public ConcurrentBag<(Location Location, string Name)> RequireUsages { get; } = new();
         }
 
         /// <summary>类型是否携带指定特性（含继承链）。</summary>

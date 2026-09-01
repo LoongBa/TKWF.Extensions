@@ -12,6 +12,12 @@ namespace TKWF.Ext.Emailing
         /// <summary>SMTP 服务器端口（默认 587）。</summary>
         public int SmtpPort { get; set; } = 587;
 
+        /// <summary>
+        /// 是否使用隐式 SSL（SslOnConnect，465 端口）。默认 false = StartTls（587 端口标准）。
+        /// <para>V0.1.1（评审修复）：原先硬编码 StartTls，无法对接仅支持隐式 SSL 的服务器。</para>
+        /// </summary>
+        public bool UseSsl { get; set; }
+
         /// <summary>SMTP 认证用户名。</summary>
         public string SmtpUser { get; set; } = "";
 

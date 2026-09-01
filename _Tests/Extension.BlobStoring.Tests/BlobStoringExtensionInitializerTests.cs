@@ -89,8 +89,8 @@ public class BlobStoringExtensionInitializerTests
     /// <summary>测试专用 IBlobStorageService：标记消费方自定义实现。</summary>
     private sealed class ConsumerBlobStorageService : IBlobStorageService
     {
-        public Task<BlobInfo> UploadAsync(string name, System.IO.Stream content, string? contentType = null, CancellationToken ct = default)
-            => Task.FromResult(new BlobInfo());
+        public Task<BlobInfo?> UploadAsync(string name, System.IO.Stream content, string? contentType = null, CancellationToken ct = default)
+            => Task.FromResult<BlobInfo?>(new BlobInfo());
         public Task<System.IO.Stream?> DownloadAsync(string path, CancellationToken ct = default)
             => Task.FromResult<System.IO.Stream?>(null);
         public Task<bool> DeleteAsync(string path, CancellationToken ct = default)

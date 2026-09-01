@@ -119,16 +119,20 @@ namespace TKWF.Ext.Identity
 
             try
             {
-                // 先清空已分配
+                var desired = roleIds.Distinct().ToList();
+
+                // 先分配目标角色（幂等）——中途失败时旧角色仍保留，避免角色丢失（V0.1.1 原子性修复）
+                foreach (var roleId in desired)
+                {
+                    await _userStore.AssignRoleAsync(userId, roleId, ct);
+                }
+
+                // 再清理不在目标集的旧角色
                 var existing = await _userStore.GetRolesAsync(userId, ct);
                 foreach (var role in existing)
                 {
-                    await _userStore.RemoveRoleAsync(userId, role.Id, ct);
-                }
-
-                foreach (var roleId in roleIds.Distinct())
-                {
-                    await _userStore.AssignRoleAsync(userId, roleId, ct);
+                    if (!desired.Contains(role.Id))
+                        await _userStore.RemoveRoleAsync(userId, role.Id, ct);
                 }
             }
             catch (Exception ex)

@@ -11,8 +11,8 @@ namespace TKWF.Ext.BlobStoring
     /// </summary>
     public interface IBlobStorageService
     {
-        /// <summary>上传 Blob，返回元数据信息。</summary>
-        Task<BlobInfo> UploadAsync(string name, Stream content, string? contentType = null, CancellationToken ct = default);
+        /// <summary>上传 Blob，返回元数据信息（失败返回 null——V0.1.1 评审修复：可区分成功/失败）。</summary>
+        Task<BlobInfo?> UploadAsync(string name, Stream content, string? contentType = null, CancellationToken ct = default);
 
         /// <summary>下载 Blob，返回内容流（不存在返回 null）。</summary>
         Task<Stream?> DownloadAsync(string path, CancellationToken ct = default);

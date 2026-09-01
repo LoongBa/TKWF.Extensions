@@ -77,7 +77,10 @@ namespace TKWF.Ext.Account
 
         /// <summary>
         /// 验证重置码并设置新密码（SecurePassword 契约：客户端已计算 PBKDF2）。
-        /// <para>码无效/已用/过期 → 失败；密码落地成功后标记已用（幂等消费）。</para>
+        /// <para>码无效/已用/过期 → 失败；先标记已用（幂等消费）再落地密码——避免
+        /// 改密成功但标记失败时重置码可重复使用（V0.1.1 安全修复）。</para>
+        /// <para>注：调换顺序后若密码落地失败，码已标记已用——用户需重新发起重置
+        /// （安全侧 fail-closed 正确，重置码一次性语义保持）。</para>
         /// </summary>
         public async Task<ResetResult> CompleteResetAsync(
             string userName,
@@ -100,10 +103,12 @@ namespace TKWF.Ext.Account
                 if (record == null || record.IsUsed || record.ExpireTime < DateTime.Now)
                     return new ResetResult(false, "无效或已过期的重置码");
 
+                // 先标记已用（幂等消费）——确保码一次性，即使后续改密失败也不可重用
+                await _store.MarkUsedAsync(record.Id, ct);
+
                 var ok = await passwordManager.SetPasswordAsync(userName, newClientHash, salt, ct);
                 if (!ok) return new ResetResult(false, "密码更新失败");
 
-                await _store.MarkUsedAsync(record.Id, ct); // 幂等消费
                 return new ResetResult(true);
             }
             catch (Exception ex)

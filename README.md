@@ -179,7 +179,9 @@ P0 剩余：**PrintTemplates**（打印模板，需先写 ADR 定模板引擎选
 
 ## 许可证
 
-Copyright © LoongBa.cn 2026 · MIT
+Copyright © 2026 LoongBa · [Apache-2.0](./LICENSE)
+
+> 开源、允许商用与闭源衍生，但必须保留版权与归属声明（Attribution）。
 
 ## 相关仓库
 

@@ -1,27 +1,29 @@
 # TKWF.Extensions
 
-> TKWF 业务扩展仓库——权限、导航、身份、审计、设置、邮件、存储、账户、数据字典等。
+> TKWF 扩展模块仓库——权限、导航、身份、审计、设置、邮件、存储、账户、数据字典等。
 >
-> 扩展与主框架 **[TKW.Framework](https://github.com/LoongBa/TKW.Framework)** 解耦：扩展代码、测试、使用指南独立演进，不进入主框架 `TKW.Framework.slnx`。
+> 扩展模块与主框架 **[TKW.Framework](https://github.com/LoongBa/TKW.Framework)** 解耦：扩展代码、测试、使用指南独立演进，不进入主框架 `TKW.Framework.slnx`。
 
 ---
 
-## 扩展一览
+## 扩展模块一览
 
-| 扩展 | 版本 | 说明 | Tag |
-|------|------|------|-----|
-| **Permissions** | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001） | `v0.7.0` |
-| **Permissions.Abstractions** | V0.1.0 | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | — |
-| **Permissions.Validation** | V0.8.0 | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合） | — |
-| **Identity** | V0.1.0 | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证 | `Identity/v0.1.0` |
-| **Account** | V0.1.0 | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐） | `Account/v0.1.0` |
-| **Navigation** | V0.1.0 | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出） | `Navigation/v0.1.0` |
-| **AuditLogging** | V0.1.0 | 审计日志 FreeSql 存储 + SG1 实体 | `AuditLogging/v0.1.0` |
-| **Settings** | V0.1.0 | 全局/用户级配置持久化 + 分层读取 | `Settings/v0.1.0` |
-| **BlobStoring** | V0.1.0 | 二进制大对象本地文件系统存储 + FreeSql 记录 | `BlobStoring/v0.1.0` |
-| **Emailing** | V0.1.0 | SMTP/MailKit 邮件发送 + FreeSql 发送记录 | `Emailing/v0.1.0` |
-| **DataDictionary** | V0.1.0 | 数据字典集中管理（定义 + 项 + 按编码查询） | `DataDictionary/v0.1.0` |
-| **Tagging** | V0.1.0 | 标签提取 / 匹配 / 格式化（从框架核心迁出） | `v0.1.0` |
+> 各扩展模块使用说明
+
+| 扩展                         | 版本            | 说明                                                                     | Tag                     |
+| ---------------------------- | --------------- | ------------------------------------------------------------------------ | ----------------------- |
+| **Permissions**              | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）          | `v0.7.0`                |
+| **Permissions.Abstractions** | V0.1.0          | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       |
+| **Permissions.Validation**   | V0.8.0          | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）                      | —                       |
+| **Identity**                 | V0.1.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证                     | `Identity/v0.1.0`       |
+| **Account**                  | V0.1.0          | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）                       | `Account/v0.1.0`        |
+| **Navigation**               | V0.1.0          | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.0`     |
+| **AuditLogging**             | V0.1.0          | 审计日志 FreeSql 存储 + SG1 实体                                         | `AuditLogging/v0.1.0`   |
+| **Settings**                 | V0.1.0          | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.1.0`       |
+| **BlobStoring**              | V0.1.0          | 二进制大对象本地文件系统存储 + FreeSql 记录                              | `BlobStoring/v0.1.0`    |
+| **Emailing**                 | V0.1.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录                                 | `Emailing/v0.1.0`       |
+| **DataDictionary**           | V0.1.0          | 数据字典集中管理（定义 + 项 + 按编码查询）                               | `DataDictionary/v0.1.0` |
+| **Tagging**                  | V0.1.0          | 标签提取 / 匹配 / 格式化（从框架核心迁出）                               | `v0.1.0`                |
 
 > 全量 **289 测试全绿**——`dotnet test` 零失败。
 
@@ -29,12 +31,12 @@
 
 ## 仓库定位
 
-| 项 | 说明 |
-|----|------|
-| 主框架 | [`_TKWF/`](https://github.com/LoongBa/TKW.Framework)（TKW.Framework 领域框架） |
-| 本仓库 | TKWF 业务扩展包（`TKWF.Ext.*`）——独立版本，与主框架版本无关 |
+| 项       | 说明                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------ |
+| 主框架   | [`_TKWF/`](https://github.com/LoongBa/TKW.Framework)（TKW.Framework 领域框架）                                     |
+| 本仓库   | TKWF 业务扩展包（`TKWF.Ext.*`）——独立版本，与主框架版本无关                                                        |
 | 引用模式 | 扩展经 `$(TKWFRoot)` ProjectReference 引用主框架源码（跨仓库编译期依赖）；主框架发布 NuGet 后可切 PackageReference |
-| 版本管理 | MinVer 自动管理（git tag 即版本）；各扩展独立版本（各打各的 tag，命名空间前缀如 `Identity/v0.1.0`） |
+| 版本管理 | MinVer 自动管理（git tag 即版本）；各扩展独立版本（各打各的 tag，命名空间前缀如 `Identity/v0.1.0`）                |
 
 ---
 

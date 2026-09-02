@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\_Framework\Tagging\TKWF.Ext.Tagging.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Utility\TKWF.Utility.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
   </ItemGroup>
 

@@ -3,7 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
-using TKW.Framework.Cryptography;
+using TKW.Framework.Utility.Cryptography;
 
 namespace TKWF.Ext.Identity.Tests;
 

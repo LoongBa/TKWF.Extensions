@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using TKW.Framework.Cryptography;
+using TKW.Framework.Utility.Cryptography;
 
 namespace TKWF.Ext.Identity
 {

@@ -21,7 +21,7 @@
   <ItemGroup>
     <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Cryptography\TKWF.Cryptography.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Utility\TKWF.Utility.csproj" />
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />

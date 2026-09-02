@@ -1,4 +1,4 @@
-# TKWF.Tools.Tags 标签提取引擎技术规范
+# TKWF.Ext.Tagging 标签存储扩展技术规范
 
 **状态**: 核心基础设施 (Core Infrastructure) | **版本**: V4.3 | **框架**: .NET 10
 

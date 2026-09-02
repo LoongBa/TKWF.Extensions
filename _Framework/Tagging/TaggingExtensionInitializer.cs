@@ -6,21 +6,22 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.Tagging;
-using TKWF.Ext.Tagging.Matchers;
-using TKWF.Ext.Tagging.Processors;
+using TKW.Framework.Utility.Tags;
+using TKW.Framework.Utility.Tags.Matchers;
+using TKW.Framework.Utility.Tags.Processors;
 
 namespace TKWF.Ext.Tagging;
 
 /// <summary>
-/// V4.9.79 (D17 模式 3)：标签服务扩展初始化器——标签提取/匹配/格式化（从框架核心迁出）。
+/// ADR52 (V4.9.91)：标签存储扩展初始化器——标签算法已回归 <c>TKWF.Utility</c>（<c>TKW.Framework.Utility.Tags</c>），
+/// 本扩展瘦身为<b>标签存储扩展</b>：DI 接线（注册 Utility 算法服务）+ 规则/命中持久化（V0.3.0 实施）。
 /// 经 [TKWFExtension] 被 SG1 编译期发现，三钩子接线：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——DI 构建前：注册默认分词器 + 内置匹配器家族 + 后置处理器 + 引擎流水线 + 业务门面 <see cref="ITagService"/></item>
+/// <item><see cref="ConfigureServices"/>——DI 构建前：注册来自 Utility 的分词器 + 匹配器家族 + 后置处理器 + 流水线 + 业务门面 <see cref="ITagService"/></item>
 /// <item><see cref="ConfigureFilters"/>——Tagging 无全局过滤器（空实现）</item>
 /// <item><see cref="InitializeAsync"/>——系统就绪后：空实现（规则加载由消费方调用 <see cref="ITagService.LoadRules"/> 或后续迭代 Options 注入）</item>
 /// </list>
-/// <para>命名空间 <c>TKWF.Ext.Tagging</c>（D17 §5.1 设计 + 包名约定 §4.6）。</para>
+/// <para>命名空间 <c>TKWF.Ext.Tagging</c>（D17 §5.1 设计 + 包名约定 §4.6；算法类型见 Utility）。</para>
 /// </summary>
 [TKWFExtension("Tagging")]
 public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
@@ -30,7 +31,7 @@ public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUser
     public override string Name => "Tagging";
 
     /// <summary>扩展描述。</summary>
-    public override string Description => "标签服务扩展——标签提取/匹配/格式化";
+    public override string Description => "标签存储扩展——标签算法来自 TKWF.Utility.Tags，持久化 V0.3.0 实施";
 
     public override void ConfigureServices(IServiceCollection services)
     {
@@ -53,6 +54,7 @@ public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUser
         services.TryAddSingleton<TagExtractionPipeline>();
         // 4. 业务门面 ITagService（消费方经 Use<ITagService>() 调用；实现类 TagService 可从 DI 解析）
         services.TryAddSingleton<ITagService, TagService>();
+        // 5. 存储扩展占位（V0.3.0 实施）：ITagRuleStore / ITagHitStore / ITagAnalysisService 后续注册
     }
 
     /// <summary>Tagging 无全局过滤器。</summary>

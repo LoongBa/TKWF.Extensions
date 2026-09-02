@@ -5,9 +5,10 @@ using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Enumerations;
+using TKW.Framework.Utility.Tags;
+using TKW.Framework.Utility.Tags.Matchers;
+using TKW.Framework.Utility.Tags.Processors;
 using TKWF.Ext.Tagging;
-using TKWF.Ext.Tagging.Matchers;
-using TKWF.Ext.Tagging.Processors;
 
 namespace TKWF.Ext.Tagging.Tests;
 

@@ -10,20 +10,22 @@
 
 > 各扩展模块使用说明
 
-| 扩展                         | 版本            | 说明                                                                     | Tag                     |
-| ---------------------------- | --------------- | ------------------------------------------------------------------------ | ----------------------- |
-| **Permissions**              | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）          | `v0.7.0`                |
-| **Permissions.Abstractions** | V0.1.0          | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       |
-| **Permissions.Validation**   | V0.8.0          | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）                      | —                       |
-| **Identity**                 | V0.1.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证                     | `Identity/v0.1.0`       |
-| **Account**                  | V0.1.0          | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）                       | `Account/v0.1.0`        |
-| **Navigation**               | V0.1.0          | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.0`     |
-| **AuditLogging**             | V0.1.0          | 审计日志 FreeSql 存储 + SG1 实体                                         | `AuditLogging/v0.1.0`   |
-| **Settings**                 | V0.1.0          | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.1.0`       |
-| **BlobStoring**              | V0.1.0          | 二进制大对象本地文件系统存储 + FreeSql 记录                              | `BlobStoring/v0.1.0`    |
-| **Emailing**                 | V0.1.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录                                 | `Emailing/v0.1.0`       |
-| **DataDictionary**           | V0.1.0          | 数据字典集中管理（定义 + 项 + 按编码查询）                               | `DataDictionary/v0.1.0` |
-| **Tagging**                  | V0.1.0          | 标签提取 / 匹配 / 格式化（从框架核心迁出）                               | `v0.1.0`                |
+| 扩展                         | 版本            | 说明                                                                     | Tag                     | README                                   | 指南                                     |
+| ---------------------------- | --------------- | ------------------------------------------------------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------------- |
+| **Permissions**              | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）          | `v0.7.0`                | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
+| **Permissions.Abstractions** | V0.1.0          | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       | —                                        | —（并入 Permissions）                    |
+| **Permissions.Validation**   | V0.8.0          | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）                      | —                       | —                                        | —（并入 Permissions）                    |
+| **Identity**                 | V0.1.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证                     | `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
+| **Account**                  | V0.1.0          | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）                       | `Account/v0.1.0`        | [README](./_Framework/Account/README.md)       | [指南](./docs/Account/账户管理扩展-使用指南.md) |
+| **Navigation**               | V0.1.0          | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.0`     | —                                        | [指南](./docs/Navigation/导航扩展-使用指南.md)  |
+| **AuditLogging**             | V0.1.0          | 审计日志 FreeSql 存储 + SG1 实体                                         | `AuditLogging/v0.1.0`   | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
+| **Settings**                 | V0.1.0          | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.1.0`       | [README](./_Framework/Settings/README.md)      | [指南](./docs/Settings/设置管理扩展-使用指南.md) |
+| **BlobStoring**              | V0.1.0          | 二进制大对象本地文件系统存储 + FreeSql 记录                              | `BlobStoring/v0.1.0`    | [README](./_Framework/BlobStoring/README.md)   | [指南](./docs/BlobStoring/二进制存储扩展-使用指南.md) |
+| **Emailing**                 | V0.1.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录                                 | `Emailing/v0.1.0`       | [README](./_Framework/Emailing/README.md)      | [指南](./docs/Emailing/邮件发送扩展-使用指南.md) |
+| **DataDictionary**           | V0.1.0          | 数据字典集中管理（定义 + 项 + 按编码查询）                               | `DataDictionary/v0.1.0` | [README](./_Framework/DataDictionary/README.md) | [指南](./docs/DataDictionary/数据字典扩展-使用指南.md) |
+| **Tagging**                  | V0.1.0          | 标签提取 / 匹配 / 格式化（从框架核心迁出）                               | `v0.1.0`                | [README](./_Framework/Tagging/README.md)       | [指南](./docs/Tagging/标签服务扩展-使用指南.md)  |
+
+> 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
 > 全量 **289 测试全绿**——`dotnet test` 零失败。
 

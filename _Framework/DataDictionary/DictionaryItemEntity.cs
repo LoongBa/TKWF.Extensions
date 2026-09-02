@@ -52,5 +52,19 @@ namespace TKWF.Ext.DataDictionary
         /// <summary>更新时间。</summary>
         [FreeSql.DataAnnotations.Column(Position = 9)]
         public DateTimeOffset UpdateTime { get; set; } = DateTimeOffset.Now;
+
+        /// <summary>父项编码（业务编码引用，V0.2.0 树形分组）。根节点为 null。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 10)]
+        [MaxLength(128)]
+        public string? ParentCode { get; set; }
+
+        /// <summary>层级深度（V0.2.0 树形分组）。根节点为 0。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 11)]
+        public int Level { get; set; }
+
+        /// <summary>物化路径（V0.2.0 树形分组，形如 "/root/child/grandchild"）。根节点为 "/{Code}"。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 12)]
+        [MaxLength(1024)]
+        public string Path { get; set; } = "";
     }
 }

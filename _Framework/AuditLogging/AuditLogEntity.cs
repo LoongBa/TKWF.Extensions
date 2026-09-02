@@ -13,6 +13,9 @@ namespace TKWF.Ext.AuditLogging
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
     [Table("AuditLog")]
+    [FreeSql.DataAnnotations.Index("IX_AuditLog_ExecutionTime", nameof(ExecutionTime), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("IX_AuditLog_UserName", nameof(UserName), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("IX_AuditLog_CorrelationId", nameof(CorrelationId), IsUnique = false)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuditLogEntity
     {

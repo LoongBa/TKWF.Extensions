@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -75,10 +77,39 @@ public class DataDictionaryExtensionInitializerTests
         Assert.Equal(typeof(ConsumerDictionaryManager), descriptors[0].ImplementationType);
     }
 
+    [Fact]
+    public void ConfigureServices_Registers_IMemoryCache()
+    {
+        var services = new ServiceCollection();
+        new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IMemoryCache));
+
+        Assert.NotNull(descriptor);
+        Assert.Equal(ServiceLifetime.Singleton, descriptor!.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_DataDictionaryOptions()
+    {
+        var services = new ServiceCollection();
+        new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetService<Microsoft.Extensions.Options.IOptions<DataDictionaryOptions>>();
+
+        // AddOptions<DataDictionaryOptions>() 为内部注册——通过容器解析 IOptions<T> 验证默认值生效
+        Assert.NotNull(options);
+        Assert.True(options!.Value.EnableCache);
+        Assert.Equal(300, options.Value.CacheExpirationSeconds);
+    }
+
     /// <summary>测试专用 IDictionaryStore：标记消费方自定义实现。</summary>
     private sealed class ConsumerDictionaryStore : IDictionaryStore
     {
         public Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default) => Task.FromResult<DictionaryDefinitionEntity?>(null);
+        public Task<DictionaryDefinitionEntity?> GetDefinitionByIdAsync(long id, CancellationToken ct = default) => Task.FromResult<DictionaryDefinitionEntity?>(null);
+        public Task<DictionaryItemEntity?> GetItemByIdAsync(long id, CancellationToken ct = default) => Task.FromResult<DictionaryItemEntity?>(null);
         public Task<IReadOnlyList<DictionaryDefinitionEntity>> GetDefinitionsAsync(int skip = 0, int take = 20, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<DictionaryDefinitionEntity>>(Array.Empty<DictionaryDefinitionEntity>());
         public Task<IReadOnlyList<DictionaryItemEntity>> GetItemsAsync(long definitionId, CancellationToken ct = default)
@@ -99,5 +130,9 @@ public class DataDictionaryExtensionInitializerTests
             => Task.FromResult<DictionaryDefinitionWithItems?>(null);
         public Task UpsertDefinitionAsync(DictionaryDefinitionEntity definition, CancellationToken ct = default) => Task.CompletedTask;
         public Task UpsertItemAsync(DictionaryItemEntity item, CancellationToken ct = default) => Task.CompletedTask;
+        public Task DeleteDefinitionAsync(long id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task DeleteItemAsync(long id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<DictionaryTreeNode>> GetItemsTreeAsync(string code, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<DictionaryTreeNode>>(Array.Empty<DictionaryTreeNode>());
     }
 }

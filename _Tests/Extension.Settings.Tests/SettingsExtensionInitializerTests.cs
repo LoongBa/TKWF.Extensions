@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -8,7 +10,7 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.Settings.Tests;
 
 /// <summary>
-/// SettingsExtensionInitializer 测试——覆盖 [TKWFExtension] 特性声明、DI 注册、TryAddScoped 语义。
+/// SettingsExtensionInitializer 测试——覆盖 [TKWFExtension] 特性声明、DI 注册、TryAddScoped 语义、IMemoryCache + Options 注册。
 /// </summary>
 public class SettingsExtensionInitializerTests
 {
@@ -51,6 +53,34 @@ public class SettingsExtensionInitializerTests
     }
 
     [Fact]
+    public void ConfigureServices_Registers_IMemoryCache_Descriptor()
+    {
+        var services = new ServiceCollection();
+        new SettingsExtensionInitializer<SettingsUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IMemoryCache));
+
+        Assert.NotNull(descriptor);
+        Assert.Equal(typeof(MemoryCache), descriptor!.ImplementationType);
+        Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_SettingsOptions_Descriptor()
+    {
+        var services = new ServiceCollection();
+        new SettingsExtensionInitializer<SettingsUserInfo>().ConfigureServices(services);
+
+        // AddOptions<T> 注册 Options 基础设施，可通过 ServiceProvider 解析 IOptions<T>
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<SettingsOptions>>();
+
+        Assert.NotNull(options);
+        Assert.Equal("Global", options.Value.DefaultSettingValueProvider);
+        Assert.Equal(300, options.Value.CacheExpirationSeconds);
+    }
+
+    [Fact]
     public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
     {
         var services = new ServiceCollection();
@@ -87,15 +117,17 @@ public class SettingsExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_DescriptorCount_IsExactlyTwo()
+    public void ConfigureServices_DescriptorCount_IsExactlyFour()
     {
         var services = new ServiceCollection();
         new SettingsExtensionInitializer<SettingsUserInfo>().ConfigureServices(services);
 
         var storeCount = services.Count(d => d.ServiceType == typeof(ISettingStore));
         var managerCount = services.Count(d => d.ServiceType == typeof(ISettingManager));
+        var cacheCount = services.Count(d => d.ServiceType == typeof(IMemoryCache));
         Assert.Equal(1, storeCount);
         Assert.Equal(1, managerCount);
+        Assert.Equal(1, cacheCount);
     }
 
     /// <summary>测试专用 ISettingStore：标记消费方自定义实现。</summary>

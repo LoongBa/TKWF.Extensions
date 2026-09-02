@@ -1,8 +1,8 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (审计日志数据库存储与基础查询) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (审计日志数据库存储与查询 API) | **框架**: .NET 10
 
-**核心约束**: 方法级审计日志持久化、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
+**核心约束**: 方法级审计日志持久化、查询 API、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 
 ---
 
@@ -18,11 +18,13 @@
 
 - **配置割裂**：审计配置（是否启用、是否记录匿名用户）散落在代码中，无法通过 `appsettings.json` 统一管理。
 
+- **查询缺失**（V0.2.0 解决）：V0.1.0 仅提供写入（`IAuditLogStore.SaveAsync`），消费方无法按条件查询审计日志——安全审计、问题排查均需标准化查询能力。
+
 ---
 
 ## 二、设计原理 (Design Principles)
 
-本扩展采用 **"存储抽象 + ORM 无关持久化 + 异常静默"** 架构。
+本扩展采用 **"存储抽象 + 查询 API + ORM 无关持久化 + 异常静默"** 架构。
 
 ### 1. 结构分层
 
@@ -30,22 +32,28 @@
 
 - **存储抽象 (`IAuditLogStore`)**：主框架已有接口，定义 `SaveAsync(AuditLogEntry)`。扩展提供 FreeSql 默认实现。
 
+- **查询抽象 (`IAuditLogQueryService`)**：V0.2.0 新增，扩展侧自建接口（不修改主框架）。按条件分页查询审计日志，返回 DTO 列表。
+
 - **持久化实现 (`FreeSqlAuditLogStore`)**：将 `AuditLogEntry` 映射为 `AuditLogEntity` 并持久化。异常静默处理（不阻塞业务）。
 
-- **声明式实体 (`AuditLogEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` 特性。
+- **查询实现 (`AuditLogQueryService`)**：V0.2.0 新增，internal sealed，FreeSql 查询 + 异常静默（Warning 日志 + 返回空结果）。
+
+- **声明式实体 (`AuditLogEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` + `[Index]` 特性。
 
 ### 2. 安全语义
 
-- **异常静默**：写入失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
+- **异常静默**：写入/查询失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
 
 - **TryAdd 语义**：DI 注册用 `TryAddScoped`——消费方自定义实现优先；扩展默认实现不覆盖消费方。
 
-- **Scoped 生命周期**：`IAuditLogStore` Scoped，自动参与当前请求上下文。
+- **Scoped 生命周期**：`IAuditLogStore` / `IAuditLogQueryService` Scoped，自动参与当前请求上下文。
+
+- **DTO 安全（D5）**：`AuditLogListItemDto` 不含 `ArgumentsJson`——防止脱敏前的参数结构泄露。
 
 ### 3. 与主框架的关系
 
 - `IAuditLogStore` + `AuditLogEntry` + `AuditLogFilterAttribute` 由主框架定义（不动）。
-- 本扩展提供 `FreeSqlAuditLogStore` 实现 + `AuditLoggingExtensionInitializer` 注册。
+- 本扩展提供 `FreeSqlAuditLogStore` 实现 + `IAuditLogQueryService` 查询服务 + `AuditLoggingExtensionInitializer` 注册。
 - 消费方通过 `FilterBuilder.AddAuditLog()` 启用审计日志过滤器。
 
 ---
@@ -61,7 +69,7 @@
 public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-白名单声明后自动注册：`IAuditLogStore`（默认 `FreeSqlAuditLogStore`）。
+白名单声明后自动注册：`IAuditLogStore`（默认 `FreeSqlAuditLogStore`）+ `IAuditLogQueryService`（默认 `AuditLogQueryService`）。
 
 ### 2. 启用审计日志过滤器
 
@@ -80,7 +88,30 @@ protected override void ConfigureGlobalFilters(FilterBuilder<MyUserInfo> builder
 }
 ```
 
-### 3. 配置选项
+### 3. 查询审计日志（V0.2.0）
+
+```csharp
+// 注入 IAuditLogQueryService
+public class AuditQueryService(IAuditLogQueryService queryService)
+{
+    // 按时间范围 + 用户查询
+    var result = await queryService.GetListAsync(new AuditLogQueryInput
+    {
+        StartTime = DateTime.Today.AddDays(-7),
+        UserName = "alice",
+        Success = false,
+        Take = 20
+    });
+
+    // 统计总数
+    var total = await queryService.CountAsync(new AuditLogQueryInput
+    {
+        ServiceName = "OrderService"
+    });
+}
+```
+
+### 4. 配置选项
 
 通过 `appsettings.json` 配置：
 
@@ -97,7 +128,12 @@ protected override void ConfigureGlobalFilters(FilterBuilder<MyUserInfo> builder
 }
 ```
 
-### 4. 自定义 IAuditLogStore
+消费方如需从配置绑定 Options，在自身 `ConfigureServices` 中调用：
+```csharp
+services.Configure<AuditLoggingOptions>(configuration.GetSection("TKWF:AuditLogging"));
+```
+
+### 5. 自定义 IAuditLogStore
 
 若需替换 `FreeSqlAuditLogStore`（如写文件、发送到 SIEM）：
 
@@ -115,9 +151,13 @@ TryAdd 语义确保消费方实现优先。
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
 | **`IAuditLogStore`** | 审计日志存储抽象（主框架定义） | `FreeSqlAuditLogStore`（本扩展） |
+| **`IAuditLogQueryService`** | 审计日志查询服务（V0.2.0，扩展侧自建） | `AuditLogQueryService`（本扩展） |
 | **`AuditLogEntry`** | 审计日志数据模型（主框架定义） | record 类型 |
 | **`AuditLogFilterAttribute`** | 方法级审计日志过滤器（主框架定义） | 消费方 opt-in 启用 |
 | **`AuditLogEntity`** | 审计日志表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
+| **`AuditLogQueryInput`** | 查询输入参数（V0.2.0） | record 类型 |
+| **`AuditLogListItemDto`** | 查询列表项 DTO（V0.2.0，不含 ArgumentsJson） | record 类型 |
+| **`AuditLogPagedResult`** | 分页查询结果（V0.2.0） | record 类型 |
 | **`AuditLoggingUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
 | **`AuditLoggingOptions`** | 配置选项（`TKWF:AuditLogging` 节） | 内置 |
 | **`AuditLoggingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
@@ -136,12 +176,14 @@ TryAdd 语义确保消费方实现优先。
 | ServiceName | NVARCHAR(200) | 目标服务名（类名） |
 | MethodName | NVARCHAR(200) | 目标方法名 |
 | ArgumentsJson | NVARCHAR(MAX) | 参数 JSON（已脱敏） |
-| ExecutionTime | DATETIMEOFFSET | 执行时间 |
+| ExecutionTime | DATETIME | 执行时间 |
 | DurationMs | INT | 执行耗时（毫秒） |
 | Success | BIT | 是否执行成功 |
 | Exception | NVARCHAR(MAX) | 异常信息（失败时记录） |
 | CorrelationId | NVARCHAR(128) | 关联 ID（分布式链路追踪） |
 | CreateTime | DATETIMEOFFSET | 记录创建时间 |
+
+**索引**（V0.2.0 新增）：`IX_AuditLog_ExecutionTime` / `IX_AuditLog_UserName` / `IX_AuditLog_CorrelationId`（均为非唯一索引）。
 
 ---
 
@@ -152,6 +194,7 @@ TryAdd 语义确保消费方实现优先。
 | **跟踪对象** | 方法调用事件 | 实体字段变更 |
 | **记录内容** | 调用者、方法、参数、耗时、异常 | 实体字段 OldValue/NewValue |
 | **持久化** | 需 IAuditLogStore 实现 | 需 IEntityHistoryStore 实现 |
+| **查询** | `IAuditLogQueryService`（V0.2.0） | 待实现 |
 | **脱敏** | 内置（SensitiveFields） | 无 |
 | **适用场景** | 安全合规审计 | 业务数据变更追踪 |
 
@@ -159,16 +202,18 @@ TryAdd 语义确保消费方实现优先。
 
 ## 七、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0
 - FreeSql 审计日志存储
 - 基础查询（实体建表）
 - 异常静默处理
 
-### V0.2.0（规划）
-- EF Core 存储实现
-- 查询 API（按时间/用户/服务名/方法名筛选）
-- 分页查询
+### V0.2.0（当前）
+- 查询 API（`IAuditLogQueryService`：按时间/用户/服务名/方法名等条件分页查询）
+- 索引补建（ExecutionTime / UserName / CorrelationId）
+- Options 绑定修复（`AddOptions<AuditLoggingOptions>` 注册）
+- DTO 安全（不含 ArgumentsJson）
 
 ### V0.3.0（规划）
+- 统计聚合（CountByServiceAsync / CountByUserAsync 等）
 - 数据清理/归档策略
 - 审计日志统计分析

@@ -13,6 +13,12 @@ namespace TKWF.Ext.DataDictionary
         /// <summary>按编码读取字典定义（不存在返回 null）。</summary>
         Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default);
 
+        /// <summary>按 Id 读取字典定义（不存在返回 null；V0.2.0 缓存失效反查用）。</summary>
+        Task<DictionaryDefinitionEntity?> GetDefinitionByIdAsync(long id, CancellationToken ct = default);
+
+        /// <summary>按 Id 读取字典项（不存在返回 null；V0.2.0 缓存失效反查用）。</summary>
+        Task<DictionaryItemEntity?> GetItemByIdAsync(long id, CancellationToken ct = default);
+
         /// <summary>分页读取字典定义列表。</summary>
         Task<IReadOnlyList<DictionaryDefinitionEntity>> GetDefinitionsAsync(int skip = 0, int take = 20, CancellationToken ct = default);
 

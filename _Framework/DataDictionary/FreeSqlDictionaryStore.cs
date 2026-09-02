@@ -39,6 +39,36 @@ namespace TKWF.Ext.DataDictionary
             }
         }
 
+        public async Task<DictionaryDefinitionEntity?> GetDefinitionByIdAsync(long id, CancellationToken ct = default)
+        {
+            try
+            {
+                return await _freeSql.Select<DictionaryDefinitionEntity>()
+                    .Where(d => d.Id == id)
+                    .FirstAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "字典定义按 Id 读取失败: Id={Id}", id);
+                return null;
+            }
+        }
+
+        public async Task<DictionaryItemEntity?> GetItemByIdAsync(long id, CancellationToken ct = default)
+        {
+            try
+            {
+                return await _freeSql.Select<DictionaryItemEntity>()
+                    .Where(i => i.Id == id)
+                    .FirstAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "字典项按 Id 读取失败: Id={Id}", id);
+                return null;
+            }
+        }
+
         public async Task<IReadOnlyList<DictionaryDefinitionEntity>> GetDefinitionsAsync(int skip = 0, int take = 20, CancellationToken ct = default)
         {
             try

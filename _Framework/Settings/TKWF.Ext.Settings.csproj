@@ -37,6 +37,7 @@
   <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->
   <ItemGroup>
     <PackageReference Include="FreeSql" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
   </ItemGroup>
 
   <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->

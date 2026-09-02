@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 
@@ -25,7 +27,9 @@ public class DictionaryManagerTests
     private static DictionaryManager CreateManager(IFreeSql fsql)
     {
         var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
-        return new DictionaryManager(store, NullLogger<DictionaryManager>.Instance);
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var options = Options.Create(new DataDictionaryOptions());
+        return new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
     }
 
     private static async Task SeedGender(IFreeSql fsql)

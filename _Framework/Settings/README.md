@@ -1,8 +1,8 @@
 # TKWF.Ext.Settings 设置管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (设置管理与持久化) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (分层读写 + 内存缓存 + Options 绑定修复) | **框架**: .NET 10
 
-**核心约束**: 分层键值对存储、FreeSql 持久化、异常静默处理、SG1 声明式实体
+**核心约束**: 分层键值对存储、FreeSql 持久化、异常静默处理、SG1 声明式实体、内存缓存
 
 ---
 
@@ -32,7 +32,7 @@
 
 - **管理器 (`ISettingManager`)**：分层读写接口，屏蔽 Provider 细节，提供类型安全的 Get/Set。
 
-- **管理器实现 (`SettingManager`)**：分层查找逻辑（User → Tenant → Global → 默认值），JSON 序列化支持。
+- **管理器实现 (`SettingManager`)**：分层查找逻辑（User → Tenant → Global → 默认值），JSON 序列化支持，内存缓存。
 
 - **声明式实体 (`SettingEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` 特性。
 
@@ -63,7 +63,7 @@
 public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-白名单声明后自动注册：`ISettingStore`（默认 `FreeSqlSettingStore`）+ `ISettingManager`（默认 `SettingManager`）。
+白名单声明后自动注册：`ISettingStore`（默认 `FreeSqlSettingStore`）+ `ISettingManager`（默认 `SettingManager`）+ `IMemoryCache`（默认 `MemoryCache`）。
 
 ### 2. 读写设置
 
@@ -97,11 +97,17 @@ public class MyService(ISettingManager settingManager)
   "TKWF": {
     "Settings": {
       "DefaultSettingValueProvider": "Global",
-      "IsEnabled": true
+      "IsEnabled": true,
+      "CacheExpirationSeconds": 300
     }
   }
 }
 ```
+
+> **Options 绑定（V0.2.0）**：`SettingsOptions` 标注 `[Options("TKWF:Settings")]`——SG1 在消费方生成
+> `GeneratedOptionsBindings`，宿主启动期经 `RegisterOptionsBindings` 自动执行
+> `services.Configure<SettingsOptions>(configuration.GetSection("TKWF:Settings"))`（与 Navigation/Permissions 同模式）。
+> 亦可在消费方 `ConfigureExtensions` 中 `services.Configure<SettingsOptions>(o => ...)` 覆盖。
 
 ### 4. 自定义 ISettingStore
 
@@ -124,7 +130,7 @@ TryAdd 语义确保消费方实现优先。
 | **`ISettingManager`** | 分层读写管理器 | `SettingManager`（本扩展） |
 | **`SettingEntity`** | 设置表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`SettingsUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
-| **`SettingsOptions`** | 配置选项（`TKWF:Settings` 节） | 内置 |
+| **`SettingsOptions`** | 配置选项（`TKWF:Settings` 节，含 `CacheExpirationSeconds`） | 内置 |
 | **`SettingsExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 
 ---
@@ -149,7 +155,7 @@ TryAdd 语义确保消费方实现优先。
 
 ## 六、分层读取逻辑 (Layered Reading)
 
-V0.1.0 仅实现 Global 层；V0.2.0 将实现完整分层：
+V0.2.0 实现完整分层：
 
 ```
 读取顺序：User → Tenant → Global → 默认值
@@ -159,19 +165,35 @@ V0.1.0 仅实现 Global 层；V0.2.0 将实现完整分层：
 - **Tenant 层**：`ProviderName = "Tenant"`, `ProviderKey = tenantId`
 - **Global 层**：`ProviderName = "Global"`, `ProviderKey = null`
 
+**匿名降级**：`IsAuthenticated == false` 时跳过 User/Tenant 层，直接查 Global → 默认值。
+
+**写入层**：已认证用户写 User 层，匿名写 Global 层。
+
 ---
 
-## 七、架构演进路线 (Architecture Roadmap)
+## 七、缓存策略 (Caching Strategy)
 
-### V0.1.0（当前）
+V0.2.0 引入 `IMemoryCache` 读缓存：
+
+- **缓存 key**：`Setting:{ProviderName}:{ProviderKey}:{Name}`（如 `Setting:User:42:Theme`）
+- **缓存过期**：`SettingsOptions.CacheExpirationSeconds` 默认 300 秒（5 分钟）
+- **缓存失效**：`SetAsync` 后自动清除对应 key 的缓存
+- **注册方式**：`TryAddSingleton<IMemoryCache, MemoryCache>`，消费方可覆盖
+
+---
+
+## 八、架构演进路线 (Architecture Roadmap)
+
+### V0.1.0
 - FreeSql 设置存储
-- 基础 CRUD + 分层读取
+- 基础 CRUD + Global 层读取
 - 异常静默处理
 
-### V0.2.0（规划）
-- 完整分层（User → Tenant → Global）
-- 缓存层（内存缓存 + 过期策略）
-- EF Core 存储实现
+### V0.2.0（当前）
+- 完整分层（User → Tenant → Global → 默认值）
+- 内存缓存（IMemoryCache + 过期策略 + 写后失效）
+- Options 绑定修复（`[Options("TKWF:Settings")]` SG1 自动绑定 + `CacheExpirationSeconds`）
+- 匿名降级（IsAuthenticated == false 跳过 User/Tenant 层）
 
 ### V0.3.0（规划）
 - 管理 UI（设置编辑界面）

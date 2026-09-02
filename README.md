@@ -23,7 +23,7 @@
 | **BlobStoring**              | V0.1.0          | 二进制大对象本地文件系统存储 + FreeSql 记录                              | `BlobStoring/v0.1.0`    | [README](./_Framework/BlobStoring/README.md)   | [指南](./docs/BlobStoring/二进制存储扩展-使用指南.md) |
 | **Emailing**                 | V0.1.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录                                 | `Emailing/v0.1.0`       | [README](./_Framework/Emailing/README.md)      | [指南](./docs/Emailing/邮件发送扩展-使用指南.md) |
 | **DataDictionary**           | V0.1.0          | 数据字典集中管理（定义 + 项 + 按编码查询）                               | `DataDictionary/v0.1.0` | [README](./_Framework/DataDictionary/README.md) | [指南](./docs/DataDictionary/数据字典扩展-使用指南.md) |
-| **Tagging**                  | V0.1.0          | 标签提取 / 匹配 / 格式化（从框架核心迁出）                               | `v0.1.0`                | [README](./_Framework/Tagging/README.md)       | [指南](./docs/Tagging/标签服务扩展-使用指南.md)  |
+| **Tagging**                  | V0.2.0          | 标签存储扩展（标签算法已回归 `TKW.Framework.Utility.Tags`，ADR52 瘦身）  | `v0.1.0`                | [README](./_Framework/Tagging/README.md)       | [指南](./docs/Tagging/标签服务扩展-使用指南.md)  |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
@@ -58,7 +58,7 @@ _TKWF.Extensions/
 │   ├── BlobStoring/                 # 二进制存储（本地文件系统 + FreeSql 记录）
 │   ├── Emailing/                    # SMTP/MailKit 邮件发送
 │   ├── DataDictionary/              # 数据字典集中管理
-│   └── Tagging/                     # 标签提取引擎（零分配 + AOT 兼容）
+│   └── Tagging/                     # 标签存储扩展（算法已回归 TKW.Framework.Utility.Tags）
 ├── _Tests/                          # 测试（一组扩展一个测试项目）
 │   ├── Extension.Permissions.Tests/
 │   ├── Extension.Permissions.Consumer/    # 消费方集成验证
@@ -173,7 +173,7 @@ Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 
 ## 扩展规划
 
-P0（必须）：**9/11 已实施**——Identity / Account / Navigation / AuditLogging / Settings / BlobStoring / Emailing / DataDictionary / Tagging + Permissions（V0.7.0 + V0.8.0 编译期校验）
+P0（必须）：**9/11 已实施**——Identity / Account / Navigation / AuditLogging / Settings / BlobStoring / Emailing / DataDictionary / Tagging + Permissions（V0.7.0 + V0.8.0 编译期校验）。注：Tagging 标签算法已按 ADR52 回归主框架 `TKW.Framework.Utility.Tags`，扩展保留存储层。
 
 P0 剩余：**PrintTemplates**（打印模板，需先写 ADR 定模板引擎选型 Scriban vs RazorLight + 版本化策略）
 

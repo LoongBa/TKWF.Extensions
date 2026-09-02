@@ -85,16 +85,16 @@ namespace TKWF.Ext.Permissions
         /// <summary>
         /// 系统就绪后初始化（V0.4.0 G3 + V0.7.0 增强）。
         /// <list type="bullet">
-        /// <item><b>V0.7.0 W1（自建表）</b>：扩展实体 <c>PermissionGrant</c> 不在消费方 <c>SyncTables</c> 范围
-        /// （只扫消费方 assembly）——此处复用 <see cref="ITableStructureSynchronizer"/> 对扩展自身程序集主动
-        /// <see cref="ITableStructureSynchronizer.SyncStructure"/>（幂等建表：创建缺失表/列）。未注册实现时静默跳过
-        /// （InMemory/NoOp 场景无影响）。</item>
+        /// <item><b>V4.9.92（ADR49）建表托管</b>：扩展实体 <c>PermissionGrant</c> 建表由**主框架统一托管**——
+        /// SG 编译期 <c>EntityAssemblies</c> 清单（消费方 + 框架内置 + 已启用扩展程序集）经 <c>SyncTables</c>
+        /// 统一遍历建表（开发环境）；扩展初始化器**不再自建表**（弃用 V0.7.0 W1 的 synchronizer 手动调用）。
+        /// 生产环境仍走 <c>scripts\PermissionGrant.sql</c> 迁移脚本（DBA/CI）。</item>
         /// <item><b>V0.4.0 G3 + V0.7.0 W3（种子）</b>：幂等预置默认 admin 角色 <see cref="PermissionNames.AdminAll"/>
         /// 系统权限（替代 V0.4.0 的逐权限授予——Admin.All 拥有者对全部权限放行，未来新增权限自动覆盖）。
         /// 幂等：仅当记录不存在时授予，绝不覆盖消费方已设置的授予/撤销。</item>
         /// </list>
-        /// <para>经 <see cref="IServiceProviderAware.ServiceProvider"/> 解析 <see cref="PermissionGrantEntityDataService"/>
-        /// 与 <see cref="ITableStructureSynchronizer"/>。通过 <see cref="PermissionOptions.SeedAdminRoleName"/> 控制种子角色；
+        /// <para>经 <see cref="IServiceProviderAware.ServiceProvider"/> 解析 <see cref="PermissionGrantEntityDataService"/>。
+        /// 通过 <see cref="PermissionOptions.SeedAdminRoleName"/> 控制种子角色；
         /// 空字符串 = 禁用种子。未注册 <see cref="IEntityDAC{TEntity}"/>（无真实持久化）时跳过。</para>
         /// </summary>
         public override async Task InitializeAsync()
@@ -105,12 +105,10 @@ namespace TKWF.Ext.Permissions
             using var scope = ServiceProvider.CreateScope();
             var scoped = scope.ServiceProvider;
 
-            // ── V0.7.0 W1：扩展自建表（幂等，未注册 synchronizer 时跳过）──
-            // 扩展实体不在消费方 SyncTables 范围（只扫 GetType().Assembly）——主动建扩展自己的表。
-            // FreeSqlTableStructureSynchronizer.CodeFirst.SyncStructure 幂等：仅创建缺失表/列。
-            var synchronizer = scoped.GetService<ITableStructureSynchronizer>();
-            if (synchronizer != null)
-                synchronizer.SyncStructure(typeof(PermissionGrantEntity).Assembly);
+            // ── V4.9.92（ADR49）：建表由主框架统一托管 ──
+            // 扩展实体经 SG 编译期 EntityAssemblies 清单（消费方 [TKWFEnabledExtension] 白名单声明即触发）
+            // 进入 SyncTables 统一遍历建表（开发环境）；生产仍走 scripts\PermissionGrant.sql 迁移脚本。
+            // 弃用 V0.7.0 W1 的 synchronizer 手动调用（扩展不再自建表）。
 
             // 真实持久化未接线（未注册 IEntityDAC）→ 跳过种子（NoOp 模式下无意义）
             var dataService = scoped.GetService<PermissionGrantEntityDataService>();

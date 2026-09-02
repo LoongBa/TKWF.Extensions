@@ -183,7 +183,7 @@ public class MyService
 
 ### 4. 生产部署（建表迁移）
 
-`PermissionGrant` 扩展实体的建表由主框架统一托管（**V4.9.92 ADR49**）——SG 编译期 `EntityAssemblies` 清单（消费方 + 框架内置 + 已启用扩展程序集）经 `SyncTables` 统一遍历建表，消费方经 `[TKWFEnabledExtension(typeof(PermissionExtensionInitializer<>))]` 白名单声明后扩展程序集自动进入清单。**扩展初始化器不再自建表**（弃用 V0.7.0 W1）。**生产部署仍建议用迁移脚本**（V0.7.0 W2，随 NuGet 发布至 `scripts\PermissionGrant.sql`，DBA/CI 执行）：
+`PermissionGrant` 扩展实体不在 `FreeSqlTableStructureSynchronizer` 自动建表范围（`SyncTables` 只扫消费方 assembly）——**生产部署需含建表迁移脚本**（V0.7.0 W2，随 NuGet 发布至 `scripts\PermissionGrant.sql`）：
 
 ```sql
 -- PermissionGrant 表结构（参考，完整脚本见包内 scripts\PermissionGrant.sql）
@@ -196,6 +196,8 @@ CREATE TABLE [PermissionGrant] (
     CONSTRAINT UK_PermissionGrant UNIQUE ([PermissionName], [ProviderName], [ProviderKey])
 );
 ```
+
+**V0.7.0 W1 扩展自建表**：注册了 `ITableStructureSynchronizer`（FreeSql）时，扩展 `InitializeAsync` 会对 `PermissionGrantEntity` 所在程序集主动 `SyncStructure`（幂等建表，创建缺失表/列）——开发环境自动建表，生产环境仍建议用 `scripts\PermissionGrant.sql` 正式迁移（DBA/CI 执行）。
 
 ---
 
@@ -219,8 +221,8 @@ CREATE TABLE [PermissionGrant] (
 
 ### 1d. V0.7.0：建表迁移工具 + 消费方集成验证 + Admin.All（已实施）
 
-- **W1 扩展自建表**（**V4.9.92 ADR49 已废弃**）：原 `InitializeAsync` 复用 `ITableStructureSynchronizer` 对扩展程序集主动 `SyncStructure`（幂等建表）——主框架 SG `EntityAssemblies` 清单统一托管建表后，此做法已删除，扩展零建表代码。
-- **W2 SQL 迁移脚本**：`scripts\PermissionGrant.sql` 随 NuGet 发布（生产 DBA/CI 迁移，仍保留）。
+- **W1 扩展自建表**：`InitializeAsync` 复用 `ITableStructureSynchronizer` 对扩展程序集主动 `SyncStructure`（幂等建表）。
+- **W2 SQL 迁移脚本**：`scripts\PermissionGrant.sql` 随 NuGet 发布（生产 DBA/CI 迁移）。
 - **W3 Admin.All 系统权限**：`PermissionNames.AdminAll`——用户/任一角色拥有即对所有已定义权限放行；种子预置 admin 角色 Admin.All（替代 V0.4.0 逐权限授予）。
 - **W4 消费方集成验证**：`_Tests/Extension.Permissions.Consumer` 激活 SG1b 验证控制器接口名在消费方记录 + 三钩子接线 + TryAdd 语义。
 
@@ -310,7 +312,7 @@ CREATE TABLE [PermissionGrant] (
 ### 7. 版本与发布
 
 - 扩展独立版本（MinVer），tag 前缀 `v`，**须征得同意**才打 tag。当前未打 tag（V0.3.0/V0.4.0 未发布）。
-- 生产建表：`PermissionGrant` 建表由主框架 `SyncTables` 统一托管（V4.9.92 ADR49），生产 DDL 仍建议走迁移脚本（见 §五.4）。
+- 生产建表：`PermissionGrant` 不在 `SyncTables` 自动建表范围，需迁移脚本（见 §五.4）。
 
 ### 文档信息
 

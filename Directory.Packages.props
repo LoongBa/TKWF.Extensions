@@ -38,6 +38,8 @@
     <PackageVersion Include="FreeSql.Provider.Sqlite" Version="3.5.311" />
     <!-- 邮件发送（MailKit SMTP 实现库） -->
     <PackageVersion Include="MailKit" Version="4.12.1" />
+    <!-- Scriban（打印模板引擎——PrintTemplates 扩展首个非存储类第三方运行时依赖，ADR 已裁定选型） -->
+    <PackageVersion Include="Scriban" Version="7.0.0" />
     <!-- Roslyn Analyzer（编译期权限名校验——扩展侧 DiagnosticAnalyzer，对齐主框架 CPM 版本） -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.6.0" />

@@ -36,6 +36,9 @@
   <Folder Name="/_Framework/DataDictionary/">
     <Project Path="_Framework/DataDictionary/TKWF.Ext.DataDictionary.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Metrics/">
+    <Project Path="_Framework/Metrics/TKWF.Ext.Metrics.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -66,6 +69,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.DataDictionary.Tests/">
     <Project Path="_Tests/Extension.DataDictionary.Tests/TKWF.Ext.DataDictionary.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Metrics.Tests/">
+    <Project Path="_Tests/Extension.Metrics.Tests/TKWF.Ext.Metrics.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Identity.Tests/">
     <Project Path="_Tests/Extension.Identity.Tests/TKWF.Ext.Identity.Tests.csproj" />

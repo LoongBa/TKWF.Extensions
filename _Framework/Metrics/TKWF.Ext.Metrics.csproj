@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Metrics</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.Metrics</PackageId>
+    <Description>TKWF 扩展：业务指标计算引擎（规格文档驱动的复合业务指标计算；核心计算在 TKWF.Utility.Metrics，本包为 TKWF 集成层）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <!-- 核心计算：TKW.Framework.Utility.Metrics（零第三方依赖，无 SG1/FreeSql 接线——本扩展无持久化实体，对齐 Tagging 瘦身模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Utility\TKWF.Utility.csproj" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal（如有） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Metrics.Tests" />
+  </ItemGroup>
+
+</Project>

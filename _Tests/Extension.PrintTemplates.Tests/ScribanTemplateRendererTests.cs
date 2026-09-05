@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Scriban.Syntax;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 

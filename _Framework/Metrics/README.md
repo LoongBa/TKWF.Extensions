@@ -39,7 +39,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 | **`IMetricCalculator`** | 计算器（非泛型，返回单个 `MetricResult`） | 6 内置计算器（见 §四） |
 | **`MetricRow`** | 数据行（非泛型，字段经委托访问，`Get<T>` 无约束泛型） | 内置 |
 | **`MetricDefinition`** | 指标定义（Name/Calculator/扁平键 Parameters） | 内置 record |
-| **`MetricResult`** | 指标结果（Name/Value/Unit/Dimensions，可序列化为 D20 data.values） | 内置 record |
+| **`MetricResult`** | 指标结果（Name/Value/Unit/Dimensions，可序列化为 D20 data.values；**Value 可为 null**——分母 0/空数据/全 null 桶） | 内置 record |
 | **`MetricSlice`** | 指标切片（多切片计算器的 Value 元素，C1） | 内置 record |
 | **`IMetricCalculatorFactory`** | 计算器工厂（静态注册表零反射） | `CalculatorFactory` |
 | **`MetricsEngineOptions`** | 执行参数（纯 POCO：超时/失败行为/对齐标志） | 内置（可派生） |
@@ -111,10 +111,11 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 - 6 内置计算器（Repurchase/Retention/Cohort/Funnel/TimeBucket/Ratio）
 - 多切片输出约定（`MetricSlice` + 引擎展开）
 - 扩展集成层（初始器 + Options + SpecFileProvider），消费方一包快速拼接
-- 63/63 测试全绿（核心计算纯单测 + 扩展集成）
+- **70/70 测试全绿**（核心计算纯单测 + 扩展集成；扩展回归 436/436 全绿）
+- **Oracle 双审通过**：开发方案 PASS WITH CONDITIONS（C1/C2/C3 + M1-M4 + Minor#1-7 落实）+ 代码审核 PASS WITH CONDITIONS（C-1 阻塞项 + Issue 1-6 处理）；`MetricResult.Value` 为 `object?`（Oracle Issue#1 修正）
 
 ### V0.2.0（规划）
-- 消费方自定义计算器注册（扩展侧 Roslyn SG 扫描 `[MetricCalculator]`）
+- 消费方自定义计算器：**DI 覆盖 `IMetricCalculatorFactory`（TryAdd 语义）/ 包装默认 `CalculatorFactory`**——零 SG（2026-09-06 修订：扩展模块不引入 SG，避免消费方配置复杂度/对接管线成本）
 - D20 manifest 状态校验激活（自建 `MetricSpecStaleException`，零 D20 依赖）
 - 指标结果持久化评估（`IMetricResultStore`，若 DMP-Lite 出现集中管理需求）
 - 多周期留存曲线 / 复杂漏斗变体（DMP-Lite 需求驱动）

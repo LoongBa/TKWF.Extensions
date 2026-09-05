@@ -115,7 +115,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 - **Oracle 双审通过**：开发方案 PASS WITH CONDITIONS（C1/C2/C3 + M1-M4 + Minor#1-7 落实）+ 代码审核 PASS WITH CONDITIONS（C-1 阻塞项 + Issue 1-6 处理）；`MetricResult.Value` 为 `object?`（Oracle Issue#1 修正）
 
 ### V0.2.0（规划）
-- 消费方自定义计算器：**DI 覆盖 `IMetricCalculatorFactory`（TryAdd 语义）/ 包装默认 `CalculatorFactory`**——零 SG（2026-09-06 修订：扩展模块不引入 SG，避免消费方配置复杂度/对接管线成本）
+- 消费方自定义计算器：**DI 覆盖 `IMetricCalculatorFactory`（TryAdd 语义）/ 包装默认 `CalculatorFactory`**（2026-09-06 修订：**无必要勿增 SG**——消费方自定义已有 DI 覆盖方案，不构成 SG 必要性；SG 仅在真实必要性出现时评估，且须权衡消费方配置复杂度/对接管线成本）
 - D20 manifest 状态校验激活（自建 `MetricSpecStaleException`，零 D20 依赖）
 - 指标结果持久化评估（`IMetricResultStore`，若 DMP-Lite 出现集中管理需求）
 - 多周期留存曲线 / 复杂漏斗变体（DMP-Lite 需求驱动）

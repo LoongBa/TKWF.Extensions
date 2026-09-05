@@ -113,12 +113,20 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 - 扩展集成层（初始器 + Options + SpecFileProvider），消费方一包快速拼接
 - **70/70 测试全绿**（核心计算纯单测 + 扩展集成；扩展回归 436/436 全绿）
 - **Oracle 双审通过**：开发方案 PASS WITH CONDITIONS（C1/C2/C3 + M1-M4 + Minor#1-7 落实）+ 代码审核 PASS WITH CONDITIONS（C-1 阻塞项 + Issue 1-6 处理）；`MetricResult.Value` 为 `object?`（Oracle Issue#1 修正）
+- **已发布**：tag `Metrics/v0.1.0`（2026-09-06）；消费方验证后按反馈修补
 
-### V0.2.0（规划）
-- 消费方自定义计算器：**DI 覆盖 `IMetricCalculatorFactory`（TryAdd 语义）/ 包装默认 `CalculatorFactory`**（2026-09-06 修订：**无必要勿增 SG**——消费方自定义已有 DI 覆盖方案，不构成 SG 必要性；SG 仅在真实必要性出现时评估，且须权衡消费方配置复杂度/对接管线成本）
-- D20 manifest 状态校验激活（自建 `MetricSpecStaleException`，零 D20 依赖）
-- 指标结果持久化评估（`IMetricResultStore`，若 DMP-Lite 出现集中管理需求）
-- 多周期留存曲线 / 复杂漏斗变体（DMP-Lite 需求驱动）
+### V0.2.0（候选，能力完善）
+- 消费方自定义计算器**全链路验证**：DI 覆盖 `IMetricCalculatorFactory`（TryAdd 语义）/ 包装默认 `CalculatorFactory`（**无必要勿增 SG**——自定义已有 DI 覆盖方案，不构成 SG 必要性；SG 仅在真实必要性出现时评估，且须权衡消费方配置复杂度/对接管线成本）
+- 规格示例库落地：`docs/analytics-specs/{Domain}/{specKey}/metric-definitions.json` git-tracked 示例规格（支付 + tag 数据真实字段）
+- **Funnel 时间缺失行为定案**（Oracle Issue#6）：提供 `timeField` 但某行时间 null → 排除 null 事件或显式报错
+- D20 manifest 状态校验激活（自建 `MetricSpecStaleException`，零 D20 依赖；**依赖 D20 落地**——tkwf-analytics-view skill 尚未实施）
+- 计算器扩展（DMP-Lite 需求驱动）：多周期留存曲线、复杂漏斗变体、新经营指标
+- 指标结果持久化评估（`IMetricResultStore`，若 DMP-Lite 出现跨模块集中管理指标结果需求）
+
+### 远期 / 评估
+- 性能/并发冒烟：大数据集（10 万+ 行）× 多定义性能基线（构建期访问器缓存已设计，无基准数字）
+- 消费方 Options 绑定真实验证：`[Options("TKWF:Metrics")]` SG 自动绑定在消费方 IConfiguration 生效（当前测试仅覆盖 AddOptions 默认值）
+- 定时触发重算：DMP-Lite 每日指标重算可用 `IBackgroundJobManager` 包装（框架组 BackgroundJobs 补齐后；Metrics 侧零改动）
 
 ---
 

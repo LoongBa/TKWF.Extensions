@@ -39,8 +39,6 @@ namespace TKWF.Ext.PrintTemplates
 
             // 模板存储（TryAddScoped：消费方可自定义 ITemplateStore 覆盖默认）——
             // 经 SG1/xCodeGen 生成的 DataService 委托持久化（数据访问红线：不直接注入 IFreeSql / IEntityDAC）
-            services.TryAddScoped<PrintTemplateEntityDataService>();
-            services.TryAddScoped<PrintTemplateVersionEntityDataService>();
             services.TryAddScoped<ITemplateStore, TemplateStore>();
 
             // 模板管理门面（TryAddScoped：消费方可自定义 ITemplateManager 覆盖默认）

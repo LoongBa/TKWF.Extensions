@@ -4,7 +4,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using FreeSql;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Utility.DataPort;
 
@@ -13,20 +12,22 @@ namespace TKWF.Ext.DataPort
     /// <summary>
     /// 数据导入任务服务实现——封装导入执行 + 批次记录落库 + FileHash 幂等检查 + 状态跟踪。
     /// <para>消费方自管业务数据持久化（adapter.OnBatchWrite 钩子）；本服务仅记录批次元数据。</para>
+    /// <para>数据访问红线整改（2026-09-07）：经 <see cref="DataImportRecordEntityDataService"/>（SG1 DataService）
+    /// 委托持久化——不直接注入 IFreeSql；原 3 处 raw SQL（重置/更新状态/标记失败）改为 DataService 业务方法。</para>
     /// </summary>
     internal sealed class DataImportTaskService : IDataImportTaskService
     {
         private readonly IImportService _importService;
-        private readonly IFreeSql _freeSql;
+        private readonly DataImportRecordEntityDataService _dataService;
         private readonly DataPortOptions _options;
 
         public DataImportTaskService(
             IImportService importService,
-            IFreeSql freeSql,
+            DataImportRecordEntityDataService dataService,
             IOptions<DataPortOptions> options)
         {
             _importService = importService ?? throw new ArgumentNullException(nameof(importService));
-            _freeSql = freeSql ?? throw new ArgumentNullException(nameof(freeSql));
+            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         }
 
@@ -44,9 +45,7 @@ namespace TKWF.Ext.DataPort
             var fileHash = await ComputeFileHashAsync(filePath, ct);
 
             // 2. 幂等检查：同文件已导入 → 返回已有批次
-            var existing = await _freeSql.Select<DataImportRecordEntity>()
-                .Where(r => r.FileHash == fileHash)
-                .FirstAsync(ct);
+            var existing = await _dataService.GetByFileHashAsync(fileHash, ct);
 
             if (existing != null)
             {
@@ -56,9 +55,9 @@ namespace TKWF.Ext.DataPort
                     return new DataImportTaskResult(existing.Id, existing.BatchNo, ImportResult.Empty);
                 }
                 // 已失败的批次 → 允许重新导入（重置记录为 Processing 后重跑）
-                await _freeSql.Ado.ExecuteNonQueryAsync(
-                    "UPDATE DataImportRecord SET Status = 'Processing', StartTime = @startTime, EndTime = NULL, ErrorSummary = NULL, SuccessCount = 0, FailedCount = 0, BatchFailureCount = 0, UpdateTime = @updateTime WHERE Id = @id",
-                    new { startTime = DateTime.UtcNow, updateTime = DateTime.UtcNow, id = existing.Id });
+                // StartTime 保留首次导入时间（CanUpdate=false 语义优于原 raw SQL 覆盖）
+                await _dataService.ResetToProcessingAsync(
+                    existing.Id, DateTime.UtcNow, DateTime.UtcNow, ct);
 
                 return await ExecuteImportAsync(existing, filePath, adapter, batchOptions, ct);
             }
@@ -80,17 +79,13 @@ namespace TKWF.Ext.DataPort
                     UpdateTime = DateTime.UtcNow
                 };
 
-                await _freeSql.Insert(record).ExecuteAffrowsAsync(ct);
-                record = await _freeSql.Select<DataImportRecordEntity>()
-                    .Where(r => r.BatchNo == batchNo)
-                    .FirstAsync(ct);
+                await _dataService.CreateAsync(record, ct);
+                record = await _dataService.GetByBatchNoAsync(batchNo, ct);
             }
             catch (Exception)
             {
                 // Race condition: another concurrent import inserted the same FileHash
-                record = await _freeSql.Select<DataImportRecordEntity>()
-                    .Where(r => r.FileHash == fileHash)
-                    .FirstAsync(ct);
+                record = await _dataService.GetByFileHashAsync(fileHash, ct);
 
                 if (record == null)
                     throw; // Not a race condition — re-throw original exception
@@ -106,9 +101,7 @@ namespace TKWF.Ext.DataPort
         public async Task<DataImportRecordEntity?> GetRecordByBatchNoAsync(
             string batchNo, CancellationToken ct = default)
         {
-            return await _freeSql.Select<DataImportRecordEntity>()
-                .Where(r => r.BatchNo == batchNo)
-                .FirstAsync(ct);
+            return await _dataService.GetByBatchNoAsync(batchNo, ct);
         }
 
         /// <summary>
@@ -129,15 +122,16 @@ namespace TKWF.Ext.DataPort
             {
                 var result = await _importService.ImportAsync(filePath, adapter, effectiveBatchOptions, ct);
 
-                // 更新记录状态（原始 SQL：时间列以 UTC DateTime 落库，避免 Provider 类型映射差异）
+                // 更新记录状态（经 DataService——实体 DateTime 类型保证 UTC 落库）
                 var status = result.BatchFailures.Count > 0 ? "PartiallySucceeded" : "Succeeded";
                 var errorSummary = result.BatchFailures.Count > 0
                     ? string.Join("; ", result.BatchFailures.Take(5).Select(b => $"批次{b.BatchIndex}: {b.Exception.Message}"))
                     : null;
 
-                await _freeSql.Ado.ExecuteNonQueryAsync(
-                    "UPDATE DataImportRecord SET Status = @status, SuccessCount = @successCount, FailedCount = @failedCount, BatchFailureCount = @batchFailureCount, EndTime = @endTime, ErrorSummary = @errorSummary, UpdateTime = @updateTime WHERE Id = @id",
-                    new { status, successCount = result.SuccessCount, failedCount = result.FailedCount, batchFailureCount = result.BatchFailures.Count, endTime = DateTime.UtcNow, errorSummary, updateTime = DateTime.UtcNow, id = record.Id });
+                await _dataService.UpdateStatusAsync(
+                    record.Id, status,
+                    result.SuccessCount, result.FailedCount, result.BatchFailures.Count,
+                    DateTime.UtcNow, errorSummary, DateTime.UtcNow, ct);
 
                 return new DataImportTaskResult(record.Id, record.BatchNo, result);
             }
@@ -146,9 +140,8 @@ namespace TKWF.Ext.DataPort
                 // Best-effort: update record to Failed status; if DB update fails, swallow to preserve original exception
                 try
                 {
-                    await _freeSql.Ado.ExecuteNonQueryAsync(
-                        "UPDATE DataImportRecord SET Status = 'Failed', EndTime = @endTime, ErrorSummary = @errorSummary, UpdateTime = @updateTime WHERE Id = @id",
-                        new { endTime = DateTime.UtcNow, errorSummary = ex.Message, updateTime = DateTime.UtcNow, id = record.Id });
+                    await _dataService.MarkFailedAsync(
+                        record.Id, DateTime.UtcNow, ex.Message, DateTime.UtcNow, ct);
                 }
                 catch
                 {

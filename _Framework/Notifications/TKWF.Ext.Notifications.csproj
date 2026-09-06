@@ -53,6 +53,11 @@
   </ItemGroup>
 
   <!-- 测试项目访问 internal -->
+  <!-- xCodeGen（D1 集中化）：共享配置路径 -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\notifications.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Notifications.Tests" />
   </ItemGroup>

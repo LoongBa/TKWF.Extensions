@@ -34,8 +34,6 @@ namespace TKWF.Ext.Account
         public override void ConfigureServices(IServiceCollection services)
         {
             // 数据访问红线整改（2026-09-07）：Store 委托 SG1 DataService，禁裸 IFreeSql
-            services.TryAddScoped<AccountLockoutEntityDataService>();
-            services.TryAddScoped<PasswordResetCodeEntityDataService>();
             services.TryAddScoped<IAccountLockoutStore, AccountLockoutStore>();
             services.TryAddScoped<IPasswordResetStore, PasswordResetStore>();
             services.TryAddScoped<IAccountLockoutPolicy, FreeSqlAccountLockoutPolicy>();

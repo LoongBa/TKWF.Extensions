@@ -45,8 +45,6 @@ namespace TKWF.Ext.DataDictionary
             services.AddMemoryCache();
 
             // V0.1.0 存储与管理注册（数据访问红线整改：DataService 委托，禁裸 IFreeSql）
-            services.TryAddScoped<DictionaryDefinitionEntityDataService>();
-            services.TryAddScoped<DictionaryItemEntityDataService>();
             services.TryAddScoped<IDictionaryStore, DictionaryStore>();
             services.TryAddScoped<IDictionaryManager, DictionaryManager>();
         }

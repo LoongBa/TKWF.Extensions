@@ -50,7 +50,7 @@ namespace TKWF.Ext.DataPort
             services.TryAddSingleton<MiniExcelExportProvider>();
             services.TryAddSingleton<IExportProvider>(sp => sp.GetRequiredService<MiniExcelExportProvider>());
 
-            // 导入任务服务（TryAddScoped：消费方可自定义覆盖）
+            // 数据访问红线整改（2026-09-07）：导入任务服务委托 SG1 DataService，禁裸 IFreeSql
             services.TryAddScoped<IDataImportTaskService, DataImportTaskService>();
         }
     }

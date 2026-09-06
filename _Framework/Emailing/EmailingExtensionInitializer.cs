@@ -30,7 +30,6 @@ namespace TKWF.Ext.Emailing
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
-            services.TryAddScoped<EmailRecordEntityDataService>();
             services.TryAddScoped<IEmailRecordStore, EmailRecordStore>();
             services.TryAddScoped<IEmailSender, SmtpEmailSender>();
         }

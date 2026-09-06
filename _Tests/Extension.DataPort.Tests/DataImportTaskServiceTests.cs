@@ -49,7 +49,7 @@ public class DataImportTaskServiceTests
     private static DataImportTaskService CreateTaskService(IFreeSql fsql)
     {
         var importService = new ImportService(new MiniExcelImportProvider());
-        return new DataImportTaskService(importService, fsql, Options.Create(new DataPortOptions()));
+        return new DataImportTaskService(importService, DataPortTestHost.CreateDataService(fsql), Options.Create(new DataPortOptions()));
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class DataImportTaskServiceTests
         {
             // Provider 读取抛异常（记录已落库 Processing）→ 核心 ImportAsync 抛异常 → 记录更新为 Failed
             var importService = new ImportService(new ThrowOnReadProvider());
-            var service = new DataImportTaskService(importService, fsql, Options.Create(new DataPortOptions()));
+            var service = new DataImportTaskService(importService, DataPortTestHost.CreateDataService(fsql), Options.Create(new DataPortOptions()));
 
             await Assert.ThrowsAsync<DataImportException>(
                 () => service.ImportAsync(filePath, new TestImportAdapter()));

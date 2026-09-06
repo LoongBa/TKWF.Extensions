@@ -49,13 +49,15 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         services.TryAddSingleton<NotificationDefinitionManager>();
         services.TryAddSingleton<INotificationDefinitionManager>(sp => sp.GetRequiredService<NotificationDefinitionManager>());
 
+        // 数据访问红线整改（2026-09-07）：委托 SG1 DataService，禁裸 IFreeSql
+
         // 收件箱存储（Scoped）
-        services.TryAddScoped<FreeSqlNotificationStore>();
-        services.TryAddScoped<INotificationStore>(sp => sp.GetRequiredService<FreeSqlNotificationStore>());
+        services.TryAddScoped<NotificationStore>();
+        services.TryAddScoped<INotificationStore>(sp => sp.GetRequiredService<NotificationStore>());
 
         // 订阅管理（Scoped）
-        services.TryAddScoped<FreeSqlNotificationSubscriptionManager>();
-        services.TryAddScoped<INotificationSubscriptionManager>(sp => sp.GetRequiredService<FreeSqlNotificationSubscriptionManager>());
+        services.TryAddScoped<NotificationSubscriptionStore>();
+        services.TryAddScoped<INotificationSubscriptionManager>(sp => sp.GetRequiredService<NotificationSubscriptionStore>());
 
         // 通道（Scoped：InboxNotifier owns UserNotification 写入，C5）
         services.TryAddScoped<InboxNotifier>();

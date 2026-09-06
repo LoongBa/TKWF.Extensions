@@ -43,6 +43,7 @@
     <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
   </ItemGroup>
 
 </Project>

@@ -3,6 +3,8 @@ using System.Threading;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Notifications;
 using TKWF.Ext.Permissions.Abstractions;
@@ -48,6 +50,16 @@ internal static class NotificationTestHost
         services.AddSingleton(fsql);
         services.AddSingleton<ITransactionManager>(new NoopTransactionManager());
         services.AddSingleton<INotificationDefinitionProvider, TestNotificationDefinitions>();
+        // 模拟 SG 自动注册（生产经 DomainHostInitializerBase.RegisterGeneratedServices 注册 DataService；
+        // 测试容器不走 SG 自动注册——手动补注册 DataService 链：UoW → DAC → DataService）
+        services.AddScoped<UnitOfWorkManager>();
+        services.AddScoped<IEntityDAC<NotificationEntity>>(sp => new FreeSqlEntityDAC<NotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<UserNotificationEntity>>(sp => new FreeSqlEntityDAC<UserNotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<NotificationSubscriptionEntity>>(sp => new FreeSqlEntityDAC<NotificationSubscriptionEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
+        services.AddScoped<NotificationEntityDataService>();
+        services.AddScoped<UserNotificationEntityDataService>();
+        services.AddScoped<NotificationSubscriptionEntityDataService>();
         configure?.Invoke(services);
         new NotificationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         return services.BuildServiceProvider();
@@ -119,4 +131,27 @@ internal sealed class FakePermissionChecker : IPermissionChecker
 
     public Task<Dictionary<string, bool>> IsGrantedAsync(params string[] permissionNames)
         => Task.FromResult(permissionNames.ToDictionary(n => n, n => _grants.GetValueOrDefault(n, false)));
+}
+
+/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+internal sealed class StubDomainUser : IDomainUser
+{
+    public string SessionKey => "test-session";
+    public bool IsAuthenticated => false;
+    public bool IsSystemActor => false;
+    public IUserInfo? UserInfo => null;
+    public long? TenantId => null;
+    public bool IsNoAuditActive => false;
+    public string? UserId => null;
+    public string? UserName => null;
+    public bool IsInRole(string role) => false;
+
+    public TDomainService Use<TDomainService>() where TDomainService : IDomainService
+        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+
+    public TService GetService<TService>() where TService : notnull
+        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+
+    public TService GetOptionalService<TService>() where TService : class => null!;
+    public System.Collections.Generic.IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

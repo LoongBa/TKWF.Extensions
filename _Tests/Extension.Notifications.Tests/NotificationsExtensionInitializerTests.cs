@@ -68,17 +68,13 @@ public class NotificationsExtensionInitializerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton(fsql);
-        services.AddSingleton<INotificationDefinitionProvider, TestNotificationDefinitions>();
-        new NotificationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        // 用 Build 容器（含 DataService 注册——模拟 SG 自动注册，InboxNotifier 可解析）
+        using var sp = NotificationTestHost.Build(fsql);
 
-        var descriptor = services.First(d => d.ServiceType == typeof(INotificationNotifier));
+        var descriptor = sp.GetRequiredService<INotificationNotifier>();
         Assert.NotNull(descriptor);
 
         // 解析验证：v0.1.0 内置 InboxNotifier（通道名 "Inbox"）
-        using var sp = services.BuildServiceProvider();
         var notifier = sp.GetRequiredService<INotificationNotifier>();
         Assert.Equal("Inbox", notifier.Name);
     }

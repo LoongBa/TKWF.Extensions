@@ -36,9 +36,6 @@ namespace TKWF.Ext.Identity
         public override void ConfigureServices(IServiceCollection services)
         {
             // 数据访问红线整改（2026-09-07）：Store 委托 SG1 DataService，禁裸 IFreeSql
-            services.TryAddScoped<UserEntityDataService>();
-            services.TryAddScoped<RoleEntityDataService>();
-            services.TryAddScoped<UserRoleEntityDataService>();
             services.TryAddScoped<IUserStore, UserStore>();
             services.TryAddScoped<IRoleStore, RoleStore>();
             services.TryAddScoped<IUserManager, UserManager>();

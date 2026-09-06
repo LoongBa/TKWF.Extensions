@@ -30,7 +30,6 @@ namespace TKWF.Ext.BlobStoring
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
-            services.TryAddScoped<BlobRecordEntityDataService>();
             services.TryAddScoped<IBlobStorageService, LocalStorageService>();
             services.TryAddScoped<IBlobRecordStore, BlobRecordStore>();
         }

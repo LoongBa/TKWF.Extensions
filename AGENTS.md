@@ -150,6 +150,8 @@ _Tests/Extension.{扩展名}.Tests/
 
 > **实践思路**（V0.2.0 起）：扩展模块**可以**采用框架原生开发方式——引入 SG1 分析器 + xCodeGen 生成 DTO/DataService/Conditions/IDomainEntity 实现，与业务领域项目使用同一套开发模式（tkwf-entity / tkwf-service skill）。这使扩展获得自动建表、REST/GraphQL API 暴露、Dto 自动裁剪等框架能力，减少手写样板代码。
 >
+> **"无必要勿增SG"澄清**（2026-09-06 用户裁定）：扩展实体用 `[DomainGenerateCode]`（SG1 原生方式）**不计入"增 SG"**——消费方标准 TKWF 项目 SG1 已接线，扩展实体被自动扫描生成（IDomainEntity/DTO/DataService），**零额外配置**（先例：PrintTemplates/AuditLogging/DataDictionary 全部如此）。"无必要勿增SG"特指**扩展引入独立生成管线/分析器依赖**（如 Permissions.Validation 的 Analyzer，消费方需额外接线）——此类才需权衡"引入 SG 增加消费方配置复杂度/对接管线成本"。**判据：扩展实体是否需要 DTO/DataService/API 生成（有持久化 + 查询/管理需求的实体默认用 SG1）；纯内存/纯运行时扩展（Tagging/Metrics/Dashboard/DataPort 核心）无需 SG1。**
+>
 > **与"预编译库"模式的关系**：两种模式并存——简单横切扩展（如 Tagging，纯内存服务）保持预编译库；有持久化 + 管理 API 的扩展（如 Permissions V0.2.0）可升级为 SG1 原生。
 >
 > **扩展启用（V4.9.85）**：扩展 DLL 被消费方引用后，SG1 经 `ReferencedAssemblySymbols` 发现 `[TKWFExtension]` 初始化器（生成能力清单）；但**发现 ≠ 启用**——扩展的 `IsEnabled` 默认 false，三钩子默认不执行。消费方须在自身 `DomainHostInitializerBase<T>` 派生类上标注 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明（AllowMultiple），扩展才真正启用、三钩子才执行。未声明 → 发现但默认不启用。

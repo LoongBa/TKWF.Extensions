@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Dashboard</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.Dashboard</PackageId>
+    <Description>TKWF 扩展：仪表盘数据服务（Metrics 展示层——JSON 描述符定义 + Widget 数据查询 + 消费 TKWF.Utility.Metrics 复合指标；不引入图表库，UI 渲染归消费方）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <!-- 核心计算：TKW.Framework.Utility.Metrics（零第三方依赖，无 SG1/FreeSql 接线——本扩展无持久化实体，对齐 Metrics/Tagging 瘦身模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Utility\TKWF.Utility.csproj" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal（如有） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Dashboard.Tests" />
+  </ItemGroup>
+
+</Project>

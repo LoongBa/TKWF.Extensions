@@ -42,6 +42,9 @@
   <Folder Name="/_Framework/PrintTemplates/">
     <Project Path="_Framework/PrintTemplates/TKWF.Ext.PrintTemplates.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Dashboard/">
+    <Project Path="_Framework/Dashboard/TKWF.Ext.Dashboard.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -84,5 +87,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.PrintTemplates.Tests/">
     <Project Path="_Tests/Extension.PrintTemplates.Tests/TKWF.Ext.PrintTemplates.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Dashboard.Tests/">
+    <Project Path="_Tests/Extension.Dashboard.Tests/TKWF.Ext.Dashboard.Tests.csproj" />
   </Folder>
 </Solution>

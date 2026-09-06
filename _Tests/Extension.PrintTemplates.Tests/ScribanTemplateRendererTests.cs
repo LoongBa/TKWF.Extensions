@@ -7,6 +7,7 @@ namespace TKWF.Ext.PrintTemplates.Tests;
 /// <summary>
 /// ScribanTemplateRenderer 测试——变量替换 / 循环 / 格式化 / 条件 / 嵌套字典递归 / 解析错误 / 沙箱 GetType 阻断。
 /// <para>渲染器为 Singleton（internal sealed，经 InternalsVisibleTo 访问），直接以真实实现单测。</para>
+/// <para>格式化为 Scriban 7 内建函数：货币用 object.format "C2"（.NET IFormattable），日期用 date.parse + object.format。</para>
 /// </summary>
 public class ScribanTemplateRendererTests
 {
@@ -46,7 +47,7 @@ public class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task RenderContentAsync_RendersNumberValue()
+    public async Task RenderContentAsync_FormatCurrency_FormatsNumber()
     {
         var renderer = CreateRenderer();
         var model = new Dictionary<string, object?>
@@ -54,10 +55,11 @@ public class ScribanTemplateRendererTests
             ["model"] = new Dictionary<string, object?> { ["Price"] = 12.5 }
         };
 
-        // Scriban 沙箱无 money/string.format 函数——验证数字值可正常渲染
-        var result = await renderer.RenderContentAsync("{{ model.Price }}", model);
+        // Scriban 7 无 Liquid 式 money 过滤器——用 object.format（.NET IFormattable "C2" 货币格式）
+        var result = await renderer.RenderContentAsync("{{ model.Price | object.format \"C2\" }}", model);
 
-        Assert.Equal("12.5", result);
+        // 货币符号随文化区域（$ / ¤ / ¥）而变——断言数字部分即可，保证跨机器稳定
+        Assert.Contains("12.50", result);
     }
 
     [Fact]
@@ -66,11 +68,12 @@ public class ScribanTemplateRendererTests
         var renderer = CreateRenderer();
         var model = new Dictionary<string, object?>
         {
+            // ISO 字符串保证跨文化区域可解析，输出确定
             ["model"] = new Dictionary<string, object?> { ["Date"] = "2026-01-15" }
         };
 
-        // Scriban date 过滤器用 date.to_string（非 Liquid 语法）
-        var result = await renderer.RenderContentAsync("{{ model.Date }}", model);
+        // Scriban 7：date.parse 解析字符串 → object.format 按 .NET 格式串输出（等价 strftime %Y-%m-%d）
+        var result = await renderer.RenderContentAsync("{{ date.parse model.Date | object.format \"yyyy-MM-dd\" }}", model);
 
         Assert.Equal("2026-01-15", result);
     }
@@ -121,7 +124,7 @@ public class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task RenderContentAsync_SandboxGetType_ThrowsOrReturnsEmpty()
+    public async Task RenderContentAsync_SandboxGetType_ReturnsEmpty()
     {
         var renderer = CreateRenderer();
         var model = new Dictionary<string, object?>
@@ -129,15 +132,13 @@ public class ScribanTemplateRendererTests
             ["model"] = new Dictionary<string, object?> { ["Name"] = "Alice" }
         };
 
-        // 安全契约（M3）：MemberFilter 仅放行公共属性，GetType() 方法调用被阻断
-        // Scriban 会抛 ScriptRuntimeException（函数未找到）或返回空——两种结果均表示阻断成功
-        var ex = await Record.ExceptionAsync(() => renderer.RenderContentAsync("{{ model.GetType() }}", model));
-        if (ex == null)
-        {
-            // 无异常时，结果应为空或不含 System 类型信息
-            var result = await renderer.RenderContentAsync("{{ model.GetType() }}", model);
-            Assert.DoesNotContain("System.", result);
-        }
-        // 有异常时（ScriptRuntimeException），阻断成功
+        // 安全契约（M3/M6）：MemberFilter 仅放行公共属性——GetType() 方法调用被阻断。
+        // Scriban 对不可用函数抛 ScriptRuntimeException（"function model.GetType was not found"），
+        // 渲染结果不会泄漏任何 .NET 类型信息（"empty/error" 双分支均代表阻断成功）。
+        var ex = await Assert.ThrowsAsync<ScriptRuntimeException>(
+            () => renderer.RenderContentAsync("{{ model.GetType() }}", model));
+
+        Assert.Contains("GetType", ex.Message);
+        Assert.DoesNotContain("System.", ex.Message);
     }
 }

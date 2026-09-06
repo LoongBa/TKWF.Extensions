@@ -26,10 +26,11 @@
 | **Tagging**                  | V0.2.0          | 标签存储扩展（标签算法已回归 `TKW.Framework.Utility.Tags`，ADR52 瘦身）  | `Tagging/v0.2.0`        | [README](./_Framework/Tagging/README.md)       | [指南](./docs/Tagging/标签服务扩展-使用指南.md)  |
 | **PrintTemplates**           | V0.1.0          | 打印模板引擎与版本化（Scriban 沙箱渲染 + Draft/Active/Archived 生命周期）| `PrintTemplates/v0.1.0` | [README](./_Framework/PrintTemplates/README.md) | [指南](./docs/PrintTemplates/打印模板扩展-使用指南.md) |
 | **Dashboard**                | V0.1.0          | 仪表盘数据服务（Metrics 展示层——JSON 描述符 + Widget 数据查询；不引入图表库）| `Dashboard/v0.1.0` | [README](./_Framework/Dashboard/README.md) | [指南](./docs/Dashboard/仪表盘扩展-使用指南.md) |
+| **DataPort**                 | V0.1.0          | 数据导入导出（三层架构——核心运行库+MiniExcel Provider+SG1 持久化；FileHash 幂等）| `DataPort/v0.1.0` | [README](./_Framework/DataPort/README.md) | [指南](./docs/DataPort/数据导入导出扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **497 测试全绿**——`dotnet test` 零失败。
+> 全量 **511 测试全绿**——`dotnet test` 零失败。
 
 ---
 

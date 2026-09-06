@@ -42,8 +42,8 @@ public class UserManagerTests
 
         Assert.NotNull(user);
         Assert.True(user!.Id > 0);
-        var saved = fsql.Select<UserEntity>().Where(u => u.Id == user.Id).First();
-        Assert.NotEqual("secret123", saved.PasswordHash);
+        var saved = await manager.GetByIdAsync(user.Id, CancellationToken.None);
+        Assert.NotEqual("secret123", saved!.PasswordHash);
         Assert.True(PasswordHasher.VerifyPassword("secret123", saved.PasswordHash!));
         Assert.Equal("ALICE", saved.NormalizedUserName);
     }
@@ -57,7 +57,8 @@ public class UserManagerTests
         var user = await manager.CreateUserAsync("alice", "123", "Alice", CancellationToken.None);
 
         Assert.Null(user);
-        Assert.Equal(0, fsql.Select<UserEntity>().Count());
+        var list = await IdentityTestHost.CreateUserStore(fsql).GetListAsync(take: 100, ct: CancellationToken.None);
+        Assert.Empty(list);
     }
 
     [Fact]
@@ -170,10 +171,11 @@ public class UserManagerTests
 
         await manager.DeleteUserAsync(user.Id, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<UserEntity>().Count());
-        Assert.Equal(0, fsql.Select<UserRoleEntity>().Count());
+        Assert.Null(await manager.GetByIdAsync(user.Id, CancellationToken.None));
+        Assert.Empty(await manager.GetUserRolesAsync(user.Id, CancellationToken.None));
         // 角色保留
-        Assert.Equal(1, fsql.Select<RoleEntity>().Count());
+        var savedRole = await IdentityTestHost.CreateRoleStore(fsql).GetByIdAsync(role!.Id, CancellationToken.None);
+        Assert.NotNull(savedRole);
     }
 
     [Fact]
@@ -199,6 +201,7 @@ public class UserManagerTests
         var result = await manager.DeleteRoleAsync(role!.Id, CancellationToken.None);
 
         Assert.False(result);
-        Assert.Equal(1, fsql.Select<RoleEntity>().Count());
+        var savedRole = await IdentityTestHost.CreateRoleStore(fsql).GetByIdAsync(role!.Id, CancellationToken.None);
+        Assert.NotNull(savedRole);
     }
 }

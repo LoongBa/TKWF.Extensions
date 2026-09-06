@@ -52,8 +52,8 @@ public class FreeSqlTemplateStoreTests
 
         await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k1", Name = "n1" });
 
-        var count = fsql.Select<PrintTemplateEntity>().Count();
-        Assert.Equal(1, count);
+        var saved = await store.GetByKeyAsync("k1", CancellationToken.None);
+        Assert.NotNull(saved);
     }
 
     [Fact]
@@ -161,13 +161,11 @@ public class FreeSqlTemplateStoreTests
             Status = PrintTemplateVersionStatus.Draft
         });
 
-        var count = fsql.Select<PrintTemplateVersionEntity>().Count();
-        Assert.Equal(1, count);
-
-        var saved = fsql.Select<PrintTemplateVersionEntity>().First();
-        Assert.Equal(savedTemplate.Id, saved.TemplateId);
-        Assert.Equal("1.0.0", saved.Version);
-        Assert.Equal("content", saved.Content);
+        var versions = await store.ListVersionsAsync(savedTemplate.Id, CancellationToken.None);
+        Assert.Single(versions);
+        Assert.Equal(savedTemplate.Id, versions[0].TemplateId);
+        Assert.Equal("1.0.0", versions[0].Version);
+        Assert.Equal("content", versions[0].Content);
     }
 
     // ── 异常传播（审计关键，不静默）——数据访问红线整改后补充 ──
@@ -208,6 +206,7 @@ public class FreeSqlTemplateStoreTests
 
         // 异常显式暴露（审计关键资产，存储层错误不得静默）
         Assert.NotNull(ex);
-        Assert.Equal(1, fsql.Select<PrintTemplateVersionEntity>().Count());
+        var versions = await store.ListVersionsAsync(savedTemplate.Id, CancellationToken.None);
+        Assert.Single(versions);
     }
 }

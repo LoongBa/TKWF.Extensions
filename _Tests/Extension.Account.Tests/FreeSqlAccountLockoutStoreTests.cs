@@ -62,7 +62,9 @@ public class FreeSqlAccountLockoutStoreTests
 
         var loaded = await store.GetAsync("alice", CancellationToken.None);
         Assert.Equal(3, loaded!.FailedCount);
-        Assert.Equal(1, fsql.Select<AccountLockoutEntity>().Count());
+        // Store 无列表/计数业务方法（仅 Get/Save/Delete）——"更新不产生重复记录"无法经业务方法表达，
+        // 保留直查校验 Upsert 语义（同用户名二次 Save 仍为单行）。
+        Assert.Equal(1, fsql.Select<AccountLockoutEntity>().Count()); // 无业务方法覆盖（Store 无 count 接口），保留直查
     }
 
     [Fact]
@@ -74,7 +76,7 @@ public class FreeSqlAccountLockoutStoreTests
 
         await store.DeleteAsync("alice", CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<AccountLockoutEntity>().Count());
+        Assert.Null(await store.GetAsync("alice", CancellationToken.None));
     }
 
     [Fact]
@@ -85,6 +87,6 @@ public class FreeSqlAccountLockoutStoreTests
 
         await store.SaveAsync(null!, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<AccountLockoutEntity>().Count());
+        Assert.Null(await store.GetAsync("alice", CancellationToken.None));
     }
 }

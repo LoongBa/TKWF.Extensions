@@ -38,8 +38,8 @@ public class FreeSqlRoleStoreTests
         await store.CreateAsync(role, CancellationToken.None);
 
         Assert.True(role.Id > 0);
-        var saved = fsql.Select<RoleEntity>().Where(r => r.Id == role.Id).First();
-        Assert.Equal("Admin", saved.Name);
+        var saved = await store.GetByIdAsync(role.Id, CancellationToken.None);
+        Assert.Equal("Admin", saved!.Name);
     }
 
     [Fact]
@@ -92,7 +92,8 @@ public class FreeSqlRoleStoreTests
         var list = await store.GetListAsync(0, 2, CancellationToken.None);
 
         Assert.Equal(2, list.Count);
-        Assert.Equal(3, fsql.Select<RoleEntity>().Count());
+        var all = await store.GetListAsync(take: 100, ct: CancellationToken.None);
+        Assert.Equal(3, all.Count);
     }
 
     [Fact]
@@ -106,8 +107,8 @@ public class FreeSqlRoleStoreTests
 
         await store.UpdateAsync(role, CancellationToken.None);
 
-        var saved = fsql.Select<RoleEntity>().Where(r => r.Id == role.Id).First();
-        Assert.Equal("超级管理员", saved.DisplayName);
+        var saved = await store.GetByIdAsync(role.Id, CancellationToken.None);
+        Assert.Equal("超级管理员", saved!.DisplayName);
     }
 
     [Fact]
@@ -121,7 +122,8 @@ public class FreeSqlRoleStoreTests
         var result = await store.DeleteAsync(role.Id, CancellationToken.None);
 
         Assert.True(result);
-        Assert.Equal(0, fsql.Select<RoleEntity>().Count());
+        var list = await store.GetListAsync(take: 100, ct: CancellationToken.None);
+        Assert.Empty(list);
     }
 
     [Fact]
@@ -136,7 +138,7 @@ public class FreeSqlRoleStoreTests
         var result = await store.DeleteAsync(role.Id, CancellationToken.None);
 
         Assert.False(result);
-        Assert.Equal(1, fsql.Select<RoleEntity>().Count());
+        Assert.NotNull(await store.GetByIdAsync(role.Id, CancellationToken.None));
     }
 
     [Fact]
@@ -152,13 +154,13 @@ public class FreeSqlRoleStoreTests
             NormalizedUserName = "ALICE",
             DisplayName = "alice"
         };
-        user.Id = await fsql.Insert(user).ExecuteIdentityAsync();
-        await fsql.Insert(new UserRoleEntity { UserId = user.Id, RoleId = role.Id }).ExecuteAffrowsAsync();
+        await IdentityTestHost.CreateUserStore(fsql).CreateAsync(user, CancellationToken.None);
+        await IdentityTestHost.CreateUserStore(fsql).AssignRoleAsync(user.Id, role.Id, CancellationToken.None);
 
         var result = await store.DeleteAsync(role.Id, CancellationToken.None);
 
         Assert.False(result);
-        Assert.Equal(1, fsql.Select<RoleEntity>().Count());
+        Assert.NotNull(await store.GetByIdAsync(role.Id, CancellationToken.None));
     }
 
     [Fact]
@@ -181,6 +183,7 @@ public class FreeSqlRoleStoreTests
         await store.CreateAsync(null!, CancellationToken.None);
         await store.UpdateAsync(null!, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<RoleEntity>().Count());
+        var list = await store.GetListAsync(take: 100, ct: CancellationToken.None);
+        Assert.Empty(list);
     }
 }

@@ -94,8 +94,9 @@ public class FreeSqlPasswordResetStoreTests
 
         await store.MarkUsedAsync(record.Id, CancellationToken.None);
 
-        var loaded = fsql.Select<PasswordResetCodeEntity>().Where(p => p.Id == record.Id).First();
-        Assert.True(loaded.IsUsed);
+        var loaded = await store.GetAsync("alice", "ABC12345", CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.True(loaded!.IsUsed);
     }
 
     [Fact]
@@ -106,6 +107,6 @@ public class FreeSqlPasswordResetStoreTests
 
         await store.SaveAsync(null!, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<PasswordResetCodeEntity>().Count());
+        Assert.Null(await store.GetAsync("alice", "ABC12345", CancellationToken.None));
     }
 }

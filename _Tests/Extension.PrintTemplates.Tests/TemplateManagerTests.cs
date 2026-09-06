@@ -114,10 +114,10 @@ public class TemplateManagerTests
         var result = await manager.DraftAsync("k", "updated draft");
 
         // 单 Draft：upsert 而非新增
-        Assert.Equal(1, fsql.Select<PrintTemplateVersionEntity>().Count());
+        var all = await manager.ListVersionsAsync("k", CancellationToken.None);
+        Assert.Equal(1, all.Count);
         Assert.Equal("updated draft", result.Content);
 
-        var all = await manager.ListVersionsAsync("k");
         Assert.Single(all);
         Assert.Equal("updated draft", all[0].Content);
     }

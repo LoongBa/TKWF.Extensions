@@ -19,6 +19,7 @@ public class NotificationSubscriptionManagerTests
 
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
 
+        // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         var row = fsql.Select<NotificationSubscriptionEntity>().First();
         Assert.Equal(1L, row.UserId);
         Assert.Equal(TestNotificationDefinitions.OrderShipped, row.NotificationName);
@@ -36,6 +37,7 @@ public class NotificationSubscriptionManagerTests
 
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100");
 
+        // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         var row = fsql.Select<NotificationSubscriptionEntity>().First();
         Assert.Equal(1L, row.UserId);
         Assert.Equal("Order", row.EntityTypeName);
@@ -54,6 +56,7 @@ public class NotificationSubscriptionManagerTests
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
 
+        // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Single(fsql.Select<NotificationSubscriptionEntity>().ToList());
     }
 
@@ -66,10 +69,12 @@ public class NotificationSubscriptionManagerTests
         var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
 
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
+        // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Single(fsql.Select<NotificationSubscriptionEntity>().ToList());
 
         await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
 
+        // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Empty(fsql.Select<NotificationSubscriptionEntity>().ToList());
     }
 
@@ -84,6 +89,7 @@ public class NotificationSubscriptionManagerTests
         // 从未订阅 → 退订应静默（不抛异常）
         await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
 
+        // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Empty(fsql.Select<NotificationSubscriptionEntity>().ToList());
     }
 }

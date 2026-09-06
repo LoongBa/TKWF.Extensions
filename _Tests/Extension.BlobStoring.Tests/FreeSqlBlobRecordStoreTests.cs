@@ -57,10 +57,9 @@ public class FreeSqlBlobRecordStoreTests
         await store.SaveAsync(record);
 
         // Assert
-        var count = fsql.Select<BlobRecordEntity>().Count();
-        Assert.Equal(1, count);
-
-        var saved = fsql.Select<BlobRecordEntity>().First();
+        var list = await store.GetListAsync(ct: CancellationToken.None);
+        Assert.Single(list);
+        var saved = list[0];
         Assert.Equal("photo.png", saved.Name);
         Assert.Equal("abc123/photo.png", saved.Path);
         Assert.Equal("image/png", saved.ContentType);
@@ -86,7 +85,7 @@ public class FreeSqlBlobRecordStoreTests
         };
         await store.SaveAsync(record);
 
-        var saved = fsql.Select<BlobRecordEntity>().First();
+        var saved = (await store.GetListAsync(ct: CancellationToken.None))[0];
         var originalId = saved.Id;
         saved.Size = 4096;
 
@@ -94,10 +93,9 @@ public class FreeSqlBlobRecordStoreTests
         await store.SaveAsync(saved);
 
         // Assert — 改造后 Upsert 保留自增 Id（不再先删后插）
-        var count = fsql.Select<BlobRecordEntity>().Count();
-        Assert.Equal(1, count);
-
-        var updated = fsql.Select<BlobRecordEntity>().First();
+        var list = await store.GetListAsync(ct: CancellationToken.None);
+        Assert.Single(list);
+        var updated = list[0];
         Assert.Equal(originalId, updated.Id);
         Assert.Equal(4096, updated.Size);
     }
@@ -119,7 +117,7 @@ public class FreeSqlBlobRecordStoreTests
             Size = 1048576
         };
         await store.SaveAsync(record);
-        var id = fsql.Select<BlobRecordEntity>().First().Id;
+        var id = (await store.GetListAsync(ct: CancellationToken.None))[0].Id;
 
         // Act
         var result = await store.GetAsync(id);
@@ -203,8 +201,7 @@ public class FreeSqlBlobRecordStoreTests
         await store.SaveAsync(null!);
 
         // Assert — no records created
-        var count = fsql.Select<BlobRecordEntity>().Count();
-        Assert.Equal(0, count);
+        Assert.Empty(await store.GetListAsync(ct: CancellationToken.None));
     }
 
     [Fact]

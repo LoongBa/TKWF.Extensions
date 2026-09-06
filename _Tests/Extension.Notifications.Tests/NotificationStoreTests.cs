@@ -19,18 +19,19 @@ public class NotificationStoreTests
         var publisher = sp.GetRequiredService<INotificationPublisher>();
         var store = sp.GetRequiredService<INotificationStore>();
 
-        // 发布 2 条 → 均未读
+        // 发布 2 条 → 均未读（经 Store 读取收件箱，按创建倒序）
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        var firstNotif = fsql.Select<NotificationEntity>().First();
         await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
-        var secondNotif = fsql.Select<NotificationEntity>().Where(n => n.Id != firstNotif.Id).First();
+        var inbox = await store.GetListAsync(1, page: 1, pageSize: 10);
+        Assert.Equal(2, inbox.Count);
 
-        // 第 1 条标记已读
-        await store.MarkReadAsync(1, firstNotif.Id);
+        // 标记其中一条已读
+        var firstRow = inbox[0];
+        await store.MarkReadAsync(1, firstRow.NotificationId);
 
         var unread = await store.GetUnreadAsync(1);
         Assert.Single(unread);
-        Assert.Equal(secondNotif.Id, unread[0].NotificationId);
+        Assert.NotEqual(firstRow.NotificationId, unread[0].NotificationId); // 另一条仍未读
     }
 
     [Fact]
@@ -69,8 +70,8 @@ public class NotificationStoreTests
 
         Assert.Equal(2, await store.GetUnreadCountAsync(1));
 
-        var notif = fsql.Select<NotificationEntity>().First();
-        await store.MarkReadAsync(1, notif.Id);
+        var notif = (await store.GetListAsync(1, page: 1, pageSize: 10))[0];
+        await store.MarkReadAsync(1, notif.NotificationId);
 
         Assert.Equal(1, await store.GetUnreadCountAsync(1));
     }
@@ -85,12 +86,13 @@ public class NotificationStoreTests
         var store = sp.GetRequiredService<INotificationStore>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        var notif = fsql.Select<NotificationEntity>().First();
+        var notif = (await store.GetListAsync(1, page: 1, pageSize: 10))[0];
         var before = DateTime.UtcNow;
 
-        await store.MarkReadAsync(1, notif.Id);
+        await store.MarkReadAsync(1, notif.NotificationId);
 
-        var inboxRow = fsql.Select<UserNotificationEntity>().First();
+        var inboxRow = (await store.GetListAsync(1, page: 1, pageSize: 10))
+            .Single(r => r.NotificationId == notif.NotificationId);
         Assert.Equal(1, inboxRow.State);
         Assert.NotNull(inboxRow.ReadTime);
         NotificationTestHost.AssertRecent(inboxRow.ReadTime!.Value, before);
@@ -112,7 +114,7 @@ public class NotificationStoreTests
         await store.MarkAllReadAsync(1);
 
         Assert.Equal(0, await store.GetUnreadCountAsync(1));
-        var rows = fsql.Select<UserNotificationEntity>().ToList();
+        var rows = await store.GetListAsync(1, page: 1, pageSize: 10);
         Assert.All(rows, r => Assert.Equal(1, r.State));
     }
 

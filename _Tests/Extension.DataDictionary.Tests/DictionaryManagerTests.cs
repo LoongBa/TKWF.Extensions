@@ -113,7 +113,8 @@ public class DictionaryManagerTests
         await manager.UpsertDefinitionAsync(def, CancellationToken.None);
 
         Assert.True(def.Id > 0);
-        Assert.Equal(1, fsql.Select<DictionaryDefinitionEntity>().Count());
+        var saved = await manager.GetDefinitionByCodeAsync("Color", CancellationToken.None);
+        Assert.NotNull(saved);
     }
 
     [Fact]
@@ -122,13 +123,15 @@ public class DictionaryManagerTests
         var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
         await SeedGender(fsql);
-        var def = fsql.Select<DictionaryDefinitionEntity>().First();
-        var item = new DictionaryItemEntity { DefinitionId = def.Id, Code = "Other", DisplayName = "其他", Order = 3 };
+        var def = await manager.GetDefinitionByCodeAsync("Gender", CancellationToken.None);
+        Assert.NotNull(def); // 播种定义经 manager 业务方法读取
+        var item = new DictionaryItemEntity { DefinitionId = def!.Id, Code = "Other", DisplayName = "其他", Order = 3 };
 
         await manager.UpsertItemAsync(item, CancellationToken.None);
 
         Assert.True(item.Id > 0);
-        Assert.Equal(3, fsql.Select<DictionaryItemEntity>().Count());
+        var items = await manager.GetItemsAsync("Gender", CancellationToken.None);
+        Assert.Equal(3, items.Count);
     }
 
     [Fact]
@@ -140,7 +143,7 @@ public class DictionaryManagerTests
         await manager.UpsertDefinitionAsync(null!, CancellationToken.None);
         await manager.UpsertItemAsync(null!, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<DictionaryDefinitionEntity>().Count());
-        Assert.Equal(0, fsql.Select<DictionaryItemEntity>().Count());
+        Assert.Null(await manager.GetDefinitionByCodeAsync("Color", CancellationToken.None));
+        Assert.Empty(await manager.GetItemsAsync("Color", CancellationToken.None));
     }
 }

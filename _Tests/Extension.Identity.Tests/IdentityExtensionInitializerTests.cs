@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
@@ -118,9 +119,12 @@ public class IdentityExtensionInitializerTests
         await init.InitializeAsync();
         await init.InitializeAsync(); // 第二次调用应幂等
 
-        Assert.Equal(1, fsql.Select<RoleEntity>().Count());
-        var admin = fsql.Select<RoleEntity>().Where(r => r.Name == "Admin").First();
-        Assert.True(admin.IsSystemRole);
+        var roleStore = sp.GetRequiredService<IRoleStore>();
+        var roleList = await roleStore.GetListAsync(take: 100, ct: CancellationToken.None);
+        Assert.Single(roleList);
+        var admin = await roleStore.GetByNameAsync("Admin", CancellationToken.None);
+        Assert.NotNull(admin);
+        Assert.True(admin!.IsSystemRole);
     }
 
     [Fact]

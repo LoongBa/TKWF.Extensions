@@ -127,10 +127,11 @@ public class DictionaryManagerCacheTests
         Assert.Equal(2, before.Count);
 
         // 新增项
-        var def = fsql.Select<DictionaryDefinitionEntity>().First();
+        var def = await manager.GetDefinitionByCodeAsync("Gender", CancellationToken.None);
+        Assert.NotNull(def); // 播种定义经 manager 业务方法读取
         await manager.UpsertItemAsync(new DictionaryItemEntity
         {
-            DefinitionId = def.Id, Code = "Other", DisplayName = "其他", Order = 3
+            DefinitionId = def!.Id, Code = "Other", DisplayName = "其他", Order = 3
         }, CancellationToken.None);
 
         // 重新读取 → 应包含新项

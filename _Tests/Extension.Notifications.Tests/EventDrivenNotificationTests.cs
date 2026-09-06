@@ -26,20 +26,21 @@ public class EventDrivenNotificationTests
         });
 
         var handler = sp.GetRequiredService<ILocalEventHandler<OrderCreatedEvent>>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         // 事件 → handler.HandleEventAsync → 发布通知
         await handler.HandleEventAsync(new OrderCreatedEvent(OrderId: 42, BuyerId: 7, OrderNo: "ORD-42"));
 
-        // 验证：Notification 表 1 行（OrderCreated）
+        // 验证：Notification 表 1 行（OrderCreated）——无业务方法覆盖（发布态直读），保留直查
         var notification = fsql.Select<NotificationEntity>().First();
         Assert.Equal(OrderNotificationDefinitions.OrderCreated, notification.Name);
         Assert.Equal("订单已创建", notification.DisplayName);
 
-        // 验证：收件箱 1 行（BuyerId=7，未读）
-        var inbox = fsql.Select<UserNotificationEntity>().First();
-        Assert.Equal(7L, inbox.UserId);
-        Assert.Equal(notification.Id, inbox.NotificationId);
-        Assert.Equal(0, inbox.State);
+        // 验证：收件箱 1 行（BuyerId=7，未读）——经 Store 业务方法
+        var inbox = await store.GetUnreadAsync(7);
+        Assert.Single(inbox);
+        Assert.Equal(7L, inbox[0].UserId);
+        Assert.Equal(notification.Id, inbox[0].NotificationId);
 
         // 验证：DataJson 可反序列化（OrderId/OrderNo 保留）
         var data = NotificationData.FromJson(notification.DataJson);

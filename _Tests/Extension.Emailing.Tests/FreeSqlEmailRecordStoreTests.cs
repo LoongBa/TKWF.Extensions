@@ -57,10 +57,9 @@ public class FreeSqlEmailRecordStoreTests
         await store.SaveAsync(entity);
 
         // Assert
-        var count = fsql.Select<EmailRecordEntity>().Count();
-        Assert.Equal(1, count);
-
-        var saved = fsql.Select<EmailRecordEntity>().First();
+        var list = await store.GetListAsync(ct: CancellationToken.None);
+        Assert.Single(list);
+        var saved = list[0];
         Assert.Equal("test@example.com", saved.To);
         Assert.Equal("sender@example.com", saved.From);
         Assert.Equal("Hello", saved.Subject);
@@ -87,7 +86,7 @@ public class FreeSqlEmailRecordStoreTests
         await store.SaveAsync(entity);
 
         // 获取生成的 Id
-        var saved = fsql.Select<EmailRecordEntity>().First();
+        var saved = (await store.GetListAsync(ct: CancellationToken.None))[0];
         saved.Status = "Sent";
         saved.SendTime = DateTime.Now;
 
@@ -95,10 +94,9 @@ public class FreeSqlEmailRecordStoreTests
         await store.SaveAsync(saved);
 
         // Assert
-        var count = fsql.Select<EmailRecordEntity>().Count();
-        Assert.Equal(1, count);
-
-        var updated = fsql.Select<EmailRecordEntity>().First();
+        var list = await store.GetListAsync(ct: CancellationToken.None);
+        Assert.Single(list);
+        var updated = list[0];
         Assert.Equal("Sent", updated.Status);
         Assert.NotNull(updated.SendTime);
     }
@@ -119,7 +117,7 @@ public class FreeSqlEmailRecordStoreTests
             Status = "Sent"
         };
         await store.SaveAsync(entity);
-        var id = fsql.Select<EmailRecordEntity>().First().Id;
+        var id = (await store.GetListAsync(ct: CancellationToken.None))[0].Id;
 
         // Act
         var result = await store.GetAsync(id);
@@ -200,8 +198,7 @@ public class FreeSqlEmailRecordStoreTests
         await store.SaveAsync(null!);
 
         // Assert — no records created
-        var count = fsql.Select<EmailRecordEntity>().Count();
-        Assert.Equal(0, count);
+        Assert.Empty(await store.GetListAsync(ct: CancellationToken.None));
     }
 
     [Fact]

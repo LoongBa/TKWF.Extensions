@@ -47,20 +47,20 @@ public class AuditLogStoreTests
         // Act
         await store.SaveAsync(entry);
 
-        // Assert
-        var count = fsql.Select<AuditLogEntity>().Count();
-        Assert.Equal(1, count);
-
-        var saved = fsql.Select<AuditLogEntity>().First();
-        Assert.Equal("testuser", saved.UserName);
-        Assert.Equal("u123", saved.UserId);
-        Assert.Equal("OrderService", saved.ServiceName);
-        Assert.Equal("CreateOrder", saved.MethodName);
-        Assert.Equal("{\"id\":1}", saved.ArgumentsJson);
-        Assert.Equal(42, saved.DurationMs);
-        Assert.True(saved.Success);
-        Assert.Null(saved.Exception);
-        Assert.Equal("corr-001", saved.CorrelationId);
+        // Assert — 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）
+        var dataService = AuditLoggingTestHost.CreateDataService(fsql);
+        var saved = await dataService.EntityGetAsync(e => e.CorrelationId == "corr-001", CancellationToken.None);
+        Assert.NotNull(saved);
+        var entity = saved!;
+        Assert.Equal("testuser", entity.UserName);
+        Assert.Equal("u123", entity.UserId);
+        Assert.Equal("OrderService", entity.ServiceName);
+        Assert.Equal("CreateOrder", entity.MethodName);
+        Assert.Equal("{\"id\":1}", entity.ArgumentsJson);
+        Assert.Equal(42, entity.DurationMs);
+        Assert.True(entity.Success);
+        Assert.Null(entity.Exception);
+        Assert.Equal("corr-001", entity.CorrelationId);
     }
 
     [Fact]
@@ -108,8 +108,9 @@ public class AuditLogStoreTests
         await store.SaveAsync(null!);
 
         // Assert — no records created
-        var count = fsql.Select<AuditLogEntity>().Count();
-        Assert.Equal(0, count);
+        var dataService = AuditLoggingTestHost.CreateDataService(fsql);
+        var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
+        Assert.Empty(all);
     }
 
     [Fact]
@@ -138,19 +139,22 @@ public class AuditLogStoreTests
         // Act
         await store.SaveAsync(entry);
 
-        // Assert
-        var saved = fsql.Select<AuditLogEntity>().First();
-        Assert.Equal("alice", saved.UserName);
-        Assert.Equal("a1", saved.UserId);
-        Assert.Equal("PaymentService", saved.ServiceName);
-        Assert.Equal("ProcessPayment", saved.MethodName);
-        Assert.Equal("{\"amount\":100}", saved.ArgumentsJson);
-        Assert.Equal(execTime, saved.ExecutionTime, TimeSpan.FromSeconds(1));
-        Assert.Equal(150, saved.DurationMs);
-        Assert.False(saved.Success);
-        Assert.Equal("Insufficient funds", saved.Exception);
-        Assert.Equal("pay-999", saved.CorrelationId);
-        Assert.True(saved.CreateTime > DateTimeOffset.MinValue);
+        // Assert — 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）
+        var dataService = AuditLoggingTestHost.CreateDataService(fsql);
+        var saved = await dataService.EntityGetAsync(e => e.CorrelationId == "pay-999", CancellationToken.None);
+        Assert.NotNull(saved);
+        var entity = saved!;
+        Assert.Equal("alice", entity.UserName);
+        Assert.Equal("a1", entity.UserId);
+        Assert.Equal("PaymentService", entity.ServiceName);
+        Assert.Equal("ProcessPayment", entity.MethodName);
+        Assert.Equal("{\"amount\":100}", entity.ArgumentsJson);
+        Assert.Equal(execTime, entity.ExecutionTime, TimeSpan.FromSeconds(1));
+        Assert.Equal(150, entity.DurationMs);
+        Assert.False(entity.Success);
+        Assert.Equal("Insufficient funds", entity.Exception);
+        Assert.Equal("pay-999", entity.CorrelationId);
+        Assert.True(entity.CreateTime > DateTimeOffset.MinValue);
     }
 
     [Fact]
@@ -196,9 +200,10 @@ public class AuditLogStoreTests
             ));
         }
 
-        // Assert
-        var count = fsql.Select<AuditLogEntity>().Count();
-        Assert.Equal(5, count);
+        // Assert — 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）
+        var dataService = AuditLoggingTestHost.CreateDataService(fsql);
+        var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
+        Assert.Equal(5, all.Count);
     }
 
     // ── Test helpers ──

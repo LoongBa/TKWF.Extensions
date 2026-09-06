@@ -41,7 +41,8 @@ public class FreeSqlDictionaryStoreTests
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
         Assert.True(def.Id > 0);
-        Assert.Equal(1, fsql.Select<DictionaryDefinitionEntity>().Count());
+        var all = await store.GetDefinitionsAsync(0, 100, CancellationToken.None);
+        Assert.Single(all);
     }
 
     [Fact]
@@ -56,9 +57,11 @@ public class FreeSqlDictionaryStoreTests
         updated.DisplayName = "性别（更新）";
         await store.UpsertDefinitionAsync(updated, CancellationToken.None);
 
-        Assert.Equal(1, fsql.Select<DictionaryDefinitionEntity>().Count());
-        var saved = fsql.Select<DictionaryDefinitionEntity>().Where(d => d.Code == "Gender").First();
-        Assert.Equal("性别（更新）", saved.DisplayName);
+        var all = await store.GetDefinitionsAsync(0, 100, CancellationToken.None);
+        Assert.Single(all);
+        var saved = await store.GetDefinitionByCodeAsync("Gender", CancellationToken.None);
+        Assert.NotNull(saved);
+        Assert.Equal("性别（更新）", saved!.DisplayName);
     }
 
     [Fact]
@@ -97,7 +100,8 @@ public class FreeSqlDictionaryStoreTests
         var list = await store.GetDefinitionsAsync(0, 2, CancellationToken.None);
 
         Assert.Equal(2, list.Count);
-        Assert.Equal(3, fsql.Select<DictionaryDefinitionEntity>().Count());
+        var all = await store.GetDefinitionsAsync(0, 100, CancellationToken.None);
+        Assert.Equal(3, all.Count);
     }
 
     [Fact]
@@ -116,8 +120,9 @@ public class FreeSqlDictionaryStoreTests
         item2.DisplayName = "男（更新）";
         await store.UpsertItemAsync(item2, CancellationToken.None);
 
-        Assert.Equal(1, fsql.Select<DictionaryItemEntity>().Count());
-        var saved = fsql.Select<DictionaryItemEntity>().Where(i => i.Code == "Male").First();
+        var items = await store.GetItemsAsync(def.Id, CancellationToken.None);
+        Assert.Single(items);
+        var saved = items.Single(i => i.Code == "Male");
         Assert.Equal("男（更新）", saved.DisplayName);
         Assert.Equal(2, saved.Order); // 更新生效
     }
@@ -153,8 +158,10 @@ public class FreeSqlDictionaryStoreTests
 
         await store.DeleteDefinitionAsync(def.Id, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<DictionaryDefinitionEntity>().Count());
-        Assert.Equal(0, fsql.Select<DictionaryItemEntity>().Count());
+        var defs = await store.GetDefinitionsAsync(0, 100, CancellationToken.None);
+        Assert.Empty(defs);
+        var items = await store.GetItemsAsync(def.Id, CancellationToken.None);
+        Assert.Empty(items);
     }
 
     [Fact]
@@ -169,7 +176,8 @@ public class FreeSqlDictionaryStoreTests
 
         await store.DeleteItemAsync(item.Id, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<DictionaryItemEntity>().Count());
+        var items = await store.GetItemsAsync(def.Id, CancellationToken.None);
+        Assert.Empty(items);
     }
 
     [Fact]
@@ -181,7 +189,10 @@ public class FreeSqlDictionaryStoreTests
         await store.UpsertDefinitionAsync(null!, CancellationToken.None);
         await store.UpsertItemAsync(null!, CancellationToken.None);
 
-        Assert.Equal(0, fsql.Select<DictionaryDefinitionEntity>().Count());
-        Assert.Equal(0, fsql.Select<DictionaryItemEntity>().Count());
+        var defs = await store.GetDefinitionsAsync(0, 100, CancellationToken.None);
+        Assert.Empty(defs);
+        // 无定义时按任意 Id 查项为空（业务方法表达"全表无项"）
+        var items = await store.GetItemsAsync(1, CancellationToken.None);
+        Assert.Empty(items);
     }
 }

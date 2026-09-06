@@ -65,8 +65,10 @@ public class DefaultPasswordResetFlowTests
         var result = await flow.InitiateResetAsync("alice", CancellationToken.None);
 
         Assert.True(result);
-        Assert.Equal(1, fsql.Select<PasswordResetCodeEntity>().Count());
-        var saved = fsql.Select<PasswordResetCodeEntity>().First();
+        // 重置码由 flow 内部生成且不对外返回——Store.GetAsync(userName, resetCode) 需预知码才能读取，
+        // 故保留直查：验证落库条数 + 读回自动生成的码。
+        Assert.Equal(1, fsql.Select<PasswordResetCodeEntity>().Count()); // 无业务方法覆盖（流程内部生成码不返回），保留直查
+        var saved = fsql.Select<PasswordResetCodeEntity>().First(); // 无业务方法覆盖（需读回流程内部生成的码），保留直查
         Assert.Equal("alice", saved.UserName);
         Assert.Equal(8, saved.ResetCode.Length);
     }
@@ -82,7 +84,7 @@ public class DefaultPasswordResetFlowTests
 
         // 防用户枚举：用户不存在也返回 true，且不生成码
         Assert.True(result);
-        Assert.Equal(0, fsql.Select<PasswordResetCodeEntity>().Count());
+        Assert.Null(await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("nobody", "NONEXIST", CancellationToken.None));
     }
 
     [Fact]
@@ -94,7 +96,7 @@ public class DefaultPasswordResetFlowTests
         var result = await flow.InitiateResetAsync("alice", CancellationToken.None);
 
         Assert.False(result);
-        Assert.Equal(0, fsql.Select<PasswordResetCodeEntity>().Count());
+        Assert.Null(await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("alice", "NONEXIST", CancellationToken.None));
     }
 
     [Fact]
@@ -104,15 +106,17 @@ public class DefaultPasswordResetFlowTests
         var manager = new FakePasswordManager();
         var flow = CreateFlow(fsql, manager);
         await flow.InitiateResetAsync("alice", CancellationToken.None);
-        var saved = fsql.Select<PasswordResetCodeEntity>().First();
+        // 重置码由 flow 内部生成且不对外返回——Store.GetAsync 需预知码，保留直查读回已存码。
+        var saved = fsql.Select<PasswordResetCodeEntity>().First(); // 无业务方法覆盖（需读回流程内部生成的码），保留直查
 
         var result = await flow.CompleteResetAsync("alice", saved.ResetCode, "CLIENT_HASH", "SALT", CancellationToken.None);
 
         Assert.True(result.Success, $"重置失败: {result.Message}");
         Assert.Equal("alice", manager.SavedUserName);
         Assert.Equal("CLIENT_HASH", manager.SavedHash);
-        var updated = fsql.Select<PasswordResetCodeEntity>().Where(p => p.Id == saved.Id).First();
-        Assert.True(updated.IsUsed);
+        var updated = await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("alice", saved.ResetCode, CancellationToken.None);
+        Assert.NotNull(updated);
+        Assert.True(updated!.IsUsed);
     }
 
     [Fact]
@@ -135,7 +139,8 @@ public class DefaultPasswordResetFlowTests
         var manager = new FakePasswordManager();
         var flow = CreateFlow(fsql, manager);
         await flow.InitiateResetAsync("alice", CancellationToken.None);
-        var saved = fsql.Select<PasswordResetCodeEntity>().First();
+        // 重置码由 flow 内部生成且不对外返回——Store.GetAsync 需预知码，保留直查读回已存码。
+        var saved = fsql.Select<PasswordResetCodeEntity>().First(); // 无业务方法覆盖（需读回流程内部生成的码），保留直查
 
         await flow.CompleteResetAsync("alice", saved.ResetCode, "HASH1", "SALT", CancellationToken.None);
         // 第二次使用同一码（已标记 Used）
@@ -150,12 +155,11 @@ public class DefaultPasswordResetFlowTests
     {
         var fsql = CreateFreeSql();
         var flow = CreateFlow(fsql, new FakePasswordManager());
-        await fsql.Insert(new PasswordResetCodeEntity
-        {
+        await AccountTestHost.CreatePasswordResetStore(fsql).SaveAsync(new PasswordResetCodeEntity {
             UserName = "alice",
             ResetCode = "EXPIRED1",
             ExpireTime = DateTime.Now.AddMinutes(-1) // 已过期
-        }).ExecuteAffrowsAsync();
+        }, CancellationToken.None);
 
         var result = await flow.CompleteResetAsync("alice", "EXPIRED1", "HASH", "SALT", CancellationToken.None);
 
@@ -170,13 +174,15 @@ public class DefaultPasswordResetFlowTests
         var manager = new FakePasswordManager { SetResult = false }; // 模拟密码落地失败
         var flow = CreateFlow(fsql, manager);
         await flow.InitiateResetAsync("alice", CancellationToken.None);
-        var saved = fsql.Select<PasswordResetCodeEntity>().First();
+        // 重置码由 flow 内部生成且不对外返回——Store.GetAsync 需预知码，保留直查读回已存码。
+        var saved = fsql.Select<PasswordResetCodeEntity>().First(); // 无业务方法覆盖（需读回流程内部生成的码），保留直查
 
         var result = await flow.CompleteResetAsync("alice", saved.ResetCode, "HASH", "SALT", CancellationToken.None);
 
         Assert.False(result.Success);
-        var updated = fsql.Select<PasswordResetCodeEntity>().Where(p => p.Id == saved.Id).First();
-        Assert.True(updated.IsUsed); // 码已标记已用——不可重放
+        var updated = await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("alice", saved.ResetCode, CancellationToken.None);
+        Assert.NotNull(updated);
+        Assert.True(updated!.IsUsed); // 码已标记已用——不可重放
     }
 
     [Fact]

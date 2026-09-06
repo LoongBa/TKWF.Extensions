@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,9 +69,7 @@ public class DataImportTaskServiceTests
             Assert.Empty(result.ImportResult.Failures);
             Assert.Empty(result.ImportResult.BatchFailures);
 
-            var record = await fsql.Select<DataImportRecordEntity>()
-                .Where(r => r.Id == result.RecordId)
-                .FirstAsync();
+            var record = await service.GetRecordByBatchNoAsync(result.BatchNo, CancellationToken.None);
 
             Assert.NotNull(record);
             Assert.Equal(result.BatchNo, record!.BatchNo);
@@ -107,9 +104,10 @@ public class DataImportTaskServiceTests
             Assert.Equal(first.RecordId, second.RecordId);
             Assert.Same(ImportResult.Empty, second.ImportResult);
 
-            // 数据库仅一条批次记录
-            var count = fsql.Select<DataImportRecordEntity>().Count();
-            Assert.Equal(1, count);
+            // 数据库仅一条批次记录（幂等：二次导入命中同一批次，无新增行）
+            var record = await service.GetRecordByBatchNoAsync(first.BatchNo, CancellationToken.None);
+            Assert.NotNull(record);
+            Assert.Equal(first.RecordId, record!.Id);
         }
         finally
         {
@@ -136,9 +134,7 @@ public class DataImportTaskServiceTests
             Assert.NotEmpty(result.ImportResult.BatchFailures);
             Assert.Equal(2, adapter.BatchCount);
 
-            var record = await fsql.Select<DataImportRecordEntity>()
-                .Where(r => r.Id == result.RecordId)
-                .FirstAsync();
+            var record = await service.GetRecordByBatchNoAsync(result.BatchNo, CancellationToken.None);
 
             Assert.NotNull(record);
             Assert.Equal("PartiallySucceeded", record!.Status);
@@ -169,7 +165,10 @@ public class DataImportTaskServiceTests
             await Assert.ThrowsAsync<DataImportException>(
                 () => service.ImportAsync(filePath, new TestImportAdapter()));
 
-            var record = await fsql.Select<DataImportRecordEntity>().FirstAsync();
+            // 导入抛异常 → 无 BatchNo 可用；经 DataService 枚举回查（红线：断言不经裸 fsql.Select）
+            var dataService = DataPortTestHost.CreateDataService(fsql);
+            var records = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
+            var record = Assert.Single(records);
 
             Assert.NotNull(record);
             Assert.Equal("Failed", record!.Status);
@@ -195,8 +194,7 @@ public class DataImportTaskServiceTests
             // First import: ThrowingBatchAdapter causes PartiallySucceeded
             var firstResult = await service.ImportAsync(filePath, new ThrowingBatchAdapter(),
                 new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false));
-            var firstRecord = await fsql.Select<DataImportRecordEntity>()
-                .Where(r => r.Id == firstResult.RecordId).FirstAsync();
+            var firstRecord = await service.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
             Assert.Equal("PartiallySucceeded", firstRecord!.Status);
 
             // Second import of same file: should reset and re-run with TestImportAdapter
@@ -204,8 +202,7 @@ public class DataImportTaskServiceTests
             Assert.Equal(firstResult.RecordId, secondResult.RecordId); // Same record
             Assert.Equal(firstResult.BatchNo, secondResult.BatchNo);
 
-            var record = await fsql.Select<DataImportRecordEntity>()
-                .Where(r => r.Id == firstResult.RecordId).FirstAsync();
+            var record = await service.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
             Assert.Equal("Succeeded", record!.Status);
             Assert.Equal(3, record.SuccessCount);
         }

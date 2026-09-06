@@ -48,10 +48,9 @@ public class FreeSqlSettingStoreTests
         await store.SetAsync("Theme", "dark", "Global", null, "UI theme", CancellationToken.None);
 
         // Assert
-        var count = fsql.Select<SettingEntity>().Count();
-        Assert.Equal(1, count);
-
-        var saved = fsql.Select<SettingEntity>().First();
+        var list = await store.GetListAsync("Global", null, CancellationToken.None);
+        Assert.Single(list);
+        var saved = list[0];
         Assert.Equal("Theme", saved.Name);
         Assert.Equal("dark", saved.Value);
         Assert.Equal("Global", saved.ProviderName);
@@ -74,10 +73,9 @@ public class FreeSqlSettingStoreTests
         await store.SetAsync("Theme", "light", "Global", null, null, CancellationToken.None);
 
         // Assert
-        var count = fsql.Select<SettingEntity>().Count();
-        Assert.Equal(1, count);
-
-        var saved = fsql.Select<SettingEntity>().First();
+        var list = await store.GetListAsync("Global", null, CancellationToken.None);
+        Assert.Single(list);
+        var saved = list[0];
         Assert.Equal("light", saved.Value);
     }
 
@@ -127,13 +125,13 @@ public class FreeSqlSettingStoreTests
         var store = CreateStore(fsql, logger);
 
         await store.SetAsync("Temp", "value", "Global", null, null, CancellationToken.None);
-        Assert.Equal(1, fsql.Select<SettingEntity>().Count());
+        Assert.Single(await store.GetListAsync("Global", null, CancellationToken.None));
 
         // Act
         await store.DeleteAsync("Temp", "Global", null, CancellationToken.None);
 
         // Assert
-        Assert.Equal(0, fsql.Select<SettingEntity>().Count());
+        Assert.Empty(await store.GetListAsync("Global", null, CancellationToken.None));
     }
 
     [Fact]
@@ -252,8 +250,8 @@ public class FreeSqlSettingStoreTests
         await store.SetAsync("NullVal", null, "Global", null, null, CancellationToken.None);
 
         // Assert
-        var saved = fsql.Select<SettingEntity>().First();
-        Assert.Null(saved.Value);
+        var saved = await store.GetAsync("NullVal", "Global", null, CancellationToken.None);
+        Assert.Null(saved!.Value);
     }
 
     // ── Test helpers ──

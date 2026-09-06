@@ -24,22 +24,24 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
 
-        // Notification 发布态 1 行（含定义快照 + 严重级别）
+        // Notification 发布态 1 行（含定义快照 + 严重级别）——无业务方法覆盖（发布态直读），保留直查
         var notifications = fsql.Select<NotificationEntity>().ToList();
         Assert.Single(notifications);
         Assert.Equal(TestNotificationDefinitions.OrderShipped, notifications[0].Name);
         Assert.Equal("订单已发货", notifications[0].DisplayName);
         Assert.Equal((int)NotificationSeverity.Info, notifications[0].Severity);
 
-        // 收件箱每收件人 1 行（State=0 未读，指向同一 Notification）
-        var inboxRows = fsql.Select<UserNotificationEntity>().ToList();
-        Assert.Equal(2, inboxRows.Count);
-        Assert.All(inboxRows, r => Assert.Equal(0, r.State));
-        Assert.All(inboxRows, r => Assert.Equal(notifications[0].Id, r.NotificationId));
-        Assert.Equal(new[] { 1L, 2L }, inboxRows.Select(r => r.UserId).OrderBy(id => id).ToArray());
+        // 收件箱每收件人 1 行（未读，指向同一 Notification）——经 Store 业务方法
+        var user1Inbox = await store.GetUnreadAsync(1);
+        var user2Inbox = await store.GetUnreadAsync(2);
+        Assert.Single(user1Inbox);
+        Assert.Single(user2Inbox);
+        Assert.All(user1Inbox.Concat(user2Inbox), r => Assert.Equal(notifications[0].Id, r.NotificationId));
+        Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
 
     [Fact]
@@ -49,11 +51,12 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: Array.Empty<long>());
 
-        Assert.Equal(0, fsql.Select<NotificationEntity>().Count());
-        Assert.Equal(0, fsql.Select<UserNotificationEntity>().Count());
+        Assert.Equal(0, fsql.Select<NotificationEntity>().Count()); // 无业务方法覆盖（发布态直读），保留直查
+        Assert.Empty(await store.GetUnreadAsync(1));
     }
 
     [Fact]
@@ -63,13 +66,15 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 1, 2 });
 
-        Assert.Single(fsql.Select<NotificationEntity>().ToList());
-        var inboxRows = fsql.Select<UserNotificationEntity>().ToList();
-        Assert.Equal(2, inboxRows.Count); // 1,1,2 → 去重 → 1,2
-        Assert.Equal(new[] { 1L, 2L }, inboxRows.Select(r => r.UserId).OrderBy(id => id).ToArray());
+        Assert.Single(fsql.Select<NotificationEntity>().ToList()); // 无业务方法覆盖（发布态直读），保留直查
+        var user1Inbox = await store.GetUnreadAsync(1);
+        var user2Inbox = await store.GetUnreadAsync(2);
+        Assert.Equal(2, user1Inbox.Count + user2Inbox.Count); // 1,1,2 → 去重 → 1,2
+        Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
 
     [Fact]
@@ -79,15 +84,17 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         await publisher.PublishAsync(
             TestNotificationDefinitions.OrderShipped,
             userIds: new long[] { 1, 2, 3 },
             excludedUserIds: new long[] { 2 });
 
-        var inboxRows = fsql.Select<UserNotificationEntity>().ToList();
-        Assert.Equal(2, inboxRows.Count);
-        Assert.Equal(new[] { 1L, 3L }, inboxRows.Select(r => r.UserId).OrderBy(id => id).ToArray());
+        var user1Inbox = await store.GetUnreadAsync(1);
+        var user3Inbox = await store.GetUnreadAsync(3);
+        Assert.Equal(2, user1Inbox.Count + user3Inbox.Count);
+        Assert.Equal(new[] { 1L, 3L }, user1Inbox.Concat(user3Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
 
     // ─── 订阅者派发 ───
@@ -99,6 +106,7 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
         var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
 
         // 用户 1、2 订阅定义级通知；用户 3 未订阅
@@ -108,9 +116,10 @@ public class NotificationPublisherTests
         // userIds=null → 按订阅解析收件人
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped);
 
-        var inboxRows = fsql.Select<UserNotificationEntity>().ToList();
-        Assert.Equal(2, inboxRows.Count);
-        Assert.Equal(new[] { 1L, 2L }, inboxRows.Select(r => r.UserId).OrderBy(id => id).ToArray());
+        var user1Inbox = await store.GetUnreadAsync(1);
+        var user2Inbox = await store.GetUnreadAsync(2);
+        Assert.Equal(2, user1Inbox.Count + user2Inbox.Count);
+        Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
 
     [Fact]
@@ -120,6 +129,7 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
         var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
 
         // 用户 1 订阅实体 o-100；用户 2 订阅实体 o-200
@@ -132,11 +142,11 @@ public class NotificationPublisherTests
             entityTypeName: "Order",
             entityId: "o-100");
 
-        var inboxRows = fsql.Select<UserNotificationEntity>().ToList();
-        Assert.Single(inboxRows);
-        Assert.Equal(1L, inboxRows[0].UserId);
+        var user1Inbox = await store.GetUnreadAsync(1);
+        Assert.Single(user1Inbox);
+        Assert.Equal(1L, user1Inbox[0].UserId);
 
-        // Notification 行填充实体关联
+        // Notification 行填充实体关联——无业务方法覆盖（发布态直读），保留直查
         var notif = fsql.Select<NotificationEntity>().First();
         Assert.Equal("Order", notif.EntityTypeName);
         Assert.Equal("o-100", notif.EntityId);
@@ -151,13 +161,14 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => publisher.PublishAsync("NoSuchNotification", userIds: new long[] { 1 }));
 
         // 未定义 → 不落库
-        Assert.Equal(0, fsql.Select<NotificationEntity>().Count());
-        Assert.Equal(0, fsql.Select<UserNotificationEntity>().Count());
+        Assert.Equal(0, fsql.Select<NotificationEntity>().Count()); // 无业务方法覆盖（发布态直读），保留直查
+        Assert.Empty(await store.GetUnreadAsync(1));
     }
 
     // ─── 发布方权限门控（RequirePermission）───
@@ -179,7 +190,7 @@ public class NotificationPublisherTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 }));
 
-        Assert.Equal(0, fsql.Select<NotificationEntity>().Count());
+        Assert.Equal(0, fsql.Select<NotificationEntity>().Count()); // 无业务方法覆盖（发布态直读），保留直查
     }
 
     [Fact]
@@ -194,11 +205,12 @@ public class NotificationPublisherTests
                 new Dictionary<string, bool> { ["Notifications.Restricted"] = true }));
         });
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
 
         await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 });
 
-        Assert.Single(fsql.Select<NotificationEntity>().ToList());
-        Assert.Single(fsql.Select<UserNotificationEntity>().ToList());
+        Assert.Single(fsql.Select<NotificationEntity>().ToList()); // 无业务方法覆盖（发布态直读），保留直查
+        Assert.Single(await store.GetUnreadAsync(1));
     }
 
     // ─── 通知数据（NotificationData JSON 往返）───
@@ -219,7 +231,7 @@ public class NotificationPublisherTests
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, data: data, userIds: new long[] { 1 });
 
         // DataJson 落库后可反序列化回 NotificationData
-        var notif = fsql.Select<NotificationEntity>().First();
+        var notif = fsql.Select<NotificationEntity>().First(); // 无业务方法覆盖（发布态直读），保留直查
         Assert.NotNull(notif.DataJson);
 
         var restored = NotificationData.FromJson(notif.DataJson);
@@ -237,6 +249,7 @@ public class NotificationPublisherTests
         NotificationTestHost.SyncStructure(fsql);
         using var sp = NotificationTestHost.Build(fsql);
         var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var store = sp.GetRequiredService<INotificationStore>();
         var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
 
         // 用户 1：定义级订阅（收全部）；用户 2：实体级订阅 o-100；用户 3：实体级订阅 o-200
@@ -250,9 +263,10 @@ public class NotificationPublisherTests
             entityTypeName: "Order",
             entityId: "o-100");
 
-        var inboxRows = fsql.Select<UserNotificationEntity>().ToList();
-        Assert.Equal(2, inboxRows.Count);
-        Assert.Equal(new[] { 1L, 2L }, inboxRows.Select(r => r.UserId).OrderBy(id => id).ToArray());
+        var user1Inbox = await store.GetUnreadAsync(1);
+        var user2Inbox = await store.GetUnreadAsync(2);
+        Assert.Equal(2, user1Inbox.Count + user2Inbox.Count);
+        Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
 
     // ─── M5 修订：inbox 写入失败 → 事务回滚（C4 原子性）───

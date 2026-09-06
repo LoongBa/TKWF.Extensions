@@ -31,7 +31,7 @@
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **549 测试全绿**——`dotnet test` 零失败。（511 既有 + Notifications 38）
+> 全量 **551 测试全绿**——`dotnet test` 零失败。（数据访问红线整改后 10 扩展 374 + 其它 177）
 
 ---
 

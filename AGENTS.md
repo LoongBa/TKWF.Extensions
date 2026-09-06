@@ -150,6 +150,17 @@ _Tests/Extension.{扩展名}.Tests/
 
 > **实践思路**（V0.2.0 起）：扩展模块**可以**采用框架原生开发方式——引入 SG1 分析器 + xCodeGen 生成 DTO/DataService/Conditions/IDomainEntity 实现，与业务领域项目使用同一套开发模式（tkwf-entity / tkwf-service skill）。这使扩展获得自动建表、REST/GraphQL API 暴露、Dto 自动裁剪等框架能力，减少手写样板代码。
 >
+> **数据访问红线（2026-09-07 用户裁定）**——扩展数据访问层必须遵循以下三条，违反即架构违规：
+> 1. **不允许直接使用 ORM（依赖）**——扩展代码不得注入 `IFreeSql`（或其他 ORM）直接写查询/SQL，除非业务有特殊需要且框架不可能满足（如 DataPort raw SQL 的 UTC DateTime 语义）；裸 ORM 无委托解析、autocommit、不参与 UoW，破坏事务一致性。
+> 2. **不允许直接使用 `IEntityDAC<T>`**——扩展不得在自定义 Store/Service 中直接注入 `IEntityDAC<T>` 手写数据访问；须用 SG1/xCodeGen 生成的 DataService（`DomainDataServiceBase`/`DomainReadOnlyDataServiceBase` 派生，`[GenerateController(FromDataService=true)]` 暴露 API）。极少情况需征求用户同意并记录，且不能作为示范（Permissions `EntityDACPermissionStore` 即为反例，待整改为委托 DataService）。
+> 3. **扩展应发挥组装优势**——TKWF 扩展模块机制的价值在于业务领域可灵活组装基础扩展、甚至用扩展机制拆分业务子领域；扩展自身数据访问必须走框架原生路径（SG1 生成 DataService），否则丢弃框架优势、本末倒置。
+>
+> **标准数据访问路径**：`DataService（DomainDataServiceBase/DomainReadOnlyDataServiceBase）→ IEntityDAC<T>（ORM 无关契约）→ FreeSqlEntityDAC/EFCoreEntityDAC（实现层，UoW 事务绑定）`。扩展只依赖 DataService，不触碰 IEntityDAC/ORM。
+>
+> **待整改扩展清单**（2026-09-07 盘点，逐个按难度分批改造）：
+> - 规则 1 违规（裸 IFreeSql）：Settings/Emailing/BlobStoring（低）→ Account/DataDictionary/PrintTemplates（中）→ Identity/AuditLogging/DataPort/Notifications（高）
+> - 规则 2 违规（直接 IEntityDAC）：Permissions `EntityDACPermissionStore`（委托 DataService 整改）
+>
 > **"无必要勿增SG"澄清**（2026-09-06 用户裁定）：扩展实体用 `[DomainGenerateCode]`（SG1 原生方式）**不计入"增 SG"**——消费方标准 TKWF 项目 SG1 已接线，扩展实体被自动扫描生成（IDomainEntity/DTO/DataService），**零额外配置**（先例：PrintTemplates/AuditLogging/DataDictionary 全部如此）。"无必要勿增SG"特指**扩展引入独立生成管线/分析器依赖**（如 Permissions.Validation 的 Analyzer，消费方需额外接线）——此类才需权衡"引入 SG 增加消费方配置复杂度/对接管线成本"。**判据：扩展实体是否需要 DTO/DataService/API 生成（有持久化 + 查询/管理需求的实体默认用 SG1）；纯内存/纯运行时扩展（Tagging/Metrics/Dashboard/DataPort 核心）无需 SG1。**
 >
 > **与"预编译库"模式的关系**：两种模式并存——简单横切扩展（如 Tagging，纯内存服务）保持预编译库；有持久化 + 管理 API 的扩展（如 Permissions V0.2.0）可升级为 SG1 原生。
@@ -213,3 +224,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-08-30 | — | §8 新增「扩展使用 SG1/xCodeGen（框架原生开发方式）」实践思路（V0.2.0 起） |
 | 2026-09-01 | — | v4.9.85："发现即启用"改为"发现不自动启用"，消费方须 `[TKWFEnabledExtension]` 白名单声明；§8 补充白名单概念 |
 | 2026-09-07 | — | §8 新增「构建/编译操作纪律」——dll 占用时用 `dotnet build-server shutdown` 优雅关闭编译服务器，不强杀进程 |
+| 2026-09-07 | — | §8 新增「数据访问红线」（用户裁定 2026-09-07）——扩展禁裸 ORM / 禁直接 IEntityDAC / 应发挥组装优势；标准路径 = DataService → IEntityDAC → 实现层；待整改清单 10+1 扩展分批改造 |

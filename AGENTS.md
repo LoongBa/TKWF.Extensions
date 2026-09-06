@@ -199,6 +199,10 @@ _Tests/Extension.{扩展名}.Tests/
 - `build\refs\` 需在主框架编译后生成（`_PushToRefs` 目标自动推送）
 - 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存。发现 ≠ 启用：消费方须 `[TKWFEnabledExtension]` 白名单声明后三钩子才执行（V4.9.85 ADR47）
 
+### 构建/编译操作纪律
+
+- **dll 被占用（`CS2012`/`file in use by another process`）时，用 `dotnet build-server shutdown` 优雅关闭 MSBuild/VBCSCompiler 编译服务器**，而非强杀进程——编译服务器是常驻进程（MSBuild node + Roslyn compiler server），强杀会留下孤儿进程/状态损坏；shutdown 后重试构建即可。若 shutdown 后仍占用，再检查是否残留 dotnet 测试宿主进程。
+
 ---
 
 ## 变更记录
@@ -208,3 +212,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-08-30 | v0.1.0 | 初始版本——对齐主仓库 Agents_TKWF.md 规范，适配扩展仓库独立版本/公开私有边界 |
 | 2026-08-30 | — | §8 新增「扩展使用 SG1/xCodeGen（框架原生开发方式）」实践思路（V0.2.0 起） |
 | 2026-09-01 | — | v4.9.85："发现即启用"改为"发现不自动启用"，消费方须 `[TKWFEnabledExtension]` 白名单声明；§8 补充白名单概念 |
+| 2026-09-07 | — | §8 新增「构建/编译操作纪律」——dll 占用时用 `dotnet build-server shutdown` 优雅关闭编译服务器，不强杀进程 |

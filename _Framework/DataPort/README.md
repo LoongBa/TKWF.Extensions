@@ -156,12 +156,12 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | SuccessCount | INT | 验证通过数（独立于批次持久化） |
 | FailedCount | INT | 行级失败数 |
 | BatchFailureCount | INT | 批次级持久化失败数 |
-| StartTime | DATETIMEOFFSET | 开始时间（UTC） |
-| EndTime | DATETIMEOFFSET? | 结束时间（UTC） |
+| StartTime | DATETIME | 开始时间（UTC） |
+| EndTime | DATETIME? | 结束时间（UTC） |
 | ErrorSummary | NVARCHAR(2048)? | 错误摘要（前 5 个批次失败消息） |
 | CreatedBy | NVARCHAR(128)? | 创建人（审计字段，v0.1.0 预留） |
-| CreateTime | DATETIMEOFFSET | 创建时间 |
-| UpdateTime | DATETIMEOFFSET | 更新时间 |
+| CreateTime | DATETIME | 创建时间 |
+| UpdateTime | DATETIME | 更新时间 |
 
 **索引**：`IX_dir_filehash`（FileHash 唯一）+ `IX_dir_batchno`（BatchNo 唯一）。
 

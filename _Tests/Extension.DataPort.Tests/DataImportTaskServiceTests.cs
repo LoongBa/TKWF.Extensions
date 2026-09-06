@@ -183,6 +183,39 @@ public class DataImportTaskServiceTests
     }
 
     [Fact]
+    public async Task ImportAsync_PreviouslyFailedBatch_ReimportsSuccessfully()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        SyncStructure(fsql);
+        var service = CreateTaskService(fsql);
+        var filePath = await CreateTempDataFileAsync();
+
+        try
+        {
+            // First import: ThrowingBatchAdapter causes PartiallySucceeded
+            var firstResult = await service.ImportAsync(filePath, new ThrowingBatchAdapter(),
+                new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false));
+            var firstRecord = await fsql.Select<DataImportRecordEntity>()
+                .Where(r => r.Id == firstResult.RecordId).FirstAsync();
+            Assert.Equal("PartiallySucceeded", firstRecord!.Status);
+
+            // Second import of same file: should reset and re-run with TestImportAdapter
+            var secondResult = await service.ImportAsync(filePath, new TestImportAdapter());
+            Assert.Equal(firstResult.RecordId, secondResult.RecordId); // Same record
+            Assert.Equal(firstResult.BatchNo, secondResult.BatchNo);
+
+            var record = await fsql.Select<DataImportRecordEntity>()
+                .Where(r => r.Id == firstResult.RecordId).FirstAsync();
+            Assert.Equal("Succeeded", record!.Status);
+            Assert.Equal(3, record.SuccessCount);
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public async Task GetRecordByBatchNoAsync_NotExists_ReturnsNull()
     {
         using var fsql = CreateInMemoryFreeSql();

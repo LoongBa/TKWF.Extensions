@@ -65,22 +65,39 @@ namespace TKWF.Ext.DataPort
 
             // 3. 新记录：创建 Processing 状态
             var batchNo = Guid.NewGuid().ToString("N");
-            var record = new DataImportRecordEntity
+            DataImportRecordEntity record;
+            try
             {
-                BatchNo = batchNo,
-                FileHash = fileHash,
-                FileName = Path.GetFileName(filePath),
-                ProviderName = adapter.GetType().Name,
-                Status = "Processing",
-                StartTime = DateTime.UtcNow,
-                CreateTime = DateTime.UtcNow,
-                UpdateTime = DateTime.UtcNow
-            };
+                record = new DataImportRecordEntity
+                {
+                    BatchNo = batchNo,
+                    FileHash = fileHash,
+                    FileName = Path.GetFileName(filePath),
+                    ProviderName = adapter.GetType().Name,
+                    Status = "Processing",
+                    StartTime = DateTime.UtcNow,
+                    CreateTime = DateTime.UtcNow,
+                    UpdateTime = DateTime.UtcNow
+                };
 
-            await _freeSql.Insert(record).ExecuteAffrowsAsync(ct);
-            record = await _freeSql.Select<DataImportRecordEntity>()
-                .Where(r => r.BatchNo == batchNo)
-                .FirstAsync(ct);
+                await _freeSql.Insert(record).ExecuteAffrowsAsync(ct);
+                record = await _freeSql.Select<DataImportRecordEntity>()
+                    .Where(r => r.BatchNo == batchNo)
+                    .FirstAsync(ct);
+            }
+            catch (Exception)
+            {
+                // Race condition: another concurrent import inserted the same FileHash
+                record = await _freeSql.Select<DataImportRecordEntity>()
+                    .Where(r => r.FileHash == fileHash)
+                    .FirstAsync(ct);
+
+                if (record == null)
+                    throw; // Not a race condition — re-throw original exception
+
+                // Another import already created this record — return it (idempotent)
+                return new DataImportTaskResult(record.Id, record.BatchNo, ImportResult.Empty);
+            }
 
             return await ExecuteImportAsync(record!, filePath, adapter, batchOptions, ct);
         }
@@ -126,10 +143,17 @@ namespace TKWF.Ext.DataPort
             }
             catch (Exception ex)
             {
-                // 更新记录为失败状态
-                await _freeSql.Ado.ExecuteNonQueryAsync(
-                    "UPDATE DataImportRecord SET Status = 'Failed', EndTime = @endTime, ErrorSummary = @errorSummary, UpdateTime = @updateTime WHERE Id = @id",
-                    new { endTime = DateTime.UtcNow, errorSummary = ex.Message, updateTime = DateTime.UtcNow, id = record.Id });
+                // Best-effort: update record to Failed status; if DB update fails, swallow to preserve original exception
+                try
+                {
+                    await _freeSql.Ado.ExecuteNonQueryAsync(
+                        "UPDATE DataImportRecord SET Status = 'Failed', EndTime = @endTime, ErrorSummary = @errorSummary, UpdateTime = @updateTime WHERE Id = @id",
+                        new { endTime = DateTime.UtcNow, errorSummary = ex.Message, updateTime = DateTime.UtcNow, id = record.Id });
+                }
+                catch
+                {
+                    // DB update failed — swallow to avoid masking the original import exception
+                }
 
                 throw;
             }

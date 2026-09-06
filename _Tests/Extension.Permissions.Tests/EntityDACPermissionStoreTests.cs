@@ -18,7 +18,7 @@ public class EntityDACPermissionStoreTests
     [Fact]
     public async Task GetAsync_NoEntity_ReturnsDenied()
     {
-        var store = new EntityDACPermissionStore(new InMemoryEntityDac());
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(new InMemoryEntityDac()));
 
         var result = await store.GetAsync(Permission, Provider, Key);
 
@@ -37,7 +37,7 @@ public class EntityDACPermissionStoreTests
             ProviderKey = Key,
             IsGranted = true
         }, TestContext.Current.CancellationToken);
-        var store = new EntityDACPermissionStore(dac);
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(dac));
 
         var result = await store.GetAsync(Permission, Provider, Key);
 
@@ -56,7 +56,7 @@ public class EntityDACPermissionStoreTests
             ProviderKey = Key,
             IsGranted = false
         }, TestContext.Current.CancellationToken);
-        var store = new EntityDACPermissionStore(dac);
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(dac));
 
         var result = await store.GetAsync(Permission, Provider, Key);
 
@@ -68,7 +68,7 @@ public class EntityDACPermissionStoreTests
     public async Task SetAsync_NewGrant_InsertsEntity()
     {
         var dac = new InMemoryEntityDac();
-        var store = new EntityDACPermissionStore(dac);
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(dac));
 
         await store.SetAsync(Permission, Provider, Key, isGranted: true);
 
@@ -85,7 +85,7 @@ public class EntityDACPermissionStoreTests
     public async Task SetAsync_ExistingGrant_UpdatesInsteadOfReinserting()
     {
         var dac = new InMemoryEntityDac();
-        var store = new EntityDACPermissionStore(dac);
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(dac));
         await store.SetAsync(Permission, Provider, Key, isGranted: true);
 
         // 同业务键二次写入 → 应更新（IsGranted 翻转），而非插入新行
@@ -107,7 +107,7 @@ public class EntityDACPermissionStoreTests
     [Fact]
     public async Task SetAsync_RoundTrip_GrantThenRevoke()
     {
-        var store = new EntityDACPermissionStore(new InMemoryEntityDac());
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(new InMemoryEntityDac()));
 
         await store.SetAsync(Permission, Provider, Key, isGranted: true);
         Assert.Equal(PermissionGrantResult.Granted, await store.GetAsync(Permission, Provider, Key));
@@ -119,7 +119,7 @@ public class EntityDACPermissionStoreTests
     [Fact]
     public async Task SetAsync_Iso_latedByBusinessKey()
     {
-        var store = new EntityDACPermissionStore(new InMemoryEntityDac());
+        var store = new EntityDACPermissionStore(PermissionsTestHost.CreateDataService(new InMemoryEntityDac()));
 
         // 不同用户（ProviderKey）互不影响
         await store.SetAsync(Permission, Provider, "u-1001", isGranted: true);

@@ -7,17 +7,18 @@ using TKW.Framework.Domain.Interception.Auditing;
 namespace TKWF.Ext.AuditLogging
 {
     /// <summary>
-    /// FreeSql 审计日志存储实现——将 <see cref="AuditLogEntry"/> 映射为 <see cref="AuditLogEntity"/> 并持久化。
-    /// <para>异常静默处理：写入失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
+    /// 审计日志存储实现——经 <see cref="AuditLogEntityDataService"/>（SG1/xCodeGen 生成的 DataService）
+    /// 委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
+    /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
     /// </summary>
-    internal sealed class FreeSqlAuditLogStore : IAuditLogStore
+    internal sealed class AuditLogStore : IAuditLogStore
     {
-        private readonly IFreeSql _freeSql;
-        private readonly ILogger<FreeSqlAuditLogStore> _logger;
+        private readonly AuditLogEntityDataService _dataService;
+        private readonly ILogger<AuditLogStore> _logger;
 
-        public FreeSqlAuditLogStore(IFreeSql freeSql, ILogger<FreeSqlAuditLogStore> logger)
+        public AuditLogStore(AuditLogEntityDataService dataService, ILogger<AuditLogStore> logger)
         {
-            _freeSql = freeSql ?? throw new ArgumentNullException(nameof(freeSql));
+            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -28,7 +29,7 @@ namespace TKWF.Ext.AuditLogging
             try
             {
                 var entity = MapToEntity(entry);
-                await _freeSql.Insert(entity).ExecuteAffrowsAsync(ct);
+                await _dataService.EntityCreateAsync(entity, ct);
             }
             catch (Exception ex)
             {
@@ -36,9 +37,6 @@ namespace TKWF.Ext.AuditLogging
             }
         }
 
-        /// <summary>
-        /// 将 <see cref="AuditLogEntry"/> 映射为 <see cref="AuditLogEntity"/>。
-        /// </summary>
         private static AuditLogEntity MapToEntity(AuditLogEntry entry)
         {
             return new AuditLogEntity

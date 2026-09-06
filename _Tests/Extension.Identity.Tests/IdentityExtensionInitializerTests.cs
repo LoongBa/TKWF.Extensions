@@ -2,10 +2,12 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Identity.Tests;
@@ -36,7 +38,7 @@ public class IdentityExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlUserStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(UserStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
@@ -49,7 +51,7 @@ public class IdentityExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IRoleStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlRoleStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(RoleStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
@@ -102,7 +104,14 @@ public class IdentityExtensionInitializerTests
         var services = new ServiceCollection();
         services.AddSingleton<IFreeSql>(fsql);
         services.AddLogging();
-        services.TryAddScoped<IRoleStore, FreeSqlRoleStore>();
+        // 数据访问红线整改：RoleStore 委托 DataService——注册完整 DI 链（UoW/DAC/DataService/User）
+        services.AddScoped<UnitOfWorkManager>();
+        services.AddScoped<IEntityDAC<RoleEntity>>(sp => new FreeSqlEntityDAC<RoleEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<UserRoleEntity>>(sp => new FreeSqlEntityDAC<UserRoleEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<RoleEntityDataService>();
+        services.AddScoped<UserRoleEntityDataService>();
+        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
+        services.TryAddScoped<IRoleStore, RoleStore>();
         var sp = services.BuildServiceProvider();
 
         var init = new IdentityExtensionInitializer<IdentityUserInfo> { ServiceProvider = sp };

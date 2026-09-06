@@ -1,33 +1,29 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using FreeSql;
 
 namespace TKWF.Ext.AuditLogging
 {
     /// <summary>
-    /// 审计日志查询服务实现（internal sealed）——基于 FreeSql 按条件分页查询审计日志。
+    /// 审计日志查询服务实现（internal sealed）——经 <see cref="AuditLogEntityDataService"/>（SG1 DataService）委托查询。
     /// <para>异常静默处理：查询失败时记录 Warning 日志并返回空结果（不抛出异常，不阻塞消费方）。</para>
-    /// <para>对齐 <see cref="FreeSqlAuditLogStore"/> 模式：internal 隐藏实现细节、TryAddScoped 允许消费方覆盖。</para>
+    /// <para>数据访问红线整改（2026-09-07）：不直接注入 IFreeSql，动态 Where 用 Expression API 拼 predicate。</para>
     /// </summary>
     internal sealed class AuditLogQueryService : IAuditLogQueryService
     {
         private const int DefaultTake = 50;
         private const int MaxTake = 200;
 
-        private readonly IFreeSql _freeSql;
+        private readonly AuditLogEntityDataService _dataService;
         private readonly ILogger<AuditLogQueryService> _logger;
 
-        /// <summary>
-        /// 初始化审计日志查询服务。
-        /// </summary>
-        /// <param name="freeSql">FreeSql 实例。</param>
-        /// <param name="logger">日志记录器。</param>
-        public AuditLogQueryService(IFreeSql freeSql, ILogger<AuditLogQueryService> logger)
+        public AuditLogQueryService(AuditLogEntityDataService dataService, ILogger<AuditLogQueryService> logger)
         {
-            _freeSql = freeSql ?? throw new ArgumentNullException(nameof(freeSql));
+            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -39,14 +35,12 @@ namespace TKWF.Ext.AuditLogging
             try
             {
                 var (skip, take) = NormalizePaging(query.Skip, query.Take);
+                var predicate = BuildPredicate(query);
 
-                var itemsQuery = ApplyFilters(query);
-                var countTask = itemsQuery.CountAsync(ct);
-                var listTask = itemsQuery
-                    .OrderByDescending(e => e.ExecutionTime)
-                    .Skip(skip)
-                    .Take(take)
-                    .ToListAsync(ct);
+                // DataService 基类转发方法（.g.cs 内部访问器）——Count + List 并行避免重复构建 IQueryable
+                var countTask = _dataService.CountAsync(predicate, ct);
+                var listTask = _dataService.EntitySelectAsync(
+                    predicate, skip, take, q => q.OrderByDescending(e => e.ExecutionTime), ct);
 
                 await Task.WhenAll(countTask, listTask);
 
@@ -70,7 +64,8 @@ namespace TKWF.Ext.AuditLogging
 
             try
             {
-                return await ApplyFilters(query).CountAsync(ct);
+                var predicate = BuildPredicate(query);
+                return await _dataService.CountAsync(predicate, ct);
             }
             catch (Exception ex)
             {
@@ -79,49 +74,75 @@ namespace TKWF.Ext.AuditLogging
             }
         }
 
-        /// <summary>
-        /// 构建 FreeSql 查询——按输入条件动态添加 Where 过滤。
-        /// </summary>
-        private ISelect<AuditLogEntity> ApplyFilters(AuditLogQueryInput query)
+        /// <summary>用 Expression API 动态构建过滤 predicate（10 条件 AND 组合）。</summary>
+        private static Expression<Func<AuditLogEntity, bool>>? BuildPredicate(AuditLogQueryInput query)
         {
-            var select = _freeSql.Select<AuditLogEntity>();
+            var param = Expression.Parameter(typeof(AuditLogEntity), "e");
+            Expression? combined = null;
 
             if (query.StartTime.HasValue)
-                select = select.Where(e => e.ExecutionTime >= query.StartTime.Value);
+                combined = Combine(combined, Expression.GreaterThanOrEqual(
+                    Expression.Property(param, nameof(AuditLogEntity.ExecutionTime)),
+                    Expression.Constant(query.StartTime.Value)));
 
             if (query.EndTime.HasValue)
-                select = select.Where(e => e.ExecutionTime <= query.EndTime.Value);
+                combined = Combine(combined, Expression.LessThanOrEqual(
+                    Expression.Property(param, nameof(AuditLogEntity.ExecutionTime)),
+                    Expression.Constant(query.EndTime.Value)));
 
             if (!string.IsNullOrEmpty(query.UserName))
-                select = select.Where(e => e.UserName != null && e.UserName.Contains(query.UserName));
+            {
+                var userNameProp = Expression.Property(param, nameof(AuditLogEntity.UserName));
+                var contains = Expression.Call(
+                    Expression.Coalesce(userNameProp, Expression.Constant(string.Empty)),
+                    nameof(string.Contains),
+                    Type.EmptyTypes,
+                    Expression.Constant(query.UserName));
+                combined = Combine(combined, contains);
+            }
 
             if (!string.IsNullOrEmpty(query.UserId))
-                select = select.Where(e => e.UserId == query.UserId);
+                combined = Combine(combined, Expression.Equal(
+                    Expression.Property(param, nameof(AuditLogEntity.UserId)),
+                    Expression.Constant(query.UserId)));
 
             if (!string.IsNullOrEmpty(query.ServiceName))
-                select = select.Where(e => e.ServiceName == query.ServiceName);
+                combined = Combine(combined, Expression.Equal(
+                    Expression.Property(param, nameof(AuditLogEntity.ServiceName)),
+                    Expression.Constant(query.ServiceName)));
 
             if (!string.IsNullOrEmpty(query.MethodName))
-                select = select.Where(e => e.MethodName == query.MethodName);
+                combined = Combine(combined, Expression.Equal(
+                    Expression.Property(param, nameof(AuditLogEntity.MethodName)),
+                    Expression.Constant(query.MethodName)));
 
             if (query.Success.HasValue)
-                select = select.Where(e => e.Success == query.Success.Value);
+                combined = Combine(combined, Expression.Equal(
+                    Expression.Property(param, nameof(AuditLogEntity.Success)),
+                    Expression.Constant(query.Success.Value)));
 
             if (!string.IsNullOrEmpty(query.CorrelationId))
-                select = select.Where(e => e.CorrelationId == query.CorrelationId);
+                combined = Combine(combined, Expression.Equal(
+                    Expression.Property(param, nameof(AuditLogEntity.CorrelationId)),
+                    Expression.Constant(query.CorrelationId)));
 
             if (query.MinDurationMs.HasValue)
-                select = select.Where(e => e.DurationMs >= query.MinDurationMs.Value);
+                combined = Combine(combined, Expression.GreaterThanOrEqual(
+                    Expression.Property(param, nameof(AuditLogEntity.DurationMs)),
+                    Expression.Constant(query.MinDurationMs.Value)));
 
             if (query.MaxDurationMs.HasValue)
-                select = select.Where(e => e.DurationMs <= query.MaxDurationMs.Value);
+                combined = Combine(combined, Expression.LessThanOrEqual(
+                    Expression.Property(param, nameof(AuditLogEntity.DurationMs)),
+                    Expression.Constant(query.MaxDurationMs.Value)));
 
-            return select;
+            return combined == null ? null : Expression.Lambda<Func<AuditLogEntity, bool>>(combined, param);
         }
 
-        /// <summary>
-        /// 规范化分页参数——Take 默认 50，上限 200（防滥用）；Skip 下限 0。
-        /// </summary>
+        private static Expression Combine(Expression? left, Expression right)
+            => left == null ? right : Expression.AndAlso(left, right);
+
+        /// <summary>规范化分页参数——Take 默认 50，上限 200（防滥用）；Skip 下限 0。</summary>
         private static (int Skip, int Take) NormalizePaging(int skip, int take)
         {
             skip = Math.Max(0, skip);
@@ -129,9 +150,7 @@ namespace TKWF.Ext.AuditLogging
             return (skip, take);
         }
 
-        /// <summary>
-        /// 将 <see cref="AuditLogEntity"/> 投影为 <see cref="AuditLogListItemDto"/>（不含 ArgumentsJson）。
-        /// </summary>
+        /// <summary>将 <see cref="AuditLogEntity"/> 投影为 <see cref="AuditLogListItemDto"/>（不含 ArgumentsJson）。</summary>
         private static AuditLogListItemDto MapToDto(AuditLogEntity entity)
         {
             return new AuditLogListItemDto

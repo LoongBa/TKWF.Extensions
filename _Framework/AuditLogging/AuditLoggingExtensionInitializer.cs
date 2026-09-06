@@ -40,7 +40,8 @@ namespace TKWF.Ext.AuditLogging
             services.AddOptions<AuditLoggingOptions>();
 
             // V0.1.0：审计日志写入存储
-            services.TryAddScoped<IAuditLogStore, FreeSqlAuditLogStore>();
+            services.TryAddScoped<AuditLogEntityDataService>();
+            services.TryAddScoped<IAuditLogStore, AuditLogStore>();
 
             // V0.2.0：审计日志查询服务（TryAddScoped：消费方可自定义查询实现覆盖默认）
             services.TryAddScoped<IAuditLogQueryService, AuditLogQueryService>();

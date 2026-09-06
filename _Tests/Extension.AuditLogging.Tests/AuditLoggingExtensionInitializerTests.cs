@@ -36,7 +36,7 @@ public class AuditLoggingExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IAuditLogStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlAuditLogStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(AuditLogStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
@@ -71,7 +71,7 @@ public class AuditLoggingExtensionInitializerTests
         new AuditLoggingExtensionInitializer<AuditLoggingUserInfo>().ConfigureServices(services);
 
         var descriptor = services.First(d => d.ServiceType == typeof(IAuditLogStore));
-        Assert.Equal(typeof(FreeSqlAuditLogStore), descriptor.ImplementationType);
+        Assert.Equal(typeof(AuditLogStore), descriptor.ImplementationType);
     }
 
     [Fact]

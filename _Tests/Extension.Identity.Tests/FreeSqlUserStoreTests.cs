@@ -24,8 +24,8 @@ public class FreeSqlUserStoreTests
         return fsql;
     }
 
-    private static FreeSqlUserStore CreateStore(IFreeSql fsql)
-        => new(fsql, NullLogger<FreeSqlUserStore>.Instance);
+    private static UserStore CreateStore(IFreeSql fsql)
+        => IdentityTestHost.CreateUserStore(fsql);
 
     private static UserEntity NewUser(string name = "alice")
         => new()

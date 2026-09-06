@@ -22,8 +22,8 @@ public class FreeSqlRoleStoreTests
         return fsql;
     }
 
-    private static FreeSqlRoleStore CreateStore(IFreeSql fsql)
-        => new(fsql, NullLogger<FreeSqlRoleStore>.Instance);
+    private static RoleStore CreateStore(IFreeSql fsql)
+        => IdentityTestHost.CreateRoleStore(fsql);
 
     private static RoleEntity NewRole(string name = "Admin")
         => new() { Name = name, DisplayName = name };

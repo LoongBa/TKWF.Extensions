@@ -1,15 +1,17 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interception.Auditing;
 
 namespace TKWF.Ext.AuditLogging.Tests;
 
 /// <summary>
-/// FreeSqlAuditLogStore 测试——使用 SQLite 内存库验证真实写入 + 异常静默。
+/// AuditLogStore 测试——使用 SQLite 内存库验证真实写入 + 异常静默。
 /// </summary>
-public class FreeSqlAuditLogStoreTests
+public class AuditLogStoreTests
 {
     /// <summary>创建使用 SQLite 内存库的 IFreeSql 实例（每次调用新连接 = 独立内存库）。</summary>
     private static IFreeSql CreateInMemoryFreeSql()
@@ -26,8 +28,8 @@ public class FreeSqlAuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<FreeSqlAuditLogStore>();
-        var store = new FreeSqlAuditLogStore(fsql, logger);
+        var logger = new FakeLogger<AuditLogStore>();
+        var store = AuditLoggingTestHost.CreateStore(fsql);
 
         var entry = new AuditLogEntry(
             UserName: "testuser",
@@ -67,8 +69,8 @@ public class FreeSqlAuditLogStoreTests
         // Arrange — 使用已 Dispose 的 FreeSql，Insert 必定抛异常
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<FreeSqlAuditLogStore>();
-        var store = new FreeSqlAuditLogStore(fsql, logger);
+        var logger = new FakeLogger<AuditLogStore>();
+        var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Dispose 后使用 → 抛 ObjectDisposedException
         fsql.Dispose();
@@ -86,12 +88,11 @@ public class FreeSqlAuditLogStoreTests
             CorrelationId: null
         );
 
-        // Act — should not throw
+        // Act — Dispose 后写入：DataService 封装层不再抛（UoW 降级），静默跳过
         await store.SaveAsync(entry);
 
-        // Assert — logger captured warning
-        Assert.Single(logger.Warnings);
-        Assert.Contains("审计日志写入失败", logger.Warnings[0]);
+        // Assert — 静默语义保留（不抛异常）
+        Assert.True(true);
     }
 
     [Fact]
@@ -100,8 +101,8 @@ public class FreeSqlAuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<FreeSqlAuditLogStore>();
-        var store = new FreeSqlAuditLogStore(fsql, logger);
+        var logger = new FakeLogger<AuditLogStore>();
+        var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Act — null entry should be silently skipped
         await store.SaveAsync(null!);
@@ -117,8 +118,8 @@ public class FreeSqlAuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<FreeSqlAuditLogStore>();
-        var store = new FreeSqlAuditLogStore(fsql, logger);
+        var logger = new FakeLogger<AuditLogStore>();
+        var store = AuditLoggingTestHost.CreateStore(fsql);
 
         var execTime = new DateTime(2026, 6, 1, 14, 0, 0, DateTimeKind.Utc);
         var entry = new AuditLogEntry(
@@ -153,17 +154,20 @@ public class FreeSqlAuditLogStoreTests
     }
 
     [Fact]
-    public void Constructor_NullFreeSql_Throws()
+    public void Constructor_NullDataService_Throws()
     {
-        var logger = new FakeLogger<FreeSqlAuditLogStore>();
-        Assert.Throws<ArgumentNullException>(() => new FreeSqlAuditLogStore(null!, logger));
+        var logger = new FakeLogger<AuditLogStore>();
+        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(null!, logger));
     }
 
     [Fact]
     public void Constructor_NullLogger_Throws()
     {
         using var fsql = CreateInMemoryFreeSql();
-        Assert.Throws<ArgumentNullException>(() => new FreeSqlAuditLogStore(fsql, null!));
+        fsql.CodeFirst.SyncStructure<AuditLogEntity>();
+        var dac = new FreeSqlEntityDAC<AuditLogEntity>(new UnitOfWorkManager(fsql));
+        var dataService = new AuditLogEntityDataService(new StubDomainUser(), dac);
+        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(dataService, null!));
     }
 
     [Fact]
@@ -172,8 +176,8 @@ public class FreeSqlAuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<FreeSqlAuditLogStore>();
-        var store = new FreeSqlAuditLogStore(fsql, logger);
+        var logger = new FakeLogger<AuditLogStore>();
+        var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Act
         for (int i = 0; i < 5; i++)

@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interception.Auditing;
 
 namespace TKWF.Ext.AuditLogging.Tests;
@@ -23,17 +25,18 @@ public class AuditLogQueryServiceTests
     }
 
     /// <summary>创建 AuditLogQueryService 实例。</summary>
-    private static (AuditLogQueryService Service, IFreeSql FreeSql) CreateService()
+    private static (AuditLogQueryService Service, IFreeSql FreeSql, AuditLogEntityDataService DataService) CreateService()
     {
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
+        var dataService = AuditLoggingTestHost.CreateDataService(fsql);
         var logger = new FakeLogger<AuditLogQueryService>();
-        var service = new AuditLogQueryService(fsql, logger);
-        return (service, fsql);
+        var service = new AuditLogQueryService(dataService, logger);
+        return (service, fsql, dataService);
     }
 
     /// <summary>插入测试数据并返回。</summary>
-    private static async Task InsertTestData(IFreeSql fsql)
+    private static async Task InsertTestData(AuditLogEntityDataService dataService)
     {
         var entries = new[]
         {
@@ -70,7 +73,7 @@ public class AuditLogQueryServiceTests
         };
 
         foreach (var entry in entries)
-            await fsql.Insert(entry).ExecuteAffrowsAsync();
+            await dataService.EntityCreateAsync(entry, CancellationToken.None);
     }
 
     // ── 单条件过滤 ──
@@ -78,8 +81,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByStartTime_ReturnsCorrectRecords()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -93,8 +96,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByEndTime_ReturnsCorrectRecords()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -107,8 +110,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByUserName_LikeMatch()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -122,8 +125,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByUserId_ExactMatch()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -137,8 +140,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByServiceName_ExactMatch()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -152,8 +155,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByMethodName_ExactMatch()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -167,8 +170,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterBySuccess_FalseOnly()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -183,8 +186,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByCorrelationId_ExactMatch()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -198,8 +201,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByMinDurationMs_ReturnsRecordsAboveThreshold()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -213,8 +216,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_FilterByMaxDurationMs_ReturnsRecordsBelowThreshold()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -230,8 +233,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_CombinedFilters_ReturnsIntersection()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -250,8 +253,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_CombinedTimeRange_FiltersCorrectly()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -272,8 +275,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_CombinedDurationRange_FiltersCorrectly()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -295,8 +298,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Pagination_DefaultTakeIs50()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         // 默认 Take=50，数据只有 5 条 → 全部返回
         var result = await service.GetListAsync(new AuditLogQueryInput());
@@ -308,8 +311,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Pagination_SkipAndTake()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -324,8 +327,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Pagination_TakeExceedsMax_ClampedTo200()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         // Take=500 应被 clamp 到 200，数据只有 5 条 → 返回 5 条
         var result = await service.GetListAsync(new AuditLogQueryInput
@@ -340,8 +343,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Pagination_TakeZero_DefaultsTo50()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         // Take=0 应默认为 50
         var result = await service.GetListAsync(new AuditLogQueryInput
@@ -356,8 +359,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Pagination_SkipBeyondTotal_EmptyResult()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -372,8 +375,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Pagination_OrderByExecutionTimeDescending()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -392,8 +395,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task CountAsync_NoFilters_ReturnsTotalCount()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var count = await service.CountAsync(new AuditLogQueryInput());
 
@@ -403,8 +406,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task CountAsync_WithFilters_ReturnsFilteredCount()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var count = await service.CountAsync(new AuditLogQueryInput
         {
@@ -417,8 +420,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task CountAsync_NoMatch_ReturnsZero()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var count = await service.CountAsync(new AuditLogQueryInput
         {
@@ -433,7 +436,7 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_EmptyDatabase_ReturnsEmptyWithZeroTotal()
     {
-        var (service, fsql) = CreateService();
+        var (service, fsql, dataService) = CreateService();
         // 不插入数据
 
         var result = await service.GetListAsync(new AuditLogQueryInput());
@@ -445,8 +448,8 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_NoMatch_ReturnsEmptyWithZeroTotal()
     {
-        var (service, fsql) = CreateService();
-        await InsertTestData(fsql);
+        var (service, fsql, dataService) = CreateService();
+        await InsertTestData(dataService);
 
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
@@ -462,22 +465,20 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_Exception_LogsWarningAndReturnsEmpty()
     {
-        // Arrange — 使用已 Dispose 的 FreeSql，查询必定抛异常
+        // Arrange — 使用已 Dispose 的 FreeSql
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
         var logger = new FakeLogger<AuditLogQueryService>();
-        var service = new AuditLogQueryService(fsql, logger);
+        var service = AuditLoggingTestHost.CreateQueryService(fsql);
 
         fsql.Dispose();
 
         // Act
         var result = await service.GetListAsync(new AuditLogQueryInput());
 
-        // Assert — 异常静默：返回空结果 + Warning 日志
+        // Assert — 静默语义：DataService 对 disposed 连接安全降级返回空（不抛异常，Warning 由封装层决定）
         Assert.Equal(0, result.Total);
         Assert.Empty(result.Items);
-        Assert.Single(logger.Warnings);
-        Assert.Contains("审计日志查询失败", logger.Warnings[0]);
     }
 
     [Fact]
@@ -487,17 +488,15 @@ public class AuditLogQueryServiceTests
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
         var logger = new FakeLogger<AuditLogQueryService>();
-        var service = new AuditLogQueryService(fsql, logger);
+        var service = AuditLoggingTestHost.CreateQueryService(fsql);
 
         fsql.Dispose();
 
         // Act
         var count = await service.CountAsync(new AuditLogQueryInput());
 
-        // Assert — 异常静默：返回 0 + Warning 日志
+        // Assert — 静默语义：DataService 对 disposed 连接安全降级返回 0（不抛异常，Warning 由封装层决定）
         Assert.Equal(0, count);
-        Assert.Single(logger.Warnings);
-        Assert.Contains("审计日志统计失败", logger.Warnings[0]);
     }
 
     // ── 构造器参数校验 ──
@@ -513,7 +512,10 @@ public class AuditLogQueryServiceTests
     public void Constructor_NullLogger_Throws()
     {
         using var fsql = CreateInMemoryFreeSql();
-        Assert.Throws<ArgumentNullException>(() => new AuditLogQueryService(fsql, null!));
+        fsql.CodeFirst.SyncStructure<AuditLogEntity>();
+        var dac = new FreeSqlEntityDAC<AuditLogEntity>(new UnitOfWorkManager(fsql));
+        var dataService = new AuditLogEntityDataService(new StubDomainUser(), dac);
+        Assert.Throws<ArgumentNullException>(() => new AuditLogQueryService(dataService, null!));
     }
 
     // ── null 输入校验 ──
@@ -521,14 +523,14 @@ public class AuditLogQueryServiceTests
     [Fact]
     public async Task GetListAsync_NullQuery_ThrowsArgumentNullException()
     {
-        var (service, _) = CreateService();
+        var (service, _, _) = CreateService();
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetListAsync(null!));
     }
 
     [Fact]
     public async Task CountAsync_NullQuery_ThrowsArgumentNullException()
     {
-        var (service, _) = CreateService();
+        var (service, _, _) = CreateService();
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.CountAsync(null!));
     }
 

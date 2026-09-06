@@ -26,8 +26,8 @@ public class UserManagerTests
 
     private static UserManager CreateManager(IFreeSql fsql, IdentityOptions? options = null)
     {
-        var store = new FreeSqlUserStore(fsql, NullLogger<FreeSqlUserStore>.Instance);
-        var roleStore = new FreeSqlRoleStore(fsql, NullLogger<FreeSqlRoleStore>.Instance);
+        var store = IdentityTestHost.CreateUserStore(fsql);
+        var roleStore = IdentityTestHost.CreateRoleStore(fsql);
         var optionsWrapper = Microsoft.Extensions.Options.Options.Create(options ?? new IdentityOptions());
         return new UserManager(store, roleStore, optionsWrapper, NullLogger<UserManager>.Instance);
     }

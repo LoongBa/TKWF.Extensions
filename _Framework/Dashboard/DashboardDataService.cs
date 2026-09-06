@@ -112,7 +112,7 @@ namespace TKWF.Ext.Dashboard
         }
 
         /// <summary>
-        /// 组装 WidgetDataResult——单指标单值 → Value；单指标多切片（Cohort/TimeBucket/Funnel）→ Slices；全量多指标 → Slices。
+        /// 组装 WidgetDataResult——单指标单值 → Value；多切片（Cohort/TimeBucket/Funnel）→ Slices；全量多指标 → 递归展开 Slices。
         /// </summary>
         private static WidgetDataResult AssembleMetricResult(
             DashboardWidgetDefinition widget,
@@ -141,9 +141,22 @@ namespace TKWF.Ext.Dashboard
                 };
             }
 
-            // 全量模式（多个指标）→ 每个指标一个 Slices 元素（chart 多指标展示）
-            var multiResults = results.Select(r => new WidgetDataResult(
-                widget.Name, widget.Type, r.Name, r.Value, r.Unit, r.Dimensions, null, null)).ToArray();
+            // 全量模式（多个指标）→ 每指标展开为 Slices 元素；多切片指标递归展开（Oracle Major#1 修复）
+            var multiResults = new List<WidgetDataResult>();
+            foreach (var r in results)
+            {
+                if (r.Value is IReadOnlyList<MetricSlice> slices && slices.Count > 0)
+                {
+                    foreach (var s in slices)
+                        multiResults.Add(new WidgetDataResult(
+                            widget.Name, widget.Type, r.Name, s.Value, r.Unit, s.Dimensions, null, null));
+                }
+                else
+                {
+                    multiResults.Add(new WidgetDataResult(
+                        widget.Name, widget.Type, r.Name, r.Value, r.Unit, r.Dimensions, null, null));
+                }
+            }
             return widgetResult with { MetricName = results[0].Name, Slices = multiResults };
         }
 

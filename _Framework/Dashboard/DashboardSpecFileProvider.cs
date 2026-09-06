@@ -78,7 +78,8 @@ namespace TKWF.Ext.Dashboard
 
         /// <summary>
         /// 按域 + specKey 加载 Metrics 指标定义（<c>{TKWF:Metrics:SpecRoot}/{domain}/{specKey}/metric-definitions.json</c>）。
-        /// <para>结构校验由 <see cref="MetricDefinitionLoader"/> 完成；SpecRoot 经 <see cref="IConfiguration"/> 直读。</para>
+        /// <para>结构校验由 <see cref="MetricDefinitionLoader"/> 完成；SpecRoot 经 <see cref="IConfiguration"/> 直读。
+        /// domain/specKey 为可信标识符（git-tracked 定义），纵深防御拒绝路径穿越段。</para>
         /// </summary>
         /// <exception cref="MetricDefinitionException">规格文件缺失/损坏（MetricDefinitionLoader 语义）。</exception>
         public IReadOnlyList<MetricDefinition> LoadMetricsSpec(string domain, string specKey)
@@ -87,6 +88,13 @@ namespace TKWF.Ext.Dashboard
                 throw new DashboardDefinitionException(null, null, "Metrics 规格 domain 不能为空");
             if (string.IsNullOrWhiteSpace(specKey))
                 throw new DashboardDefinitionException(null, null, "Metrics 规格 specKey 不能为空");
+            if (domain is "." or ".." || specKey is "." or ".."
+                || domain.Contains('\\') || specKey.Contains('\\')
+                || domain.Contains('/') || specKey.Contains('/'))
+            {
+                throw new DashboardDefinitionException(null, null,
+                    $"Metrics 规格标识符非法（不得含路径分隔符或穿越段）：domain='{domain}' specKey='{specKey}'");
+            }
 
             var metricsSpecRoot = _configuration["TKWF:Metrics:SpecRoot"];
             if (string.IsNullOrWhiteSpace(metricsSpecRoot))
@@ -98,7 +106,7 @@ namespace TKWF.Ext.Dashboard
             return MetricDefinitionLoader.Load(path);
         }
 
-        /// <summary>解析 Dashboard 定义文件路径（dashKey 含 '/' 时视为 group/dashKey 子路径，防路径穿越）。</summary>
+        /// <summary>解析 Dashboard 定义文件路径（dashKey 含 '/' 时视为 group/dashKey 子路径，拒绝路径穿越段）。</summary>
         private string ResolveDashboardPath(string dashKey)
         {
             var safeKey = dashKey.Replace('\\', '/');
@@ -106,8 +114,14 @@ namespace TKWF.Ext.Dashboard
             if (segments.Length == 0)
                 throw new DashboardDefinitionException(dashKey, null, "dashKey 非法");
 
+            // 纵深防御（Oracle Major#2）：拒绝穿越段与绝对路径
+            if (segments.Any(s => s is "." or ".."))
+                throw new DashboardDefinitionException(dashKey, null, "dashKey 含非法路径段（./..）");
+            if (segments[0].Contains(':') || segments[^1].Contains(':'))
+                throw new DashboardDefinitionException(dashKey, null, "dashKey 含非法字符");
+
             var fileName = $"{segments[^1]}.json";
-            if (Path.GetFileName(fileName) != fileName || fileName.Contains(':'))
+            if (Path.GetFileName(fileName) != fileName)
                 throw new DashboardDefinitionException(dashKey, null, $"dashKey 非法字符");
 
             var relative = segments.Length > 1

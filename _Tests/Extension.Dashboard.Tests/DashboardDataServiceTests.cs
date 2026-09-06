@@ -94,10 +94,42 @@ public class DashboardDataServiceTests
 
         var result = await service.GetWidgetDataAsync("all", "all-metrics");
 
-        Assert.NotNull(result.Slices);
-        Assert.Equal(2, result.Slices!.Count); // total-revenue + daily-trend 两个指标
+        // total-revenue（单值）+ daily-trend（3 切片展开）= 4 个 Slices 元素（Major#1 修复后语义）
+        Assert.Equal(4, result.Slices!.Count);
         Assert.Contains(result.Slices, s => s.MetricName == "total-revenue");
         Assert.Contains(result.Slices, s => s.MetricName == "daily-trend");
+    }
+
+    [Fact]
+    public async Task GetWidgetDataAsync_MetricRef_AllMetrics_MultiSliceExpandsRecursively()
+    {
+        // Oracle Major#1 修复验证：全量模式下多切片指标（daily-trend time-bucket）递归展开——每个 slice 的 Value 为标量
+        using var root = DashboardTestInfra.CreateTempRoot();
+        DashboardTestInfra.WriteDashboard(root.Path, "all", """
+            {
+              "name": "all", "title": "全部",
+              "widgets": [
+                { "name": "all-metrics", "type": "chart", "row": 0, "order": 0, "width": 2,
+                  "dataSource": "test-ds", "metricRef": "merchant/payment-metrics" }
+              ]
+            }
+            """);
+        DashboardTestInfra.WriteMetricsSpec(root.Path, "merchant", "payment-metrics", DashboardTestInfra.MetricsSpecJson());
+        var (sp, _) = DashboardTestInfra.BuildServices(root.Path, root.Path, SampleRows);
+        var service = sp.GetRequiredService<IDashboardDataService>();
+
+        var result = await service.GetWidgetDataAsync("all", "all-metrics");
+
+        // total-revenue（单值 1 个）+ daily-trend（3 天 → 3 切片）= 4 个 Slices 元素
+        Assert.Equal(4, result.Slices!.Count);
+        // 多切片指标的每个元素 Value 须为标量（非 List<MetricSlice>），且带 Dimensions
+        var dailySlices = result.Slices.Where(s => s.MetricName == "daily-trend").ToArray();
+        Assert.Equal(3, dailySlices.Length);
+        Assert.All(dailySlices, s =>
+        {
+            Assert.IsNotType<IReadOnlyList<MetricSlice>>(s.Value);
+            Assert.NotNull(s.Dimensions);
+        });
     }
 
     [Fact]
@@ -185,15 +217,6 @@ public class DashboardDataServiceTests
         var ex = await Assert.ThrowsAsync<DashboardDefinitionException>(
             () => service.GetWidgetDataAsync("overview", "w1"));
         Assert.Contains("未在规格", ex.Message);
-    }
-
-    [Theory]
-    [InlineData("merchant/payment-metrics:total-revenue", "merchant", "payment-metrics", "total-revenue")]
-    [InlineData("merchant/payment-metrics", "merchant", "payment-metrics", null)]
-    public void ParseMetricRef_Formats(string metricRef, string domain, string specKey, string? metricName)
-    {
-        // 经一次真实查询间接验证解析（公有路径），解析器本身为私有——用 DataService 全链路断言行为
-        Assert.NotNull(metricRef);
     }
 
     [Fact]

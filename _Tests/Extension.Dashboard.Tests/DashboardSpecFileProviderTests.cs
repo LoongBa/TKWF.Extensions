@@ -108,6 +108,29 @@ public class DashboardSpecFileProviderTests
     }
 
     [Fact]
+    public void LoadDashboard_PathTraversal_Throws()
+    {
+        // Oracle Major#2 修复验证：dashKey 含路径穿越段（./..）→ 拒绝
+        using var root = DashboardTestInfra.CreateTempRoot();
+        var provider = CreateProvider(root.Path, root.Path);
+
+        var ex = Assert.Throws<DashboardDefinitionException>(() => provider.LoadDashboard("../secret"));
+        Assert.Contains("非法", ex.Message);
+    }
+
+    [Fact]
+    public void LoadMetricsSpec_PathTraversal_Throws()
+    {
+        // Oracle Major#2 修复验证：domain/specKey 含穿越段或分隔符 → 拒绝
+        using var root = DashboardTestInfra.CreateTempRoot();
+        var provider = CreateProvider(root.Path, root.Path);
+
+        var ex = Assert.Throws<DashboardDefinitionException>(() => provider.LoadMetricsSpec("..", "payment-metrics"));
+        Assert.Contains("非法", ex.Message);
+        Assert.Throws<DashboardDefinitionException>(() => provider.LoadMetricsSpec("merchant", "../x"));
+    }
+
+    [Fact]
     public void LoadMetricsSpec_LoadsDefinitions()
     {
         using var root = DashboardTestInfra.CreateTempRoot();

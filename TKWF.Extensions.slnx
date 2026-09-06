@@ -48,6 +48,9 @@
   <Folder Name="/_Framework/DataPort/">
     <Project Path="_Framework/DataPort/TKWF.Ext.DataPort.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Notifications/">
+    <Project Path="_Framework/Notifications/TKWF.Ext.Notifications.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -96,5 +99,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.DataPort.Tests/">
     <Project Path="_Tests/Extension.DataPort.Tests/TKWF.Ext.DataPort.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Notifications.Tests/">
+    <Project Path="_Tests/Extension.Notifications.Tests/TKWF.Ext.Notifications.Tests.csproj" />
   </Folder>
 </Solution>

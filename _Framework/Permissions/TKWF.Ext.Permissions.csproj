@@ -55,7 +55,7 @@
 
   <!-- V0.2.0 (SG1 化)：xCodeGen（可选，仅 Debug 触发）：定义配置路径走 D1 集中化 -->
   <PropertyGroup>
-    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\.xCodeGen\permissions.xCodeGen.json</_XCG_ConfigPath>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\permissions.xCodeGen.json</_XCG_ConfigPath>
   </PropertyGroup>
 
   <!-- V4.9.72 (W6): 单元测试访问 internal 默认实现（InMemoryPermissionDefinitionRepository/PermissionChecker/NoOpPermissionStore） -->

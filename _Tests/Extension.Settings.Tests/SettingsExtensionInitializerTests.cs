@@ -35,7 +35,7 @@ public class SettingsExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISettingStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlSettingStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(SettingStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 

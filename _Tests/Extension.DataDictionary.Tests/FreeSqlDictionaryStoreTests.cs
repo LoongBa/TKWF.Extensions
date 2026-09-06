@@ -22,8 +22,8 @@ public class FreeSqlDictionaryStoreTests
         return fsql;
     }
 
-    private static FreeSqlDictionaryStore CreateStore(IFreeSql fsql)
-        => new(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+    private static DictionaryStore CreateStore(IFreeSql fsql)
+        => DataDictionaryTestHost.CreateStore(fsql);
 
     private static DictionaryDefinitionEntity NewDefinition(string code = "Gender")
         => new() { Code = code, DisplayName = code };

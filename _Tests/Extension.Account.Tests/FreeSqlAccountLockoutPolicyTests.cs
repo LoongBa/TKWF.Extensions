@@ -24,7 +24,7 @@ public class FreeSqlAccountLockoutPolicyTests
 
     private static FreeSqlAccountLockoutPolicy CreatePolicy(IFreeSql fsql, AccountOptions? options = null)
     {
-        var store = new FreeSqlAccountLockoutStore(fsql, NullLogger<FreeSqlAccountLockoutStore>.Instance);
+        var store = AccountTestHost.CreateLockoutStore(fsql);
         return new FreeSqlAccountLockoutPolicy(
             store,
             Options.Create(options ?? new AccountOptions()),

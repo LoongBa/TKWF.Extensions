@@ -20,7 +20,7 @@
 
 ### 1. 分层结构
 
-- **模板存储（`ITemplateStore`）**：模板/版本 CRUD + 按 `Key`/`Key@Version`/`Active` 查询。FreeSql 实现，**异常传播不静默**——模板是审计关键资产，存储层错误必须显式暴露（C1）。
+- **模板存储（`ITemplateStore`）**：模板/版本 CRUD + 按 `Key`/`Key@Version`/`Active` 查询。经 SG1/xCodeGen 生成的 DataService 委托持久化（遵循数据访问红线，不直接注入 IFreeSql），**异常传播不静默**——模板是审计关键资产，存储层错误必须显式暴露（C1）。
 - **沙箱渲染（`ITemplateRenderer`）**：Scriban 沙箱渲染——`MemberFilter` 公共属性白名单 + **不配置 `TemplateLoader`**（阻断 `include` 读盘）+ 数据模型递归转换（不暴露原始 .NET 对象）+ 解析缓存 + 执行限制。无状态 → Singleton 线程安全。
 - **管理门面（`ITemplateManager`）**：版本生命周期（Draft→Active→Archived）+ 发布版本自动 minor 递增 + 渲染入口（`version=null` 取最新 Active / 显式 version 精确固定，审计用）。Scoped。
 - **扩展接线（`PrintTemplatesExtensionInitializer`）**：`[TKWFExtension]` SG1 发现 + 三钩子——ConfigureServices 注册三件套（TryAdd 语义，消费方可覆盖）+ Options 绑定；ConfigureFilters/InitializeAsync 不调用（V0.1.0 无过滤器/无种子数据）。
@@ -37,7 +37,7 @@
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`ITemplateStore`** | 模板/版本 CRUD + 按 Key/Key@Version/Active 查询；**异常传播**（审计关键，不静默，C1） | `FreeSqlTemplateStore`（FreeSql） |
+| **`ITemplateStore`** | 模板/版本 CRUD + 按 Key/Key@Version/Active 查询；**异常传播**（审计关键，不静默，C1） | `TemplateStore`（经 SG1/xCodeGen DataService 委托） |
 | **`ITemplateRenderer`** | Scriban 沙箱渲染（公共属性白名单 + 无 TemplateLoader + 递归转换 + 解析缓存 + 执行限制） | `ScribanTemplateRenderer`（Singleton） |
 | **`ITemplateManager`** | 管理门面：版本生命周期 + 发布自动 minor 递增 + 渲染入口 | `TemplateManager`（Scoped） |
 | **`PrintTemplateEntity`** | 模板定义实体（Key 唯一 + Name + Description + 审计时间） | SG1 声明式实体 → `PrintTemplate` 表 |

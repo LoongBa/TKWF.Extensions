@@ -43,7 +43,8 @@ namespace TKWF.Ext.Settings
             // V0.2.0：内存缓存（TryAddSingleton：IMemoryCache 是 Singleton 生命周期，消费方可覆盖）
             services.TryAddSingleton<IMemoryCache, MemoryCache>();
 
-            services.TryAddScoped<ISettingStore, FreeSqlSettingStore>();
+            services.TryAddScoped<SettingEntityDataService>();
+            services.TryAddScoped<ISettingStore, SettingStore>();
             services.TryAddScoped<ISettingManager, SettingManager>();
         }
     }

@@ -26,7 +26,7 @@ public class DictionaryTreeTests
 
     private static DictionaryManager CreateManager(IFreeSql fsql, bool enableTreeMode = true)
     {
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var options = Options.Create(new DataDictionaryOptions { EnableTreeMode = enableTreeMode });
         return new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
@@ -35,7 +35,7 @@ public class DictionaryTreeTests
     /// <summary>种子：省市区三级树形数据。</summary>
     private static async Task SeedRegionTree(IFreeSql fsql)
     {
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Region", DisplayName = "地区" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -103,7 +103,7 @@ public class DictionaryTreeTests
         var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
 
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Flat", DisplayName = "平级" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -134,7 +134,7 @@ public class DictionaryTreeTests
         var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
 
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Siblings", DisplayName = "兄弟" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -193,7 +193,7 @@ public class DictionaryTreeTests
         var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
 
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         await store.UpsertDefinitionAsync(new DictionaryDefinitionEntity
         {
             Code = "Empty", DisplayName = "空"

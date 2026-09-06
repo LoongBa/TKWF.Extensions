@@ -20,8 +20,8 @@ public class FreeSqlAccountLockoutStoreTests
         return fsql;
     }
 
-    private static FreeSqlAccountLockoutStore CreateStore(IFreeSql fsql)
-        => new(fsql, NullLogger<FreeSqlAccountLockoutStore>.Instance);
+    private static AccountLockoutStore CreateStore(IFreeSql fsql)
+        => AccountTestHost.CreateLockoutStore(fsql);
 
     [Fact]
     public async Task SaveAndGet_RoundTrip()

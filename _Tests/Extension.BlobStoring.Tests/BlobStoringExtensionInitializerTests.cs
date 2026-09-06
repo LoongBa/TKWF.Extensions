@@ -46,7 +46,7 @@ public class BlobStoringExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IBlobRecordStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlBlobRecordStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(BlobRecordStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 

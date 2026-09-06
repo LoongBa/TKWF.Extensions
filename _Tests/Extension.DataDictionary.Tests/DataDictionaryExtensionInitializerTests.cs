@@ -36,7 +36,7 @@ public class DataDictionaryExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IDictionaryStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlDictionaryStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(DictionaryStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 

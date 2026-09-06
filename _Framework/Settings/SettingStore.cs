@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -8,18 +7,18 @@ using Microsoft.Extensions.Logging;
 namespace TKWF.Ext.Settings
 {
     /// <summary>
-    /// FreeSql 设置存储实现——将设置映射为 <see cref="SettingEntity"/> 并持久化。
-    /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
-    /// 与 <see cref="FreeSqlAuditLogStore"/> 模式一致。</para>
+    /// 设置存储实现——经 <see cref="SettingEntityDataService"/>（SG1/xCodeGen 生成的 DataService）委托持久化，
+    /// 遵循数据访问红线（2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
+    /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
     /// </summary>
-    internal sealed class FreeSqlSettingStore : ISettingStore
+    internal sealed class SettingStore : ISettingStore
     {
-        private readonly IFreeSql _freeSql;
-        private readonly ILogger<FreeSqlSettingStore> _logger;
+        private readonly SettingEntityDataService _dataService;
+        private readonly ILogger<SettingStore> _logger;
 
-        public FreeSqlSettingStore(IFreeSql freeSql, ILogger<FreeSqlSettingStore> logger)
+        public SettingStore(SettingEntityDataService dataService, ILogger<SettingStore> logger)
         {
-            _freeSql = freeSql ?? throw new ArgumentNullException(nameof(freeSql));
+            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -27,9 +26,7 @@ namespace TKWF.Ext.Settings
         {
             try
             {
-                return await _freeSql.Select<SettingEntity>()
-                    .Where(s => s.Name == name && s.ProviderName == providerName && s.ProviderKey == providerKey)
-                    .FirstAsync(ct);
+                return await _dataService.GetByKeyAsync(name, providerName, providerKey, ct);
             }
             catch (Exception ex)
             {
@@ -42,9 +39,7 @@ namespace TKWF.Ext.Settings
         {
             try
             {
-                return await _freeSql.Select<SettingEntity>()
-                    .Where(s => s.ProviderName == providerName && s.ProviderKey == providerKey)
-                    .ToListAsync(ct);
+                return await _dataService.GetListByProviderAsync(providerName, providerKey, ct);
             }
             catch (Exception ex)
             {
@@ -59,11 +54,6 @@ namespace TKWF.Ext.Settings
             {
                 var now = DateTimeOffset.Now;
 
-                // Upsert: 先删后插（确保 SQLite/PostgreSQL 等全兼容）
-                await _freeSql.Delete<SettingEntity>()
-                    .Where(s => s.Name == name && s.ProviderName == providerName && s.ProviderKey == providerKey)
-                    .ExecuteAffrowsAsync(ct);
-
                 var entity = new SettingEntity
                 {
                     Name = name,
@@ -75,7 +65,7 @@ namespace TKWF.Ext.Settings
                     CreateTime = now,
                     UpdateTime = now
                 };
-                await _freeSql.Insert(entity).ExecuteAffrowsAsync(ct);
+                await _dataService.UpsertByKeyAsync(entity, ct);
             }
             catch (Exception ex)
             {
@@ -87,9 +77,7 @@ namespace TKWF.Ext.Settings
         {
             try
             {
-                await _freeSql.Delete<SettingEntity>()
-                    .Where(s => s.Name == name && s.ProviderName == providerName && s.ProviderKey == providerKey)
-                    .ExecuteAffrowsAsync(ct);
+                await _dataService.DeleteByKeyAsync(name, providerName, providerKey, ct);
             }
             catch (Exception ex)
             {

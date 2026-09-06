@@ -1,12 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BlobStoring.Tests;
 
 /// <summary>
-/// FreeSqlBlobRecordStore 测试——使用 SQLite 内存库验证真实读写 + 异常静默。
+/// BlobRecordStore 测试——使用 SQLite 内存库验证真实读写 + 异常静默。
+/// <para>BlobRecordStore 经 BlobRecordEntityDataService（FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化。</para>
 /// </summary>
 public class FreeSqlBlobRecordStoreTests
 {
@@ -19,14 +24,25 @@ public class FreeSqlBlobRecordStoreTests
             .Build();
     }
 
+    /// <summary>构造 BlobRecordEntityDataService——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动。</summary>
+    private static BlobRecordEntityDataService CreateDataService(IFreeSql fsql)
+    {
+        var uowManager = new UnitOfWorkManager(fsql);
+        var dac = new FreeSqlEntityDAC<BlobRecordEntity>(uowManager);
+        return new BlobRecordEntityDataService(new StubDomainUser(), dac);
+    }
+
+    private static BlobRecordStore CreateStore(IFreeSql fsql, FakeLogger<BlobRecordStore> logger)
+        => new(CreateDataService(fsql), logger);
+
     [Fact]
     public async Task SaveAsync_NewRecord_PersistsToDatabase()
     {
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         var record = new BlobRecordEntity
         {
@@ -58,8 +74,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         var record = new BlobRecordEntity
         {
@@ -71,16 +87,18 @@ public class FreeSqlBlobRecordStoreTests
         await store.SaveAsync(record);
 
         var saved = fsql.Select<BlobRecordEntity>().First();
+        var originalId = saved.Id;
         saved.Size = 4096;
 
         // Act
         await store.SaveAsync(saved);
 
-        // Assert
+        // Assert — 改造后 Upsert 保留自增 Id（不再先删后插）
         var count = fsql.Select<BlobRecordEntity>().Count();
         Assert.Equal(1, count);
 
         var updated = fsql.Select<BlobRecordEntity>().First();
+        Assert.Equal(originalId, updated.Id);
         Assert.Equal(4096, updated.Size);
     }
 
@@ -90,8 +108,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         var record = new BlobRecordEntity
         {
@@ -118,8 +136,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         // Act
         var result = await store.GetAsync(999);
@@ -134,8 +152,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         await store.SaveAsync(new BlobRecordEntity
         {
@@ -158,8 +176,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         await store.SaveAsync(new BlobRecordEntity { Name = "a.txt", Path = "a/a.txt", ContentType = "text/plain" });
         await store.SaveAsync(new BlobRecordEntity { Name = "b.png", Path = "b/b.png", ContentType = "image/png" });
@@ -178,8 +196,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         // Act — null record should be silently skipped
         await store.SaveAsync(null!);
@@ -195,8 +213,8 @@ public class FreeSqlBlobRecordStoreTests
         // Arrange — 使用已 Dispose 的 FreeSql，操作必定抛异常
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<FreeSqlBlobRecordStore>();
-        var store = new FreeSqlBlobRecordStore(fsql, logger);
+        var logger = new FakeLogger<BlobRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         fsql.Dispose();
 
@@ -211,6 +229,26 @@ public class FreeSqlBlobRecordStoreTests
     }
 
     // ── Test helpers ──
+
+    /// <summary>最小 IDomainUser 桩——仅满足编译，不提供真实用户上下文。</summary>
+    private sealed class StubDomainUser : IDomainUser
+    {
+        public string SessionKey => "test-session";
+        public bool IsAuthenticated => false;
+        public bool IsSystemActor => false;
+        public IUserInfo? UserInfo => null;
+        public long? TenantId => null;
+        public bool IsNoAuditActive => false;
+        public string? UserId => null;
+        public string? UserName => null;
+        public bool IsInRole(string role) => false;
+        public TDomainService Use<TDomainService>() where TDomainService : IDomainService
+            => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        public TService GetService<TService>() where TService : notnull
+            => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        public TService GetOptionalService<TService>() where TService : class => null!;
+        public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+    }
 
     /// <summary>简化 ILogger 桩：捕获 Warning 日志。</summary>
     private sealed class FakeLogger<T> : ILogger<T>

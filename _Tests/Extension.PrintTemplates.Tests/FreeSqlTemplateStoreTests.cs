@@ -1,37 +1,24 @@
-using System.Collections.Generic;
+using System;
 using System.Threading.Tasks;
 using FreeSql;
+using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 
 /// <summary>
 /// FreeSqlTemplateStore 测试——使用 SQLite 内存库验证真实 CRUD / 版本查询 / Active 查询 / 版本倒序列表。
-/// <para>存储层异常传播（审计关键，不静默）——异常路径经 Manager 层测试覆盖。</para>
+/// <para>TemplateStore 经两个 DataService（SG1/xCodeGen 生成，FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化——
+/// 数据访问红线整改后不直接注入 IFreeSql。</para>
+/// <para>存储层异常传播（审计关键，不静默）：唯一约束冲突（同 TemplateId+Version 并发直插）显式抛异常——"并发发布败者"语义（C1）。</para>
 /// </summary>
 public class FreeSqlTemplateStoreTests
 {
-    /// <summary>创建使用 SQLite 内存库的 IFreeSql 实例（每次调用新连接 = 独立内存库）。</summary>
-    private static IFreeSql CreateInMemoryFreeSql()
-    {
-        return new FreeSqlBuilder()
-            .UseConnectionString(DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-    }
-
-    /// <summary>同步两张表结构（模板 + 版本，含唯一索引）。</summary>
-    private static void SyncStructure(IFreeSql fsql)
-    {
-        fsql.CodeFirst.SyncStructure<PrintTemplateEntity>();
-        fsql.CodeFirst.SyncStructure<PrintTemplateVersionEntity>();
-    }
-
     [Fact]
     public async Task GetByKeyAsync_Exists_ReturnsTemplate()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         var template = new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "测试模板" };
         await store.UpsertTemplateAsync(template);
@@ -47,9 +34,9 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task GetByKeyAsync_NotExists_ReturnsNull()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         var result = await store.GetByKeyAsync("No.Such.Key");
 
@@ -59,9 +46,9 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task UpsertTemplateAsync_InsertsNewTemplate()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k1", Name = "n1" });
 
@@ -72,9 +59,9 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task GetVersionAsync_Exists_ReturnsVersion()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -100,9 +87,9 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task GetActiveVersionAsync_Exists_ReturnsActiveVersion()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -134,9 +121,9 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task ListVersionsAsync_ReturnsVersions()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -158,9 +145,9 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task UpsertVersionAsync_InsertsNewVersion()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var store = new FreeSqlTemplateStore(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -181,5 +168,46 @@ public class FreeSqlTemplateStoreTests
         Assert.Equal(savedTemplate.Id, saved.TemplateId);
         Assert.Equal("1.0.0", saved.Version);
         Assert.Equal("content", saved.Content);
+    }
+
+    // ── 异常传播（审计关键，不静默）——数据访问红线整改后补充 ──
+
+    /// <summary>
+    /// 唯一约束冲突（同 TemplateId+Version 并发直插）→ 数据库约束异常显式向上传播，不被吞掉（C1）。
+    /// <para>模拟并发：绕过 Store 的"先查后插/更"预检，直接对已占用键再次 DataService Create——
+    /// 等价于并发发布双方都过了预检后败者直插，命中 <c>IX_ptv_template_version</c> 唯一索引。</para>
+    /// </summary>
+    [Fact]
+    public async Task UpsertVersionAsync_DuplicateTemplateVersion_ThrowsNotSwallowed()
+    {
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
+
+        var template = new PrintTemplateEntity { Key = "k", Name = "n" };
+        await store.UpsertTemplateAsync(template);
+        var savedTemplate = await store.GetByKeyAsync("k");
+
+        // 首次创建 1.0.0
+        await store.UpsertVersionAsync(new PrintTemplateVersionEntity
+        {
+            TemplateId = savedTemplate!.Id,
+            Version = "1.0.0",
+            Content = "v1"
+        });
+
+        // 并发败者直插同键 → 唯一约束异常必须向上传播（不吞）
+        var dupDataService = new PrintTemplateVersionEntityDataService(
+            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionEntity>(new UnitOfWorkManager(fsql)));
+        var ex = await Record.ExceptionAsync(() => dupDataService.EntityCreateAsync(new PrintTemplateVersionEntity
+        {
+            TemplateId = savedTemplate.Id,
+            Version = "1.0.0",
+            Content = "v2"
+        }));
+
+        // 异常显式暴露（审计关键资产，存储层错误不得静默）
+        Assert.NotNull(ex);
+        Assert.Equal(1, fsql.Select<PrintTemplateVersionEntity>().Count());
     }
 }

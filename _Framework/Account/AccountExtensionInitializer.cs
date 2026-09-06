@@ -33,8 +33,11 @@ namespace TKWF.Ext.Account
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
-            services.TryAddScoped<IAccountLockoutStore, FreeSqlAccountLockoutStore>();
-            services.TryAddScoped<IPasswordResetStore, FreeSqlPasswordResetStore>();
+            // 数据访问红线整改（2026-09-07）：Store 委托 SG1 DataService，禁裸 IFreeSql
+            services.TryAddScoped<AccountLockoutEntityDataService>();
+            services.TryAddScoped<PasswordResetCodeEntityDataService>();
+            services.TryAddScoped<IAccountLockoutStore, AccountLockoutStore>();
+            services.TryAddScoped<IPasswordResetStore, PasswordResetStore>();
             services.TryAddScoped<IAccountLockoutPolicy, FreeSqlAccountLockoutPolicy>();
             services.TryAddScoped<IPasswordResetFlow, DefaultPasswordResetFlow>();
             // IAccountPasswordManager 不注册默认实现——消费方实现（适配 Identity IUserManager）

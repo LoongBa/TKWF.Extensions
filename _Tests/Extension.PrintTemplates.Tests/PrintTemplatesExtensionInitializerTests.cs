@@ -5,7 +5,7 @@ namespace TKWF.Ext.PrintTemplates.Tests;
 
 /// <summary>
 /// PrintTemplatesExtensionInitializer 测试——DI 注册（Store/Manager Scoped + Renderer Singleton）+ Options 默认值。
-/// <para>注意：FreeSqlTemplateStore 依赖 IFreeSql（未在测试 DI 中注册）、ScribanTemplateRenderer 依赖
+/// <para>注意：TemplateStore 依赖两个 DataService（未在测试 DI 中注册）、ScribanTemplateRenderer 依赖
 /// PrintTemplatesOptions（AddOptions 不注册 T 本身）——因此 Store/Manager/Renderer 经 Descriptor 验证而非 resolve；
 /// Options 测试显式注册空 IConfiguration（BindConfiguration 需要）后 resolve 验证默认值。</para>
 /// </summary>
@@ -19,7 +19,7 @@ public class PrintTemplatesExtensionInitializerTests
 
         var descriptor = services.First(d => d.ServiceType == typeof(ITemplateStore));
 
-        Assert.Equal(typeof(FreeSqlTemplateStore), descriptor.ImplementationType);
+        Assert.Equal(typeof(TemplateStore), descriptor.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 

@@ -40,6 +40,8 @@
   <ItemGroup>
     <!-- 本仓库扩展（Settings）+ 主框架（TKWFRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Settings\TKWF.Ext.Settings.csproj" />
+    <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 SettingEntityDataService -->
+    <ProjectReference Include="$(TKWFRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />

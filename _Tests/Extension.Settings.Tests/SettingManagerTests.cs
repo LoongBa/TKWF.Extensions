@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Settings.Tests;
@@ -23,6 +25,13 @@ public class SettingManagerTests
             .Build();
     }
 
+    private static SettingEntityDataService CreateDataService(IFreeSql fsql)
+    {
+        var uowManager = new UnitOfWorkManager(fsql);
+        var dac = new FreeSqlEntityDAC<SettingEntity>(uowManager);
+        return new SettingEntityDataService(new StubDomainUser(), dac);
+    }
+
     private static SettingManager CreateManager(
         ISettingStore? store = null,
         IDomainUser? user = null,
@@ -32,7 +41,7 @@ public class SettingManagerTests
     {
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<SettingEntity>();
-        store ??= new FreeSqlSettingStore(fsql, new FakeLogger<FreeSqlSettingStore>());
+        store ??= new SettingStore(CreateDataService(fsql), new FakeLogger<SettingStore>());
         user ??= new StubDomainUser();
         var options = Options.Create(new SettingsOptions
         {
@@ -459,7 +468,7 @@ public class SettingManagerTests
     {
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<SettingEntity>();
-        return new CountingSettingStore(fsql, new FakeLogger<FreeSqlSettingStore>());
+        return new CountingSettingStore(fsql, new FakeLogger<SettingStore>());
     }
 
     private sealed class TestLayout
@@ -517,11 +526,11 @@ public class SettingManagerTests
     private sealed class CountingSettingStore : ISettingStore
     {
         private readonly IFreeSql _freeSql;
-        private readonly ILogger<FreeSqlSettingStore> _logger;
+        private readonly ILogger<SettingStore> _logger;
 
         public int GetCalls { get; private set; }
 
-        public CountingSettingStore(IFreeSql freeSql, ILogger<FreeSqlSettingStore> logger)
+        public CountingSettingStore(IFreeSql freeSql, ILogger<SettingStore> logger)
         {
             _freeSql = freeSql;
             _logger = logger;

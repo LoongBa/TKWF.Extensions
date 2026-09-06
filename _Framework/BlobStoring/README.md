@@ -32,7 +32,7 @@
 
 - **记录存储抽象 (`IBlobRecordStore`)**：定义 Blob 元数据记录的 CRUD 操作。扩展提供 FreeSql 默认实现。
 
-- **持久化实现 (`FreeSqlBlobRecordStore`)**：将 `BlobRecordEntity` 元数据持久化到数据库。异常静默处理。
+- **持久化实现 (`BlobRecordStore`)**：将 `BlobRecordEntity` 元数据持久化到数据库（经 SG1/xCodeGen 生成的 `BlobRecordEntityDataService` 委托，遵循数据访问红线）。异常静默处理。
 
 - **声明式实体 (`BlobRecordEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` 特性。
 
@@ -46,7 +46,7 @@
 
 ### 3. 与主框架的关系
 
-- 本扩展提供 `LocalStorageService` + `FreeSqlBlobRecordStore` 实现 + `BlobStoringExtensionInitializer` 注册。
+- 本扩展提供 `LocalStorageService` + `BlobRecordStore` 实现 + `BlobStoringExtensionInitializer` 注册。
 - 消费方通过 `IBlobStorageService` 上传下载文件、`IBlobRecordStore` 管理元数据，无需关心存储细节。
 - V0.1.0 不引入 Azure/S3 SDK——后续版本可平滑替换存储后端（接口不变）。
 
@@ -72,7 +72,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-自动注册：`IBlobStorageService`（默认 `LocalStorageService`）+ `IBlobRecordStore`（默认 `FreeSqlBlobRecordStore`）。
+自动注册：`IBlobStorageService`（默认 `LocalStorageService`）+ `IBlobRecordStore`（默认 `BlobRecordStore`）。
 
 ### 2. 上传 / 下载 / 删除
 
@@ -154,7 +154,7 @@ TryAdd 语义确保消费方实现优先。
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
 | **`IBlobStorageService`** | Blob 存储抽象（上传/下载/删除/检查） | `LocalStorageService`（本扩展） |
-| **`IBlobRecordStore`** | Blob 元数据记录存储抽象（CRUD） | `FreeSqlBlobRecordStore`（本扩展） |
+| **`IBlobRecordStore`** | Blob 元数据记录存储抽象（CRUD） | `BlobRecordStore`（本扩展） |
 | **`BlobInfo`** | Blob 元数据信息模型（Name/Path/ContentType/Size） | 内置 |
 | **`BlobRecordEntity`** | Blob 记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`BlobStoringUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |

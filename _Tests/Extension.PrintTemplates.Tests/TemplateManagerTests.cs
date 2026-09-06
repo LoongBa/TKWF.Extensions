@@ -6,30 +6,14 @@ namespace TKWF.Ext.PrintTemplates.Tests;
 
 /// <summary>
 /// TemplateManager 测试——版本生命周期（Publish/Draft/Archive）+ 渲染入口 + 发布版本自动递增。
-/// <para>集成测试：真实 FreeSqlTemplateStore（SQLite 内存）+ 真实 ScribanTemplateRenderer。</para>
+/// <para>集成测试：真实 TemplateStore（经 SG1/xCodeGen DataService 委托，SQLite 内存）+ 真实 ScribanTemplateRenderer。</para>
 /// </summary>
 public class TemplateManagerTests
 {
-    /// <summary>创建使用 SQLite 内存库的 IFreeSql 实例（每次调用新连接 = 独立内存库）。</summary>
-    private static IFreeSql CreateInMemoryFreeSql()
-    {
-        return new FreeSqlBuilder()
-            .UseConnectionString(DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-    }
-
-    /// <summary>同步两张表结构（模板 + 版本）。</summary>
-    private static void SyncStructure(IFreeSql fsql)
-    {
-        fsql.CodeFirst.SyncStructure<PrintTemplateEntity>();
-        fsql.CodeFirst.SyncStructure<PrintTemplateVersionEntity>();
-    }
-
     /// <summary>创建 Manager（真实 Store + 真实 Renderer，默认 Options）。</summary>
     private static TemplateManager CreateManager(IFreeSql fsql)
     {
-        var store = new FreeSqlTemplateStore(fsql);
+        var store = TemplateTestSupport.CreateStore(fsql);
         var renderer = new ScribanTemplateRenderer(new PrintTemplatesOptions());
         return new TemplateManager(store, renderer);
     }
@@ -43,8 +27,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_FirstVersion_Returns1_0_0()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         var result = await manager.PublishAsync("Invoice.Standard", "Hello {{ model.Name }}");
@@ -58,8 +42,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_SecondVersion_Returns1_1_0()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.PublishAsync("k", "v1");
@@ -72,8 +56,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_OldActive_Archived()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.PublishAsync("k", "v1");
@@ -91,8 +75,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_TemplateNotFound_AutoCreates()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.PublishAsync("Invoice.Standard", "content", "desc");
@@ -108,8 +92,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task DraftAsync_CreatesDraft()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         var result = await manager.DraftAsync("k", "draft content");
@@ -122,8 +106,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task DraftAsync_UpsertsExistingDraft()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.DraftAsync("k", "first draft");
@@ -141,8 +125,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task DraftAsync_DoesNotOccupyActive()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.DraftAsync("k", "draft content");
@@ -155,8 +139,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task ArchiveAsync_ArchivesVersion()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.PublishAsync("k", "content");
@@ -170,8 +154,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task RenderAsync_NullVersion_RendersActive()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.PublishAsync("k", "Hello {{ model.Name }}");
@@ -184,8 +168,8 @@ public class TemplateManagerTests
     [Fact]
     public async Task RenderAsync_SpecificVersion_RendersFixed()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
         var manager = CreateManager(fsql);
 
         await manager.PublishAsync("k", "v1-{{ model.Name }}");
@@ -197,3 +181,4 @@ public class TemplateManagerTests
         Assert.Equal("v1-Alice", result);
     }
 }
+

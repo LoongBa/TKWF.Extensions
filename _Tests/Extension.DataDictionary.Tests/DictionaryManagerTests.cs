@@ -26,7 +26,7 @@ public class DictionaryManagerTests
 
     private static DictionaryManager CreateManager(IFreeSql fsql)
     {
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var options = Options.Create(new DataDictionaryOptions());
         return new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
@@ -34,7 +34,7 @@ public class DictionaryManagerTests
 
     private static async Task SeedGender(IFreeSql fsql)
     {
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Gender", DisplayName = "性别" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(new DictionaryItemEntity { DefinitionId = def.Id, Code = "Female", DisplayName = "女", Order = 2 }, CancellationToken.None);

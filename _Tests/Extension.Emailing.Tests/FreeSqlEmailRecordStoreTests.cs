@@ -1,12 +1,16 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing.Tests;
 
 /// <summary>
-/// FreeSqlEmailRecordStore 测试——使用 SQLite 内存库验证真实读写 + 异常静默。
+/// EmailRecordStore 测试——使用 SQLite 内存库验证真实读写 + 异常静默。
+/// <para>EmailRecordStore 经 EmailRecordEntityDataService（FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化。</para>
 /// </summary>
 public class FreeSqlEmailRecordStoreTests
 {
@@ -19,14 +23,25 @@ public class FreeSqlEmailRecordStoreTests
             .Build();
     }
 
+    /// <summary>构造 EmailRecordEntityDataService——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动。</summary>
+    private static EmailRecordEntityDataService CreateDataService(IFreeSql fsql)
+    {
+        var uowManager = new UnitOfWorkManager(fsql);
+        var dac = new FreeSqlEntityDAC<EmailRecordEntity>(uowManager);
+        return new EmailRecordEntityDataService(new StubDomainUser(), dac);
+    }
+
+    private static EmailRecordStore CreateStore(IFreeSql fsql, FakeLogger<EmailRecordStore> logger)
+        => new(CreateDataService(fsql), logger);
+
     [Fact]
     public async Task SaveAsync_NewRecord_PersistsToDatabase()
     {
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         var entity = new EmailRecordEntity
         {
@@ -60,8 +75,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         var entity = new EmailRecordEntity
         {
@@ -94,8 +109,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         var entity = new EmailRecordEntity
         {
@@ -121,8 +136,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         // Act
         var result = await store.GetAsync(999);
@@ -137,8 +152,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         await store.SaveAsync(new EmailRecordEntity { To = "a@example.com", Subject = "A", Status = "Sent" });
         await store.SaveAsync(new EmailRecordEntity { To = "b@example.com", Subject = "B", Status = "Failed" });
@@ -157,8 +172,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         await store.SaveAsync(new EmailRecordEntity { To = "a@example.com", Subject = "A", Status = "Sent" });
         await store.SaveAsync(new EmailRecordEntity { To = "b@example.com", Subject = "B", Status = "Failed" });
@@ -178,8 +193,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         // Act — null entity should be silently skipped
         await store.SaveAsync(null!);
@@ -195,8 +210,8 @@ public class FreeSqlEmailRecordStoreTests
         // Arrange — 使用已 Dispose 的 FreeSql，操作必定抛异常
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
-        var logger = new FakeLogger<FreeSqlEmailRecordStore>();
-        var store = new FreeSqlEmailRecordStore(fsql, logger);
+        var logger = new FakeLogger<EmailRecordStore>();
+        var store = CreateStore(fsql, logger);
 
         fsql.Dispose();
 
@@ -211,6 +226,26 @@ public class FreeSqlEmailRecordStoreTests
     }
 
     // ── Test helpers ──
+
+    /// <summary>最小 IDomainUser 桩——仅满足编译，不提供真实用户上下文。</summary>
+    private sealed class StubDomainUser : IDomainUser
+    {
+        public string SessionKey => "test-session";
+        public bool IsAuthenticated => false;
+        public bool IsSystemActor => false;
+        public IUserInfo? UserInfo => null;
+        public long? TenantId => null;
+        public bool IsNoAuditActive => false;
+        public string? UserId => null;
+        public string? UserName => null;
+        public bool IsInRole(string role) => false;
+        public TDomainService Use<TDomainService>() where TDomainService : IDomainService
+            => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        public TService GetService<TService>() where TService : notnull
+            => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        public TService GetOptionalService<TService>() where TService : class => null!;
+        public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+    }
 
     /// <summary>简化 ILogger 桩：捕获 Warning 日志。</summary>
     private sealed class FakeLogger<T> : ILogger<T>

@@ -33,7 +33,7 @@ public class EmailingExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IEmailRecordStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FreeSqlEmailRecordStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(EmailRecordStore), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 

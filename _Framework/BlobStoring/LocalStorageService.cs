@@ -10,7 +10,7 @@ namespace TKWF.Ext.BlobStoring
     /// <summary>
     /// 本地文件系统 Blob 存储实现——在指定根目录下读写文件。
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
-    /// 与 <see cref="FreeSqlBlobRecordStore"/> 模式一致。</para>
+    /// 与 <see cref="BlobRecordStore"/> 模式一致。</para>
     /// </summary>
     internal sealed class LocalStorageService : IBlobStorageService
     {

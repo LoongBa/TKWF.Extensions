@@ -65,7 +65,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-自动注册：`IDictionaryStore`（默认 `FreeSqlDictionaryStore`）+ `IDictionaryManager`（默认 `DictionaryManager`）+ `IMemoryCache`（TryAddSingleton）+ `DataDictionaryOptions`（默认值，消费方自行绑定配置节）。
+自动注册：`IDictionaryStore`（默认 `DictionaryStore`，经 SG1 DataService 委托）+ `IDictionaryManager`（默认 `DictionaryManager`）+ `IMemoryCache`（TryAddSingleton）+ `DataDictionaryOptions`（默认值，消费方自行绑定配置节）。
 
 ### 2. 读取字典（业务侧）
 
@@ -154,7 +154,7 @@ TryAdd 语义确保消费方实现优先；自定义实现同理。
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`IDictionaryStore`** | 字典存储抽象（CRUD + 按编码查询 + 按 Id 查询） | `FreeSqlDictionaryStore`（本扩展） |
+| **`IDictionaryStore`** | 字典存储抽象（CRUD + 按编码查询 + 按 Id 查询） | `DictionaryStore`（本扩展，DataService 委托，数据访问红线整改 2026-09-07） |
 | **`IDictionaryManager`** | 数据字典管理门面（按编码聚合查询 + 缓存拦截 + 树形组装） | `DictionaryManager`（本扩展） |
 | **`DictionaryDefinitionEntity`** | 字典定义实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`DictionaryItemEntity`** | 字典项实体（SG1 声明式，V0.2.0 含树形字段 ParentCode/Level/Path） | 内置，`partial class` + `[DomainGenerateCode]` |

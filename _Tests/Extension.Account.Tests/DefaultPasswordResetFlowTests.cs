@@ -30,7 +30,7 @@ public class DefaultPasswordResetFlowTests
             services.AddSingleton(passwordManager);
         var sp = services.BuildServiceProvider();
 
-        var store = new FreeSqlPasswordResetStore(fsql, NullLogger<FreeSqlPasswordResetStore>.Instance);
+        var store = AccountTestHost.CreatePasswordResetStore(fsql);
         return new DefaultPasswordResetFlow(
             store,
             sp,

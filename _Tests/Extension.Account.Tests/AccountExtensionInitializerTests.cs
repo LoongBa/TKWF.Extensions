@@ -63,9 +63,9 @@ public class AccountExtensionInitializerTests
         var resetStore = services.FirstOrDefault(d => d.ServiceType == typeof(IPasswordResetStore));
 
         Assert.NotNull(lockoutStore);
-        Assert.Equal(typeof(FreeSqlAccountLockoutStore), lockoutStore!.ImplementationType);
+        Assert.Equal(typeof(AccountLockoutStore), lockoutStore!.ImplementationType);
         Assert.NotNull(resetStore);
-        Assert.Equal(typeof(FreeSqlPasswordResetStore), resetStore!.ImplementationType);
+        Assert.Equal(typeof(PasswordResetStore), resetStore!.ImplementationType);
     }
 
     [Fact]

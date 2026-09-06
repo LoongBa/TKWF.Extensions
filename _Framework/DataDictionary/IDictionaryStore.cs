@@ -6,7 +6,7 @@ namespace TKWF.Ext.DataDictionary
 {
     /// <summary>
     /// 数据字典存储抽象——字典定义与字典项的 CRUD 与查询。
-    /// <para>由扩展默认 FreeSql 实现（<see cref="FreeSqlDictionaryStore"/>），消费方可自定义（TryAdd 语义）。</para>
+    /// <para>由扩展默认 FreeSql 实现（<see cref="DictionaryStore"/>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
     public interface IDictionaryStore
     {

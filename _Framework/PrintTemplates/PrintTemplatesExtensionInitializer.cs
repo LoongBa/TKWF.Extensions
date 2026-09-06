@@ -8,8 +8,8 @@ namespace TKWF.Ext.PrintTemplates
     /// <summary>
     /// 打印模板扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
-    /// <item><see cref="ConfigureServices"/>——注册 <see cref="ITemplateStore"/> 默认 FreeSql 实现 +
-    ///       <see cref="ITemplateManager"/> 门面 + <see cref="ITemplateRenderer"/> Scriban 沙箱渲染 +
+    /// <item><see cref="ConfigureServices"/>——注册 <see cref="ITemplateStore"/> 默认实现（<see cref="TemplateStore"/>，
+    ///      经两个 DataService 委托持久化）+ <see cref="ITemplateManager"/> 门面 + <see cref="ITemplateRenderer"/> Scriban 沙箱渲染 +
     ///       <see cref="PrintTemplatesOptions"/> Options 绑定（TKWF:PrintTemplates）</item>
     /// <item>ConfigureFilters——不调用（V0.1.0 无过滤器）</item>
     /// <item>InitializeAsync——不调用（V0.1.0 无种子数据）</item>
@@ -37,8 +37,11 @@ namespace TKWF.Ext.PrintTemplates
             services.AddOptions<PrintTemplatesOptions>()
                 .BindConfiguration("TKWF:PrintTemplates");
 
-            // 模板存储（TryAddScoped：消费方可自定义 ITemplateStore 覆盖默认）
-            services.TryAddScoped<ITemplateStore, FreeSqlTemplateStore>();
+            // 模板存储（TryAddScoped：消费方可自定义 ITemplateStore 覆盖默认）——
+            // 经 SG1/xCodeGen 生成的 DataService 委托持久化（数据访问红线：不直接注入 IFreeSql / IEntityDAC）
+            services.TryAddScoped<PrintTemplateEntityDataService>();
+            services.TryAddScoped<PrintTemplateVersionEntityDataService>();
+            services.TryAddScoped<ITemplateStore, TemplateStore>();
 
             // 模板管理门面（TryAddScoped：消费方可自定义 ITemplateManager 覆盖默认）
             services.TryAddScoped<ITemplateManager, TemplateManager>();

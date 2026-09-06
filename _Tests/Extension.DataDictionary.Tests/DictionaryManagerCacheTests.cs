@@ -28,7 +28,7 @@ public class DictionaryManagerCacheTests
         bool enableCache = true, int cacheExpirationSeconds = 300)
     {
         var fsql = CreateFreeSql();
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var options = Options.Create(new DataDictionaryOptions
         {
@@ -41,7 +41,7 @@ public class DictionaryManagerCacheTests
 
     private static async Task SeedGender(IFreeSql fsql)
     {
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Gender", DisplayName = "性别" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(new DictionaryItemEntity
@@ -186,7 +186,7 @@ public class DictionaryManagerCacheTests
     {
         var (manager, fsql) = CreateManagerWithCache(enableCache: true);
 
-        var store = new FreeSqlDictionaryStore(fsql, NullLogger<FreeSqlDictionaryStore>.Instance);
+        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "CachedTree", DisplayName = "缓存树" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(new DictionaryItemEntity

@@ -20,8 +20,8 @@ public class FreeSqlPasswordResetStoreTests
         return fsql;
     }
 
-    private static FreeSqlPasswordResetStore CreateStore(IFreeSql fsql)
-        => new(fsql, NullLogger<FreeSqlPasswordResetStore>.Instance);
+    private static PasswordResetStore CreateStore(IFreeSql fsql)
+        => AccountTestHost.CreatePasswordResetStore(fsql);
 
     [Fact]
     public async Task SaveAndGet_RoundTrip()

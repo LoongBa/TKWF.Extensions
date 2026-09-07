@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using TKWF.Ext.Permissions.Abstractions;
@@ -30,6 +31,15 @@ namespace TKWF.Ext.Permissions
         {
             // upsert：DataService.SetGrantAsync 内部按三列业务键查存在 → 更新 IsGranted / 插入
             await _dataService.SetGrantAsync(permissionName, providerName, providerKey, isGranted, CancellationToken.None);
+        }
+
+        /// <summary>按 provider 批量读取已授予权限名集合（N+1 优化 V0.8.1）——委托 DataService 一次查询。</summary>
+        public async Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            var names = await _dataService.GetGrantedNamesByProviderAsync(
+                providerName, providerKeys, CancellationToken.None);
+            return names;
         }
     }
 }

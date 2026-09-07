@@ -163,6 +163,12 @@ namespace TKWF.Ext.Permissions
         private readonly IPermissionStore _store;
         private readonly IRoleProvider<TUserInfo> _roleProvider;
 
+        // V0.8.1 N+1 优化：授权集懒加载缓存（Scoped）——首次检查按 provider 批量加载已授予权限名，
+        // 后续检查内存判定（HashSet.Contains），消除"逐权限名 × 逐角色"单条查询放大。
+        // 关键语义：未认证用户不缓存（空 userId 直接拒绝，不落缓存）；角色变更需新请求（Scoped）生效。
+        private HashSet<string>? _userGrantedCache;
+        private HashSet<string>? _roleGrantedCache;
+
         public PermissionChecker(IPermissionDefinitionRepository repository, IPermissionStore store, IRoleProvider<TUserInfo> roleProvider)
         {
             _repository = repository;
@@ -175,9 +181,22 @@ namespace TKWF.Ext.Permissions
 
         public async Task<Dictionary<string, bool>> IsGrantedAsync(params string[] permissionNames)
         {
+            // 批量检查先解析一次用户上下文 + 加载授权集缓存——N 个权限名共享一轮查询（N+1 优化）
+            var current = DomainUserContext.CurrentAopUser as DomainUser<TUserInfo>;
+            var user = current?.UserInfo;
+            var userId = user?.UserIdString;
+            if (string.IsNullOrEmpty(userId))
+            {
+                // 未认证——全部 fail-closed 拒绝
+                var denied = new Dictionary<string, bool>();
+                foreach (var name in permissionNames) denied[name] = false;
+                return denied;
+            }
+
+            var (userGranted, roleGranted) = await LoadGrantedCacheAsync(userId, user!).ConfigureAwait(false);
             var result = new Dictionary<string, bool>();
             foreach (var name in permissionNames)
-                result[name] = await IsGrantedCoreAsync(name).ConfigureAwait(false);
+                result[name] = EvaluatePermission(name, userGranted, roleGranted);
             return result;
         }
 
@@ -194,49 +213,39 @@ namespace TKWF.Ext.Permissions
             if (string.IsNullOrEmpty(userId))
                 return false; // 未认证/无用户上下文 → 拒绝（与 AuthorityFilter 未认证拦截一致）
 
+            var (userGranted, roleGranted) = await LoadGrantedCacheAsync(userId, user!).ConfigureAwait(false);
+            return EvaluatePermission(permissionName, userGranted, roleGranted);
+        }
+
+        /// <summary>内存判定：Admin.All 系统权限（用户或角色）→ 放行；未定义 → 拒绝；用户级授予优先；回退角色级。</summary>
+        private bool EvaluatePermission(string permissionName, HashSet<string> userGranted, HashSet<string> roleGranted)
+        {
             // V0.7.0 W3：系统权限 Admin.All——用户或任一角色拥有 → 对所有权限放行
-            // （系统权限是隐式定义，不依赖贡献者声明，不走下方 _repository.Contains 校验）
-            if (await HasSystemPermissionAsync(userId, user!).ConfigureAwait(false))
+            if (userGranted.Contains(PermissionNames.AdminAll) || roleGranted.Contains(PermissionNames.AdminAll))
                 return true;
 
             // fail-closed：权限名未定义 → 拒绝
             if (!_repository.Contains(permissionName))
                 return false;
 
-            // 1. 用户级检查（显式授权优先）
-            var userResult = await _store.GetAsync(permissionName, "User", userId).ConfigureAwait(false);
-            if (userResult.IsGranted) return true; // 用户显式授予
-
-            // 2. 角色级检查（兜底——用户未授权时回退角色判定）
-            //    PermissionGrantResult 无 NotFound 状态，Denied 既表示"显式撤销"也表示"未设置"，
-            //    因此统一回退角色检查，不在此处短路。
-            var roles = await _roleProvider.GetRolesAsync(user!).ConfigureAwait(false);
-            foreach (var role in roles)
-            {
-                var roleResult = await _store.GetAsync(permissionName, "Role", role).ConfigureAwait(false);
-                if (roleResult.IsGranted) return true; // 任一角色授予即通过
-            }
-
-            return false; // 用户未授权 + 角色未授权 → fail-closed
+            // 用户级显式授予优先；回退角色级（任一角色授予即通过）
+            return userGranted.Contains(permissionName) || roleGranted.Contains(permissionName);
         }
 
-        /// <summary>
-        /// V0.7.0 W3：检查用户或任一角色是否拥有系统权限 <see cref="PermissionNames.AdminAll"/>。
-        /// 拥有者对所有已定义权限放行。用户级优先，其次任一角色。
-        /// </summary>
-        private async Task<bool> HasSystemPermissionAsync(string userId, TUserInfo user)
+        /// <summary>懒加载 + 缓存用户级/角色级授权集（N+1 优化：每请求每 provider 仅一次批量查询）。</summary>
+        private async Task<(HashSet<string> User, HashSet<string> Role)> LoadGrantedCacheAsync(
+            string userId, TUserInfo userInfo)
         {
-            var userSystem = await _store.GetAsync(PermissionNames.AdminAll, "User", userId).ConfigureAwait(false);
-            if (userSystem.IsGranted) return true;
+            if (_userGrantedCache == null)
+                _userGrantedCache = await _store.GetGrantedPermissionNamesAsync("User", [userId]).ConfigureAwait(false);
 
-            var roles = await _roleProvider.GetRolesAsync(user).ConfigureAwait(false);
-            foreach (var role in roles)
+            if (_roleGrantedCache == null)
             {
-                var roleSystem = await _store.GetAsync(PermissionNames.AdminAll, "Role", role).ConfigureAwait(false);
-                if (roleSystem.IsGranted) return true;
+                var roles = await _roleProvider.GetRolesAsync(userInfo).ConfigureAwait(false);
+                _roleGrantedCache = await _store.GetGrantedPermissionNamesAsync("Role", roles).ConfigureAwait(false);
             }
 
-            return false;
+            return (_userGrantedCache, _roleGrantedCache);
         }
     }
 
@@ -252,5 +261,9 @@ namespace TKWF.Ext.Permissions
 
         public Task SetAsync(string permissionName, string providerName, string providerKey, bool isGranted)
             => Task.CompletedTask;
+
+        public Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+            => Task.FromResult(new HashSet<string>(StringComparer.Ordinal));   // 恒拒绝——空授权集
     }
 }

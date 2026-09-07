@@ -226,6 +226,13 @@ CREATE TABLE [PermissionGrant] (
 - **W3 Admin.All 系统权限**：`PermissionNames.AdminAll`——用户/任一角色拥有即对所有已定义权限放行；种子预置 admin 角色 Admin.All（替代 V0.4.0 逐权限授予）。
 - **W4 消费方集成验证**：`_Tests/Extension.Permissions.Consumer` 激活 SG1b 验证控制器接口名在消费方记录 + 三钩子接线 + TryAdd 语义。
 
+### 1e. V0.8.1：权限检查 N+1 优化（已实施）
+
+- **问题**：`PermissionChecker` 每次检查逐权限名 × 逐角色单条查询（用户级 1 + 每角色 1）——批量 `IsGrantedAsync(params[])` 对 N 权限 × M 角色 = N×(2+M) 次 DB 往返（热点路径放大）。
+- **方案**：`IPermissionStore` 新增 `GetGrantedPermissionNamesAsync(providerName, providerKeys?)` 批量接口（返回已授予权限名集合）；`EntityDACPermissionStore` 委托 `PermissionGrantEntityDataService.GetGrantedNamesByProviderAsync`（一次查询）；`PermissionChecker` 懒加载 **Scoped 授权集缓存**（用户级 + 角色级各 1 次批量查询，后续检查 `HashSet.Contains` 内存判定）。
+- **语义保持**：fail-closed（未定义权限拒绝 / 未认证拒绝 / Admin.All 放行）不变；角色变更需新请求（Scoped）生效——与 Identity V0.3.0 `IdentityRoleProvider` Scoped 缓存一致。
+- **性能**：批量检查从 N×(2+M) → 常数 2 次批量查询（与权限名/角色数无关）；46→49 测试（+2 N+1 专项：批量查询次数 + 缓存命中）。
+
 ### 2. 编译期权限名校验（ADR38 D7）
 
 - **当前状态**：贡献者 `Define()` 是运行时方法，SG 看不到体内字符串 → 未知权限名只能运行时 fail-closed 兜底。
@@ -306,7 +313,7 @@ CREATE TABLE [PermissionGrant] (
 
 ### 6. 测试基线
 
-- **51/51 通过**（xunit.v3）：单元测试 47（初始化器 3 + PermissionChecker 8 + EntityDACPermissionStore 9 + DataService 9 + SeedInitializer 5 + Role/Admin.All 13）+ 消费方集成验证 4。
+- **49/49 通过**（xunit.v3）：单元测试 49（初始化器 3 + PermissionChecker 10——含 V0.8.1 N+1 专项 2 + EntityDACPermissionStore 9 + DataService 9 + SeedInitializer 5 + Role/Admin.All 13）+ 消费方集成验证 4。
 - 测试桩 `InMemoryEntityDac`/`StubDomainUser` 是各测试文件私有内部类——新增测试可复用但需自行内嵌。
 
 ### 7. 版本与发布

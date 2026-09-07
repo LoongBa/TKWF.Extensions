@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,7 +36,7 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
         return entities.Select(PermissionGrantEntityDto.FromEntity).ToList();
     }
 
-    /// <summary>按 provider（如 "User"/"Role"）查询所有授予记录。</summary>
+    /// <summary>按 provider 查询所有授予记录。</summary>
     [GenerateControllerMethod]
     public async Task<List<PermissionGrantEntityDto>> GetByProviderAsync(
         string providerName, string providerKey, CancellationToken ct = default)
@@ -44,6 +45,23 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
             .Where(g => g.ProviderName == providerName && g.ProviderKey == providerKey);
         var entities = await dac.ToListAsync(query, ct);
         return entities.Select(PermissionGrantEntityDto.FromEntity).ToList();
+    }
+
+    /// <summary>按 provider 批量查询已授予权限名集合（IsGranted == true）——N+1 优化（V0.8.1）。
+    /// <para>一次查询返回该 provider（限定 providerKeys 时按集合）下所有已授予的权限名——PermissionChecker
+    /// 据此加载授权集内存判定，替代"逐权限名 × 逐角色"的单条查询放大。</para></summary>
+    public async Task<HashSet<string>> GetGrantedNamesByProviderAsync(
+        string providerName, IEnumerable<string>? providerKeys, CancellationToken ct = default)
+    {
+        var query = dac.Query.Where(g => g.ProviderName == providerName && g.IsGranted);
+        if (providerKeys != null)
+        {
+            var keys = providerKeys as IReadOnlyCollection<string> ?? providerKeys.ToList();
+            if (keys.Count == 0) return new HashSet<string>(StringComparer.Ordinal);
+            query = query.Where(g => keys.Contains(g.ProviderKey));
+        }
+        var entities = await dac.ToListAsync(query, ct);
+        return new HashSet<string>(entities.Select(e => e.PermissionName), StringComparer.Ordinal);
     }
 
     /// <summary>查询指定权限名 + provider 的授予状态。</summary>

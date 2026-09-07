@@ -36,10 +36,27 @@ public class PermissionCheckerTests
             Grant(permissionName, providerName, providerKey, isGranted);
             return Task.CompletedTask;
         }
+
+        public Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            var keys = providerKeys == null ? null : new HashSet<string>(providerKeys);
+            var granted = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var kv in _grants)
+            {
+                if (!kv.Value) continue;
+                var parts = kv.Key.Split('|');
+                var (perm, prov, key) = (parts[0], parts[1], parts[2]);
+                if (prov != providerName) continue;
+                if (keys != null && !keys.Contains(key)) continue;
+                granted.Add(perm);
+            }
+            return Task.FromResult(granted);
+        }
     }
 
     /// <summary>构造含权限定义的 checker（默认仓库含 DefinedPermission）。</summary>
-    private static PermissionChecker<SimpleUserInfo> CreateChecker(StubPermissionStore? store = null, bool withDefinedPermission = true, IRoleProvider<SimpleUserInfo>? roleProvider = null)
+    private static PermissionChecker<SimpleUserInfo> CreateChecker(IPermissionStore? store = null, bool withDefinedPermission = true, IRoleProvider<SimpleUserInfo>? roleProvider = null)
     {
         var repository = new InMemoryPermissionDefinitionRepository();
         if (withDefinedPermission)
@@ -156,5 +173,62 @@ public class PermissionCheckerTests
         var checker = CreateChecker(store);
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
+    }
+
+    // ── V0.8.1 N+1 优化专项测试 ──
+
+    /// <summary>计数 stub：追踪 GetGrantedPermissionNamesAsync 调用次数——验证 N+1 消除 + Scoped 缓存。</summary>
+    private sealed class CountingPermissionStore : IPermissionStore
+    {
+        private readonly StubPermissionStore _inner = new();
+        public int BatchQueryCount { get; private set; }
+
+        public void Grant(string name, string provider, string key, bool granted)
+            => _inner.Grant(name, provider, key, granted);
+
+        public Task<PermissionGrantResult> GetAsync(string permissionName, string providerName, string providerKey)
+            => _inner.GetAsync(permissionName, providerName, providerKey);
+
+        public Task SetAsync(string permissionName, string providerName, string providerKey, bool isGranted)
+            => _inner.SetAsync(permissionName, providerName, providerKey, isGranted);
+
+        public Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            BatchQueryCount++;
+            return _inner.GetGrantedPermissionNamesAsync(providerName, providerKeys);
+        }
+    }
+
+    [Fact]
+    public async Task N1Optimization_BatchCheck_FewBatchQueriesRegardlessOfPermissionCount()
+    {
+        using var restore = SetAmbientUser(UserId);
+        var store = new CountingPermissionStore();
+        store.Grant(DefinedPermission, UserProvider, UserId, granted: true);
+        var checker = CreateChecker(store);
+
+        // 批量检查多个权限名——N+1 优化后每 provider 仅一次批量查询（用户级 + 角色级 = 2 次）
+        // 原实现：N 权限 × (用户级 1 + 每角色 N) 次单条查询——N 大时线性放大
+        var result = await checker.IsGrantedAsync(DefinedPermission, UnknownPermission, "P3", "P4", "P5");
+
+        Assert.True(result[DefinedPermission]);
+        Assert.All(result.Where(kv => kv.Key != DefinedPermission), kv => Assert.False(kv.Value));
+        Assert.Equal(2, store.BatchQueryCount);   // 仅 User + Role 两次批量查询，与权限名数量无关
+    }
+
+    [Fact]
+    public async Task N1Optimization_ScopedCache_SecondCheckNoExtraQuery()
+    {
+        using var restore = SetAmbientUser(UserId);
+        var store = new CountingPermissionStore();
+        store.Grant(DefinedPermission, UserProvider, UserId, granted: true);
+        var checker = CreateChecker(store);
+
+        Assert.True(await checker.IsGrantedAsync(DefinedPermission));
+        Assert.True(await checker.IsGrantedAsync(DefinedPermission));   // 二次检查——Scoped 缓存命中
+        Assert.False(await checker.IsGrantedAsync(UnknownPermission));  // fail-closed——未定义权限拒绝
+
+        Assert.Equal(2, store.BatchQueryCount);   // 3 次检查仅 2 次批量查询（User + Role 各 1，缓存命中不重复）
     }
 }

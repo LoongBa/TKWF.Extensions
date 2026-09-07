@@ -96,6 +96,10 @@ public class PermissionExtensionInitializerTests
 
         public Task SetAsync(string permissionName, string providerName, string providerKey, bool isGranted)
             => Task.CompletedTask;
+
+        public Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+            => Task.FromResult(new HashSet<string>(StringComparer.Ordinal));
     }
 
     /// <summary>测试专用 IPermissionChecker：标记消费方自定义实现。 </summary>

@@ -9,26 +9,28 @@ namespace TKWF.Ext.Identity
 {
     /// <summary>
     /// 用户存储实现——经 <see cref="UserEntityDataService"/> + <see cref="UserRoleEntityDataService"/> +
-    /// <see cref="RoleEntityDataService"/>（SG1/xCodeGen 生成的 DataService）委托持久化，遵循数据访问红线
-    /// （2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
+    /// <see cref="RoleEntityDataService"/> + <see cref="UserRoleViewDataService"/>（SG1/xCodeGen 生成的 DataService
+    /// + VEntity 手写只读 DataService）委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：
+    /// 扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
+    /// <para>V0.2.0：GetRolesAsync 改用 <see cref="UserRoleViewDataService"/>（VEntity JOIN 单查询，替代两步查询）。</para>
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
     /// </summary>
     internal sealed class UserStore : IUserStore
     {
         private readonly UserEntityDataService _userDataService;
         private readonly UserRoleEntityDataService _userRoleDataService;
-        private readonly RoleEntityDataService _roleDataService;
+        private readonly UserRoleViewDataService _userRoleViewDataService;
         private readonly ILogger<UserStore> _logger;
 
         public UserStore(
             UserEntityDataService userDataService,
             UserRoleEntityDataService userRoleDataService,
-            RoleEntityDataService roleDataService,
+            UserRoleViewDataService userRoleViewDataService,
             ILogger<UserStore> logger)
         {
             _userDataService = userDataService ?? throw new ArgumentNullException(nameof(userDataService));
             _userRoleDataService = userRoleDataService ?? throw new ArgumentNullException(nameof(userRoleDataService));
-            _roleDataService = roleDataService ?? throw new ArgumentNullException(nameof(roleDataService));
+            _userRoleViewDataService = userRoleViewDataService ?? throw new ArgumentNullException(nameof(userRoleViewDataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -85,11 +87,18 @@ namespace TKWF.Ext.Identity
         {
             try
             {
-                // 跨表：先查 UserRole 表拿 RoleId 列表，再查 Role 表
-                var roleIds = await _userRoleDataService.GetRoleIdsByUserIdAsync(userId, ct);
-                if (roleIds.Count == 0) return Array.Empty<RoleEntity>();
-                var roles = await _roleDataService.EntitySelectAsync(r => roleIds.Contains(r.Id), 0, 1000, ct: ct);
-                return roles;
+                // V0.2.0 VEntity：跨表 JOIN（IdentityUserRole → IdentityRole）单查询下推 DB，替代两步查询
+                // （先查 RoleId 集合 → 再按集合查 Role）。视图行映射回 RoleEntity，接口签名不变。
+                var views = await _userRoleViewDataService.GetRolesByUserIdAsync(userId, ct);
+                return views.Select(v => new RoleEntity
+                {
+                    Id = v.Id,
+                    Name = v.Name,
+                    DisplayName = v.DisplayName,
+                    IsSystemRole = v.IsSystemRole,
+                    CreateTime = v.CreateTime,
+                    UpdateTime = v.UpdateTime
+                }).ToList();
             }
             catch (Exception ex) { _logger.LogWarning(ex, "用户角色读取失败: UserId={UserId}", userId); return Array.Empty<RoleEntity>(); }
         }

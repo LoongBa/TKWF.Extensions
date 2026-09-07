@@ -32,31 +32,8 @@ partial class UserNotificationEntityDataService(IDomainUser user, IEntityDAC<Use
             (page - 1) * pageSize, pageSize,
             q => q.OrderByDescending(n => n.CreateTime), ct);
     }
-
-    /// <summary>按通知名过滤分页（跨表两步：先经 Notification DataService 解析匹配 Id 集合，再查 UserNotification）。
-    /// <para>解决单实体 DAC 无法跨表 Join 的限制——由调用方 Store 注入 NotificationEntityDataService。</para>
-    /// <para>适用范围：通知名为稳定标识符（如 "OrderCreated"），单名发布量通常低（千级内）——两步查询内存开销可忽略。
-    /// 若单名发布量达万级，应考虑 VEntity（见 v4.9.102 VEntity 方案：跨表 JOIN 单查询下推 DB，但需 Service 包装 + 生产建视图）。</para></summary>
-    public async Task<List<UserNotificationEntity>> GetListPagedByNameAsync(
-        long userId, int page, int pageSize, string name, NotificationEntityDataService notificationDataService, CancellationToken ct = default)
-    {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 10;
-
-        // 第一步：按 name 投影取 Notification.Id 集合（SQL 级投影仅取 Id——避免拉取 DataJson 等大字段到内存）
-        var ids = await notificationDataService.SelectAsync(
-            n => n.Id,
-            predicate: n => n.Name == name,
-            limit: int.MaxValue,
-            ct: ct);
-        if (ids.Count == 0) return new List<UserNotificationEntity>();
-
-        // 第二步：按 Id 集合过滤 UserNotification
-        return await EntitySelectAsync(
-            n => n.UserId == userId && ids.Contains(n.NotificationId),
-            (page - 1) * pageSize, pageSize,
-            q => q.OrderByDescending(n => n.CreateTime), ct);
-    }
+    // V0.2.0：GetListPagedByNameAsync 已移除——按通知名过滤改用 UserNotificationViewDataService
+    // （VEntity JOIN 单查询，替代两步查询）——见 UserNotificationViewDataService.GetPagedByNameAsync
 
     /// <summary>未读计数。</summary>
     public async Task<long> CountUnreadByUserIdAsync(long userId, CancellationToken ct = default)

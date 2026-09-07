@@ -131,16 +131,15 @@ TKWF.Ext.Notifications
 - 站内通知核心：发布/收件箱/订阅/定义注册 + 事件驱动先例 + 通道抽象（inbox-only）
 - Oracle 评审 PASS WITH CONDITIONS（C1-C5 修订 + m1-m7 处理）
 
-### V0.2.0（候选，能力完善）
-- **Email 通道**：先建 `TKWF.Ext.Emailing.Abstractions`（仅抽 `IEmailSender`+`EmailMessage`，C3），`EmailNotifier` 调 `IEmailSender`
-- **SignalR 通道**：实时推送（`Clients.User(userId).SendAsync`，需评估 AspNetCore.SignalR）
-- **用户偏好路由**：按用户偏好选择通道（UseChannels 用户级覆盖）
-- **逐用户权限门控**：收件人级权限过滤（需 Permissions 批量 API）
+### V0.2.0（已实施：VEntity 跨表查询升级）
+- **`GetListAsync(name)` VEntity 化**：新增 `UserNotificationView`（VEntity，JOIN `UserNotification` → `Notification` 单查询下推 DB），替代两步查询（先按 name 取 Notification.Id 集合再按集合过滤）——消除两次往返 + IN 子句，顺带返回通知名/严重级别/显示名（GraphQL 路径可用）
+- 手写只读 DataService `UserNotificationViewDataService`（`DomainReadOnlyDataServiceBase` + `IEntityReadOnlyDAC<T>`，红线合规）
+- Store 接口签名不变（视图行映射回 `UserNotificationEntity`），消费方零迁移
+- **生产部署要求**：框架 SyncViewsAsync 只跑开发环境建视图；**生产需 DBA 手动执行 ViewSql**（PG 默认方言，SQL Server 等需补变体）
 
 ### 远期 / 评估
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）
 - 通知模板渲染（复用 Emailing V0.2.0 TextTemplates / PrintTemplates）
 - 批量派发优化（RecipientBatchSize 落地）
-- **跨表查询 VEntity 化**（评估）：收件箱按通知名过滤当前用两步查询（投影取 Id 已优化）——若单名发布量达万级，改 `vw_UserNotificationWithNotification` VEntity（JOIN 单查询下推 DB，v4.9.102 方案：VEntity 不生成 DataService/REST 端点，需手写只读 Service 继承 `DomainReadOnlyDataServiceBase` 注入 `IEntityReadOnlyDAC<T>` + 生产建 SQL View）
 
 **文档信息**: V0.1.0 | 2026-09-06 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md（主框架私有）

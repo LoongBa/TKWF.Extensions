@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -7,23 +8,24 @@ using Microsoft.Extensions.Logging;
 namespace TKWF.Ext.Notifications
 {
     /// <summary>
-    /// 收件箱存储实现——经 <see cref="UserNotificationEntityDataService"/> + <see cref="NotificationEntityDataService"/>
-    /// （SG1 DataService）委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：不直接注入 IFreeSql。
+    /// 收件箱存储实现——经 <see cref="UserNotificationEntityDataService"/> + <see cref="UserNotificationViewDataService"/>
+    /// （SG1 DataService + VEntity 手写只读 DataService）委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：不直接注入 IFreeSql。
+    /// <para>V0.2.0：按通知名过滤改用 <see cref="UserNotificationViewDataService"/>（VEntity JOIN 单查询，替代两步查询）。</para>
     /// <para>异常静默对齐既有扩展：查询失败返回空/0，写入失败记录 Warning。</para>
     /// </summary>
     internal sealed class NotificationStore : INotificationStore
     {
         private readonly UserNotificationEntityDataService _userNotificationDataService;
-        private readonly NotificationEntityDataService _notificationDataService;
+        private readonly UserNotificationViewDataService _userNotificationViewDataService;
         private readonly ILogger<NotificationStore> _logger;
 
         public NotificationStore(
             UserNotificationEntityDataService userNotificationDataService,
-            NotificationEntityDataService notificationDataService,
+            UserNotificationViewDataService userNotificationViewDataService,
             ILogger<NotificationStore> logger)
         {
             _userNotificationDataService = userNotificationDataService ?? throw new ArgumentNullException(nameof(userNotificationDataService));
-            _notificationDataService = notificationDataService ?? throw new ArgumentNullException(nameof(notificationDataService));
+            _userNotificationViewDataService = userNotificationViewDataService ?? throw new ArgumentNullException(nameof(userNotificationViewDataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -40,9 +42,18 @@ namespace TKWF.Ext.Notifications
             {
                 if (string.IsNullOrEmpty(name))
                     return await _userNotificationDataService.GetListPagedByUserIdAsync(userId, page, pageSize, ct);
-                // 按通知名过滤：跨表两步（Notification Id 集合 → UserNotification）
-                return await _userNotificationDataService.GetListPagedByNameAsync(
-                    userId, page, pageSize, name, _notificationDataService, ct);
+                // V0.2.0 VEntity：按通知名过滤跨表 JOIN 单查询（UserNotification → Notification），替代两步查询。
+                // 视图行映射回 UserNotificationEntity，接口签名不变；Name/Severity/DisplayName 由 GraphQL 路径消费。
+                var views = await _userNotificationViewDataService.GetPagedByNameAsync(userId, page, pageSize, name, ct);
+                return views.Select(v => new UserNotificationEntity
+                {
+                    Id = v.Id,
+                    UserId = v.UserId,
+                    NotificationId = v.NotificationId,
+                    State = v.State,
+                    ReadTime = v.ReadTime,
+                    CreateTime = v.CreateTime
+                }).ToList();
             }
             catch (Exception ex) { _logger.LogWarning(ex, "通知列表查询失败: UserId={UserId}", userId); return Array.Empty<UserNotificationEntity>(); }
         }

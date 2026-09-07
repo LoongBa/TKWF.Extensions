@@ -55,6 +55,9 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         services.TryAddScoped<NotificationStore>();
         services.TryAddScoped<INotificationStore>(sp => sp.GetRequiredService<NotificationStore>());
 
+        // V0.2.0 VEntity：UserNotificationViewDataService 手写（xCodeGen 跳过 VEntity DataService 模板→不自动注册），手动 TryAddScoped
+        services.TryAddScoped<UserNotificationViewDataService>();
+
         // 订阅管理（Scoped）
         services.TryAddScoped<NotificationSubscriptionStore>();
         services.TryAddScoped<INotificationSubscriptionManager>(sp => sp.GetRequiredService<NotificationSubscriptionStore>());

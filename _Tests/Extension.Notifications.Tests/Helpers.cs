@@ -30,12 +30,19 @@ internal static class NotificationTestHost
             .Build();
     }
 
-    /// <summary>同步三张通知表结构（Notification / UserNotification / NotificationSubscription）。</summary>
+    /// <summary>同步三张通知表结构（Notification / UserNotification / NotificationSubscription）+ VEntity 视图。</summary>
     public static void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<NotificationEntity>();
         fsql.CodeFirst.SyncStructure<UserNotificationEntity>();
         fsql.CodeFirst.SyncStructure<NotificationSubscriptionEntity>();
+        // V0.2.0 VEntity：建真实视图（SQLite 方言，来自 UserNotificationView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync
+        fsql.Ado.ExecuteNonQuery(
+            @"CREATE VIEW IF NOT EXISTS ""vw_UserNotificationView"" AS
+SELECT un.""Id"", un.""UserId"", un.""NotificationId"", un.""State"", un.""ReadTime"", un.""CreateTime"",
+       n.""Name"", n.""Severity"", n.""DisplayName""
+FROM ""UserNotification"" un
+INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
     }
 
     /// <summary>
@@ -60,6 +67,9 @@ internal static class NotificationTestHost
         services.AddScoped<NotificationEntityDataService>();
         services.AddScoped<UserNotificationEntityDataService>();
         services.AddScoped<NotificationSubscriptionEntityDataService>();
+        // V0.2.0 VEntity：IEntityReadOnlyDAC 只读契约 + 手写只读 DataService（模拟 SG 不生成 VEntity DataService，手动注册）
+        services.AddScoped<IEntityReadOnlyDAC<UserNotificationView>>(sp => new FreeSqlEntityDAC<UserNotificationView>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<UserNotificationViewDataService>();
         configure?.Invoke(services);
         new NotificationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         return services.BuildServiceProvider();

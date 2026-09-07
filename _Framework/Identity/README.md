@@ -177,13 +177,19 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 - 凭据验证（PasswordHasher）+ 用户/角色 CRUD + 角色分配
 - Admin 系统角色种子（幂等）
 
-### V0.2.0（规划）
+### V0.2.0（已实施：VEntity 跨表查询升级）
+- **`GetRolesAsync` VEntity 化**：新增 `UserRoleView`（VEntity，JOIN `IdentityUserRole` → `IdentityRole` 单查询下推 DB），替代两步查询（先查 RoleId 集合再查 Role）——消除两次往返 + IN 子句，顺带返回角色完整字段（含 CreateTime/UpdateTime）
+- 手写只读 DataService `UserRoleViewDataService`（`DomainReadOnlyDataServiceBase` + `IEntityReadOnlyDAC<T>`，红线合规）
+- Store 接口签名不变（视图行映射回 `RoleEntity`），消费方零迁移
+- **生产部署要求**：框架 SyncViewsAsync 只跑开发环境建视图；**生产需 DBA 手动执行 ViewSql**（PG 默认方言，SQL Server 等需补变体）
+
+### V0.3.0（规划）
 - **`IAccountPasswordManager` 适配器**（`IPasswordResetFlow`/`IAccountLockoutPolicy` 默认实现已由 `TKWF.Ext.Account` V0.1.0 提供）
 - 与 Permissions 深度集成（自定义 `IRoleProvider` 实时查库）
 - 多租户用户隔离
 - 用户注册/登录 API 层（复用框架 `AuthController`）
 
-### V0.3.0（规划）
+### V0.4.0（规划）
 - 用户管理 UI
 - 用户审计追踪
 - 批量导入/导出

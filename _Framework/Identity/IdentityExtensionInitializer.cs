@@ -39,6 +39,9 @@ namespace TKWF.Ext.Identity
             services.TryAddScoped<IUserStore, UserStore>();
             services.TryAddScoped<IRoleStore, RoleStore>();
             services.TryAddScoped<IUserManager, UserManager>();
+
+            // V0.2.0 VEntity：UserRoleViewDataService 手写（xCodeGen 跳过 VEntity DataService 模板→不自动注册），手动 TryAddScoped
+            services.TryAddScoped<UserRoleViewDataService>();
         }
 
         /// <summary>

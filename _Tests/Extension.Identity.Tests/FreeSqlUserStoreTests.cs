@@ -18,9 +18,7 @@ public class FreeSqlUserStoreTests
             .UseConnectionString(FreeSql.DataType.Sqlite, "Data Source=:memory:")
             .UseAutoSyncStructure(true)
             .Build();
-        fsql.CodeFirst.SyncStructure<UserEntity>();
-        fsql.CodeFirst.SyncStructure<RoleEntity>();
-        fsql.CodeFirst.SyncStructure<UserRoleEntity>();
+        IdentityTestHost.SyncSchema(fsql);
         return fsql;
     }
 

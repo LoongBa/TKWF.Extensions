@@ -45,12 +45,18 @@
   </ItemGroup>
 
   <!--
-    _PushToRefs: 编译后自动推送 DLL 到本仓库 build\refs\，供消费者 DLL 模式引用。
-    对齐主框架 _TKWF 的 _PushToRefs 机制（消费者经 $(TKWExtRoot)build\refs\ 引用扩展 DLL）。
+    _PushToRefs: 编译后自动推送 DLL 到 refs\，供消费者 DLL 模式引用。
+    对齐主框架 _TKWF 的 _PushToRefs 机制。
+
+    V4.9.106：推送目标改为 %TKWF_FRAMEWORK_PATH%\build\refs（发布包环境变量，真实复制）——
+    扩展 DLL 与主框架 DLL 统一进部署包 build\refs，消费端统一经环境变量引用（去 junction）；
+    未设置环境变量时 fallback 本仓库 build\refs（独立构建场景，消费者经 $(TKWExtRoot) 引用）。
   -->
   <Target Name="_PushToRefs" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(NoBuild)' != 'true'">
     <PropertyGroup>
-      <_RefsDir>$(MSBuildThisFileDirectory)build\refs\</_RefsDir>
+      <!-- V4.9.106：优先发布包环境变量（去软链、真实复制），fallback 本仓库 build\refs -->
+      <_RefsDir Condition="'$(TKWF_FRAMEWORK_PATH)' != ''">$([System.IO.Path]::GetFullPath('$(TKWF_FRAMEWORK_PATH)'))\build\refs\</_RefsDir>
+      <_RefsDir Condition="'$(_RefsDir)' == ''">$(MSBuildThisFileDirectory)build\refs\</_RefsDir>
     </PropertyGroup>
     <MakeDir Directories="$(_RefsDir)" />
     <Copy SourceFiles="$(TargetPath)"

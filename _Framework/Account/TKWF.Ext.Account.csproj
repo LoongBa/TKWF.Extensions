@@ -23,6 +23,9 @@
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
 
+    <!-- V0.3.0 拆包（用户裁定 B）：账户契约抽象（IAccountPasswordManager）→ Abstractions（ADR48 D7） -->
+    <ProjectReference Include="..\Account.Abstractions\TKWF.Ext.Account.Abstractions.csproj" />
+
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 

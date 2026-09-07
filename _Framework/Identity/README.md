@@ -183,13 +183,16 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 - Store 接口签名不变（视图行映射回 `RoleEntity`），消费方零迁移
 - **生产部署要求**：框架 SyncViewsAsync 只跑开发环境建视图；**生产需 DBA 手动执行 ViewSql**（PG 默认方言，SQL Server 等需补变体）
 
-### V0.3.0（规划）
-- **`IAccountPasswordManager` 适配器**（`IPasswordResetFlow`/`IAccountLockoutPolicy` 默认实现已由 `TKWF.Ext.Account` V0.1.0 提供）
-- 与 Permissions 深度集成（自定义 `IRoleProvider` 实时查库）
-- 多租户用户隔离
-- 用户注册/登录 API 层（复用框架 `AuthController`）
+### V0.3.0（已实施：能力完善）
+- **开箱密码重置适配器 `IdentityPasswordManager`**（`IAccountPasswordManager`，组装方案 + 可配置迭代——`IOptions<DomainOptions>.Auth.Pbkdf2Iterations` 与框架单一来源）——消费方启用 Identity + Account 零手写获得密码重置落地
+- **Permissions 角色实时查库 `IdentityRoleProvider<TUserInfo>`**（`IRoleProvider`，经 VEntity JOIN 链路 + Scoped 缓存消除 PermissionChecker 2N 放大；`AddScoped` 覆盖默认，双白名单时生效）——角色变更即时生效，无需重新登录
+- **注册/登录 API `IdentityAuthService`**（普通 `[GenerateController]` + `DomainServiceBase`；`POST /auth/register` + `POST /auth/login`，匿名守卫双控）——明文注册/登录开箱即用（框架 AuthController 仅 SecurePassword）
+- **登录衔接基类 `IdentityUserHelperBase<TUserInfo>`**（预实现 `OnLoginByPasswordAsync` 调 `IUserManager`，消费方仅实现 `CreateUserInfoFromEntity` 工厂——样板 171→8 行）
+- **框架侧配套**：`DomainUserHelperBase.OnNewGuestSessionCreatedAsync` abstract→virtual + 默认 guest（主框架独立提交）
+- 拆包 `TKWF.Ext.Account.Abstractions`（`IAccountPasswordManager` 契约，ADR48 D7）；`UserEntity` 加 NormalizedUserName 唯一索引（重名竞态 DB 兜底）
+- **生产部署**：注册端点重名预检 + DB 唯一索引双保险；IdentityUser 表结构变更（唯一索引）需 DBA 迁移
 
 ### V0.4.0（规划）
-- 用户管理 UI
-- 用户审计追踪
-- 批量导入/导出
+- **`IAccountPasswordManager` 适配器对接 Account V0.2.0 通知渠道**（重置码邮件）
+- 与 Permissions 深度集成（逐用户权限门控）
+- 多租户用户隔离

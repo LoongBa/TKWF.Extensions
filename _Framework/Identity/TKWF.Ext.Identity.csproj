@@ -23,6 +23,11 @@
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFRoot)_Framework\Utility\TKWF.Utility.csproj" />
 
+    <!-- V0.3.0 依赖倒置（ADR48 D7，L2 门控合规——只引 .Abstractions 不引实现）：
+         Account.Abstractions（IAccountPasswordManager 密码落地）+ Permissions.Abstractions（IRoleProvider 角色解析） -->
+    <ProjectReference Include="..\Account.Abstractions\TKWF.Ext.Account.Abstractions.csproj" />
+    <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 

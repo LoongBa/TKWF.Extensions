@@ -72,32 +72,18 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 
 自动注册：`IAccountLockoutStore`（`FreeSqlAccountLockoutStore`）+ `IPasswordResetStore`（`FreeSqlPasswordResetStore`）+ `IAccountLockoutPolicy`（`FreeSqlAccountLockoutPolicy`）+ `IPasswordResetFlow`（`DefaultPasswordResetFlow`）。
 
-### 2. 注册密码落地适配器（必需）
+### 2. 注册密码落地适配器
 
-扩展不提供 `IAccountPasswordManager` 默认实现——消费方实现并注册（适配 Identity 的 `IUserManager`）：
+**V0.3.0 起（Identity 扩展提供开箱实现）**：`IAccountPasswordManager` 接口迁至 `TKWF.Ext.Account.Abstractions`（命名空间保持 `TKWF.Ext.Account`，ADR48 D7）；Identity V0.3.0 提供 `IdentityPasswordManager` 默认实现（组装方案 + 可配置迭代）——消费方启用 Identity + Account 双白名单即获得密码重置落地，**零手写**：
 
 ```csharp
-// 消费方：实现 IAccountPasswordManager
-public sealed class IdentityPasswordManager : IAccountPasswordManager
-{
-    private readonly IUserManager _userManager; // Identity 扩展注入
-    public IdentityPasswordManager(IUserManager userManager) => _userManager = userManager;
-
-    public async Task<bool> UserExistsAsync(string userName, CancellationToken ct)
-        => await _userManager.FindByNameAsync(userName, ct) is not null;
-
-    public async Task<bool> SetPasswordAsync(string userName, string newClientHash, string salt, CancellationToken ct)
-    {
-        var user = await _userManager.FindByNameAsync(userName, ct);
-        if (user is null) return false;
-        await _userManager.ChangePasswordAsync(user.Id, newClientHash, ct);
-        return true;
-    }
-}
-
-// 消费方 ConfigureServices 中注册
-services.AddScoped<IAccountPasswordManager, IdentityPasswordManager>();
+// Identity 扩展自动注册（TryAddScoped）——Account 未注册默认实现，Identity 注册即生效
+// 消费方覆盖须 AddScoped（扩展钩子先于消费方 OnRegisterDomainServices，TryAdd 被跳过）
 ```
+
+> **组装方案说明（2026-09-07 实证）**：`IdentityPasswordManager.SetPasswordAsync(userName, newClientHash, salt)` 将 SecurePassword 语义的 clientHash(hex) + salt(hex) 组装为 PasswordHasher 格式 `"{iterations}.{base64salt}.{base64hash}"`——登录走标准 Password 模式（`VerifyCredentialsAsync` 明文验证）。迭代次数从 `IOptions<DomainOptions>.Auth.Pbkdf2Iterations` 注入（与框架 RequestChallenge 单一来源）。**勿用** `ChangePasswordAsync(userId, newClientHash)` 直接落地（会把 hex 当明文二次散列，登录无法验证）。
+
+**未启用 Identity 扩展时**：消费方仍须自行实现 `IAccountPasswordManager`（适配自有用户存储）：
 
 ### 3. 账户锁定（框架自动调用）
 
@@ -184,9 +170,9 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 - 密码重置默认实现（`IPasswordResetFlow`——随机码/过期/幂等消费/防用户枚举）
 - 双实体 SG1 化 + FreeSql 持久化
 
-### V0.2.0（规划）
+### V0.2.0（已实施：Identity 深度集成）
+- **`IAccountPasswordManager` 开箱适配器**（Identity V0.3.0 提供 `IdentityPasswordManager`——组装方案 + 可配置迭代；接口迁 `Account.Abstractions`）
 - 重置码通知渠道（对接 Emailing 扩展发送邮件）
-- 与 Identity 深度集成（开箱 `IAccountPasswordManager` 适配器）
 - 多因素认证（MFA）
 
 ### V0.3.0（规划）

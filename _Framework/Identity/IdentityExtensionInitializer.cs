@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Account;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Identity
 {
@@ -42,6 +44,14 @@ namespace TKWF.Ext.Identity
 
             // V0.2.0 VEntity：UserRoleViewDataService 手写（xCodeGen 跳过 VEntity DataService 模板→不自动注册），手动 TryAddScoped
             services.TryAddScoped<UserRoleViewDataService>();
+
+            // V0.3.0：Account 密码重置落地适配器（Account 不注册默认实现，Identity 注册即生效；
+            // 消费方覆盖须 AddScoped——扩展钩子先于消费方 OnRegisterDomainServices，TryAdd 被跳过）
+            services.TryAddScoped<IAccountPasswordManager, IdentityPasswordManager>();
+
+            // V0.3.0：Permissions 角色实时查库（AddScoped 非 TryAdd——覆盖 Permissions 默认 DefaultRoleProvider，
+            // 仅当双白名单启用时生效；Scoped 缓存消除 PermissionChecker 双调用/批量放大）
+            services.AddScoped<IRoleProvider<TUserInfo>, IdentityRoleProvider<TUserInfo>>();
         }
 
         /// <summary>

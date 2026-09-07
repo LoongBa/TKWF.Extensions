@@ -13,6 +13,7 @@ namespace TKWF.Ext.Identity
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
     [Table("IdentityUser")]
+    [FreeSql.DataAnnotations.Index("UX_IdentityUser_NormalizedUserName", nameof(NormalizedUserName), IsUnique = true)]  // P1-1（Oracle）：重名竞态 DB 兜底
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class UserEntity
     {

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Account</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.Account.Abstractions</PackageId>
+    <Description>TKWF 扩展抽象：账户管理契约（IAccountPasswordManager 密码落地抽象）——依赖倒置（ADR48 D7），替代"扩展引扩展"耦合</Description>
+  </PropertyGroup>
+
+  <!-- 纯契约项目：IAccountPasswordManager 仅用 BCL（string/CancellationToken/Task）——零框架引用（Oracle P2-4） -->
+
+</Project>

@@ -27,6 +27,9 @@
   <Folder Name="/_Framework/Identity/">
     <Project Path="_Framework/Identity/TKWF.Ext.Identity.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Account.Abstractions/">
+    <Project Path="_Framework/Account.Abstractions/TKWF.Ext.Account.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Account/">
     <Project Path="_Framework/Account/TKWF.Ext.Account.csproj" />
   </Folder>

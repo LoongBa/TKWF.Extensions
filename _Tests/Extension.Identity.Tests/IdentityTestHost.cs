@@ -53,6 +53,23 @@ INNER JOIN ""IdentityRole"" r ON ur.""RoleId"" = r.""Id""");
         var userRoleDataService = new UserRoleEntityDataService(new StubDomainUser(), userRoleDac);
         return new RoleStore(roleDataService, userRoleDataService, NullLogger<RoleStore>.Instance);
     }
+
+    /// <summary>创建 UserManager（UserStore + RoleStore 组合，V0.3.0 测试用）。</summary>
+    public static IUserManager CreateUserManager(IFreeSql fsql)
+    {
+        var store = CreateUserStore(fsql);
+        var roleStore = CreateRoleStore(fsql);
+        return new UserManager(store, roleStore,
+            Microsoft.Extensions.Options.Options.Create(new IdentityOptions()),
+            NullLogger<UserManager>.Instance);
+    }
+
+    /// <summary>创建 IdentityAuthService（V0.3.0 注册/登录测试用）。</summary>
+    public static IdentityAuthService CreateAuthService(IFreeSql fsql)
+    {
+        var manager = CreateUserManager(fsql);
+        return new IdentityAuthService(new StubDomainUser(), manager);
+    }
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>

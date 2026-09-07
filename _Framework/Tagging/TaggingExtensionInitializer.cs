@@ -54,7 +54,10 @@ public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUser
         services.TryAddSingleton<TagExtractionPipeline>();
         // 4. 业务门面 ITagService（消费方经 Use<ITagService>() 调用；实现类 TagService 可从 DI 解析）
         services.TryAddSingleton<ITagService, TagService>();
-        // 5. 存储扩展占位（V0.3.0 实施）：ITagRuleStore / ITagHitStore / ITagAnalysisService 后续注册
+        // 5. V0.3.0 存储扩展（持久化）：规则/命中/分析——Store 委托 SG1 DataService（红线合规，TryAddScoped 消费方可覆盖）
+        services.TryAddScoped<ITagRuleStore, FreeSqlTagRuleStore>();
+        services.TryAddScoped<ITagHitStore, FreeSqlTagHitStore>();
+        services.TryAddScoped<ITagAnalysisService, FreeSqlTagAnalysisService>();
     }
 
     /// <summary>Tagging 无全局过滤器。</summary>

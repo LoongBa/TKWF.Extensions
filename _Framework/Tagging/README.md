@@ -1,8 +1,10 @@
 # TKWF.Ext.Tagging 标签存储扩展技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V4.3 | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（存储扩展——规则持久化 + 命中落库 + 聚合分析） | **框架**: .NET 10
 
-**核心约束**: 零分配 (Zero-Allocation), Native AOT 兼容, 异步友好, 逻辑解耦
+**定位**（ADR52 V0.2.0 瘦身）：标签算法已回归 `TKW.Framework.Utility.Tags`（主框架）；本扩展为**标签存储扩展**——V0.3.0 落地 `ITagRuleStore`/`ITagHitStore`/`ITagAnalysisService` 三接口持久化（SG1 实体 + FreeSql，Store 委托 DataService 红线合规）。
+
+**核心约束**: 存储扩展数据访问走 DataService 委托（禁裸 ORM/IEntityDAC）；实体 `[DomainGenerateCode]` 不指定 UserType（ADR42 D4）；审计字段 DateTime（UTC——SQLite DateTimeOffset 不可靠实证）
 
 ---
 
@@ -112,6 +114,14 @@ public class AnalysisService(TagService tagService)
 2. 在宿主程序入口，直接调用泛型方法替换底层引擎：`builder.UseTagService<JiebaTokenizer>()`。
 
 ## 六、 架构演进路线 (Architecture Roadmap)
+
+### 0. V0.3.0 持久化（已实施，2026-09-07）
+
+- **三接口落地**：`ITagRuleStore`（规则 CRUD——幂等创建/业务键更新/按维度查询，供给 `ITagService.LoadRules`）+ `ITagHitStore`（批量单事务落库 + 分页 + 原文快照）+ `ITagAnalysisService`（频次 TopN / 趋势分桶 / 维度分布）
+- **SG1 实体**：`TagRuleEntity`（表 TagRule，唯一约束 UX_TagRule_Dimension_TagName_Pattern）+ `TagHitRecordEntity`（表 TagHit，索引 IX_TagHit_Dimension_Time/IX_TagHit_TagName）；`[DomainGenerateCode]` 不指定 UserType（ADR42 D4）
+- **红线合规**：3 Store 委托 DataService 业务方法（聚合在 DataService 内内存 GroupBy——DAC 接口边界所致，WHERE 下推 + `Take(100_000)` 上限）
+- **关键发现**：FreeSql SQLite 对 DateTime 本地化存取（UTC 12:00 存 → 20:00 Unspecified 读）——`BucketKey` 对 Unspecified 视为已 UTC；测试时间断言用容错（对齐 Notifications `AssertRecent`）；生产 PG 存 UTC 无偏移
+- Oracle 方案 + 代码双审 PASS WITH CONDITIONS（方案 6 P1 + 4 P2 / 代码 2 CONDITION + 6 P2 全部落实）；16 测试 + 全量 577 回归
 
 ### 1. 配置文件层级化 (Hierarchical Configuration)
 

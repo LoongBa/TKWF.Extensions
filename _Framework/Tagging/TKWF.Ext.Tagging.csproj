@@ -15,7 +15,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>TKWF.Ext.Tagging</PackageId>
-    <Description>TKWF 扩展：标签存储扩展（标签算法来自 TKWF.Utility.Tags，ADR52；规则/命中持久化 V0.3.0 实施）</Description>
+    <Description>TKWF 扩展：标签存储扩展（标签算法来自 TKWF.Utility.Tags，ADR52；规则/命中持久化 + 聚合分析 V0.3.0）</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +23,37 @@
     <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <!-- ADR52：标签算法引擎在运行时工具库 TKWF.Utility（TKW.Framework.Utility.Tags） -->
     <ProjectReference Include="$(TKWFRoot)_Framework\Utility\TKWF.Utility.csproj" />
+
+    <!-- SG1 化（V0.3.0 接线）：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+
+    <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
+    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+
+    <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
+
+  <!-- SG1 化：实体使用 FreeSql [Column]/[Index] 特性（FreeSql.DataAnnotations，Oracle P1-5） -->
+  <ItemGroup>
+    <PackageReference Include="FreeSql" />
+  </ItemGroup>
+
+  <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- SG1 化：xCodeGen 配置路径（Oracle P1-5：对齐 DataDictionary 模板） -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\tagging.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
 
   <!-- V4.9.79：单元测试访问 internal 默认实现 -->
   <ItemGroup>

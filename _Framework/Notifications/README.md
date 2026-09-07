@@ -141,5 +141,6 @@ TKWF.Ext.Notifications
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）
 - 通知模板渲染（复用 Emailing V0.2.0 TextTemplates / PrintTemplates）
 - 批量派发优化（RecipientBatchSize 落地）
+- **跨表查询 VEntity 化**（评估）：收件箱按通知名过滤当前用两步查询（投影取 Id 已优化）——若单名发布量达万级，改 `vw_UserNotificationWithNotification` VEntity（JOIN 单查询下推 DB，v4.9.102 方案：VEntity 不生成 DataService/REST 端点，需手写只读 Service 继承 `DomainReadOnlyDataServiceBase` 注入 `IEntityReadOnlyDAC<T>` + 生产建 SQL View）
 
 **文档信息**: V0.1.0 | 2026-09-06 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md（主框架私有）

@@ -157,6 +157,8 @@ _Tests/Extension.{扩展名}.Tests/
 >
 > **标准数据访问路径**：`DataService（DomainDataServiceBase/DomainReadOnlyDataServiceBase）→ IEntityDAC<T>（ORM 无关契约）→ FreeSqlEntityDAC/EFCoreEntityDAC（实现层，UoW 事务绑定）`。扩展只依赖 DataService，不触碰 IEntityDAC/ORM。
 >
+> **跨表查询（VEntity，2026-09-07 实施）**：扩展需要跨表 JOIN 时——**多对一**（N 行映射 → 1 行主表，JOIN 后行数不变、主键透传唯一稳定）用 **VEntity**（SQL View 实体）：`[Table(Name="vw_...", DisableSyncStructure=true)]` + `[DomainGenerateCode(IsView=true, ViewSql=<PG>, ViewSqlSQLite=<SQLite>, ExposeGraphqlQuery=true)]` + `partial class`（不手写 `IDomainViewEntity`/`IsFromPersistentSource`）。xCodeGen **跳过 VEntity 的 DataService/Conditions 模板**（Engine.cs L42-46）→ 手写只读 DataService（`DomainReadOnlyDataServiceBase<TEntity,TDto>` 2 参数版 + 注入 `IEntityReadOnlyDAC<T>`，绝不用 `IEntityDAC<T>`）+ Initializer `TryAddScoped` 手动注册（VEntity 不自动注册）；不标 `[GenerateController(FromDataService=true)]`（Store 内部能力经门面暴露，GraphQL 经 `ExposeGraphqlQuery` 自动）。**接口不变策略**：视图行映射回原实体，对外接口签名不变。**生产部署**：SyncViewsAsync 只跑开发环境建视图，**生产需 DBA 手动执行 ViewSql**（写入使用指南）。**一对多主从聚合**（DataDictionary/PrintTemplates 带缓存）**不用 VEntity**（行膨胀 + Id 造假键 + 缓存优势），保持两步查询。先例：Identity `vw_UserRoleView` + Notifications `vw_UserNotificationView`（见主框架 `docs/03_扩展模块/VEntity跨表查询升级-开发方案.md`）。
+>
 > **待整改扩展清单**（2026-09-07 盘点，逐个按难度分批改造）：
 > - 规则 1 违规（裸 IFreeSql）：Settings/Emailing/BlobStoring（低）→ Account/DataDictionary/PrintTemplates（中）→ Identity/AuditLogging/DataPort/Notifications（高）
 > - 规则 2 违规（直接 IEntityDAC）：Permissions `EntityDACPermissionStore`（委托 DataService 整改）
@@ -225,3 +227,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-01 | — | v4.9.85："发现即启用"改为"发现不自动启用"，消费方须 `[TKWFEnabledExtension]` 白名单声明；§8 补充白名单概念 |
 | 2026-09-07 | — | §8 新增「构建/编译操作纪律」——dll 占用时用 `dotnet build-server shutdown` 优雅关闭编译服务器，不强杀进程 |
 | 2026-09-07 | — | §8 新增「数据访问红线」（用户裁定 2026-09-07）——扩展禁裸 ORM / 禁直接 IEntityDAC / 应发挥组装优势；标准路径 = DataService → IEntityDAC → 实现层；待整改清单 10+1 扩展分批改造 |
+| 2026-09-07 | — | §8 新增「跨表查询 VEntity」实践——多对一 JOIN 用 VEntity（ViewSql 双方言 + 手写只读 DataService + Initializer 手动注册 + 生产 DBA 建视图）；一对多主从聚合保持两步；先例 Identity/Notifications |

@@ -15,7 +15,7 @@
 | **Permissions**              | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）          | `v0.7.0`                | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
 | **Permissions.Abstractions** | V0.1.0          | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       | —                                        | —（并入 Permissions）                    |
 | **Permissions.Validation**   | V0.8.0          | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）                      | —                       | —                                        | —（并入 Permissions）                    |
-| **Identity**                 | V0.1.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证                     | `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
+| **Identity**                 | V0.2.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.2.0）| `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
 | **Account**                  | V0.1.0          | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）                       | `Account/v0.1.0`        | [README](./_Framework/Account/README.md)       | [指南](./docs/Account/账户管理扩展-使用指南.md) |
 | **Navigation**               | V0.1.0          | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.0`     | [README](./_Framework/Navigation/README.md) | [指南](./docs/Navigation/导航扩展-使用指南.md)  |
 | **AuditLogging**             | V0.1.0          | 审计日志 FreeSql 存储 + SG1 实体                                         | `AuditLogging/v0.1.0`   | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
@@ -27,7 +27,7 @@
 | **PrintTemplates**           | V0.1.0          | 打印模板引擎与版本化（Scriban 沙箱渲染 + Draft/Active/Archived 生命周期）| `PrintTemplates/v0.1.0` | [README](./_Framework/PrintTemplates/README.md) | [指南](./docs/PrintTemplates/打印模板扩展-使用指南.md) |
 | **Dashboard**                | V0.1.0          | 仪表盘数据服务（Metrics 展示层——JSON 描述符 + Widget 数据查询；不引入图表库）| `Dashboard/v0.1.0` | [README](./_Framework/Dashboard/README.md) | [指南](./docs/Dashboard/仪表盘扩展-使用指南.md) |
 | **DataPort**                 | V0.1.0          | 数据导入导出（三层架构——核心运行库+MiniExcel Provider+SG1 持久化；FileHash 幂等）| `DataPort/v0.1.0` | [README](./_Framework/DataPort/README.md) | [指南](./docs/DataPort/数据导入导出扩展-使用指南.md) |
-| **Notifications**            | V0.1.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）| — | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
+| **Notifications**            | V0.2.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.2.0）| — | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 

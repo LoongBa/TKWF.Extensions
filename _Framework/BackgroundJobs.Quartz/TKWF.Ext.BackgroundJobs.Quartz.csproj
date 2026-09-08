@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.BackgroundJobs.Quartz</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.BackgroundJobs.Quartz</PackageId>
+    <Description>TKWF 扩展：Quartz AdoJobStore 一键封装（12 表自动建表 + 集群配置，配置级封装不碰 SQL）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\BackgroundJobs.Quartz\TKWF.BackgroundJobs.Quartz.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+  </ItemGroup>
+
+  <!-- Quartz 4.0.0 单一包（含 Extensions.DependencyInjection/Hosting/序列化——net10.0 ONLY） -->
+  <ItemGroup>
+    <PackageReference Include="Quartz" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.BackgroundJobs.Quartz.Tests" />
+  </ItemGroup>
+
+</Project>

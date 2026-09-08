@@ -54,6 +54,12 @@
   <Folder Name="/_Framework/Notifications/">
     <Project Path="_Framework/Notifications/TKWF.Ext.Notifications.csproj" />
   </Folder>
+  <Folder Name="/_Framework/BackgroundJobs/">
+    <Project Path="_Framework/BackgroundJobs/TKWF.Ext.BackgroundJobs.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/BackgroundJobs.Quartz/">
+    <Project Path="_Framework/BackgroundJobs.Quartz/TKWF.Ext.BackgroundJobs.Quartz.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -105,5 +111,11 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Notifications.Tests/">
     <Project Path="_Tests/Extension.Notifications.Tests/TKWF.Ext.Notifications.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.BackgroundJobs.Tests/">
+    <Project Path="_Tests/Extension.BackgroundJobs.Tests/TKWF.Ext.BackgroundJobs.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.BackgroundJobs.Quartz.Tests/">
+    <Project Path="_Tests/Extension.BackgroundJobs.Quartz.Tests/TKWF.Ext.BackgroundJobs.Quartz.Tests.csproj" />
   </Folder>
 </Solution>

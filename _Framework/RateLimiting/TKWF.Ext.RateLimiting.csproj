@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.RateLimiting</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.RateLimiting</PackageId>
+    <Description>TKWF 扩展：Web 层限流接线（ASP.NET Core AddRateLimiter 中间件——固定/滑动窗口/令牌桶 + IP/用户分区 + 429/Retry-After + TKWF:RateLimiting 配置节；与 Domain 层 [RateLimit] AOP 双层互补；零第三方依赖）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- net10 内置共享框架（Microsoft.AspNetCore.RateLimiting + Http.Abstractions 均含于此——零第三方 NuGet 依赖） -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

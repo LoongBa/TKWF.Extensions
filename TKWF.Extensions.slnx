@@ -60,6 +60,15 @@
   <Folder Name="/_Framework/BackgroundJobs.Quartz/">
     <Project Path="_Framework/BackgroundJobs.Quartz/TKWF.Ext.BackgroundJobs.Quartz.csproj" />
   </Folder>
+  <Folder Name="/_Framework/HealthCheck/">
+    <Project Path="_Framework/HealthCheck/TKWF.Ext.HealthCheck.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/RateLimiting/">
+    <Project Path="_Framework/RateLimiting/TKWF.Ext.RateLimiting.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/SecurityLog/">
+    <Project Path="_Framework/SecurityLog/TKWF.Ext.SecurityLog.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -117,5 +126,14 @@
   </Folder>
   <Folder Name="/_Tests/Extension.BackgroundJobs.Quartz.Tests/">
     <Project Path="_Tests/Extension.BackgroundJobs.Quartz.Tests/TKWF.Ext.BackgroundJobs.Quartz.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.HealthCheck.Tests/">
+    <Project Path="_Tests/Extension.HealthCheck.Tests/TKWF.Ext.HealthCheck.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.RateLimiting.Tests/">
+    <Project Path="_Tests/Extension.RateLimiting.Tests/TKWF.Ext.RateLimiting.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.SecurityLog.Tests/">
+    <Project Path="_Tests/Extension.SecurityLog.Tests/TKWF.Ext.SecurityLog.Tests.csproj" />
   </Folder>
 </Solution>

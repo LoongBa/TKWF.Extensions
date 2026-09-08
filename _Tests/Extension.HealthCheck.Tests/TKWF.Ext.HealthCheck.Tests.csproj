@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.HealthCheck.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <!-- 端点集成测试：最小 host（WebApplication + Kestrel loopback 临时端口）——共享框架提供
+       IConfiguration/DI/Http，无需 TestHost/第三方包 -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+    <Using Include="TKW.Framework.Enumerations" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 本仓库扩展（HealthCheck）+ 主框架（TKWFRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="..\..\_Framework\HealthCheck\TKWF.Ext.HealthCheck.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.RateLimiting.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <!-- TestServer（HTTP 级限流验证）。VersionOverride：CPM 未收录 ASP.NET Core 测试包——按 CSP 规则
+         本条目显式覆盖版本（对齐 Microsoft.Extensions 10.0.11），不改 Directory.Packages.props（no CPM 接线） -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost"  />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+    <Using Include="TKW.Framework.Enumerations" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 本仓库扩展 + 主框架（HTTP 级测试需 ASP.NET Core 共享框架） -->
+    <ProjectReference Include="..\..\_Framework\RateLimiting\TKWF.Ext.RateLimiting.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

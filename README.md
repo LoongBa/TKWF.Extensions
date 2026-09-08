@@ -28,10 +28,15 @@
 | **Dashboard**                | V0.1.0          | 仪表盘数据服务（Metrics 展示层——JSON 描述符 + Widget 数据查询；不引入图表库）| `Dashboard/v0.1.0` | [README](./_Framework/Dashboard/README.md) | [指南](./docs/Dashboard/仪表盘扩展-使用指南.md) |
 | **DataPort**                 | V0.1.0          | 数据导入导出（三层架构——核心运行库+MiniExcel Provider+SG1 持久化；FileHash 幂等）| `DataPort/v0.1.0` | [README](./_Framework/DataPort/README.md) | [指南](./docs/DataPort/数据导入导出扩展-使用指南.md) |
 | **Notifications**            | V0.2.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.2.0）| — | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
+| **BackgroundJobs**          | V0.1.0          | 后台任务持久化增强（执行历史 `JobExecution` + 业务结果 `JobResult` 追踪，经统一 `IBackgroundJobExecutionListener` 三路径自动落库）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs/README.md) | [指南](./docs/BackgroundJobs/后台任务持久化扩展-使用指南.md) |
+| **BackgroundJobs.Quartz**   | V0.1.0          | Quartz AdoJobStore 一键封装（`UseTkfwAdoJobStore` 12 表自动建表/集群配置）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs.Quartz/README.md) | —（并入 BackgroundJobs） |
+| **HealthCheck**             | V0.1.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + 自定义探针扩展点）| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
+| **RateLimiting**            | V0.1.0          | Web 层限流接线（ASP.NET Core AddRateLimiter + IP/用户分区 + 429/Retry-After；与 Domain `[RateLimit]` 双层防护）| — | [README](./_Framework/RateLimiting/README.md) | [指南](./docs/RateLimiting/限流扩展-使用指南.md) |
+| **SecurityLog**             | V0.1.0          | 安全日志（登录/登出/改密/重置/锁定/注册/挑战事件 + IP/UA/结果，Domain AOP 自动采集）| — | [README](./_Framework/SecurityLog/README.md) | [指南](./docs/SecurityLog/安全日志扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **551 测试全绿**——`dotnet test` 零失败。（数据访问红线整改后 10 扩展 374 + 其它 177）
+> 全量 **709 测试全绿**（22 测试项目）——`dotnet test` 零失败。（BackgroundJobs 追踪 + 三件套基础设施 + 数据访问红线整改后）
 
 ---
 
@@ -62,7 +67,12 @@ _TKWF.Extensions/
 │   ├── BlobStoring/                 # 二进制存储（本地文件系统 + FreeSql 记录）
 │   ├── Emailing/                    # SMTP/MailKit 邮件发送
 │   ├── DataDictionary/              # 数据字典集中管理
-│   └── Tagging/                     # 标签存储扩展（算法已回归 TKW.Framework.Utility.Tags）
+│   ├── Tagging/                     # 标签存储扩展（算法已回归 TKW.Framework.Utility.Tags）
+│   ├── BackgroundJobs/              # 后台任务持久化增强（执行历史 + 业务结果追踪）
+│   ├── BackgroundJobs.Quartz/       # Quartz AdoJobStore 一键封装
+│   ├── HealthCheck/                 # 系统健康探测（/health 端点接线）
+│   ├── RateLimiting/                # Web 层限流接线（IP/用户分区 + 429）
+│   └── SecurityLog/                 # 安全日志（登录/改密/锁定等安全事件）
 ├── _Tests/                          # 测试（一组扩展一个测试项目）
 │   ├── Extension.Permissions.Tests/
 │   ├── Extension.Permissions.Consumer/    # 消费方集成验证

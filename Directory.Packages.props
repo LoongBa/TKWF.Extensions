@@ -49,5 +49,7 @@
     <PackageVersion Include="Quartz" Version="4.0.0" />
     <!-- Microsoft.Data.Sqlite — Quartz 4.0 UseSqlite 内部需要的 SQLite 驱动元数据 -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <!-- Microsoft.AspNetCore.TestHost — ASP.NET Core 测试宿主（RateLimiting 测试 HTTP 级验证，对齐 Microsoft.Extensions 10.0.11） -->
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.HealthCheck</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.HealthCheck</PackageId>
+    <Description>TKWF 扩展：系统健康探测（接线型——net10 内置 HealthChecks 聚合 + /health 端点映射 + TKWF:HealthCheck 配置节；不内置探针，消费方经 AddCheck 注册）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
+    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      net10 内置 HealthChecks：经 Microsoft.AspNetCore.App 共享框架引用（零 NuGet 包、零第三方依赖）——
+      覆盖 Microsoft.Extensions.Diagnostics.HealthChecks（IHealthCheck/AddHealthChecks）+
+      Microsoft.AspNetCore.Http.Abstractions（IEndpointRouteBuilder）+
+      Microsoft.AspNetCore.Diagnostics.HealthChecks（MapHealthChecks/HealthCheckOptions，ASP.NET Core 内置）。
+      纯内存接线型扩展：无 SG1/无持久化（对齐 Metrics/Dashboard 瘦身模式，不引 Utility）。
+    -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal（如有） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.HealthCheck.Tests" />
+  </ItemGroup>
+
+</Project>

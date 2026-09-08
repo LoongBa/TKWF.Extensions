@@ -72,6 +72,9 @@
   <Folder Name="/_Framework/Approval/">
     <Project Path="_Framework/Approval/TKWF.Ext.Approval.csproj" />
   </Folder>
+  <Folder Name="/_Framework/OrganizationUnit/">
+    <Project Path="_Framework/OrganizationUnit/TKWF.Ext.OrganizationUnit.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -141,5 +144,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Approval.Tests/">
     <Project Path="_Tests/Extension.Approval.Tests/TKWF.Ext.Approval.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.OrganizationUnit.Tests/">
+    <Project Path="_Tests/Extension.OrganizationUnit.Tests/TKWF.Ext.OrganizationUnit.Tests.csproj" />
   </Folder>
 </Solution>

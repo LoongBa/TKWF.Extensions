@@ -33,10 +33,11 @@
 | **HealthCheck**             | V0.1.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + 自定义探针扩展点）| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
 | **RateLimiting**            | V0.1.0          | Web 层限流接线（ASP.NET Core AddRateLimiter + IP/用户分区 + 429/Retry-After；与 Domain `[RateLimit]` 双层防护）| — | [README](./_Framework/RateLimiting/README.md) | [指南](./docs/RateLimiting/限流扩展-使用指南.md) |
 | **SecurityLog**             | V0.1.0          | 安全日志（登录/登出/改密/重置/锁定/注册/挑战事件 + IP/UA/结果，Domain AOP 自动采集）| — | [README](./_Framework/SecurityLog/README.md) | [指南](./docs/SecurityLog/安全日志扩展-使用指南.md) |
+| **Approval**                | V0.1.0          | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 完成事件回调；不依赖外部工作流引擎）| — | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **709 测试全绿**（22 测试项目）——`dotnet test` 零失败。（BackgroundJobs 追踪 + 三件套基础设施 + 数据访问红线整改后）
+> 全量 **739 测试全绿**（23 测试项目）——`dotnet test` 零失败。（Approval 审批引擎 + 三件套基础设施 + 数据访问红线整改后）
 
 ---
 
@@ -72,7 +73,8 @@ _TKWF.Extensions/
 │   ├── BackgroundJobs.Quartz/       # Quartz AdoJobStore 一键封装
 │   ├── HealthCheck/                 # 系统健康探测（/health 端点接线）
 │   ├── RateLimiting/                # Web 层限流接线（IP/用户分区 + 429）
-│   └── SecurityLog/                 # 安全日志（登录/改密/锁定等安全事件）
+│   ├── SecurityLog/                 # 安全日志（登录/改密/锁定等安全事件）
+│   └── Approval/                    # 轻量审批引擎（流程定义/实例/任务 + 状态机）
 ├── _Tests/                          # 测试（一组扩展一个测试项目）
 │   ├── Extension.Permissions.Tests/
 │   ├── Extension.Permissions.Consumer/    # 消费方集成验证

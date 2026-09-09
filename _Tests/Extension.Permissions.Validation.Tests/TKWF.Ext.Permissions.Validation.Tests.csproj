@@ -28,7 +28,7 @@
          + 主框架 Domain（RequirePermissionAttribute 基类 DomainFlagAttribute + IUserInfo） -->
     <ProjectReference Include="..\..\_Framework\Permissions.Validation\TKWF.Ext.Permissions.Validation.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
   </ItemGroup>
 
 </Project>

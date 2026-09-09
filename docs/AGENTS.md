@@ -8,7 +8,7 @@
 
 - 仓库：TKWF.Extensions — TKWF 业务扩展包仓库
 - 定位：`TKWF.Ext.*` 扩展（Tags/Permissions/Navigation 等）独立开发、独立版本，不进入主框架 slnx
-- 主框架：`../_TKWF/`（TKW.Framework，经 `$(TKWFRoot)` ProjectReference 引用）
+- 主框架：`../_TKWF/`（TKW.Framework，经 `$(TKWFSourceRoot)` ProjectReference 引用）
 - 扩展进度：主框架私有 `docs/03_扩展模块/总览和跟踪.md`（扩展迭代/跟踪不公开；公开仓库存代码/指南）
 - 本仓库文档：`docs/`（指南/模板/规则）
 
@@ -32,7 +32,7 @@
 ## 核心规则（简要）
 
 - **扩展 = 独立单元**：项目 + 测试 + 文档 + 版本各自独立；`TKWF.Extensions.slnx` 统一注册，**不进** `TKW.Framework.slnx`
-- **跨仓库引用**：主框架用 `$(TKWFRoot)`（`Directory.Build.props` 定义 = `../_TKWF/`）；扩展间用 ProjectReference（编译期依赖）
+- **跨仓库引用**：主框架用 `$(TKWFSourceRoot)`（`Directory.Build.props` 定义 = `../_TKWF/`）；扩展间用 ProjectReference（编译期依赖）
 - **MinVer 版本**：`V{major}.{minor}.{patch}`，tag 前缀 `v`，扩展版本独立于主框架
 - **扩展 ADR 命名**：`ADR-{扩展名称}-{title}.md`（不走主框架 ADR01-39 序号），三问必填
 - **Commit 纪律**：避免频繁，积累后统一提交（一次迭代 1-4 个）

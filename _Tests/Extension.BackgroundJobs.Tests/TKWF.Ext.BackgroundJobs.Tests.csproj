@@ -34,13 +34,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 本仓库扩展（BackgroundJobs）+ 主框架（TKWFRoot 定义于 ../Directory.Build.props） -->
+    <!-- 本仓库扩展（BackgroundJobs）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\BackgroundJobs\TKWF.Ext.BackgroundJobs.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\BackgroundJobs\TKWF.BackgroundJobs.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\BackgroundJobs\TKWF.BackgroundJobs.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
   </ItemGroup>
 
 </Project>

@@ -24,12 +24,14 @@
   </PropertyGroup>
 
   <!--
-    定义 TKWFRoot：相对路径指向主框架 _TKWF（与本仓库同级），不依赖环境变量。
-    扩展包通过 $(TKWFRoot)_Framework\... ProjectReference 引用主框架源码。
+    定义 TKWFSourceRoot：相对路径指向主框架 _TKWF（与本仓库同级），不依赖环境变量。
+    扩展包通过 $(TKWFSourceRoot)_Framework\... ProjectReference 引用主框架源码。
+    TKWFDeployPath：部署根（从环境变量 TKWFDeployPath 规范化，Dll 模式 refs 使用）。
     （对齐 DMP-Lite 的跨仓库引用模式）
   -->
   <PropertyGroup>
-    <TKWFRoot>$([MSBuild]::EnsureTrailingSlash('$(MSBuildThisFileDirectory)..\_TKWF\'))</TKWFRoot>
+    <TKWFSourceRoot>$([MSBuild]::EnsureTrailingSlash('$(MSBuildThisFileDirectory)..\_TKWF\'))</TKWFSourceRoot>
+    <TKWFDeployPath>$([MSBuild]::EnsureTrailingSlash('$(TKWFDeployPath)'))</TKWFDeployPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -48,14 +50,14 @@
     _PushToRefs: 编译后自动推送 DLL 到 refs\，供消费者 DLL 模式引用。
     对齐主框架 _TKWF 的 _PushToRefs 机制。
 
-    V4.9.106：推送目标改为 %TKWF_FRAMEWORK_PATH%\build\refs（发布包环境变量，真实复制）——
+    V4.9.106：推送目标改为部署根 build\refs（TKWFDeployPath，真实复制）——
     扩展 DLL 与主框架 DLL 统一进部署包 build\refs，消费端统一经环境变量引用（去 junction）；
     未设置环境变量时 fallback 本仓库 build\refs（独立构建场景，消费者经 $(TKWExtRoot) 引用）。
   -->
   <Target Name="_PushToRefs" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(NoBuild)' != 'true'">
     <PropertyGroup>
-      <!-- V4.9.106：优先发布包环境变量（去软链、真实复制），fallback 本仓库 build\refs -->
-      <_RefsDir Condition="'$(TKWF_FRAMEWORK_PATH)' != ''">$([System.IO.Path]::GetFullPath('$(TKWF_FRAMEWORK_PATH)'))\build\refs\</_RefsDir>
+      <!-- 优先部署根环境变量（去软链、真实复制），fallback 本仓库 build\refs -->
+      <_RefsDir Condition="'$(TKWFDeployPath)' != ''">$([System.IO.Path]::GetFullPath('$(TKWFDeployPath)'))\build\refs\</_RefsDir>
       <_RefsDir Condition="'$(_RefsDir)' == ''">$(MSBuildThisFileDirectory)build\refs\</_RefsDir>
     </PropertyGroup>
     <MakeDir Directories="$(_RefsDir)" />

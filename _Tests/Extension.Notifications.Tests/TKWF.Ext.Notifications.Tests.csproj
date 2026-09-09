@@ -38,13 +38,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 本仓库扩展（Notifications + Permissions.Abstractions）+ 主框架（TKWFRoot 定义于 ../Directory.Build.props） -->
+    <!-- 本仓库扩展（Notifications + Permissions.Abstractions）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Notifications\TKWF.Ext.Notifications.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
   </ItemGroup>
 
 </Project>

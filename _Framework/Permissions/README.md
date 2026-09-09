@@ -289,7 +289,7 @@ CREATE TABLE [PermissionGrant] (
 
 - **业务方法只写在 `.cs` 骨架**，禁止改 `.g.cs`（会被覆盖）。
 - `.g.cs` 缺失时 Debug 构建自动补全；Release/无 `_XCG_ConfigPath` 时不生成（骨架文件已入库不受影响）。
-- 手动强制重新生成：`dotnet run --project "$TKWFRoot_xCodeGen\xCodeGen.Cli" -- gen -j .xCodeGen\permissions.xCodeGen.json --force`。
+- 手动强制重新生成：`dotnet run --project "$TKWFSourceRoot_xCodeGen\xCodeGen.Cli" -- gen -j .xCodeGen\permissions.xCodeGen.json --force`。
 
 ### 2. DataService 关键约束
 

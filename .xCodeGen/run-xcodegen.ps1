@@ -1,11 +1,11 @@
 # xCodeGen 统一生成脚本（扩展仓库）
 #
 # 设计（D1 集中化，用户裁定 2026-09-07）：
-# - 二进制/模板：集中在 %TKWF_FRAMEWORK_PATH%\xCodeGen\（环境变量指向框架部署根，各项目零复制）
+# - 二进制/模板：集中在 %TKWFDeployPath%\xCodeGen\（环境变量指向框架部署根，各项目零复制）
 # - JSON 配置：集中在 .xCodeGen\extensions\{扩展名}.xCodeGen.json（本仓库根共享目录）
 # - 用法：pwsh .\.xCodeGen\run-xcodegen.ps1            # 生成全部扩展
 #          pwsh .\.xCodeGen\run-xcodegen.ps1 -Ext permissions   # 生成单个扩展
-# - 前置：主框架 xCodeGen.Cli 已发布到 %TKWF_FRAMEWORK_PATH%\xCodeGen\
+# - 前置：主框架 xCodeGen.Cli 已发布到 %TKWFDeployPath%\xCodeGen\
 #         （dotnet build _xCodeGen\xCodeGen.Cli -c Release 触发 _DeployToXCodeGen）
 param(
     [string]$Ext = "",          # 扩展名（不带 .xCodeGen.json 后缀）；空 = 全部
@@ -15,12 +15,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot   # 扩展仓库根
 $configDir = Join-Path $PSScriptRoot 'extensions'
-$frameworkPath = [Environment]::GetEnvironmentVariable('TKWF_FRAMEWORK_PATH', 'Machine')
+$frameworkPath = [Environment]::GetEnvironmentVariable('TKWFDeployPath', 'Machine')
 if ([string]::IsNullOrWhiteSpace($frameworkPath)) {
-    $frameworkPath = [Environment]::GetEnvironmentVariable('TKWF_FRAMEWORK_PATH', 'User')
+    $frameworkPath = [Environment]::GetEnvironmentVariable('TKWFDeployPath', 'User')
 }
 if ([string]::IsNullOrWhiteSpace($frameworkPath)) {
-    throw "环境变量 TKWF_FRAMEWORK_PATH 未设置（Machine/User）——无法定位 xCodeGen 二进制/模板"
+    throw "环境变量 TKWFDeployPath 未设置（Machine/User）——无法定位 xCodeGen 二进制/模板"
 }
 
 $cliExe = Join-Path $frameworkPath 'xCodeGen\xCodeGen.Cli.exe'

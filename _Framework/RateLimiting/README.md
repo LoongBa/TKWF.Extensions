@@ -84,7 +84,7 @@ app.UseRateLimiter();
 - **IP 解析**：经反向代理/负载均衡时 `RemoteIpAddress` 为代理 IP——需配置 `ForwardedHeaders`（`app.UseForwardedHeaders`）
 - **429 对齐**：`RejectionStatusCode` 默认 429 对齐 Domain 层 `RateLimitException`（429/RATE_LIMITED 语义）；`Retry-After` 默认 true 写响应头
 - **不包含**：Redis 分布式限流（v0.2.0）、策略管理 API（运行时动态改策略，v0.2.0）、Domain 层改动（主框架 `EnforceAsync` AuthenticationException 留白不动）
-- **不改主框架、不做 slnx 接线**：本扩展独立构建（经项目根 `Directory.Build.props` `TKWFRoot` 跨仓库引用）
+- **不改主框架、不做 slnx 接线**：本扩展独立构建（经项目根 `Directory.Build.props` `TKWFSourceRoot` 跨仓库引用）
 
 ---
 

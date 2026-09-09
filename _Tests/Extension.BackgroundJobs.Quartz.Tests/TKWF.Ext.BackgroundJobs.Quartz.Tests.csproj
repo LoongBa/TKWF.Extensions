@@ -33,8 +33,8 @@
   <ItemGroup>
     <!-- 本仓库扩展（BackgroundJobs.Quartz）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\BackgroundJobs.Quartz\TKWF.Ext.BackgroundJobs.Quartz.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\BackgroundJobs.Quartz\TKWF.BackgroundJobs.Quartz.csproj" />
-    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\BackgroundJobs.Quartz\TKWF.BackgroundJobs.Quartz.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
   </ItemGroup>
 
 </Project>

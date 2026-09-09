@@ -33,7 +33,7 @@
 | **HealthCheck**             | V0.1.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + 自定义探针扩展点）| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
 | **RateLimiting**            | V0.1.0          | Web 层限流接线（ASP.NET Core AddRateLimiter + IP/用户分区 + 429/Retry-After；与 Domain `[RateLimit]` 双层防护）| — | [README](./_Framework/RateLimiting/README.md) | [指南](./docs/RateLimiting/限流扩展-使用指南.md) |
 | **SecurityLog**             | V0.1.0          | 安全日志（登录/登出/改密/重置/锁定/注册/挑战事件 + IP/UA/结果，Domain AOP 自动采集）| — | [README](./_Framework/SecurityLog/README.md) | [指南](./docs/SecurityLog/安全日志扩展-使用指南.md) |
-| **Approval**                | V0.1.0          | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 完成事件回调；不依赖外部工作流引擎）| — | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
+| **Approval**                | V0.2.0          | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 委派/加签/抄送/超时自动处理（v0.2.0）+ 完成事件回调；不依赖外部工作流引擎）| — | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
 | **OrganizationUnit**        | V0.1.0          | 组织单元（树形部门/团队/分组 + 物化路径 Level/Path + 循环防护/删除保护 + 用户关联 + 事务包裹）| — | [README](./_Framework/OrganizationUnit/README.md) | [指南](./docs/OrganizationUnit/组织单元扩展-使用指南.md) |
 | **Calendar**                | V0.1.0          | 日历/排程（日历+事件 CRUD + 重复规则子集（Utility 收纳：DAILY/WEEKLY/MONTHLY/YEARLY + 月末钳制 + 绝对索引）+ occurrence 查询/合并 + UTC 契约）| — | [README](./_Framework/Calendar/README.md) | [指南](./docs/Calendar/日历排程扩展-使用指南.md) |
 | **FileManagement**          | V0.1.0          | 文件管理（目录树 + 文件元数据 SHA256/去重 + 上传 10 步安全链（防穿越/白名单/大小/ContentType 服务端推导）+ 依赖倒置 BlobStoring.Abstractions）| — | [README](./_Framework/FileManagement/README.md) | [指南](./docs/FileManagement/文件管理扩展-使用指南.md) |
@@ -42,7 +42,7 @@
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **1144 测试全绿**（27 测试项目）——`dotnet test` 零失败。（FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + Approval 审批引擎 + 三件套基础设施 + BlobStoring 安全修复后）
+> 全量 **1186 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 委派/加签/抄送/超时 + FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + 三件套基础设施 + BlobStoring 安全修复后）
 
 ---
 

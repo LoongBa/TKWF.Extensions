@@ -1,8 +1,8 @@
 # TKWF.Ext.Approval 轻量审批引擎扩展技术规范
 
-**状态**: P1 差异化模块 (Differentiation Module) | **版本**: V0.1.0 | **框架**: .NET 10
+**状态**: P1 差异化模块 (Differentiation Module) | **版本**: V0.2.0 | **框架**: .NET 10
 
-**核心约束**: 三实体模型（流程定义/审批实例/审批任务）+ 内置自建状态机（Draft→Pending→Approved/Rejected/Withdrawn）+ 审批人解析抽象（User 内置 + Role 消费方）+ 完成事件回调（ILocalEventBus post-commit）+ 顺序步骤链 + 或签/会签；不依赖外部工作流引擎（Elsa/WorkflowCore）。
+**核心约束**: 三实体模型（流程定义/审批实例/审批任务）+ 内置自建状态机（Draft→Pending→Approved/Rejected/Withdrawn）+ 审批人解析抽象（User 内置 + Role 消费方）+ 完成事件回调（ILocalEventBus post-commit）+ 顺序步骤链 + 或签/会签 + **v0.2.0 深化：委派（Flowable 两阶段）/加签（运行时追加）/抄送（仅通知）/超时自动处理（5 动作）**；不依赖外部工作流引擎（Elsa/WorkflowCore）。
 
 ---
 
@@ -142,7 +142,7 @@ public class MyRoleResolver(IEntityDAC<UserRoleEntity> dac) : IApprovalAssigneeR
 
 ---
 
-## 六、边界（V0.1.0）
+## 六、边界（V0.2.0）
 
 ### 包含
 
@@ -151,15 +151,62 @@ public class MyRoleResolver(IEntityDAC<UserRoleEntity> dac) : IApprovalAssigneeR
 - ✅ 完成事件回调（ILocalEventBus）
 - ✅ 审批人解析抽象（User 内置 + Role 消费方）
 - ✅ 唯一约束防重复 + 终态释放
+- ✅ **委派**（Flowable 两阶段——DelegateTaskAsync/ResolveTaskAsync，原审批人保留，委派中不可 Complete）
+- ✅ **加签**（AppendApproverAsync——Participate 建任务 / Notify 事件；与定义时会签区分：运行时动态追加）
+- ✅ **抄送**（ApprovalCCEntity + Start/Finish 位置 + ApprovalCcNotifiedEvent——投递组装 Notifications 归消费方）
+- ✅ **超时自动处理**（步骤级 TimeoutMinutes + Remind/Transfer/Jump/Approve/Reject 5 动作 + IApprovalTimeoutService 后台触发 + 系统身份审计 system:timeout + 扫描占位防重）
+- ✅ 遗留修复（DB 级分页 total 独立 count / 步骤判定上限 int.MaxValue / WithdrawAsync 事务包裹 / RejectedAt 验证）
 
-### 不包含（v0.2.0 候选）
+### 不包含（v0.3.0 候选）
 
-- ❌ 并行分支/条件网关
-- ❌ 委托审批/超时自动处理
+- ❌ 并行分支/条件网关/循环/子流程
+- ❌ 审批历史统计/任务保留清理
 - ❌ 审批流设计器 UI
-- ❌ 外部工作流引擎（Elsa/WorkflowCore）
-- ❌ 审批任务保留清理
+- ❌ 外部工作流引擎（Elsa/WorkflowCore——ADR 裁定否决）
 
 ---
 
-**文档信息**: V0.1.0 | 2026-09-09 | 关联：ADR-Approval-轻量审批引擎-数据模型与状态机.md、v0.1.0-Approval-轻量审批引擎-开发方案.md（主框架私有）
+## 七、v0.2.0 深化（委派/加签/抄送/超时）
+
+### 委派（临时代办——Flowable 两阶段）
+
+```csharp
+await approval.DelegateTaskAsync(taskId, "u_manager", "u_deputy");  // 委派（ApproverUserId 切换，原审批人保留）
+await approval.ResolveTaskAsync(taskId, "u_deputy");                // 委派人解决 → 回原审批人
+await approval.ApproveAsync(taskId, "u_manager");                   // 原审批人复核 Complete（委派中不可）
+```
+- **委派=临时**（同任务状态切换）/ **转交=永久**（TransferAsync 建新任务）——两模型并存；单层不嵌套；审计 DelegatedAt/DelegatedToUserId/OriginalAssigneeId 全记录。
+
+### 加签（运行时追加审批人）
+
+```csharp
+await approval.AppendApproverAsync(taskId, "u_finance", ["u_legal"], mode: ApprovalAppendMode.Participate, remark: "需法务确认");
+await approval.AppendApproverAsync(taskId, "u_finance", ["u_expert"], mode: ApprovalAppendMode.Notify);   // 仅通知+事件
+```
+- 去重（已是本步骤审批人/同批重复拒绝）；加签任务继承步骤超时；Notify 模式发布 `ApprovalAppendNotifyEvent`。
+
+### 抄送（仅通知）
+
+```csharp
+var instanceId = await approval.StartAsync("Expense", "exp-002", "expense", "u_submitter", ccUserIds: ["u_finance"]);  // 命名参数（ct 之后）
+await approval.AddCCAsync(instanceId, ["u_legal"]);   // 运行中追加
+```
+- Position：Start/Finish/StartFinish；`ApprovalCcNotifiedEvent`（Result 强类型）供消费方组装 Notifications；Withdrawn 不触发 Finish。
+
+### 超时自动处理
+
+```csharp
+await approval.CreateFlowAsync("expense", "报销审批",
+    [new(0, "部门经理", ApprovalApproverType.User, "u_manager", ApprovalMode.Any)
+     { TimeoutMinutes = 48, TimeoutAction = ApprovalTimeoutAction.Remind },
+     new(1, "财务", ApprovalApproverType.User, "u_finance", ApprovalMode.Any)
+     { TimeoutMinutes = 72, TimeoutAction = ApprovalTimeoutAction.Transfer, TimeoutTransferToUserId = "u_finance2" }]);
+
+// 消费方后台周期调用（扩展不内建调度器——BackgroundJobs 扩展可观察执行历史）：
+var processed = await timeoutService.ProcessTimeoutTasksAsync();
+```
+- 5 动作：Remind/Transfer/Jump/Approve/Reject；系统身份审计 `system:timeout`；扫描占位防重（条件更新影响行数 0/1）。
+
+---
+
+**文档信息**: V0.2.0 | 2026-09-10 | 关联：ADR-Approval-轻量审批引擎-数据模型与状态机.md（v0.1.0）、ADR-Approval-v0.2.0-委派加签抄送与超时.md、v0.2.0-Approval-委派加签抄送与超时-开发方案.md（主框架私有）

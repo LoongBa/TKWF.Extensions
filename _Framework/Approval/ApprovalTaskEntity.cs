@@ -76,4 +76,47 @@ public partial class ApprovalTaskEntity
     /// <summary>创建时间（UTC）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 13, CanUpdate = false)]
     public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+
+    // ── v0.2.0：委派（Flowable 两阶段）──
+
+    /// <summary>委派状态（None/Pending/Resolved，默认 None）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 14)]
+    public ApprovalDelegationState DelegationState { get; set; } = ApprovalDelegationState.None;
+
+    /// <summary>原审批人 ID（委派时记录——Resolve 后 ApproverUserId 回写此值）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 15, IsNullable = true)]
+    [MaxLength(128)]
+    public string? OriginalAssigneeId { get; set; }
+
+    /// <summary>委派目标用户 ID（委派人成为当前处理人）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 16, IsNullable = true)]
+    [MaxLength(128)]
+    public string? DelegatedToUserId { get; set; }
+
+    /// <summary>委派时间（UTC，DelegateTaskAsync 写入）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 17, IsNullable = true)]
+    public DateTime? DelegatedAt { get; set; }
+
+    // ── v0.2.0：超时自动处理（钉钉 5 动作模型）──
+
+    /// <summary>超时时间点（任务创建时 = CreateTime + step.TimeoutMinutes；null=不超时）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 18, IsNullable = true)]
+    public DateTime? TimeoutAt { get; set; }
+
+    /// <summary>步骤超时动作快照（动作执行用；仅 TimeoutAt 非空时快照）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 19, IsNullable = true)]
+    public ApprovalTimeoutAction? TimeoutAction { get; set; }
+
+    /// <summary>Transfer 动作目标用户快照（仅 TimeoutAt 非空时快照）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 20, IsNullable = true)]
+    [MaxLength(128)]
+    public string? TimeoutTransferToUserId { get; set; }
+
+    /// <summary>Jump 动作目标步骤序号快照（仅 TimeoutAt 非空时快照）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 21, IsNullable = true)]
+    public int? TimeoutJumpToStepIndex { get; set; }
+
+    /// <summary>超时已处理（扫描即占位防重复执行，P3——默认 false）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 22)]
+    public bool TimeoutProcessed { get; set; }
 }

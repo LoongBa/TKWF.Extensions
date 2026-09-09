@@ -16,13 +16,21 @@ namespace TKWF.Ext.Approval;
 /// <param name="ApproverValue">审批人值（User=用户 ID，Role=角色名）。</param>
 /// <param name="Mode">审批模式（Any 或签 / All 会签）。</param>
 /// <param name="Condition">条件表达式（v0.1.0 预留，null 表示无条件）。</param>
+/// <param name="TimeoutMinutes">步骤超时（分钟，null=不超时）。任务创建时 TimeoutAt=CreateTime+TimeoutMinutes。</param>
+/// <param name="TimeoutAction">超时自动处理动作（默认 Remind 提醒）。</param>
+/// <param name="TimeoutTransferToUserId">Transfer 动作的目标用户（超时转交）。</param>
+/// <param name="TimeoutJumpToStepIndex">Jump 动作的目标步骤序号（须晚于当前步骤）。</param>
 public sealed record ApprovalStepDefinition(
     int Index,
     string Name,
     ApprovalApproverType ApproverType,
     string ApproverValue,
     ApprovalMode Mode = ApprovalMode.Any,
-    string? Condition = null);
+    string? Condition = null,
+    int? TimeoutMinutes = null,
+    ApprovalTimeoutAction TimeoutAction = ApprovalTimeoutAction.Remind,
+    string? TimeoutTransferToUserId = null,
+    int? TimeoutJumpToStepIndex = null);
 
 /// <summary>
 /// ApprovalStepDefinition 的 JSON 序列化/反序列化辅助（System.Text.Json）。

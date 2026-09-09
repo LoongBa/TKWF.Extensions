@@ -599,4 +599,175 @@ public class ApprovalEngineTests : IDisposable
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
             () => _host.ApprovalService.SubmitAsync(instanceId)); // Pending→Pending 非法
     }
+
+    // ── D12: v0.1.0 遗留修复（P2-1~P2-6/P2-7）──
+
+    [Fact]
+    public async Task D12_GetInstancesAsync_DBPagination_ShouldReturnPageAndTotal()
+    {
+        // P2-1/P5：DB 级分页——页数据 skip/take 下推 + total 独立 count（不再 100k 全量内存分页）
+        var steps = new[]
+        {
+            new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
+        };
+        await _host.ApprovalService.CreateFlowAsync("db_page", "流程", steps);
+        for (var i = 0; i < 5; i++)
+            await _host.ApprovalService.StartAsync("Biz", $"page-{i}", "db_page", "user1");
+
+        var result = await _host.QueryService.GetInstancesAsync(new ApprovalInstanceQueryInput
+        {
+            BusinessType = "Biz",
+            Skip = 2,
+            Take = 2
+        });
+
+        Assert.Equal(5, result.Total); // total 独立 count（页数据之外）
+        Assert.Equal(2, result.Items.Count); // 页数据精确切片
+        // 按 Id 倒序：Id 5,4,3,2,1 → Skip=2 后 [3, 2]
+        Assert.Equal(3, result.Items[0].Id);
+        Assert.Equal(2, result.Items[1].Id);
+    }
+
+    [Fact]
+    public async Task D12_GetPendingTasksAsync_DBPagination_ShouldReturnPageAndTotal()
+    {
+        // P2-1：待办查询 DB 级分页
+        var steps = new[]
+        {
+            new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
+        };
+        await _host.ApprovalService.CreateFlowAsync("db_page_task", "流程", steps);
+        for (var i = 0; i < 4; i++)
+        {
+            var id = await _host.ApprovalService.StartAsync("Biz", $"pt-{i}", "db_page_task", "user1");
+            await _host.ApprovalService.SubmitAsync(id);
+        }
+
+        var result = await _host.QueryService.GetPendingTasksAsync(new ApprovalTaskQueryInput
+        {
+            ApproverUserId = "mgr",
+            Skip = 1,
+            Take = 2
+        });
+
+        Assert.Equal(4, result.Total);
+        Assert.Equal(2, result.Items.Count);
+    }
+
+    [Fact]
+    public async Task D12_RejectAsync_ShouldSetRejectedAt()
+    {
+        // C5：RejectedAt 字段（v0.1.0 已实现——v0.2.0 验证确认）
+        var steps = new[]
+        {
+            new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
+        };
+        await _host.ApprovalService.CreateFlowAsync("rejected_at", "流程", steps);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "rejected_at", "user1");
+        await _host.ApprovalService.SubmitAsync(instanceId);
+
+        var task = (await _host.TaskDataService.EntitySelectAsync(
+            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "驳回");
+
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        Assert.True(instance!.RejectedAt.HasValue);
+        Assert.Null(instance.ApprovedAt);
+        Assert.Equal(ApprovalInstanceStatus.Rejected, instance.Status);
+    }
+
+    [Fact]
+    public async Task D12_WithdrawAsync_Pending_ShouldCompleteAllTasksAtomically()
+    {
+        // P2-7（P9）：WithdrawAsync 事务包裹——实例 Withdrawn + 全部 Pending 任务 Completed 原子提交
+        var steps = new[]
+        {
+            new ApprovalStepDefinition(0, "会签组", ApprovalApproverType.User, "user1", ApprovalMode.All)
+        };
+        await _host.ApprovalService.CreateFlowAsync("withdraw_tx", "流程", steps);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_tx", "submitter");
+        await _host.ApprovalService.SubmitAsync(instanceId);
+        // 手动加第二个会签任务
+        await _host.TaskDataService.EntityCreateAsync(new ApprovalTaskEntity
+        {
+            InstanceId = instanceId, StepIndex = 0, StepName = "会签组",
+            ApproverType = ApprovalApproverType.User, ApproverValue = "user2",
+            ApproverUserId = "user2", Status = ApprovalTaskStatus.Pending
+        });
+
+        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter");
+
+        // 实例 Withdrawn + 全部任务 Completed
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        Assert.Equal(ApprovalInstanceStatus.Withdrawn, instance!.Status);
+        Assert.False(instance.IsActive);
+        var tasks = await _host.TaskDataService.EntitySelectAsync(
+            t => t.InstanceId == instanceId, 0, 10, q => q, default);
+        Assert.All(tasks, t => Assert.Equal(ApprovalTaskStatus.Completed, t.Status));
+    }
+
+    [Fact]
+    public async Task D12_CancellationToken_Passthrough_ShouldThrowWhenCanceled()
+    {
+        // P2-6：CancellationToken 透传断言（取消令牌 → 操作中断）
+        var steps = new[]
+        {
+            new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
+        };
+        await _host.ApprovalService.CreateFlowAsync("ct_base", "流程", steps);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var ex = await Record.ExceptionAsync(
+            () => _host.ApprovalService.CreateFlowAsync("ct_test", "流程", steps, ct: cts.Token));
+
+        // FreeSql 将 TaskCanceledException 包装为 Exception（"A task was canceled"）——验证取消已透传（异常链含 OperationCanceledException）
+        Assert.NotNull(ex);
+        var chainHasCancellation = false;
+        for (var e = ex; e != null; e = e.InnerException)
+        {
+            if (e is OperationCanceledException)
+            {
+                chainHasCancellation = true;
+                break;
+            }
+        }
+        Assert.True(chainHasCancellation, $"ct 取消未透传，异常链: {ex}");
+    }
+
+    // ── D13: v0.1.0 零迁移（C4——StartAsync 追加可选参数于 ct 之后；10 方法签名不变）──
+
+    [Fact]
+    public void D13_ZeroMigration_StartAsync_ParameterOrder_ShouldKeepCtPosition()
+    {
+        // C4：ccUserIds 追加于 ct 之后（方案 A）——现有位置传参调用零影响
+        var method = typeof(IApprovalService).GetMethod(nameof(IApprovalService.StartAsync))!;
+        var parameters = method.GetParameters();
+
+        Assert.Equal(7, parameters.Length); // 6 个原有参数 + 1 个新增可选 ccUserIds（追加于 ct 之后）
+        Assert.Equal("businessDataJson", parameters[4].Name);
+        Assert.Equal(typeof(CancellationToken), parameters[5].ParameterType);
+        Assert.Equal("ct", parameters[5].Name);
+        Assert.Equal("ccUserIds", parameters[6].Name);
+        Assert.True(parameters[6].IsOptional);
+        Assert.True(parameters[5].IsOptional);
+    }
+
+    [Fact]
+    public void D13_ZeroMigration_OriginalTenMethods_ShouldExist()
+    {
+        // D13 编译断言：v0.1.0 的 10 个方法签名保持不变（追加的 4 个新方法不破坏既有接口）
+        var serviceType = typeof(IApprovalService);
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.CreateFlowAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.UpdateFlowAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.EnableFlowAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.DisableFlowAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.StartAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.SubmitAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.ApproveAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.RejectAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.TransferAsync)));
+        Assert.NotNull(serviceType.GetMethod(nameof(IApprovalService.WithdrawAsync)));
+    }
 }

@@ -44,6 +44,10 @@ public class ApprovalExtensionInitializerTests
             stubUser, new FreeSqlEntityDAC<ApprovalInstanceEntity>(new UnitOfWorkManager(fsql))));
         services.AddSingleton(new ApprovalTaskEntityDataService(
             stubUser, new FreeSqlEntityDAC<ApprovalTaskEntity>(new UnitOfWorkManager(fsql))));
+        services.AddSingleton(new ApprovalAppendEntityDataService(
+            stubUser, new FreeSqlEntityDAC<ApprovalAppendEntity>(new UnitOfWorkManager(fsql))));
+        services.AddSingleton(new ApprovalCCEntityDataService(
+            stubUser, new FreeSqlEntityDAC<ApprovalCCEntity>(new UnitOfWorkManager(fsql))));
         services.AddSingleton<TKW.Framework.Domain.Transactions.ITransactionManager>(
             new NoopTransactionManager());
         services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus>(
@@ -68,6 +72,11 @@ public class ApprovalExtensionInitializerTests
         // IApprovalAssigneeResolver / DefaultApprovalAssigneeResolver
         var resolvers = provider.GetServices<IApprovalAssigneeResolver>().ToList();
         Assert.Contains(resolvers, r => r is DefaultApprovalAssigneeResolver);
+
+        // v0.2.0：IApprovalTimeoutService / ApprovalTimeoutService（P10）
+        var timeoutService = provider.GetService<IApprovalTimeoutService>();
+        Assert.NotNull(timeoutService);
+        Assert.IsType<ApprovalTimeoutService>(timeoutService);
     }
 
     [Fact]
@@ -95,12 +104,16 @@ public class ApprovalExtensionInitializerTests
         public Task UpdateFlowAsync(long flowId, string name, System.Collections.Generic.IReadOnlyList<ApprovalStepDefinition> steps, string? description = null, CancellationToken ct = default) => throw new NotImplementedException();
         public Task EnableFlowAsync(long flowId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task DisableFlowAsync(long flowId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<long> StartAsync(string businessType, string businessId, string flowCode, string submitter, string? businessDataJson = null, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<long> StartAsync(string businessType, string businessId, string flowCode, string submitter, string? businessDataJson = null, CancellationToken ct = default, string[]? ccUserIds = null) => throw new NotImplementedException();
         public Task SubmitAsync(long instanceId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task ApproveAsync(long taskId, string approverUserId, string? comment = null, CancellationToken ct = default) => throw new NotImplementedException();
         public Task RejectAsync(long taskId, string approverUserId, string reason, CancellationToken ct = default) => throw new NotImplementedException();
         public Task TransferAsync(long taskId, string fromUserId, string toUserId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task WithdrawAsync(long instanceId, string userId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task DelegateTaskAsync(long taskId, string fromUserId, string toUserId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task ResolveTaskAsync(long taskId, string delegateUserId, string? comment = null, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task AppendApproverAsync(long taskId, string operatedByUserId, string[] appenderUserIds, ApprovalAppendMode mode = ApprovalAppendMode.Participate, string? remark = null, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task AddCCAsync(long instanceId, string[] userIds, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class CustomApprovalQueryService : IApprovalQueryService

@@ -32,13 +32,10 @@ internal sealed class ApprovalQueryService(
             && (input.FromTime == null || i.CreateTime >= input.FromTime.Value)
             && (input.ToTime == null || i.CreateTime <= input.ToTime.Value);
 
-        // 先查总数
-        var allItems = await instanceDataService.EntitySelectAsync(
-            predicate, 0, 100000, q => q.OrderByDescending(i => i.Id), ct);
-        var total = allItems.Count;
-
-        // 分页切片
-        var pageItems = allItems.Skip(skip).Take(take).ToList();
+        // P2-1/P5：DB 级分页——total 独立 count + 页数据 skip/take 下推（不再 100k 全量内存分页）
+        var total = await instanceDataService.CountAsync(predicate, ct);
+        var pageItems = await instanceDataService.EntitySelectAsync(
+            predicate, skip, take, q => q.OrderByDescending(i => i.Id), ct);
 
         var dtos = pageItems.Select(MapToListItemDto).ToList();
         return new ApprovalInstancePagedResult { Total = total, Items = dtos };
@@ -51,12 +48,14 @@ internal sealed class ApprovalQueryService(
         var take = Math.Clamp(input.Take <= 0 ? 50 : input.Take, 1, 200);
         var status = input.Status ?? ApprovalTaskStatus.Pending;
 
-        var allItems = await taskDataService.EntitySelectAsync(
-            t => t.ApproverUserId == input.ApproverUserId && t.Status == status,
-            0, 100000, q => q.OrderByDescending(t => t.Id), ct);
-        var total = allItems.Count;
+        Expression<Func<ApprovalTaskEntity, bool>> predicate =
+            t => t.ApproverUserId == input.ApproverUserId && t.Status == status;
 
-        var pageItems = allItems.Skip(skip).Take(take).ToList();
+        // P2-1/P5：DB 级分页——total 独立 count + 页数据 skip/take 下推
+        var total = await taskDataService.CountAsync(predicate, ct);
+        var pageItems = await taskDataService.EntitySelectAsync(
+            predicate, skip, take, q => q.OrderByDescending(t => t.Id), ct);
+
         var dtos = pageItems.Select(MapToTaskListItemDto).ToList();
         return new ApprovalTaskPagedResult { Total = total, Items = dtos };
     }

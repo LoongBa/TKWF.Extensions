@@ -21,5 +21,22 @@ partial class ApprovalTaskEntityDataService(IDomainUser user, IEntityDAC<Approva
         long instanceId, int stepIndex, CancellationToken ct = default)
         => await EntitySelectAsync(
             t => t.InstanceId == instanceId && t.StepIndex == stepIndex,
-            0, 1000, q => q.OrderBy(t => t.Id), ct);
+            0, int.MaxValue, q => q.OrderBy(t => t.Id), ct);
+
+    /// <summary>
+    /// 抢占超时处理权（P3 扫描即占位）——仅当任务仍 Pending 且未处理时置 TimeoutProcessed=true。
+    /// <para>返回 1=本调用独占处理权（可执行动作）；0=他者已处理/任务已非 Pending（跳过）。
+    /// 先读后写（条件 EntityGetAsync + 列更新）——轻量引擎定位（P6 推荐③：re-fetch 复查足够），
+    /// 唯一约束 + 事务已防主要竞态；双后台实例并发时以 TimeoutProcessed 状态过滤兜底。</para>
+    /// </summary>
+    public async Task<int> ClaimTimeoutAsync(long id, CancellationToken ct = default)
+    {
+        var pending = await EntityGetAsync(t =>
+            t.Id == id && t.Status == ApprovalTaskStatus.Pending && !t.TimeoutProcessed, ct);
+        if (pending == null) return 0;
+
+        pending.TimeoutProcessed = true;
+        await EntityUpdateColumnsBatchAsync(new[] { pending }, t => new { t.TimeoutProcessed }, ct);
+        return 1;
+    }
 }

@@ -29,12 +29,14 @@ internal static class ApprovalTestSupport
             .Build();
     }
 
-    /// <summary>同步三张表结构（Flow + Instance + Task）。</summary>
+    /// <summary>同步五张表结构（Flow + Instance + Task + Append + CC）。</summary>
     public static void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<ApprovalFlowEntity>();
         fsql.CodeFirst.SyncStructure<ApprovalInstanceEntity>();
         fsql.CodeFirst.SyncStructure<ApprovalTaskEntity>();
+        fsql.CodeFirst.SyncStructure<ApprovalAppendEntity>();
+        fsql.CodeFirst.SyncStructure<ApprovalCCEntity>();
     }
 
     /// <summary>构造 ApprovalTestHost（完整 DI 容器 + 真实 DataService + NoopTransactionManager + 事件收集）。</summary>
@@ -56,6 +58,9 @@ internal sealed class ApprovalTestHost : IDisposable
     public ApprovalFlowEntityDataService FlowDataService => _serviceProvider.GetRequiredService<ApprovalFlowEntityDataService>();
     public ApprovalInstanceEntityDataService InstanceDataService => _serviceProvider.GetRequiredService<ApprovalInstanceEntityDataService>();
     public ApprovalTaskEntityDataService TaskDataService => _serviceProvider.GetRequiredService<ApprovalTaskEntityDataService>();
+    public ApprovalAppendEntityDataService AppendDataService => _serviceProvider.GetRequiredService<ApprovalAppendEntityDataService>();
+    public ApprovalCCEntityDataService CcDataService => _serviceProvider.GetRequiredService<ApprovalCCEntityDataService>();
+    public IApprovalTimeoutService TimeoutService => _serviceProvider.GetRequiredService<IApprovalTimeoutService>();
     public EventCollector Events => _serviceProvider.GetRequiredService<EventCollector>();
 
     public ApprovalTestHost(IFreeSql fsql, Action<IServiceCollection>? configure = null)
@@ -88,15 +93,22 @@ internal sealed class ApprovalTestHost : IDisposable
         services.AddSingleton(sp =>
             new ApprovalTaskEntityDataService(
                 stubUser, new FreeSqlEntityDAC<ApprovalTaskEntity>(new UnitOfWorkManager(fsql))));
+        services.AddSingleton(sp =>
+            new ApprovalAppendEntityDataService(
+                stubUser, new FreeSqlEntityDAC<ApprovalAppendEntity>(new UnitOfWorkManager(fsql))));
+        services.AddSingleton(sp =>
+            new ApprovalCCEntityDataService(
+                stubUser, new FreeSqlEntityDAC<ApprovalCCEntity>(new UnitOfWorkManager(fsql))));
 
         // 默认审批人解析器
         services.TryAddScoped<IApprovalAssigneeResolver, DefaultApprovalAssigneeResolver>();
 
-        // ApprovalManager + ApprovalQueryService
+        // ApprovalManager + ApprovalQueryService + ApprovalTimeoutService
         services.TryAddScoped<ApprovalManager>();
         services.TryAddScoped<IApprovalService>(sp => sp.GetRequiredService<ApprovalManager>());
         services.TryAddScoped<ApprovalQueryService>();
         services.TryAddScoped<IApprovalQueryService>(sp => sp.GetRequiredService<ApprovalQueryService>());
+        services.TryAddScoped<IApprovalTimeoutService, ApprovalTimeoutService>();
 
         configure?.Invoke(services);
 

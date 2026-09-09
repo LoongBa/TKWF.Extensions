@@ -41,5 +41,8 @@ public class ApprovalExtensionInitializer<TUserInfo> : ExtensionInitializer<TUse
         // 审批查询（Scoped）
         services.TryAddScoped<ApprovalQueryService>();
         services.TryAddScoped<IApprovalQueryService>(sp => sp.GetRequiredService<ApprovalQueryService>());
+
+        // v0.2.0：超时处理服务（P10——新实体 DataService 依赖 SG1 自动注册，不显式 TryAddScoped；仅注册超时服务）
+        services.TryAddScoped<IApprovalTimeoutService, ApprovalTimeoutService>();
     }
 }

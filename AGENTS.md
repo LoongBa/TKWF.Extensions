@@ -159,9 +159,11 @@ _Tests/Extension.{扩展名}.Tests/
 >
 > **跨表查询（VEntity，2026-09-07 实施）**：扩展需要跨表 JOIN 时——**多对一**（N 行映射 → 1 行主表，JOIN 后行数不变、主键透传唯一稳定）用 **VEntity**（SQL View 实体）：`[Table(Name="vw_...", DisableSyncStructure=true)]` + `[DomainGenerateCode(IsView=true, ViewSql=<PG>, ViewSqlSQLite=<SQLite>, ExposeGraphqlQuery=true)]` + `partial class`（不手写 `IDomainViewEntity`/`IsFromPersistentSource`）。xCodeGen **跳过 VEntity 的 DataService/Conditions 模板**（Engine.cs L42-46）→ 手写只读 DataService（`DomainReadOnlyDataServiceBase<TEntity,TDto>` 2 参数版 + 注入 `IEntityReadOnlyDAC<T>`，绝不用 `IEntityDAC<T>`）+ Initializer `TryAddScoped` 手动注册（VEntity 不自动注册）；不标 `[GenerateController(FromDataService=true)]`（Store 内部能力经门面暴露，GraphQL 经 `ExposeGraphqlQuery` 自动）。**接口不变策略**：视图行映射回原实体，对外接口签名不变。**生产部署**：SyncViewsAsync 只跑开发环境建视图，**生产需 DBA 手动执行 ViewSql**（写入使用指南）。**一对多主从聚合**（DataDictionary/PrintTemplates 带缓存）**不用 VEntity**（行膨胀 + Id 造假键 + 缓存优势），保持两步查询。先例：Identity `vw_UserRoleView` + Notifications `vw_UserNotificationView`（见主框架 `docs/03_扩展模块/VEntity跨表查询升级-开发方案.md`）。
 >
-> **待整改扩展清单**（2026-09-07 盘点，逐个按难度分批改造）：
-> - 规则 1 违规（裸 IFreeSql）：Settings/Emailing/BlobStoring（低）→ Account/DataDictionary/PrintTemplates（中）→ Identity/AuditLogging/DataPort/Notifications（高）
-> - 规则 2 违规（直接 IEntityDAC）：Permissions `EntityDACPermissionStore`（委托 DataService 整改）
+> **数据访问红线整改清单**（2026-09-07 盘点 → **已全部完成，2026-09-07 当日闭环**，2026-09-10 复核确认）：
+> - ✅ 规则 1 违规（裸 IFreeSql）10 扩展：Settings/Emailing/BlobStoring/Account/DataDictionary/PrintTemplates/Identity/AuditLogging/DataPort/Notifications——全部委托 DataService（374 测试全绿）
+> - ✅ 规则 2 违规（直接 IEntityDAC）：Permissions `EntityDACPermissionStore` → 委托 `PermissionGrantEntityDataService`（47/47 全绿）
+> - ✅ 移除 10 个 Initializer 手动 DataService 注册（SG 自动注册覆盖生产）；测试 Host 补模拟注册
+> - 见主框架 `docs/03_扩展模块/ADR-扩展数据访问红线.md`（整改清单 + 决策完整记录）
 >
 > **"无必要勿增SG"澄清**（2026-09-06 用户裁定）：扩展实体用 `[DomainGenerateCode]`（SG1 原生方式）**不计入"增 SG"**——消费方标准 TKWF 项目 SG1 已接线，扩展实体被自动扫描生成（IDomainEntity/DTO/DataService），**零额外配置**（先例：PrintTemplates/AuditLogging/DataDictionary 全部如此）。"无必要勿增SG"特指**扩展引入独立生成管线/分析器依赖**（如 Permissions.Validation 的 Analyzer，消费方需额外接线）——此类才需权衡"引入 SG 增加消费方配置复杂度/对接管线成本"。**判据：扩展实体是否需要 DTO/DataService/API 生成（有持久化 + 查询/管理需求的实体默认用 SG1）；纯内存/纯运行时扩展（Tagging/Metrics/Dashboard/DataPort 核心）无需 SG1。**
 >

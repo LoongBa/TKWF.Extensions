@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.FileManagement.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="FreeSql" />
+    <PackageReference Include="FreeSql.Provider.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+    <Using Include="TKW.Framework.Enumerations" />
+    <!-- BlobStoring 契约（IBlobStorageService/BlobInfo/BlobStoringOptions/LocalStorageService——测试宿主构造真实 BlobStoring 链） -->
+    <Using Include="TKWF.Ext.BlobStoring" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 本仓库扩展：FileManagement（主体）+ BlobStoring 实现（真实 LocalStorageService 链） + BlobStoring.Abstractions（契约）——
+         测试项目不激活 SG1b 门控，可直接引实现 -->
+    <ProjectReference Include="..\..\_Framework\FileManagement\TKWF.Ext.FileManagement.csproj" />
+    <ProjectReference Include="..\..\_Framework\BlobStoring\TKWF.Ext.BlobStoring.csproj" />
+    <ProjectReference Include="..\..\_Framework\BlobStoring.Abstractions\TKWF.Ext.BlobStoring.Abstractions.csproj" />
+    <!-- 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Utility\TKWF.Utility.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 DataService（红线合规委托路径） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+  </ItemGroup>
+
+</Project>

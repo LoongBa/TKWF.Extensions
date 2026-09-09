@@ -24,6 +24,9 @@
   <Folder Name="/_Framework/BlobStoring/">
     <Project Path="_Framework/BlobStoring/TKWF.Ext.BlobStoring.csproj" />
   </Folder>
+  <Folder Name="/_Framework/BlobStoring.Abstractions/">
+    <Project Path="_Framework/BlobStoring.Abstractions/TKWF.Ext.BlobStoring.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Identity/">
     <Project Path="_Framework/Identity/TKWF.Ext.Identity.csproj" />
   </Folder>
@@ -77,6 +80,9 @@
   </Folder>
   <Folder Name="/_Framework/Calendar/">
     <Project Path="_Framework/Calendar/TKWF.Ext.Calendar.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/FileManagement/">
+    <Project Path="_Framework/FileManagement/TKWF.Ext.FileManagement.csproj" />
   </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
@@ -153,5 +159,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Calendar.Tests/">
     <Project Path="_Tests/Extension.Calendar.Tests/TKWF.Ext.Calendar.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.FileManagement.Tests/">
+    <Project Path="_Tests/Extension.FileManagement.Tests/TKWF.Ext.FileManagement.Tests.csproj" />
   </Folder>
 </Solution>

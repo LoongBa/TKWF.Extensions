@@ -2,12 +2,15 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+// 契约抽象（ADR50 L2 依赖倒置）——BlobStoring 实现与 FileManagement 消费方共用
+// 命名空间保持 TKWF.Ext.BlobStoring：既有消费方 using 不变，零破坏（对齐 Account.Abstractions Oracle P2-1c 迁移先例）。
 namespace TKWF.Ext.BlobStoring
 {
     /// <summary>
     /// Blob 存储抽象——定义二进制大对象的上传/下载/删除/检查操作。
-    /// <para>V0.1.0 提供本地文件系统默认实现（<see cref="LocalStorageService"/>）；
-    /// 后续可扩展 Azure Blob / S3 / MinIO 等。</para>
+    /// <para>契约定义于 <c>TKWF.Ext.BlobStoring.Abstractions</c>（ADR50 L2 依赖倒置）——
+    /// BlobStoring 实现项目与 FileManagement 等消费方共用；默认实现为本地文件系统
+    /// <c>LocalStorageService</c>，后续可扩展 Azure Blob / S3 / MinIO 等。</para>
     /// </summary>
     public interface IBlobStorageService
     {

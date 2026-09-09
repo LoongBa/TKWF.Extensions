@@ -25,11 +25,17 @@ namespace TKWF.Ext.BlobStoring
 
         /// <summary>
         /// 注册 Blob 存储与记录存储服务。
+        /// <para>Options 绑定（C2 评审修复）：<see cref="BlobStoringOptions"/> 经
+        /// <c>AddOptions&lt;BlobStoringOptions&gt;().BindConfiguration("TKWF:BlobStoring")</c>
+        /// 从配置节绑定（RootPath/IsEnabled），不再依赖宿主隐式默认值。</para>
         /// <para>TryAddScoped：消费方可自定义 <see cref="IBlobStorageService"/> / <see cref="IBlobRecordStore"/> 实现，
         /// 扩展默认实现不覆盖消费方。</para>
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
+            // Options 绑定（C2 评审修复）：TKWF:BlobStoring 配置节 → BlobStoringOptions
+            services.AddOptions<BlobStoringOptions>().BindConfiguration("TKWF:BlobStoring");
+
             services.TryAddScoped<IBlobStorageService, LocalStorageService>();
             services.TryAddScoped<IBlobRecordStore, BlobRecordStore>();
         }

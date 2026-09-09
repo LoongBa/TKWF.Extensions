@@ -19,18 +19,22 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 主框架引用（跨仓库，TKWFRoot 定义于 ../Directory.Build.props） -->
-    <ProjectReference Include="$(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <!-- 契约抽象（ADR50 L2 依赖倒置）：IBlobStorageService/BlobInfo/BlobStoringOptions 已迁至 Abstractions
+         （命名空间不变 TKWF.Ext.BlobStoring——消费方 using 零破坏；FileManagement 等消费方只依赖 Abstractions） -->
+    <ProjectReference Include="..\BlobStoring.Abstractions\TKWF.Ext.BlobStoring.Abstractions.csproj" />
+
+    <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 
     <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
-    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
-    <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
+    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
 
     <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
-    <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
                       ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
@@ -56,6 +60,8 @@
   <!-- 测试项目访问 internal（LocalStorageService、BlobRecordStore） -->
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.BlobStoring.Tests" />
+    <!-- FileManagement 测试宿主构造真实 BlobStoring 链（LocalStorageService internal，评审 C2 修复后） -->
+    <InternalsVisibleTo Include="TKWF.Ext.FileManagement.Tests" />
   </ItemGroup>
 
 </Project>

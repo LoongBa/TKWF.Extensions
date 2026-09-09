@@ -1,10 +1,10 @@
 # TKWF.Ext.Tagging 标签存储扩展技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（存储扩展——规则持久化 + 命中落库 + 聚合分析） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.0（AC 自动机批量匹配 + Options 配置接入） | **框架**: .NET 10
 
-**定位**（ADR52 V0.2.0 瘦身）：标签算法已回归 `TKW.Framework.Utility.Tags`（主框架）；本扩展为**标签存储扩展**——V0.3.0 落地 `ITagRuleStore`/`ITagHitStore`/`ITagAnalysisService` 三接口持久化（SG1 实体 + FreeSql，Store 委托 DataService 红线合规）。
+**定位**（ADR52 V0.2.0 瘦身）：标签算法已回归 `TKW.Framework.Utility.Tags`（主框架）；本扩展为**标签存储扩展**——V0.3.0 落地 `ITagRuleStore`/`ITagHitStore`/`ITagAnalysisService` 三接口持久化（SG1 实体 + FreeSql，Store 委托 DataService 红线合规）；V0.4.0 落地匹配器演进（AC 自动机 `DictMatch` 批量匹配）+ `TaggingOptions` 配置接入（`[Options("TKWF:Tagging")]`）。
 
-**核心约束**: 存储扩展数据访问走 DataService 委托（禁裸 ORM/IEntityDAC）；实体 `[DomainGenerateCode]` 不指定 UserType（ADR42 D4）；审计字段 DateTime（UTC——SQLite DateTimeOffset 不可靠实证）
+**核心约束**: 存储扩展数据访问走 DataService 委托（禁裸 ORM/IEntityDAC）；实体 `[DomainGenerateCode]` 不指定 UserType（ADR42 D4）；审计字段 DateTime（UTC——SQLite DateTimeOffset 不可靠实证）；AC 自动机纯算法归主框架 Utility（ADR52 收纳准则）
 
 ---
 
@@ -92,7 +92,8 @@ public class AnalysisService(TagService tagService)
 | ------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
 | **`TagService`**                | 业务单例门面，持有并管理规则集。 | 内置                                                                                             |
 | **`ITokenizer`**                | 执行文本拆分，生成坐标流。    | `DefaultTokenizer` (标点/空格切分)                                                                   |
-| **`ITagMatcher`**               | 具体的匹配算法实现。       | `TokenExactMatcher`, `RegexMatcher`, `ContainsMatcher`, `StartsWithMatcher`, `EndsWithMatcher` |
+| **`ITagMatcher`**               | 规则匹配算法实现（单规则）。       | `TokenExactMatcher`, `RegexMatcher`, `ContainsMatcher`, `StartsWithMatcher`, `EndsWithMatcher`, `FullMatchMatcher` |
+| **`ITagBatchMatcher`**          | 批量匹配算法实现（V0.4.0，一次接收全量规则构建共享状态）。       | `AcAutomataBatchMatcher`（`DictMatch` AC 自动机——单次扫描全量词库） |
 | **`ITagPipelinePostProcessor`** | 处理互斥逻辑、裁剪和默认兜底。  | `ExclusionGroupProcessor` (互斥裁剪)<br>`DefaultTagProcessor` (空白维度默认标签生成)                         |
 
 ## 五、 扩展与维护规范 (Extension & Maintenance)
@@ -115,7 +116,14 @@ public class AnalysisService(TagService tagService)
 
 ## 六、 架构演进路线 (Architecture Roadmap)
 
-### 0. V0.3.0 持久化（已实施，2026-09-07）
+### 0. V0.4.0 匹配器演进 + Options 接入（已实施，2026-09-10）
+
+- **AC 自动机批量匹配（`DictMatch`）**：新增 `ITagBatchMatcher` 接口 + `AcAutomataBatchMatcher`（主框架 Utility.Tags，ADR52 收纳）——一次接收全部 DictMatch 规则构建共享 trie（fail 指针 + output link），单次扫描 O(N+Z) 产出全部命中（含重叠），**与规则数 R 解耦**（逐规则 Contains O(R×N) 的规则过千瓶颈）；Pipeline 按 MatchMode 分组路由（批量优先），自动机缓存上移 Pipeline 层（`_cachedGroups` 按输入 rules 引用缓存，LoadRules 换新 List 即失效重建）
+- **FullMatch 补齐（P2-5）**：`TagMatchMode.FullMatch=4` 枚举已定义但无实现的既存缺口修复（全文精确匹配，此前消费方用 FullMatch 静默零命中）
+- **Options 接入（`[Options("TKWF:Tagging")]`）**：`TaggingOptions`（模式 A 双通道）——`DefaultRules`（配置节默认规则，静态场景）+ `AutoLoadRulesFromStore`（启动从 Store 自动加载，闭环 v0.3.0 P2-3 规则陈旧性；Store 覆盖配置默认）；Initializer 实现 `IServiceProviderAware`（V4.9.76 D2）在 `InitializeAsync` 消费；"至少配一"软校验 ILogger Warning
+- Oracle 方案 + 代码双审 PASS WITH CONDITIONS（方案 P1-1 缓存上移/ P1-2 双路径/ P1-3 移除 Required + P2-1~8；代码见审核报告）；38 测试 + 扩展仓库 1208 + 主框架 892 全量回归
+
+### 1. V0.3.0 持久化（已实施，2026-09-07）
 
 - **三接口落地**：`ITagRuleStore`（规则 CRUD——幂等创建/业务键更新/按维度查询，供给 `ITagService.LoadRules`）+ `ITagHitStore`（批量单事务落库 + 分页 + 原文快照）+ `ITagAnalysisService`（频次 TopN / 趋势分桶 / 维度分布）
 - **SG1 实体**：`TagRuleEntity`（表 TagRule，唯一约束 UX_TagRule_Dimension_TagName_Pattern）+ `TagHitRecordEntity`（表 TagHit，索引 IX_TagHit_Dimension_Time/IX_TagHit_TagName）；`[DomainGenerateCode]` 不指定 UserType（ADR42 D4）

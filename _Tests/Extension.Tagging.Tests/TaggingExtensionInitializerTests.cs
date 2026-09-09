@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Enumerations;
@@ -45,6 +46,9 @@ public class TaggingExtensionInitializerTests
     public void ConfigureServices_Registers_EngineAndFacade()
     {
         var services = new ServiceCollection();
+        // BindConfiguration 惰性读取 IConfiguration（OptionsBuilder.Configure）——测试需注册配置桩
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
         var init = new TaggingExtensionInitializer<TestUserInfo>();
         init.ConfigureServices(services);
 
@@ -56,18 +60,25 @@ public class TaggingExtensionInitializerTests
         var tagService = sp.GetService<ITagService>();
         Assert.NotNull(tagService);
         Assert.IsType<TagService>(tagService);
-        // 内置匹配器家族（5 个）
+        // 内置匹配器家族（6 个——V0.4.0 P2-5 补 FullMatchMatcher）
         var matchers = sp.GetServices<ITagMatcher>().ToList();
-        Assert.Equal(5, matchers.Count);
+        Assert.Equal(6, matchers.Count);
         Assert.Contains(matchers, m => m is TokenExactMatcher);
         Assert.Contains(matchers, m => m is ContainsMatcher);
         Assert.Contains(matchers, m => m is RegexMatcher);
         Assert.Contains(matchers, m => m is StartsWithMatcher);
         Assert.Contains(matchers, m => m is EndsWithMatcher);
+        Assert.Contains(matchers, m => m is FullMatchMatcher);
+        // 批量匹配器（V0.4.0：AC 自动机 DictMatch）
+        var batchMatchers = sp.GetServices<ITagBatchMatcher>().ToList();
+        Assert.Single(batchMatchers);
+        Assert.IsType<AcAutomataBatchMatcher>(batchMatchers[0]);
         // 后置处理器（2 个）
         var processors = sp.GetServices<ITagPipelinePostProcessor>().ToList();
         Assert.Contains(processors, p => p is ExclusionGroupProcessor);
         Assert.Contains(processors, p => p is DefaultTagProcessor);
+        // Options（V0.4.0 模式 A 注册）
+        Assert.NotNull(sp.GetService<IOptions<TaggingOptions>>());
     }
 
     [Fact]

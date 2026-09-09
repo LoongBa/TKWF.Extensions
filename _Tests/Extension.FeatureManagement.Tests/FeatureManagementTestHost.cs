@@ -105,6 +105,9 @@ internal sealed class FeatureManagementTestHost : IDisposable
         // IMemoryCache 真实实例（TryAddSingleton：扩展默认注册不覆盖消费方实例）
         services.TryAddSingleton<IMemoryCache>(new MemoryCache(new MemoryCacheOptions()));
 
+        // v0.2.0：ILocalEventBus（变更事件发布依赖——主框架 LocalEventBus 进程内实现）
+        services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus, TKW.Framework.Domain.Events.LocalEventBus>();
+
         // 贡献者收集 + 扩展初始化器注册（TryAddScoped 不覆盖已注册 DataService/IMemoryCache）
         lock (s_metaContextLock)
         {

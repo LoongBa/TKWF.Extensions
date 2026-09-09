@@ -38,11 +38,11 @@
 | **Calendar**                | V0.1.0          | 日历/排程（日历+事件 CRUD + 重复规则子集（Utility 收纳：DAILY/WEEKLY/MONTHLY/YEARLY + 月末钳制 + 绝对索引）+ occurrence 查询/合并 + UTC 契约）| — | [README](./_Framework/Calendar/README.md) | [指南](./docs/Calendar/日历排程扩展-使用指南.md) |
 | **FileManagement**          | V0.1.0          | 文件管理（目录树 + 文件元数据 SHA256/去重 + 上传 10 步安全链（防穿越/白名单/大小/ContentType 服务端推导）+ 依赖倒置 BlobStoring.Abstractions）| — | [README](./_Framework/FileManagement/README.md) | [指南](./docs/FileManagement/文件管理扩展-使用指南.md) |
 | **BlobStoring.Abstractions**| V0.1.1          | Blob 存储契约抽取（`IBlobStorageService`/`BlobInfo`/`BlobStoringOptions`——ADR50 L2 依赖倒置，FileManagement 消费）| — | — | —（并入 BlobStoring）|
-| **FeatureManagement**      | V0.1.0          | 功能管理/特性开关（[FeatureContributor] 编译期定义 + 分层值 Global/Tenant/Role/User + IFeatureChecker 实现（接入 [RequireFeature]）+ 管理 API）| — | [README](./_Framework/FeatureManagement/README.md) | [指南](./docs/FeatureManagement/功能管理扩展-使用指南.md) |
+| **FeatureManagement**      | V0.2.0          | 功能管理/特性开关（[FeatureContributor] 编译期定义 + Provider 链分层值（v0.2.0 扩展点）+ IFeatureChecker 实现（接入 [RequireFeature]）+ 变更事件（v0.2.0）+ 管理 API）| — | [README](./_Framework/FeatureManagement/README.md) | [指南](./docs/FeatureManagement/功能管理扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **1092 测试全绿**（27 测试项目）——`dotnet test` 零失败。（FeatureManagement 功能管理 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + Approval 审批引擎 + 三件套基础设施 + BlobStoring 安全修复后）
+> 全量 **1105 测试全绿**（27 测试项目）——`dotnet test` 零失败。（FeatureManagement v0.2.0 Provider 扩展点 + 变更事件 + 版本号缓存 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + Approval 审批引擎 + 三件套基础设施 + BlobStoring 安全修复后）
 
 ---
 

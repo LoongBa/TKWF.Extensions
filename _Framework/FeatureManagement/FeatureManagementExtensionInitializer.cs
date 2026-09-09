@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Core.Features;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 
@@ -38,6 +39,7 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
     {
         services.AddOptions<FeatureOptions>().BindConfiguration("TKWF:FeatureManagement");
         services.TryAddSingleton<IMemoryCache, MemoryCache>();
+        services.TryAddSingleton<FeatureCacheVersionRegistry>();   // v0.2.0 版本号缓存表（Singleton——跨 scope 共享）
 
         // Feature 贡献者收集（对齐 PermissionExtensionInitializer——ProjectMetaContextBase.Instance 在宿主注册期已设置）
         var context = new FeatureDefinitionContext();
@@ -64,13 +66,23 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
 
         services.TryAddScoped<IFeatureDefinitionRepository>(_ => repository);
         services.TryAddScoped<IFeatureValueStore, FeatureValueStore>();
+
+        // v0.2.0 Provider 扩展点——内置四层（TryAddEnumerable：多实现遍历，C2 评审修正——TryAddScoped 只注册第一个）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, UserFeatureValueProvider>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, RoleFeatureValueProvider>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, TenantFeatureValueProvider>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, GlobalFeatureValueProvider>());
+
         services.TryAddScoped<IFeatureManager>(sp => new FeatureManager(
             sp.GetRequiredService<IFeatureValueStore>(),
             sp.GetRequiredService<IFeatureDefinitionRepository>(),
+            sp.GetServices<IFeatureValueProvider>(),
+            sp.GetRequiredService<FeatureCacheVersionRegistry>(),
             sp.GetRequiredService<IDomainUser>(),
             sp.GetRequiredService<IMemoryCache>(),
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<FeatureOptions>>(),
             sp.GetRequiredService<ITransactionManager>(),
+            sp.GetRequiredService<ILocalEventBus>(),
             sp.GetRequiredService<ILogger<FeatureManager>>()));
         services.TryAddScoped<IFeatureChecker, FeatureChecker<TUserInfo>>();
         // 管理 API 服务（[GenerateController]——写路径委托 Manager：缓存失效 + Global 唯一性，C3 裁定）

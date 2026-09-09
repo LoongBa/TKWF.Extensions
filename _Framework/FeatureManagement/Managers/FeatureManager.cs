@@ -6,19 +6,20 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>
-/// 功能管理实现（public sealed，构造函数 internal + 工厂注册）——分层值解析 + 缓存 + 管理写路径。
-/// <para>分层（最优先→最不优先）：User → Role（Roles 遍历序首个命中，P4）→ Tenant（仅 TenantId.HasValue）→
-/// Global → DefaultValue；匿名（user==null 或 !IsAuthenticated）直查 Global（对齐 Settings 匿名短路）。</para>
-/// <para>缓存：IMemoryCache + NotFoundSentinel 负缓存 + BuildCacheKey + 写后 InvalidateCacheForName；
-/// Role 层缓存 key 逐角色独立（Feature:Role:{roleName}:{name}）。</para>
-/// <para>Global 层唯一性（C4 评审，对齐 FileManagement C2 教训）：ProviderKey=null 可空唯一索引 NULL 互不相同
-/// ——SetValueAsync 事务包裹内二次校验（命中更新/未命中创建）。</para>
+/// 功能管理实现（public sealed，构造函数 internal + 工厂注册）——Provider 链解析 + 版本号缓存 + 管理写路径 + 变更事件。
+/// <para>v0.2.0：分层解析 Provider 化（<see cref="IFeatureValueProvider"/> 链 + <see cref="FeatureOptions.ProviderOrder"/> 顺序），
+/// 内置四层（User→Role→Tenant→Global）行为与 v0.1.0 完全一致；缓存改<b>版本号 key</b>
+/// （<see cref="FeatureCacheVersionRegistry"/>——写后 version++ 全层天然失效，修复 v0.1.0 User/Role/Tenant 层 TTL 收敛缺陷）；
+/// 写路径发布 <see cref="FeatureValueChangedEvent"/>（Commit 后，消费方钩子——审计/跨实例联动）。</para>
+/// <para>用户契约（C2）：接收 <see cref="IDomainUser"/>（租户/认证/角色成员在其上）；匿名（user==null 或 !IsAuthenticated）直查 Global。</para>
+/// <para>Global 唯一性（C4）：ProviderKey=null 可空唯一索引 NULL 互不相同——SetValueAsync 事务包裹 + 事务内二次校验。</para>
 /// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——只经 <see cref="IFeatureValueStore"/>（委托 DataService）。</para>
 /// </summary>
 public sealed class FeatureManager : IFeatureManager
@@ -27,27 +28,39 @@ public sealed class FeatureManager : IFeatureManager
 
     private readonly IFeatureValueStore _store;
     private readonly IFeatureDefinitionRepository _definitionRepository;
+    private readonly IReadOnlyList<IFeatureValueProvider> _providers;
+    private readonly FeatureCacheVersionRegistry _versionRegistry;
     private readonly IDomainUser _domainUser;
     private readonly IMemoryCache _cache;
     private readonly FeatureOptions _options;
     private readonly ITransactionManager _transactionManager;
+    private readonly ILocalEventBus _eventBus;
     private readonly ILogger<FeatureManager> _logger;
+
+    // Provider 链缓存（Name 冲突懒校验结果 + 排序后顺序——首次解析构建，防重复检测，C4）
+    private IReadOnlyList<IFeatureValueProvider>? _orderedProvidersCache;
 
     internal FeatureManager(
         IFeatureValueStore store,
         IFeatureDefinitionRepository definitionRepository,
+        IEnumerable<IFeatureValueProvider> providers,
+        FeatureCacheVersionRegistry versionRegistry,
         IDomainUser domainUser,
         IMemoryCache cache,
         IOptions<FeatureOptions> options,
         ITransactionManager transactionManager,
+        ILocalEventBus eventBus,
         ILogger<FeatureManager> logger)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _definitionRepository = definitionRepository ?? throw new ArgumentNullException(nameof(definitionRepository));
+        _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
+        _versionRegistry = versionRegistry ?? throw new ArgumentNullException(nameof(versionRegistry));
         _domainUser = domainUser ?? throw new ArgumentNullException(nameof(domainUser));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
         _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -56,9 +69,10 @@ public sealed class FeatureManager : IFeatureManager
         string? defaultValue = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        var (value, _) = await ResolveLayerAsync(name, user ?? _domainUser, ct);
-        // 默认值语义：显式参数优先（调用方指定兜底）→ 未传（null）时定义默认（FeatureDefinition.DefaultValue）
+        var (value, _) = await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
         if (value != null) return value;
+
+        // 默认值语义：显式参数优先 → 定义默认（FeatureDefinition.DefaultValue）
         return defaultValue ?? _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name)?.DefaultValue ?? string.Empty;
     }
 
@@ -69,7 +83,7 @@ public sealed class FeatureManager : IFeatureManager
         if (string.IsNullOrWhiteSpace(name))
             return false;
 
-        var (value, _) = await ResolveLayerAsync(name, user ?? _domainUser, ct);
+        var (value, _) = await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
         if (value == null)
             return false;   // fail-closed：未定义/无值
 
@@ -87,6 +101,7 @@ public sealed class FeatureManager : IFeatureManager
         if (providerName != FeatureProviders.Global && string.IsNullOrWhiteSpace(providerKey))
             throw new ArgumentException($"Provider 层 {providerName} 必须提供 ProviderKey", nameof(providerKey));
 
+        string? oldValue;
         if (providerName == FeatureProviders.Global)
         {
             // C4：Global 层（ProviderKey=null）唯一性——事务包裹内二次校验（FileManagement C2 完整做法）
@@ -94,6 +109,7 @@ public sealed class FeatureManager : IFeatureManager
             try
             {
                 var existing = await _store.GetAsync(name, FeatureProviders.Global, null, ct);
+                oldValue = existing?.Value;
                 if (existing != null)
                 {
                     existing.Value = value;
@@ -123,6 +139,9 @@ public sealed class FeatureManager : IFeatureManager
         else
         {
             // 非 Global：UX_FeatureValue_Name_Provider 数据库唯一约束兜底（冲突转业务异常）
+            // OldValue 记录（P4：额外一次读——事件通知性语义，并发写为读取时快照）
+            var existing = await _store.GetAsync(name, providerName, providerKey, ct);
+            oldValue = existing?.Value;
             try
             {
                 await _store.SetAsync(new FeatureValueEntity
@@ -140,7 +159,9 @@ public sealed class FeatureManager : IFeatureManager
             }
         }
 
+        // 写成功：version++ 全层失效（即时，无需事件）+ 发布变更事件（Commit 后——消费方钩子）
         InvalidateCacheForName(name);
+        await PublishChangedAsync(name, providerName, providerKey, oldValue, value, ct);
     }
 
     /// <inheritdoc />
@@ -151,8 +172,14 @@ public sealed class FeatureManager : IFeatureManager
         ArgumentException.ThrowIfNullOrWhiteSpace(providerName);
         string? normalizedKey = providerName == FeatureProviders.Global ? null : providerKey;
 
+        // OldValue 记录（P4）
+        var existing = await _store.GetAsync(name, providerName, normalizedKey, ct);
+        string? oldValue = existing?.Value;
+
         await _store.DeleteAsync(name, providerName, normalizedKey, ct);
+
         InvalidateCacheForName(name);
+        await PublishChangedAsync(name, providerName, normalizedKey, oldValue, null, ct);
     }
 
     /// <inheritdoc />
@@ -167,79 +194,121 @@ public sealed class FeatureManager : IFeatureManager
     /// <inheritdoc />
     public async Task<(string? Value, string ProviderName)> GetEffectiveValueAsync(
         string name, IDomainUser? user, CancellationToken ct = default)
-        => await ResolveLayerAsync(name, user ?? _domainUser, ct);
+        => await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
 
-    // ── 内部：分层解析 ──
+    // ── 内部：Provider 链解析 ──
 
-    /// <summary>分层解析：User → Role（遍历序）→ Tenant（仅 HasValue）→ Global → (null, "Global")；匿名短路。</summary>
-    private async Task<(string? Value, string ProviderName)> ResolveLayerAsync(
+    /// <summary>Provider 链解析（v0.2.0）：按 ProviderOrder 排序遍历，首个命中返回；匿名短路直查 Global。</summary>
+    private async Task<(string? Value, string ProviderName)> ResolveViaProvidersAsync(
         string name, IDomainUser? user, CancellationToken ct)
     {
-        if (user == null || !user.IsAuthenticated)
-        {
-            // 匿名（对齐 Settings）：跳过 User/Role/Tenant 直查 Global
-            var global = await GetCachedAsync(name, FeatureProviders.Global, null, ct);
-            return (global, FeatureProviders.Global);
-        }
+        var ordered = GetOrderedProviders();
+        bool isAnonymous = user == null || !user.IsAuthenticated;
+        var definition = _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
+        var allowed = definition?.AllowedProviders;
 
-        // User 层（最优先）
-        var userId = user.UserId;
-        if (!string.IsNullOrWhiteSpace(userId))
+        foreach (var provider in ordered)
         {
-            var userValue = await GetCachedAsync(name, FeatureProviders.User, userId, ct);
-            if (userValue != null) return (userValue, FeatureProviders.User);
-        }
+            // 匿名短路：仅 Global（跳过其余 Provider）
+            if (isAnonymous && provider.Name != FeatureProviders.Global)
+                continue;
 
-        // Role 层（Roles 遍历序首个命中——逐角色独立缓存 key，P4）
-        var roles = user.UserInfo?.Roles;
-        if (roles != null)
-        {
-            foreach (var role in roles)
+            // AllowedProviders 过滤（定义级——非空且不含该 Provider → 跳过）
+            if (allowed != null && !allowed.Contains(provider.Name))
+                continue;
+
+            // providerKey 解析（内置四层：User=UserId / Role=角色遍历序逐个 / Tenant=TenantId / Global=null；自定义=null）
+            if (provider.Name == FeatureProviders.User)
             {
-                var roleValue = await GetCachedAsync(name, FeatureProviders.Role, role, ct);
-                if (roleValue != null) return (roleValue, FeatureProviders.Role);
+                var userId = user!.UserId;
+                if (string.IsNullOrWhiteSpace(userId)) continue;
+                var userValue = await GetCachedAsync(name, provider, userId, ct);
+                if (userValue != null) return (userValue, provider.Name);
+            }
+            else if (provider.Name == FeatureProviders.Role)
+            {
+                var roles = user!.UserInfo?.Roles;
+                if (roles == null) continue;
+                foreach (var role in roles)
+                {
+                    var roleValue = await GetCachedAsync(name, provider, role, ct);
+                    if (roleValue != null) return (roleValue, provider.Name);
+                }
+            }
+            else if (provider.Name == FeatureProviders.Tenant)
+            {
+                if (!user!.TenantId.HasValue) continue;
+                var tenantValue = await GetCachedAsync(name, provider, user.TenantId.Value.ToString(), ct);
+                if (tenantValue != null) return (tenantValue, provider.Name);
+            }
+            else if (provider.Name == FeatureProviders.Global)
+            {
+                var globalValue = await GetCachedAsync(name, provider, null, ct);
+                if (globalValue != null) return (globalValue, provider.Name);
+            }
+            else
+            {
+                // 自定义 Provider：providerKey 由 Provider 注入上下文自行处理（接口统一传 null）
+                var customValue = await GetCachedAsync(name, provider, null, ct);
+                if (customValue != null) return (customValue, provider.Name);
             }
         }
 
-        // Tenant 层（仅 TenantId.HasValue）
-        if (user.TenantId.HasValue)
-        {
-            var tenantValue = await GetCachedAsync(name, FeatureProviders.Tenant, user.TenantId.Value.ToString(), ct);
-            if (tenantValue != null) return (tenantValue, FeatureProviders.Tenant);
-        }
-
-        // Global 层
-        var globalValue = await GetCachedAsync(name, FeatureProviders.Global, null, ct);
-        return (globalValue, FeatureProviders.Global);
+        return (null, FeatureProviders.Global);
     }
 
-    /// <summary>缓存读取：命中返回；未命中查库（负缓存 NotFoundSentinel 防穿透，对齐 Settings）。</summary>
-    private async Task<string?> GetCachedAsync(string name, string providerName, string? providerKey, CancellationToken ct)
+    /// <summary>Provider 链排序 + Name 冲突懒校验（C4：首次解析构建缓存，防重复检测）。</summary>
+    private IReadOnlyList<IFeatureValueProvider> GetOrderedProviders()
     {
-        var key = BuildCacheKey(name, providerName, providerKey);
+        if (_orderedProvidersCache != null) return _orderedProvidersCache;
+
+        // Name 冲突校验（注册集合内重复）
+        var duplicates = _providers.GroupBy(p => p.Name).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (duplicates.Count > 0)
+            throw new InvalidOperationException($"Feature Provider Name 冲突：{string.Join(", ", duplicates)}");
+
+        // ProviderOrder 排序：列入的按配置顺序；未列入的追加末尾（注册顺序）；空列表 = 注册顺序
+        var order = _options.ProviderOrder ?? [];
+        var orderedList = order.Count > 0
+            ? order.Select(o => _providers.FirstOrDefault(p => p.Name == o)).Where(p => p != null).Cast<IFeatureValueProvider>()
+                  .Concat(_providers.Where(p => !order.Contains(p.Name))).ToList()
+            : _providers.ToList();
+
+        _orderedProvidersCache = orderedList;
+        return orderedList;
+    }
+
+    /// <summary>缓存读取（版本号 key）：命中返回；未命中查库（负缓存 NotFoundSentinel 防穿透，对齐 Settings）。</summary>
+    private async Task<string?> GetCachedAsync(string name, IFeatureValueProvider provider, string? providerKey, CancellationToken ct)
+    {
+        var key = BuildCacheKey(name, provider.Name, providerKey);
         if (_cache.TryGetValue(key, out object? cached))
             return cached is string s && s != NotFoundSentinel ? s : null;
 
-        var entity = await _store.GetAsync(name, providerName, providerKey, ct);
+        var entity = await provider.GetOrNullAsync(name, providerKey ?? "", ct);
         var ttl = TimeSpan.FromSeconds(Math.Max(1, _options.CacheExpirationSeconds));
-        if (entity?.Value == null)
+        if (entity == null)
         {
             _cache.Set(key, NotFoundSentinel, ttl);   // 负缓存
             return null;
         }
 
-        _cache.Set(key, entity.Value, ttl);
-        return entity.Value;
+        _cache.Set(key, entity, ttl);
+        return entity;
     }
 
-    private static string BuildCacheKey(string name, string providerName, string? providerKey)
-        => $"Feature:{providerName}:{providerKey ?? "Global"}:{name}";
+    /// <summary>缓存 key：版本号嵌入（v0.2.0）——写后 version++ → 全层新 key miss（无需登记枚举动态 ProviderKey）。</summary>
+    private string BuildCacheKey(string name, string providerName, string? providerKey)
+        => $"Feature:{name}:v{_versionRegistry.GetVersion(name)}:{providerName}:{providerKey ?? "Global"}";
 
-    /// <summary>写后失效：Global 层显式清（最常用层，key 确定）；User/Role/Tenant 层 key 含动态 ProviderKey
-    /// （角色名/UserId/TenantId 无法穷举，IMemoryCache 无前缀 API）——依赖 CacheExpirationSeconds TTL 收敛
-    /// （v0.1.0 裁定，多实例同理；见使用指南生产注意事项 C5）。</summary>
+    /// <summary>写后失效：版本递增（O(1)——全层天然失效；旧 key 由 TTL 清理，无泄漏）。</summary>
     private void InvalidateCacheForName(string name)
-        => _cache.Remove(BuildCacheKey(name, FeatureProviders.Global, null));
+        => _versionRegistry.BumpVersion(name);
+
+    /// <summary>发布变更事件（Commit 后——AOP Bag commit 后派发 / 非 AOP 立即；消费方钩子，不用于本进程失效）。</summary>
+    private Task PublishChangedAsync(string name, string providerName, string? providerKey,
+        string? oldValue, string? newValue, CancellationToken ct)
+        => _eventBus.PublishAsync(new FeatureValueChangedEvent(name, providerName, providerKey, oldValue, newValue));
 
     private static bool IsUniqueConstraintViolation(Exception ex)
     {

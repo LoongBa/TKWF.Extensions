@@ -20,10 +20,13 @@ public class FeatureDefinitionTests
 
         var definitions = host.DefinitionRepository.GetAll();
 
-        Assert.Equal(3, definitions.Count);
+        Assert.Equal(6, definitions.Count);
         Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.BooleanFeature);
         Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.StringFeature);
         Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.IntFeature);
+        Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.DecimalFeature);
+        Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.DateTimeFeature);
+        Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.JsonFeature);
     }
 
     [Fact]
@@ -63,6 +66,43 @@ public class FeatureDefinitionTests
 
         Assert.Equal(FeatureValueType.Int, definition.ValueType);
         Assert.Equal("10", definition.DefaultValue);
+    }
+
+    [Fact]
+    public void HostRepository_DecimalDefinition_MetadataCollected()
+    {
+        using var host = FeatureManagementTestHost.Create();
+
+        var definition = host.DefinitionRepository.GetAll()
+            .Single(d => d.Name == ConsumerFeatureContributor.DecimalFeature);
+
+        Assert.Equal(FeatureValueType.Decimal, definition.ValueType);
+        Assert.Equal("1.5", definition.DefaultValue);
+        Assert.Equal("App", definition.Group);
+    }
+
+    [Fact]
+    public void HostRepository_DateTimeDefinition_MetadataCollected()
+    {
+        using var host = FeatureManagementTestHost.Create();
+
+        var definition = host.DefinitionRepository.GetAll()
+            .Single(d => d.Name == ConsumerFeatureContributor.DateTimeFeature);
+
+        Assert.Equal(FeatureValueType.DateTime, definition.ValueType);
+        Assert.Equal("2026-10-01T00:00:00Z", definition.DefaultValue);
+    }
+
+    [Fact]
+    public void HostRepository_JsonDefinition_MetadataCollected()
+    {
+        using var host = FeatureManagementTestHost.Create();
+
+        var definition = host.DefinitionRepository.GetAll()
+            .Single(d => d.Name == ConsumerFeatureContributor.JsonFeature);
+
+        Assert.Equal(FeatureValueType.Json, definition.ValueType);
+        Assert.Equal("""{"percent":20}""", definition.DefaultValue);
     }
 
     [Fact]

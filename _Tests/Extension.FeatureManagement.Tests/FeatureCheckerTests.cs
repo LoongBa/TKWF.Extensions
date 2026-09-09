@@ -83,9 +83,19 @@ public class FeatureCheckerTests
     public async Task IsEnabledAsync_HitLayerBoolParseFailure_ReturnsFalse_NoCrossLayerFallback()
     {
         // P3：命中层（User）值 "abc" bool 解析失败 → false，不跨层回退到 Global "true"
+        // 注：v0.3.0 起写时校验拒绝向 Boolean Feature 写 "abc"（Manager.SetValueAsync 抛 ArgumentException）——
+        // 为保留 P3 读侧语义（命中层存在非法布尔值时的解析行为），此处经 DataService 直写原始坏值（绕过校验，
+        // 等价于存量库/外部直写遗留数据场景）。
         using var host = FeatureManagementTestHost.Create();
         await host.Manager.SetValueAsync(Checkout, "true", FeatureProviders.Global, null, CancellationToken.None);
-        await host.Manager.SetValueAsync(Checkout, "abc", FeatureProviders.User, "u-1", CancellationToken.None);
+        await host.DataService.UpsertByKeyAsync(new FeatureValueEntity
+        {
+            Name = Checkout,
+            Value = "abc",
+            ProviderName = FeatureProviders.User,
+            ProviderKey = "u-1",
+            UpdateTime = DateTime.UtcNow
+        }, CancellationToken.None);
         using var restore = SetAmbientUser("u-1");
 
         var result = await host.Checker.IsEnabledAsync(Checkout, CancellationToken.None);

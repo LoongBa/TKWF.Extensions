@@ -33,4 +33,16 @@ public interface IFeatureManager
 
     /// <summary>命中层返回（管理显示——写后最新值）。</summary>
     Task<(string? Value, string ProviderName)> GetEffectiveValueAsync(string name, IDomainUser? user, CancellationToken ct = default);
+
+    /// <summary>类型化读取（v0.3.0）——按 T 反序列化（对齐 Settings <c>GetAsync&lt;T&gt;</c>）。
+    /// <para>映射：bool/int/long/decimal/double 用 TryParse（InvariantCulture，DateTime 用 RoundtripKind）；
+    /// string 原样；其他（含 Json 对象/数组/record）经 <c>JsonSerializer.Deserialize</c>。
+    /// <b>解析失败/无值 → defaultValue</b>（fail-closed 精神：不抛，返回默认；Json 引用类型解析失败返回 null）。</para>
+    /// <para>回退链：存储值 → 定义 DefaultValue（可解析则用之）→ defaultValue。</para></summary>
+    Task<T> GetValueAsync<T>(string name, IDomainUser? user, T defaultValue = default!, CancellationToken ct = default);
+
+    /// <summary>类型化写入（v0.3.0）——value 序列化为规范字符串后走 <see cref="SetValueAsync(string, string, string, string, CancellationToken)"/>（含写时校验）。
+    /// <para>映射：bool → "true"/"false"（规范小写）；int/long/decimal/double → InvariantCulture；
+    /// DateTime → ISO8601（"O"）；string 原样；其他（含 Json 对象/数组/record）→ <c>JsonSerializer.Serialize</c>。</para></summary>
+    Task SetValueAsync<T>(string name, T value, string providerName, string providerKey, CancellationToken ct = default);
 }

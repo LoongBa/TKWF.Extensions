@@ -7,11 +7,14 @@ namespace TKWF.Ext.FeatureManagement.Tests;
 /// <para>经 <c>[FeatureContributor]</c> 标记，SG1 编译期扫描消费方程序集生成
 /// <c>GeneratedFeatureContributors</c> → <c>ProjectMetaContextBase.Instance.FeatureContributors</c>，
 /// 扩展 <see cref="FeatureManagementExtensionInitializer{TUserInfo}.ConfigureServices"/> 运行时读取并实例化。</para>
-/// <para>声明三种 ValueType 的测试 Feature（覆盖 Boolean/String/Int）：
+/// <para>声明六种 ValueType 的测试 Feature（覆盖 Boolean/String/Int/Decimal/DateTime/Json——v0.3.0）：
 /// <list type="bullet">
 /// <item><c>Order.NewCheckout</c>——Boolean，默认 <c>false</c>（关闭）</item>
 /// <item><c>App.Theme</c>——String，默认 <c>light</c></item>
 /// <item><c>App.MaxItems</c>——Int，默认 <c>10</c></item>
+/// <item><c>App.Rate</c>——Decimal，默认 <c>1.5</c>（v0.3.0）</item>
+/// <item><c>App.MaintenanceWindow</c>——DateTime，默认 <c>2026-10-01T00:00:00Z</c>（v0.3.0，ISO8601）</item>
+/// <item><c>App.GrayConfig</c>——Json，默认 <c>{"percent":20}</c>（v0.3.0，合法 JSON）</item>
 /// </list></para>
 /// </summary>
 [FeatureContributor]
@@ -25,6 +28,15 @@ public class ConsumerFeatureContributor : IFeatureDefinitionContributor
 
     /// <summary>Int 测试 Feature 名（默认 10）。</summary>
     public const string IntFeature = "App.MaxItems";
+
+    /// <summary>Decimal 测试 Feature 名（默认 1.5——v0.3.0）。</summary>
+    public const string DecimalFeature = "App.Rate";
+
+    /// <summary>DateTime 测试 Feature 名（默认 2026-10-01T00:00:00Z——v0.3.0，ISO8601 UTC 契约）。</summary>
+    public const string DateTimeFeature = "App.MaintenanceWindow";
+
+    /// <summary>Json 测试 Feature 名（默认 {"percent":20}——v0.3.0，合法 JSON）。</summary>
+    public const string JsonFeature = "App.GrayConfig";
 
     public void Define(FeatureDefinitionContext context)
     {
@@ -52,6 +64,33 @@ public class ConsumerFeatureContributor : IFeatureDefinitionContributor
             Group = "App",
             ValueType = FeatureValueType.Int,
             DefaultValue = "10"
+        });
+        context.Add(new FeatureDefinition
+        {
+            Name = DecimalFeature,
+            DisplayName = "费率（每笔）",
+            Description = "单笔费率/阈值（Decimal 示例——v0.3.0）",
+            Group = "App",
+            ValueType = FeatureValueType.Decimal,
+            DefaultValue = "1.5"
+        });
+        context.Add(new FeatureDefinition
+        {
+            Name = DateTimeFeature,
+            DisplayName = "计划维护窗口",
+            Description = "计划切换/维护生效时间（DateTime 示例——v0.3.0，ISO8601）",
+            Group = "App",
+            ValueType = FeatureValueType.DateTime,
+            DefaultValue = "2026-10-01T00:00:00Z"
+        });
+        context.Add(new FeatureDefinition
+        {
+            Name = JsonFeature,
+            DisplayName = "灰度发布配置",
+            Description = "灰度发布参数（Json 示例——v0.3.0，对象/数组）",
+            Group = "App",
+            ValueType = FeatureValueType.Json,
+            DefaultValue = """{"percent":20}"""
         });
     }
 }

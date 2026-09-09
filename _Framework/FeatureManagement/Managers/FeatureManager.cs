@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
@@ -21,6 +23,10 @@ namespace TKWF.Ext.FeatureManagement;
 /// <para>用户契约（C2）：接收 <see cref="IDomainUser"/>（租户/认证/角色成员在其上）；匿名（user==null 或 !IsAuthenticated）直查 Global。</para>
 /// <para>Global 唯一性（C4）：ProviderKey=null 可空唯一索引 NULL 互不相同——SetValueAsync 事务包裹 + 事务内二次校验。</para>
 /// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——只经 <see cref="IFeatureValueStore"/>（委托 DataService）。</para>
+/// <para>v0.3.0：类型化读写（<see cref="GetValueAsync{T}(string, IDomainUser?, T, CancellationToken)"/> /
+/// <see cref="SetValueAsync{T}(string, T, string, string, CancellationToken)"/>）——序列化/反序列化映射集中于本类
+/// 私有静态方法（bool/数字/DateTime 规范字符串 + 其他类型 JSON）；写时校验 <see cref="ValidateValueForDefinition"/>
+/// （对齐定义 ValueType，违反 → <see cref="ArgumentException"/>；未定义 Feature → 跳过校验向后兼容）。</para>
 /// </summary>
 public sealed class FeatureManager : IFeatureManager
 {
@@ -100,6 +106,9 @@ public sealed class FeatureManager : IFeatureManager
         ArgumentException.ThrowIfNullOrWhiteSpace(providerName);
         if (providerName != FeatureProviders.Global && string.IsNullOrWhiteSpace(providerKey))
             throw new ArgumentException($"Provider 层 {providerName} 必须提供 ProviderKey", nameof(providerKey));
+
+        // v0.3.0 写时校验（对齐定义 ValueType——写错类型立即暴露，不再延迟到读时；未定义 Feature → 跳过校验向后兼容）
+        ValidateValueForDefinition(name, value);
 
         string? oldValue;
         if (providerName == FeatureProviders.Global)
@@ -195,6 +204,28 @@ public sealed class FeatureManager : IFeatureManager
     public async Task<(string? Value, string ProviderName)> GetEffectiveValueAsync(
         string name, IDomainUser? user, CancellationToken ct = default)
         => await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
+
+    /// <inheritdoc />
+    public async Task<T> GetValueAsync<T>(string name, IDomainUser? user, T defaultValue = default!, CancellationToken ct = default)
+    {
+        var (value, _) = await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
+        if (value != null)
+            return DeserializeValue(value, defaultValue, _logger);
+
+        // 无存储值：定义 DefaultValue 优先（P6：与字符串入口回退链相反——字符串入口为参数优先 defaultValue ?? definition.DefaultValue；
+        // 类型化入口因签名 default! 区分不了 default(T) 与显式默认，故让定义默认（Feature 设计者声明的规范回退值）优先）；
+        // 不可解析/无定义默认 → defaultValue
+        var definition = _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
+        if (definition?.DefaultValue is { Length: > 0 } definitionDefault)
+            return DeserializeValue(definitionDefault, defaultValue, _logger);
+
+        return defaultValue;
+    }
+
+    /// <inheritdoc />
+    public async Task SetValueAsync<T>(string name, T value, string providerName, string providerKey,
+        CancellationToken ct = default)
+        => await SetValueAsync(name, SerializeValue(value), providerName, providerKey, ct);
 
     // ── 内部：Provider 链解析 ──
 
@@ -309,6 +340,109 @@ public sealed class FeatureManager : IFeatureManager
     private Task PublishChangedAsync(string name, string providerName, string? providerKey,
         string? oldValue, string? newValue, CancellationToken ct)
         => _eventBus.PublishAsync(new FeatureValueChangedEvent(name, providerName, providerKey, oldValue, newValue));
+
+    // ── v0.3.0 类型化序列化/反序列化映射 + 写时校验 ──
+
+    /// <summary>类型化序列化（写）：bool → "true"/"false"（规范小写）；int/long/decimal/double → InvariantCulture；
+    /// DateTime → ISO8601（"O"）；string 原样；其他（含 Json 对象/数组/record）→ JsonSerializer。
+    /// null（引用类型）→ 空字符串（String 特征恒过校验；Json 特征由写时校验拒绝空文档）。</summary>
+    private static string SerializeValue<T>(T value)
+    {
+        if (value is null) return string.Empty;
+        if (value is bool b) return b ? "true" : "false";
+        if (value is int i) return i.ToString(CultureInfo.InvariantCulture);
+        if (value is long l) return l.ToString(CultureInfo.InvariantCulture);
+        if (value is decimal m) return m.ToString(CultureInfo.InvariantCulture);
+        if (value is double d) return d.ToString(CultureInfo.InvariantCulture);
+        if (value is DateTime dt) return dt.ToString("O", CultureInfo.InvariantCulture);
+        if (value is string s) return s;
+        return JsonSerializer.Serialize(value);
+    }
+
+    /// <summary>类型化反序列化（读）：bool/int/long/decimal/double 用 TryParse（InvariantCulture，
+    /// DateTime 用 RoundtripKind——ISO8601 可往返）；string 原样；其他 → JsonSerializer.Deserialize。
+    /// 一律 fail-closed：解析失败 → defaultValue（Json 引用类型解析失败返回 null——P2 裁定），不抛异常。</summary>
+    private static T DeserializeValue<T>(string raw, T defaultValue, ILogger logger)
+    {
+        var type = typeof(T);
+        if (type == typeof(bool))
+            return bool.TryParse(raw, out var b) ? (T)(object)b : defaultValue;
+        if (type == typeof(int))
+            return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? (T)(object)i : defaultValue;
+        if (type == typeof(long))
+            return long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l) ? (T)(object)l : defaultValue;
+        if (type == typeof(decimal))
+            return decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var m) ? (T)(object)m : defaultValue;
+        if (type == typeof(double))
+            return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? (T)(object)d : defaultValue;
+        if (type == typeof(DateTime))
+            return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt) ? (T)(object)dt : defaultValue;
+        if (type == typeof(string))
+            return (T)(object)raw;
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(raw) ?? defaultValue;
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Feature 值 JSON 反序列化失败（返回默认值）| Type: {Type} | Value: {Value}",
+                type.FullName, raw);
+            return defaultValue;
+        }
+    }
+
+    /// <summary>写时校验（对齐定义 ValueType）：Boolean→bool.TryParse；Int→int.TryParse（InvariantCulture）；
+    /// Decimal→decimal.TryParse；DateTime→DateTime.TryParse（RoundtripKind——ISO8601 可往返）；
+    /// Json→JsonDocument.TryParse（合法 JSON 文档）；String→恒通过（长度由列限制兜底）。
+    /// <b>未定义 Feature → 跳过校验</b>（v0.2.0 无定义可写语义向后兼容）。违反 → <see cref="ArgumentException"/>。</summary>
+    private void ValidateValueForDefinition(string name, string value)
+    {
+        var definition = _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
+        if (definition == null)
+            return;
+
+        switch (definition.ValueType)
+        {
+            case FeatureValueType.Boolean:
+                if (!bool.TryParse(value, out _))
+                    throw new ArgumentException($"Feature 值校验失败：{name} 为 Boolean 类型，值 \"{value}\" 非法（仅接受 true/false）", nameof(value));
+                break;
+            case FeatureValueType.Int:
+                if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                    throw new ArgumentException($"Feature 值校验失败：{name} 为 Int 类型，值 \"{value}\" 非法", nameof(value));
+                break;
+            case FeatureValueType.Decimal:
+                if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+                    throw new ArgumentException($"Feature 值校验失败：{name} 为 Decimal 类型，值 \"{value}\" 非法", nameof(value));
+                break;
+            case FeatureValueType.DateTime:
+                if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _))
+                    throw new ArgumentException($"Feature 值校验失败：{name} 为 DateTime 类型，值 \"{value}\" 非法（须可往返 ISO8601）", nameof(value));
+                break;
+            case FeatureValueType.Json:
+                if (!IsValidJson(value))
+                    throw new ArgumentException($"Feature 值校验失败：{name} 为 Json 类型，值不是合法 JSON 文档", nameof(value));
+                break;
+            case FeatureValueType.String:
+            default:
+                break;   // String 恒通过（长度由列限制兜底）
+        }
+    }
+
+    /// <summary>Json 文档合法性检查（JsonDocument.TryParse——合法 JSON 文档）。</summary>
+    private static bool IsValidJson(string value)
+    {
+        try
+        {
+            JsonDocument.Parse(value);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static bool IsUniqueConstraintViolation(Exception ex)
     {

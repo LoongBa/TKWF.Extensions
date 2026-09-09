@@ -139,6 +139,9 @@ public class FeatureManagementInitializerTests
             Assert.Contains(ConsumerFeatureContributor.BooleanFeature, names);
             Assert.Contains(ConsumerFeatureContributor.StringFeature, names);
             Assert.Contains(ConsumerFeatureContributor.IntFeature, names);
+            Assert.Contains(ConsumerFeatureContributor.DecimalFeature, names);
+            Assert.Contains(ConsumerFeatureContributor.DateTimeFeature, names);
+            Assert.Contains(ConsumerFeatureContributor.JsonFeature, names);
         }
         finally
         {
@@ -211,6 +214,9 @@ public class FeatureManagementInitializerTests
         public Task<string> GetValueAsync(string name, IDomainUser? user, string? defaultValue = null, CancellationToken ct = default)
             => Task.FromResult(defaultValue ?? string.Empty);
 
+        public Task<T> GetValueAsync<T>(string name, IDomainUser? user, T defaultValue = default!, CancellationToken ct = default)
+            => Task.FromResult(defaultValue);
+
         public Task<bool> IsEnabledAsync(string name, IDomainUser? user, CancellationToken ct = default)
             => Task.FromResult(false);
 
@@ -222,6 +228,9 @@ public class FeatureManagementInitializerTests
             => Task.FromResult<IReadOnlyList<FeatureValueEntity>>([]);
 
         public Task SetValueAsync(string name, string value, string providerName, string? providerKey, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task SetValueAsync<T>(string name, T value, string providerName, string providerKey, CancellationToken ct = default)
             => Task.CompletedTask;
 
         public Task DeleteValueAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)

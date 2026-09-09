@@ -370,7 +370,7 @@ public class FeatureManagerTests
 
         var definitions = await host.Manager.GetDefinitionsAsync(CancellationToken.None);
 
-        Assert.Equal(3, definitions.Count);
+        Assert.Equal(6, definitions.Count);
         Assert.Contains(definitions, d => d.Name == ConsumerFeatureContributor.BooleanFeature);
     }
 

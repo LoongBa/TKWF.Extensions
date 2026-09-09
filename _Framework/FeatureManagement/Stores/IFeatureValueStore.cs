@@ -5,10 +5,12 @@ using System.Threading.Tasks;
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>
-/// Feature 值存储抽象（internal）——分层值 CRUD，经 SG1 DataService 委托。
+/// Feature 值存储抽象（public，v0.3.0——修复 v0.2.0 半开放缺陷：消费方自定义 Provider 注入存储契约读值；
+/// 实现类 <see cref="FeatureValueStore"/> 保持 internal sealed，DI 经扩展 Initializer 注册）。
+/// <para>分层值 CRUD，经 SG1 DataService 委托（红线合规——无 IFreeSql/IEntityDAC）。</para>
 /// <para>异常策略：读路径静默（fail-closed 降级默认值，对齐 Settings）；写路径异常传播（管理改值失败必须告知）。</para>
 /// </summary>
-internal interface IFeatureValueStore
+public interface IFeatureValueStore
 {
     /// <summary>按 Name+Provider 读值（不存在返回 null；读异常 → null 静默降级）。</summary>
     Task<FeatureValueEntity?> GetAsync(string name, string providerName, string? providerKey, CancellationToken ct = default);

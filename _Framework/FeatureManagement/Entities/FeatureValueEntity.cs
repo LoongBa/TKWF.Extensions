@@ -25,9 +25,13 @@ public partial class FeatureValueEntity
     [System.ComponentModel.DataAnnotations.MaxLength(128)]
     public string Name { get; set; } = "";
 
-    /// <summary>值（字符串表示）。</summary>
+    /// <summary>值（字符串表示）。
+    /// <para>v0.3.0：<c>[MaxLength(512)]</c> → <c>[MaxLength(-1)]</c>（FreeSql 无界字符串约定——
+    /// SQLite=text/Pg=text/SqlServer=nvarchar(max)），容纳 JSON 复杂值；新装库 SyncTables 幂等建无界列；
+    /// 存量库 VARCHAR(512) 加宽依赖 SyncTables 实现（若未自动 ALTER 需 DBA 手动变更，见使用指南）。
+    /// 注：单纯移除 MaxLength 属性 FreeSql 默认映射 NVARCHAR(255)（仍受限）——须显式 <c>MaxLength(-1)</c>。</para></summary>
     [FreeSql.DataAnnotations.Column(Position = 3)]
-    [System.ComponentModel.DataAnnotations.MaxLength(512)]
+    [System.ComponentModel.DataAnnotations.MaxLength(-1)]
     public string? Value { get; set; }
 
     /// <summary>Provider 层（Global/Tenant/Role/User）。</summary>

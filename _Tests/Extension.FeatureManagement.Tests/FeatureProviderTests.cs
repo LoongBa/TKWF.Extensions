@@ -122,6 +122,18 @@ public class FeatureProviderTests
         Assert.Equal("global-value", value);
     }
 
+    // ── D10 IFeatureValueStore public（v0.3.0 可见性修复——消费方自定义 Provider 可注入存储契约） ──
+
+    [Fact]
+    public void IFeatureValueStore_IsPublic_ConsumerAssemblyCanInject()
+    {
+        // v0.3.0：IFeatureValueStore internal → public——修复 v0.2.0 半开放缺陷（指南 §8.1 自定义 Provider
+        // 注入 Store 读值的模式在消费方编译不过）。TestEditionProvider（本文件，消费方视角程序集）构造注入
+        // IFeatureValueStore 已编译通过（编译断言）；此处再作运行时反射断言。
+        Assert.True(typeof(IFeatureValueStore).IsPublic);
+        Assert.NotNull(typeof(TestEditionProvider).GetConstructor(new[] { typeof(IFeatureValueStore) }));
+    }
+
     // ── D12 Provider Name 冲突懒校验 ──
 
     [Fact]

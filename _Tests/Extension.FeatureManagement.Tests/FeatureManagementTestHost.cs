@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -62,14 +63,22 @@ internal sealed class FeatureManagementTestHost : IDisposable
 
     public IFeatureChecker Checker => _serviceProvider.GetRequiredService<IFeatureChecker>();
 
-    /// <summary>Feature 值存储（internal，经 IVT 访问——扩展 csproj 须含
-    /// <c>&lt;InternalsVisibleTo Include="TKWF.Ext.FeatureManagement.Tests" /&gt;</c>）。</summary>
+    /// <summary>Feature 值存储（v0.3.0 public 契约——消费方自定义 Provider 可注入；实现类仍 internal，DI 经扩展注册）。</summary>
     public IFeatureValueStore Store => _serviceProvider.GetRequiredService<IFeatureValueStore>();
 
     public IFeatureDefinitionRepository DefinitionRepository => _serviceProvider.GetRequiredService<IFeatureDefinitionRepository>();
 
     /// <summary>SG1 DataService（存储层——管理 API 写路径经 Manager 委托，禁止裸 CRUD 直通）。</summary>
     public FeatureValueEntityDataService DataService => _serviceProvider.GetRequiredService<FeatureValueEntityDataService>();
+
+    /// <summary>缓存版本表（v0.2.0/0.3.0——跨实例失效测试直读版本断言）。</summary>
+    public FeatureCacheVersionRegistry VersionRegistry => _serviceProvider.GetRequiredService<FeatureCacheVersionRegistry>();
+
+    /// <summary>分布式事件总线（v0.3.0——默认 LocalDistributedEventBus 进程内降级；无总线模式验证用）。</summary>
+    public IDistributedEventBus DistributedBus => _serviceProvider.GetRequiredService<IDistributedEventBus>();
+
+    /// <summary>扩展内建跨实例失效 handler（v0.3.0——测试项目无 SG4 扫描，手动 AddTransient；D9 经总线订阅验证 LocalHandlerAdapter）。</summary>
+    public DistributedFeatureChangedHandler DistributedFeatureChangedHandler => _serviceProvider.GetRequiredService<DistributedFeatureChangedHandler>();
 
     private FeatureManagementTestHost(ServiceProvider serviceProvider, IFreeSql fsql, TestDomainUser user)
     {
@@ -107,6 +116,12 @@ internal sealed class FeatureManagementTestHost : IDisposable
 
         // v0.2.0：ILocalEventBus（变更事件发布依赖——主框架 LocalEventBus 进程内实现）
         services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus, TKW.Framework.Domain.Events.LocalEventBus>();
+
+        // v0.3.0：IDistributedEventBus（默认进程内降级——LocalDistributedEventBus 委托 ILocalEventBus；
+        // 未接 RabbitMQ 时 [DistributedEvent] 事件静默走本地，行为与 v0.2.0 一致，F8）
+        services.AddSingleton<TKW.Framework.Domain.Events.IDistributedEventBus, TKW.Framework.Domain.Events.LocalDistributedEventBus>();
+        // v0.3.0：跨实例失效 handler 手动注册（测试项目无消费方 SG4 扫描——扩展 Initializer 不手动注册）
+        services.AddTransient<DistributedFeatureChangedHandler>();
 
         // 贡献者收集 + 扩展初始化器注册（TryAddScoped 不覆盖已注册 DataService/IMemoryCache）
         lock (s_metaContextLock)

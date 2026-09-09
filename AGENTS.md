@@ -10,8 +10,8 @@
 | 项 | 说明 |
 |----|------|
 | 本仓库 | TKWF 业务扩展包（`TKWF.Ext.*`）——标签、权限、导航、身份、审计等 |
-| 主框架 | `../_TKWF/`（TKW.Framework 领域框架）——经 `$(TKWFRoot)` ProjectReference 跨仓库引用 |
-| 关系 | 扩展引用主框架**源码**（`Directory.Build.props` 定义 `TKWFRoot`）；**不进入**主框架 slnx |
+| 主框架 | `../_TKWF/`（TKW.Framework 领域框架）——经 `$(TKWFSourceRoot)` ProjectReference 跨仓库引用 |
+| 关系 | 扩展引用主框架**源码**（`Directory.Build.props` 定义 `TKWFSourceRoot`）；**不进入**主框架 slnx |
 | 解决方案 | `TKWF.Extensions.slnx`——本仓库扩展的统一构建入口 |
 
 ### 公开/私有边界
@@ -87,7 +87,7 @@
 
 ## 6. 跨仓库引用规则
 
-- **主框架引用**：扩展项目通过 `$(TKWFRoot)`（`Directory.Build.props` 定义 = `../_TKWF/`）引用主框架源码（ProjectReference，编译期依赖）。
+- **主框架引用**：扩展项目通过 `$(TKWFSourceRoot)`（`Directory.Build.props` 定义 = `../_TKWF/`）引用主框架源码（ProjectReference，编译期依赖）。
 - **扩展间引用**：扩展间依赖走 ProjectReference（编译期确定），不走运行时能力发现。
 - **NuGet 模式**（后续）：扩展成熟后独立发布 NuGet 包（`TKWF.Ext.{扩展名}`），消费方切 PackageReference。
 
@@ -137,7 +137,7 @@ public class TaggingInitializer : ExtensionInitializer<MyUserInfo>
 
 ```
 _Framework/{扩展名}/
-├── TKWF.Ext.{扩展名}.csproj    # net10.0，引用 $(TKWFRoot)_Framework\Domain\TKWF.Domain.csproj
+├── TKWF.Ext.{扩展名}.csproj    # net10.0，引用 $(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj
 ├── README.md                    # 技术规范（随 NuGet）
 └── *.cs
 
@@ -169,20 +169,20 @@ _Tests/Extension.{扩展名}.Tests/
 >
 > **扩展启用（V4.9.85）**：扩展 DLL 被消费方引用后，SG1 经 `ReferencedAssemblySymbols` 发现 `[TKWFExtension]` 初始化器（生成能力清单）；但**发现 ≠ 启用**——扩展的 `IsEnabled` 默认 false，三钩子默认不执行。消费方须在自身 `DomainHostInitializerBase<T>` 派生类上标注 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明（AllowMultiple），扩展才真正启用、三钩子才执行。未声明 → 发现但默认不启用。
 
-**csproj 接线要点**（对齐 DMP-Lite 消费模式，`$(TKWFRoot)` 定义于仓库根 `Directory.Build.props`）：
+**csproj 接线要点**（对齐 DMP-Lite 消费模式，`$(TKWFSourceRoot)` 定义于仓库根 `Directory.Build.props`）：
 
 ```xml
 <ItemGroup>
   <!-- ① 框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-  <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+  <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 
   <!-- ② SG1 分析器：用预编译 DLL（不用 ProjectReference+OutputItemType="Analyzer"——
         Roslyn 增量缓存可能导致生成器不执行，DMP-Lite 已验证；用 build\refs 预编译 DLL 生成器稳定执行） -->
-  <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.dll" />
-  <Analyzer Include="$(TKWFRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+  <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
+  <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
 
   <!-- ③ VS FastUpToDateCheck：让 VS 识别 SG 依赖（ReferenceOutputAssembly=false 不产生运行时引用） -->
-  <ProjectReference Include="$(TKWFRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+  <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
                     ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
 </ItemGroup>
 
@@ -228,3 +228,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-07 | — | §8 新增「构建/编译操作纪律」——dll 占用时用 `dotnet build-server shutdown` 优雅关闭编译服务器，不强杀进程 |
 | 2026-09-07 | — | §8 新增「数据访问红线」（用户裁定 2026-09-07）——扩展禁裸 ORM / 禁直接 IEntityDAC / 应发挥组装优势；标准路径 = DataService → IEntityDAC → 实现层；待整改清单 10+1 扩展分批改造 |
 | 2026-09-07 | — | §8 新增「跨表查询 VEntity」实践——多对一 JOIN 用 VEntity（ViewSql 双方言 + 手写只读 DataService + Initializer 手动注册 + 生产 DBA 建视图）；一对多主从聚合保持两步；先例 Identity/Notifications |
+| 2026-09-10 | — | §8 新增「分布式事件 handler 注册机制」要点（FeatureManagement v0.3.0 先例）——扩展内建 `[DomainEventHandler]` + `IDistributedEventHandler<T>` handler **必须 public**（SG4 消费方编译期经 ReferencedAssemblySymbols 生成 `typeof(Handler)` 引用，internal 无 IVT → CS0122；public 构造器依赖类型亦不可 internal——CS0051）；Initializer 不手动注册；扩展自身构建不触发 EVT003/EVT004（消费方 WebApi 编译时执行） |

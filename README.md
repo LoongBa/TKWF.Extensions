@@ -35,10 +35,11 @@
 | **SecurityLog**             | V0.1.0          | 安全日志（登录/登出/改密/重置/锁定/注册/挑战事件 + IP/UA/结果，Domain AOP 自动采集）| — | [README](./_Framework/SecurityLog/README.md) | [指南](./docs/SecurityLog/安全日志扩展-使用指南.md) |
 | **Approval**                | V0.1.0          | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 完成事件回调；不依赖外部工作流引擎）| — | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
 | **OrganizationUnit**        | V0.1.0          | 组织单元（树形部门/团队/分组 + 物化路径 Level/Path + 循环防护/删除保护 + 用户关联 + 事务包裹）| — | [README](./_Framework/OrganizationUnit/README.md) | [指南](./docs/OrganizationUnit/组织单元扩展-使用指南.md) |
+| **Calendar**                | V0.1.0          | 日历/排程（日历+事件 CRUD + 重复规则子集（Utility 收纳：DAILY/WEEKLY/MONTHLY/YEARLY + 月末钳制 + 绝对索引）+ occurrence 查询/合并 + UTC 契约）| — | [README](./_Framework/Calendar/README.md) | [指南](./docs/Calendar/日历排程扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **793 测试全绿**（24 测试项目）——`dotnet test` 零失败。（OrganizationUnit 组织单元 + Approval 审批引擎 + 三件套基础设施 + 数据访问红线整改后）
+> 全量 **921 测试全绿**（25 测试项目）——`dotnet test` 零失败。（Calendar 日历排程 + OrganizationUnit 组织单元 + Approval 审批引擎 + 三件套基础设施 + 数据访问红线整改后）
 
 ---
 
@@ -48,7 +49,7 @@
 | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | 主框架   | [`_TKWF/`](https://github.com/LoongBa/TKW.Framework)（TKW.Framework 领域框架）                                     |
 | 本仓库   | TKWF 业务扩展包（`TKWF.Ext.*`）——独立版本，与主框架版本无关                                                        |
-| 引用模式 | 扩展经 `$(TKWFRoot)` ProjectReference 引用主框架源码（跨仓库编译期依赖）；主框架发布 NuGet 后可切 PackageReference |
+| 引用模式 | 扩展经 `$(TKWFSourceRoot)` ProjectReference 引用主框架源码（跨仓库编译期依赖）；主框架发布 NuGet 后可切 PackageReference |
 | 版本管理 | MinVer 自动管理（git tag 即版本）；各扩展独立版本（各打各的 tag，命名空间前缀如 `Identity/v0.1.0`）                |
 
 ---
@@ -76,7 +77,8 @@ _TKWF.Extensions/
 │   ├── RateLimiting/                # Web 层限流接线（IP/用户分区 + 429）
 │   ├── SecurityLog/                 # 安全日志（登录/改密/锁定等安全事件）
 │   ├── Approval/                    # 轻量审批引擎（流程定义/实例/任务 + 状态机）
-│   └── OrganizationUnit/            # 组织单元（树形部门/团队/分组 + 用户归属）
+│   ├── OrganizationUnit/            # 组织单元（树形部门/团队/分组 + 用户归属）
+│   └── Calendar/                    # 日历/排程（日历+事件 + 重复规则子集）
 ├── _Tests/                          # 测试（一组扩展一个测试项目）
 │   ├── Extension.Permissions.Tests/
 │   ├── Extension.Permissions.Consumer/    # 消费方集成验证
@@ -90,7 +92,8 @@ _TKWF.Extensions/
 │   ├── Extension.Emailing.Tests/
 │   ├── Extension.DataDictionary.Tests/
 │   ├── Extension.Tagging.Tests/
-│   └── Extension.OrganizationUnit.Tests/
+│   ├── Extension.OrganizationUnit.Tests/
+│   └── Extension.Calendar.Tests/
 ├── docs/                           # 公开使用指南（每个扩展一份）
 │   ├── Permissions/权限扩展-使用指南.md
 │   ├── Identity/身份管理扩展-使用指南.md
@@ -102,8 +105,9 @@ _TKWF.Extensions/
 │   ├── Emailing/邮件发送扩展-使用指南.md
 │   ├── DataDictionary/数据字典扩展-使用指南.md
 │   ├── Tagging/标签服务扩展-使用指南.md
-│   └── OrganizationUnit/组织单元扩展-使用指南.md
-├── Directory.Build.props           # TKWFRoot + MinVer + 打包属性
+│   ├── OrganizationUnit/组织单元扩展-使用指南.md
+│   └── Calendar/日历排程扩展-使用指南.md
+├── Directory.Build.props           # TKWFSourceRoot + MinVer + 打包属性
 ├── Directory.Packages.props         # CPM 集中包版本
 ├── AGENTS.md                        # 扩展仓库开发规则（AI Agent 与人工开发者必读）
 └── TKWF.Extensions.slnx            # 扩展解决方案

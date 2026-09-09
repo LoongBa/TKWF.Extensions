@@ -75,6 +75,9 @@
   <Folder Name="/_Framework/OrganizationUnit/">
     <Project Path="_Framework/OrganizationUnit/TKWF.Ext.OrganizationUnit.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Calendar/">
+    <Project Path="_Framework/Calendar/TKWF.Ext.Calendar.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -147,5 +150,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.OrganizationUnit.Tests/">
     <Project Path="_Tests/Extension.OrganizationUnit.Tests/TKWF.Ext.OrganizationUnit.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Calendar.Tests/">
+    <Project Path="_Tests/Extension.Calendar.Tests/TKWF.Ext.Calendar.Tests.csproj" />
   </Folder>
 </Solution>

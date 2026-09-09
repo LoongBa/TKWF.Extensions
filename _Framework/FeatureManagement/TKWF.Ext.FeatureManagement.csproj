@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.FeatureManagement</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>TKWF.Ext.FeatureManagement</PackageId>
+    <Description>TKWF 扩展：功能管理（特性开关）——编译期 Contributor 定义声明 + 分层值（Global/Tenant/Role/User）+ IFeatureChecker 实现（接入框架 [RequireFeature] 过滤器）+ 管理 API</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+
+    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+
+    <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
+    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
+    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+
+    <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FreeSql" />
+    <PackageReference Include="FreeSql.Provider.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <!-- Microsoft.Data.Sqlite（FreeSql.Provider.Sqlite 传递依赖；Manager 唯一约束异常判定引用 SqliteException） -->
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+
+  <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- SG1 化：xCodeGen 配置路径（D1 集中化） -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\featuremanagement.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
+
+  <!-- 管理 API（[GenerateController(FromDataService=true)]）：控制器由消费方 SG1 生成（扩展为预编译库）——
+       CTRL003/CTRL006 为预期诊断（未生成控制器），抑制 -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);TKWF_SG1b_CTRL003;TKWF_SG1b_CTRL006</NoWarn>
+  </PropertyGroup>
+
+  <!-- 测试项目访问 internal（Store/DataService/Repository） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.FeatureManagement.Tests" />
+  </ItemGroup>
+
+</Project>

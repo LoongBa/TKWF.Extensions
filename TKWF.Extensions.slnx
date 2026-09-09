@@ -84,6 +84,9 @@
   <Folder Name="/_Framework/FileManagement/">
     <Project Path="_Framework/FileManagement/TKWF.Ext.FileManagement.csproj" />
   </Folder>
+  <Folder Name="/_Framework/FeatureManagement/">
+    <Project Path="_Framework/FeatureManagement/TKWF.Ext.FeatureManagement.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -162,5 +165,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.FileManagement.Tests/">
     <Project Path="_Tests/Extension.FileManagement.Tests/TKWF.Ext.FileManagement.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.FeatureManagement.Tests/">
+    <Project Path="_Tests/Extension.FeatureManagement.Tests/TKWF.Ext.FeatureManagement.Tests.csproj" />
   </Folder>
 </Solution>

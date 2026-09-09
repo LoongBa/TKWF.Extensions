@@ -16,6 +16,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3" />
+    <!-- V0.2.0 DB 探针测试：SQLite :memory: 建表/删表（对齐其他扩展测试项目模式） -->
+    <PackageReference Include="FreeSql" />
+    <PackageReference Include="FreeSql.Provider.Sqlite" />
   </ItemGroup>
 
   <!-- 端点集成测试：最小 host（WebApplication + Kestrel loopback 临时端口）——共享框架提供
@@ -41,6 +44,8 @@
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <!-- V0.2.0 DB 探针测试：FreeSqlEntityDAC 解析路径（UseFreeSqlEntityDAC → IEntityReadOnlyDAC<> Scoped） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
   </ItemGroup>
 
 </Project>

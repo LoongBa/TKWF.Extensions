@@ -30,7 +30,7 @@
 | **Notifications**            | V0.2.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.2.0）| — | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
 | **BackgroundJobs**          | V0.1.0          | 后台任务持久化增强（执行历史 `JobExecution` + 业务结果 `JobResult` 追踪，经统一 `IBackgroundJobExecutionListener` 三路径自动落库）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs/README.md) | [指南](./docs/BackgroundJobs/后台任务持久化扩展-使用指南.md) |
 | **BackgroundJobs.Quartz**   | V0.1.0          | Quartz AdoJobStore 一键封装（`UseTkfwAdoJobStore` 12 表自动建表/集群配置）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs.Quartz/README.md) | —（并入 BackgroundJobs） |
-| **HealthCheck**             | V0.1.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + 自定义探针扩展点）| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
+| **HealthCheck**             | V0.2.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + **内置 DB 探针** `AddDatabaseHealthCheck<T>`（V0.2.0，`IEntityReadOnlyDAC` 红线合规路径））| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
 | **RateLimiting**            | V0.1.0          | Web 层限流接线（ASP.NET Core AddRateLimiter + IP/用户分区 + 429/Retry-After；与 Domain `[RateLimit]` 双层防护）| — | [README](./_Framework/RateLimiting/README.md) | [指南](./docs/RateLimiting/限流扩展-使用指南.md) |
 | **SecurityLog**             | V0.1.0          | 安全日志（登录/登出/改密/重置/锁定/注册/挑战事件 + IP/UA/结果，Domain AOP 自动采集）| — | [README](./_Framework/SecurityLog/README.md) | [指南](./docs/SecurityLog/安全日志扩展-使用指南.md) |
 | **Approval**                | V0.2.0          | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 委派/加签/抄送/超时自动处理（v0.2.0）+ 完成事件回调；不依赖外部工作流引擎）| — | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
@@ -42,7 +42,7 @@
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **1208 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 委派/加签/抄送/超时 + FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 AC 自动机/Options 后）
+> 全量 **1213 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 委派/加签/抄送/超时 + FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 AC 自动机/Options + HealthCheck v0.2.0 DB 探针后）
 
 ---
 
@@ -76,7 +76,7 @@ _TKWF.Extensions/
 │   ├── Tagging/                     # 标签存储扩展（算法已回归 TKW.Framework.Utility.Tags）
 │   ├── BackgroundJobs/              # 后台任务持久化增强（执行历史 + 业务结果追踪）
 │   ├── BackgroundJobs.Quartz/       # Quartz AdoJobStore 一键封装
-│   ├── HealthCheck/                 # 系统健康探测（/health 端点接线）
+│   ├── HealthCheck/                 # 系统健康探测（/health 端点接线 + 内置 DB 探针 v0.2.0）
 │   ├── RateLimiting/                # Web 层限流接线（IP/用户分区 + 429）
 │   ├── SecurityLog/                 # 安全日志（登录/改密/锁定等安全事件）
 │   ├── Approval/                    # 轻量审批引擎（流程定义/实例/任务 + 状态机）

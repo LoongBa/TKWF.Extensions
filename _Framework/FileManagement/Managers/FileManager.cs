@@ -392,8 +392,12 @@ namespace TKWF.Ext.FileManagement
             catch (Exception ex) when (IsUniqueConstraintViolation(ex))
             {
                 // 并发同目录同名上传 / 并发版本号冲突（D17/P2-5）：唯一约束败者——补偿删除 Blob + 转业务异常
+                // Oracle P2-3：区分两种约束冲突消息——版本表 UX_mfv_file_version（并发版本号）vs
+                // 主表 UX_ManagedFile_Folder_Name（目录内同名）；异常消息含表名可判别
                 await TryCleanupBlobAsync(blob.Path, ct);
-                throw new InvalidOperationException("该目录下已存在同名文件", ex);
+                var isVersionConflict = ex.Message.Contains("ManagedFileVersion", StringComparison.OrdinalIgnoreCase);
+                throw new InvalidOperationException(
+                    isVersionConflict ? "并发版本号冲突，请重试" : "该目录下已存在同名文件", ex);
             }
             catch
             {
@@ -477,11 +481,12 @@ namespace TKWF.Ext.FileManagement
                     ?? throw new InvalidOperationException($"文件 {id} 不存在");
 
                 // V0.2.0（Oracle P1-2）：收集全部 StoredPath（主表 + 版本行，Distinct 去重——回滚指针复用
-                // 导致多行共享同一 StoredPath），事务内删主表 + 删全部版本行，随后 best-effort 删全部 Blob
+                // 导致多行共享同一 StoredPath），事务内删主表 + 删全部版本行，随后 best-effort 删全部 Blob。
+                // Oracle P2-2：版本路径经 GetStoredPathsByFileAsync 全量拉取（非 GetByFileAsync 1000 上限——>1000 版本不留孤儿 Blob）
                 var storedPaths = new HashSet<string>(StringComparer.Ordinal) { file.StoredPath };
-                var versions = await _versionStore.GetByFileAsync(id, ct);
-                foreach (var v in versions)
-                    storedPaths.Add(v.StoredPath);
+                var versionPaths = await _versionStore.GetStoredPathsByFileAsync(id, ct);
+                foreach (var p in versionPaths)
+                    storedPaths.Add(p);
 
                 await _fileStore.DeleteAsync(id, ct);
                 await _versionStore.DeleteByFileIdAsync(id, ct);

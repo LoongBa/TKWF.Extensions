@@ -15,6 +15,9 @@ namespace TKWF.Ext.FileManagement
         /// <summary>按文件查询全部版本（Version 升序；上限 1000——P2-6，对齐 PrintTemplates 先例）。</summary>
         Task<IReadOnlyList<ManagedFileVersionEntity>> GetByFileAsync(long fileId, CancellationToken ct = default);
 
+        /// <summary>按文件查询全部版本 StoredPath（Oracle P2-2——删除清理用，循环拉取全量不留孤儿 Blob）。</summary>
+        Task<IReadOnlyList<string>> GetStoredPathsByFileAsync(long fileId, CancellationToken ct = default);
+
         /// <summary>按文件 + 版本号查单个版本（不存在返回 null）。</summary>
         Task<ManagedFileVersionEntity?> GetByFileAndVersionAsync(long fileId, int version, CancellationToken ct = default);
 

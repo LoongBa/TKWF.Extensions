@@ -190,8 +190,9 @@ public class FileManagerTests
         Assert.NotNull(result);
         Assert.Equal(file.Id, result!.Value.File.Id);
         Assert.Equal("down.txt", result.Value.File.Name);
+        await using var stream = result.Value.Stream;   // 释放下载流——避免临时目录清理文件占用
         using var ms = new MemoryStream();
-        await result.Value.Stream.CopyToAsync(ms);
+        await stream.CopyToAsync(ms);
         Assert.Equal(HelloBytes, ms.ToArray());
     }
 

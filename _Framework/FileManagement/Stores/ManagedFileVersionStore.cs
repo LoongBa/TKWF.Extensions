@@ -22,6 +22,9 @@ namespace TKWF.Ext.FileManagement
         public Task<IReadOnlyList<ManagedFileVersionEntity>> GetByFileAsync(long fileId, CancellationToken ct = default)
             => _dataService.GetByFileAsync(fileId, ct);
 
+        public Task<IReadOnlyList<string>> GetStoredPathsByFileAsync(long fileId, CancellationToken ct = default)
+            => _dataService.GetStoredPathsByFileAsync(fileId, ct);
+
         public Task<ManagedFileVersionEntity?> GetByFileAndVersionAsync(long fileId, int version, CancellationToken ct = default)
             => _dataService.GetByFileAndVersionAsync(fileId, version, ct);
 

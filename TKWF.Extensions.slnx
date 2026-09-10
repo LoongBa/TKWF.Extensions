@@ -21,6 +21,9 @@
   <Folder Name="/_Framework/Emailing/">
     <Project Path="_Framework/Emailing/TKWF.Ext.Emailing.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Emailing.Abstractions/">
+    <Project Path="_Framework/Emailing.Abstractions/TKWF.Ext.Emailing.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/BlobStoring/">
     <Project Path="_Framework/BlobStoring/TKWF.Ext.BlobStoring.csproj" />
   </Folder>

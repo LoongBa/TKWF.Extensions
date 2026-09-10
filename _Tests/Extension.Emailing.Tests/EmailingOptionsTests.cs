@@ -32,4 +32,18 @@ public class EmailingOptionsTests
         var options = new EmailingOptions();
         Assert.True(options.IsEnabled);
     }
+
+    [Fact]
+    public void Default_RetryCount_IsZero()
+    {
+        var options = new EmailingOptions();
+        Assert.Equal(0, options.RetryCount);
+    }
+
+    [Fact]
+    public void Default_RetryBaseDelayMilliseconds_Is1000()
+    {
+        var options = new EmailingOptions();
+        Assert.Equal(1000, options.RetryBaseDelayMilliseconds);
+    }
 }

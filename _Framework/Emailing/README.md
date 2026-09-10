@@ -1,6 +1,6 @@
 # TKWF.Ext.Emailing 邮件发送扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (邮件发送与记录存储) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (邮件发送与记录存储) | **框架**: .NET 10
 
 **核心约束**: SMTP 邮件发送、FreeSql 记录持久化、异常静默处理、SG1 声明式实体
 
@@ -96,11 +96,15 @@ public class MyService(IEmailSender emailSender)
       "SmtpUser": "user@example.com",
       "SmtpPassword": "your-password",
       "DefaultFrom": "noreply@example.com",
-      "IsEnabled": true
+      "IsEnabled": true,
+      "RetryCount": 2,
+      "RetryBaseDelayMilliseconds": 1000
     }
   }
 }
 ```
+
+`RetryCount`（默认 0 = 不重试）= 失败后额外重试次数，总尝试 = `RetryCount + 1`；`RetryBaseDelayMilliseconds`（默认 1000）= 指数退避基数，第 i 次重试前等待 `base * 2^(i-1)` 毫秒（如 1000 → 1s、2s、4s…）。
 
 ### 4. 自定义 IEmailSender
 
@@ -127,6 +131,8 @@ TryAdd 语义确保消费方实现优先。
 | **`EmailingOptions`** | 配置选项（`TKWF:Emailing` 节） | 内置 |
 | **`EmailingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 
+> **V0.2.0**：`IEmailSender` / `EmailMessage` 契约迁至独立项目 [`TKWF.Ext.Emailing.Abstractions`](../Emailing.Abstractions/README.md)（ADR48 D7 依赖倒置）——实现项目与消费方共用，命名空间 `TKWF.Ext.Emailing` 不变（既有 `using` 零破坏）。
+
 ---
 
 ## 五、实体表结构 (Entity Schema)
@@ -151,17 +157,18 @@ TryAdd 语义确保消费方实现优先。
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.2.0（已实施）
+- **发送重试策略（指数退避）**——`EmailingOptions.RetryCount`（默认 0）+ `RetryBaseDelayMilliseconds`（默认 1000）配置化：失败按 `base * 2^(i-1)` 退避重试，取消不重试，最终失败异常静默保存 `Failed`（`record.RetryCount` 记录实际失败次数）
+- **拆包 Abstractions（ADR48 D7）**——`IEmailSender` / `EmailMessage` 契约迁至 `TKWF.Ext.Emailing.Abstractions`，命名空间 `TKWF.Ext.Emailing` 零破坏
+
+### V0.1.0（当前基线）
 - SMTP 邮件发送（MailKit）
 - FreeSql 邮件记录存储
 - 异常静默处理
 
-### V0.2.0（规划）
-- 发送重试策略（指数退避）
+### V0.3.0（规划）
 - 邮件模板引擎
 - 批量发送支持
-
-### V0.3.0（规划）
 - 多 SMTP 提供者支持
 - 邮件发送统计分析
 - 附件支持

@@ -29,5 +29,18 @@ namespace TKWF.Ext.Emailing
 
         /// <summary>是否启用邮件发送（默认 true）。</summary>
         public bool IsEnabled { get; set; } = true;
+
+        /// <summary>
+        /// 失败后额外重试次数（默认 0 = 不重试）。总发送尝试次数 = RetryCount + 1（首次发送 + 失败后额外重试）。
+        /// <para>V0.2.0：发送重试（指数退避）——每次失败若还有剩余尝试且未取消，递增记录 RetryCount 并按
+        /// <see cref="RetryBaseDelayMilliseconds"/> 退避后重试；最终失败仍异常静默（记录 Failed，不抛给调用方）。</para>
+        /// </summary>
+        public int RetryCount { get; set; } = 0;
+
+        /// <summary>
+        /// 指数退避基数（毫秒，默认 1000）：第 i 次重试前等待 <c>RetryBaseDelayMilliseconds * 2^(i-1)</c> 毫秒。
+        /// <para>V0.2.0：测试或低延迟场景可设 0/1 以跳过等待。</para>
+        /// </summary>
+        public int RetryBaseDelayMilliseconds { get; set; } = 1000;
     }
 }

@@ -19,6 +19,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- V0.2.0（ADR48 D7 依赖倒置）：IEmailSender / EmailMessage 契约迁至 Abstractions 项目 -->
+    <ProjectReference Include="..\Emailing.Abstractions\TKWF.Ext.Emailing.Abstractions.csproj" />
+
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
 

@@ -48,3 +48,4 @@ partial class ManagedFileVersionEntityDataService(IDomainUser user, IEntityDAC<M
 
     private const int MaxVersionListSize = 1000;
 }
+

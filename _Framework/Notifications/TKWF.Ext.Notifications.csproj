@@ -25,6 +25,9 @@
     <!-- 依赖倒置（ADR48 D7）：发布方权限门控经 Permissions.Abstractions -->
     <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
 
+    <!-- 依赖倒置（ADR48 D7）：Email 通道经 Emailing.Abstractions 契约（IEmailSender/EmailMessage，V0.2.0）——不引 Emailing 实现 -->
+    <ProjectReference Include="..\Emailing.Abstractions\TKWF.Ext.Emailing.Abstractions.csproj" />
+
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 

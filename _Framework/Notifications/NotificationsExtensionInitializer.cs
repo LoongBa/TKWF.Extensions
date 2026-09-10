@@ -11,13 +11,14 @@ namespace TKWF.Ext.Notifications;
 /// <summary>
 /// Notifications 扩展初始化器——经 <c>[TKWFExtension]</c> 被 SG1 发现，三钩子接线：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——注册 DefinitionManager(Singleton) + Publisher/Store/SubscriptionManager/InboxNotifier(Scoped)
+/// <item><see cref="ConfigureServices"/>——注册 DefinitionManager(Singleton) + Publisher/Store/SubscriptionManager/通道(Scoped)
 ///       + <see cref="NotificationsOptions"/> Options 绑定（TKWF:Notifications）</item>
 /// <item>ConfigureFilters——不调用（V0.1.0 无过滤器）</item>
 /// <item>InitializeAsync——不调用（V0.1.0 无种子数据）</item>
 /// </list>
 /// <para>IPermissionChecker 不注册——由消费方 Permissions 扩展提供；发布方权限门控经
 /// <see cref="NotificationPublisher"/> 的 IServiceProvider 可空解析（C1）。</para>
+/// <para>IUserEmailProvider 不注册——由消费方提供（Email 通道收件地址来源，V0.2.0）。</para>
 /// </summary>
 [TKWFExtension("Notifications")]
 public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
@@ -62,9 +63,12 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         services.TryAddScoped<NotificationSubscriptionStore>();
         services.TryAddScoped<INotificationSubscriptionManager>(sp => sp.GetRequiredService<NotificationSubscriptionStore>());
 
-        // 通道（Scoped：InboxNotifier owns UserNotification 写入，C5）
+        // 通道（Scoped 多实例收集 v0.2.0：TryAddEnumerable——InboxNotifier owns UserNotification 写入 C5；
+        // EmailNotifier 外部通道 best-effort M1，延迟解析 IEmailSender/IUserEmailProvider）
         services.TryAddScoped<InboxNotifier>();
-        services.TryAddScoped<INotificationNotifier>(sp => sp.GetRequiredService<InboxNotifier>());
+        services.TryAddScoped<EmailNotifier>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<INotificationNotifier, InboxNotifier>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<INotificationNotifier, EmailNotifier>());
 
         // 发布器（Scoped）
         services.TryAddScoped<NotificationPublisher>();

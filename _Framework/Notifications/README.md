@@ -1,8 +1,8 @@
 # TKWF.Ext.Notifications 通知中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 | **框架**: .NET 10
 
-**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道抽象（v0.1.0 inbox-only）、SG1 声明式实体
+**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、SG1 声明式实体
 
 ---
 
@@ -35,14 +35,23 @@ userIds = [x,y]  → 显式收件人（去重 + 排除 excludedUserIds）
 - **发布方权限门控（C1 修订）**：定义 `RequirePermission` 仅校验发布方（当前用户 `IPermissionChecker`），非逐收件人；IPermissionChecker 未注册（Permissions 未启用）→ 明确抛异常提示
 - **事务边界（C4）**：`ITransactionManager.Begin()` 包裹——Notification 行 + 全部 inbox 行原子提交，失败整体回滚
 
-### 3. 通道抽象（C5）
+### 3. 通道抽象与多通道路由（C5，v0.2.0 已实施）
 
 ```
 NotificationDeliveryRequest（NotificationId + UserId + Channel + DataJson）
   → INotificationNotifier.DeliverAsync(request)   // 通知器 owns 投递副作用
-  → InboxNotifier（v0.1.0）：写 UserNotification 行（幂等：同 UserId+NotificationId 跳过）
-  → EmailNotifier / SignalRNotifier（v0.2.0）：复用同一请求模型
+  → InboxNotifier：写 UserNotification 行（幂等：同 UserId+NotificationId 跳过）——参与发布事务 C4
+  → EmailNotifier（v0.2.0 Email 通道，best-effort M1）：经 IEmailSender 发送
+  → SignalRNotifier（远期）：复用同一请求模型
 ```
+
+- **多通道路由**：通知定义经 `UseChannels(params string[] channels)` 声明投递通道（默认 `["Inbox"]`，按声明顺序去重存储）；
+  `NotificationPublisher` 逐通道构造 `NotificationDeliveryRequest` 并匹配 `notifier.Name == channel` 投递——
+  未声明通道名的 notifier 自然跳过；不存在的通道名不校验（投递时无匹配 notifier 即跳过，不抛异常）
+- **异常语义（M1 修订）**：Inbox 通道参与发布事务（C4）——写入失败必须传播异常触发回滚；
+  外部通道（Email）best-effort——前置缺失/投递失败 LogWarning 自行处理，不重抛阻塞发布流程
+- **Email 通道前置**：消费方须注册 `IUserEmailProvider`（查邮箱）+ 启用 Emailing 扩展（注册 `IEmailSender`）；
+  任一缺失 → 跳过投递不失败（IServiceProvider 可空延迟解析，对齐 C1 模式）
 
 ### 4. 事件驱动（v0.1.0 先例）
 
@@ -70,7 +79,8 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 | **`INotificationSubscriptionManager`** | 订阅管理（定义级/实体级订阅/退订，幂等） | `FreeSqlNotificationSubscriptionManager` |
 | **`INotificationDefinitionManager`** | 通知定义注册/校验（Singleton） | `NotificationDefinitionManager` |
 | **`INotificationDefinitionProvider`** | 通知定义贡献者（`[NotificationDefinitionProvider]` 扫描） | 消费方实现 |
-| **`INotificationNotifier`** | 通道抽象（v0.1.0 仅 Inbox） | `InboxNotifier` |
+| **`INotificationNotifier`** | 通道抽象（多实例收集 TryAddEnumerable：Inbox + Email） | `InboxNotifier` / `EmailNotifier` |
+| **`IUserEmailProvider`** | 用户邮箱提供者（Email 通道收件地址，消费方实现） | 消费方实现（扩展不注册） |
 | **`NotificationsOptions`** | 配置（`TKWF:Notifications` 节） | 内置 |
 
 ## 四、实体表结构 (Entity Schema)
@@ -122,24 +132,32 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 TKWF.Ext.Notifications
 ├── 主框架 Domain + SG1（实体）
 ├── TKWF.Ext.Permissions.Abstractions（发布方权限门控 IPermissionChecker，ADR48 D7）
+├── TKWF.Ext.Emailing.Abstractions（Email 通道契约 IEmailSender/EmailMessage，ADR48 D7——不引 Emailing 实现）
 └── 事件总线（[DomainEventHandler] + ILocalEventHandler）
 ```
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0（已实施）
 - 站内通知核心：发布/收件箱/订阅/定义注册 + 事件驱动先例 + 通道抽象（inbox-only）
 - Oracle 评审 PASS WITH CONDITIONS（C1-C5 修订 + m1-m7 处理）
 
-### V0.2.0（已实施：VEntity 跨表查询升级）
+### V0.2.0（已实施：VEntity 跨表查询升级 + 多通道路由）
 - **`GetListAsync(name)` VEntity 化**：新增 `UserNotificationView`（VEntity，JOIN `UserNotification` → `Notification` 单查询下推 DB），替代两步查询（先按 name 取 Notification.Id 集合再按集合过滤）——消除两次往返 + IN 子句，顺带返回通知名/严重级别/显示名（GraphQL 路径可用）
 - 手写只读 DataService `UserNotificationViewDataService`（`DomainReadOnlyDataServiceBase` + `IEntityReadOnlyDAC<T>`，红线合规）
 - Store 接口签名不变（视图行映射回 `UserNotificationEntity`），消费方零迁移
 - **生产部署要求**：框架 SyncViewsAsync 只跑开发环境建视图；**生产需 DBA 手动执行 ViewSql**（PG 默认方言，SQL Server 等需补变体）
+- **多通道路由**：`NotificationDefinition.UseChannels(params string[])` 声明投递通道（默认 `["Inbox"]`，顺序去重、空数组抛 ArgumentException）；
+  `NotificationPublisher` 按定义 Channels 逐通道投递（替换 v0.1.0 硬编码 Inbox 过滤），C4 事务边界不变
+- **Email 通道先例（best-effort M1）**：`EmailNotifier`（Name="Email"）延迟可空解析 `IEmailSender` + `IUserEmailProvider`
+  ——Emailing 扩展未启用或消费方未实现邮箱提供者时构造不失败、投递 LogWarning 跳过；发送异常 catch 不重抛阻塞发布流程
+- **消费方接线**：注册 `IUserEmailProvider`（从用户存储查邮箱）+ `UseChannels("Inbox","Email")` 声明；Email 通道失败不影响发布事务（C4）与 inbox 写入
 
 ### 远期 / 评估
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）
 - 通知模板渲染（复用 Emailing V0.2.0 TextTemplates / PrintTemplates）
+- SignalR 实时推送通道（需 AspNetCore.SignalR 依赖评估）
+- 短信通道
 - 批量派发优化（RecipientBatchSize 落地）
 
-**文档信息**: V0.1.0 | 2026-09-06 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md（主框架私有）
+**文档信息**: V0.2.0 | 2026-09-11 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md（主框架私有）

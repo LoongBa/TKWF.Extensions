@@ -15,19 +15,20 @@
 | **Permissions**              | V0.7.0 + V0.8.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）          | `v0.7.0`                | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
 | **Permissions.Abstractions** | V0.1.0          | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       | —                                        | —（并入 Permissions）                    |
 | **Permissions.Validation**   | V0.8.0          | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）                      | —                       | —                                        | —（并入 Permissions）                    |
-| **Identity**                 | V0.2.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.2.0）| `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
+| **Identity**                 | V0.3.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.3.0）| `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
 | **Account**                  | V0.1.0          | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）                       | `Account/v0.1.0`        | [README](./_Framework/Account/README.md)       | [指南](./docs/Account/账户管理扩展-使用指南.md) |
 | **Navigation**               | V0.1.0          | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.0`     | [README](./_Framework/Navigation/README.md) | [指南](./docs/Navigation/导航扩展-使用指南.md)  |
-| **AuditLogging**             | V0.1.0          | 审计日志 FreeSql 存储 + SG1 实体                                         | `AuditLogging/v0.1.0`   | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
-| **Settings**                 | V0.1.0          | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.1.0`       | [README](./_Framework/Settings/README.md)      | [指南](./docs/Settings/设置管理扩展-使用指南.md) |
+| **AuditLogging**             | V0.2.0          | 审计日志 FreeSql 存储 + SG1 实体                                         | `AuditLogging/v0.1.0`   | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
+| **Settings**                 | V0.2.0          | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.1.0`       | [README](./_Framework/Settings/README.md)      | [指南](./docs/Settings/设置管理扩展-使用指南.md) |
 | **BlobStoring**              | V0.1.0          | 二进制大对象本地文件系统存储 + FreeSql 记录                              | `BlobStoring/v0.1.0`    | [README](./_Framework/BlobStoring/README.md)   | [指南](./docs/BlobStoring/二进制存储扩展-使用指南.md) |
-| **Emailing**                 | V0.1.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录                                 | `Emailing/v0.1.0`       | [README](./_Framework/Emailing/README.md)      | [指南](./docs/Emailing/邮件发送扩展-使用指南.md) |
-| **DataDictionary**           | V0.1.0          | 数据字典集中管理（定义 + 项 + 按编码查询）                               | `DataDictionary/v0.1.0` | [README](./_Framework/DataDictionary/README.md) | [指南](./docs/DataDictionary/数据字典扩展-使用指南.md) |
+| **Emailing**                 | V0.2.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录 + **指数退避重试（V0.2.0）**；契约抽取至 `Emailing.Abstractions`（ADR48 D7）| `Emailing/v0.1.1` | [README](./_Framework/Emailing/README.md)      | [指南](./docs/Emailing/邮件发送扩展-使用指南.md) |
+| **Emailing.Abstractions**    | V0.1.0          | 邮件发送契约抽取（`IEmailSender`/`EmailMessage`——ADR48 D7 依赖倒置，Notifications 等消费方复用）| — | — | —（并入 Emailing）|
+| **DataDictionary**           | V0.2.0          | 数据字典集中管理（定义 + 项 + 按编码查询）                               | `DataDictionary/v0.1.0` | [README](./_Framework/DataDictionary/README.md) | [指南](./docs/DataDictionary/数据字典扩展-使用指南.md) |
 | **Tagging**                  | V0.4.0          | 标签存储扩展（标签算法已回归 `TKW.Framework.Utility.Tags`，ADR52 瘦身；V0.4.0 AC 自动机 `DictMatch` 批量匹配 + Options 配置接入）| `Tagging/v0.2.0` | [README](./_Framework/Tagging/README.md)       | [指南](./docs/Tagging/标签服务扩展-使用指南.md)  |
 | **PrintTemplates**           | V0.1.0          | 打印模板引擎与版本化（Scriban 沙箱渲染 + Draft/Active/Archived 生命周期）| `PrintTemplates/v0.1.0` | [README](./_Framework/PrintTemplates/README.md) | [指南](./docs/PrintTemplates/打印模板扩展-使用指南.md) |
 | **Dashboard**                | V0.1.0          | 仪表盘数据服务（Metrics 展示层——JSON 描述符 + Widget 数据查询；不引入图表库）| `Dashboard/v0.1.0` | [README](./_Framework/Dashboard/README.md) | [指南](./docs/Dashboard/仪表盘扩展-使用指南.md) |
 | **DataPort**                 | V0.1.0          | 数据导入导出（三层架构——核心运行库+MiniExcel Provider+SG1 持久化；FileHash 幂等）| `DataPort/v0.1.0` | [README](./_Framework/DataPort/README.md) | [指南](./docs/DataPort/数据导入导出扩展-使用指南.md) |
-| **Notifications**            | V0.2.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.2.0）| — | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
+| **Notifications**            | V0.2.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.1.0）；+ 多通道路由 UseChannels/Email（V0.2.0）| — | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
 | **BackgroundJobs**          | V0.1.0          | 后台任务持久化增强（执行历史 `JobExecution` + 业务结果 `JobResult` 追踪，经统一 `IBackgroundJobExecutionListener` 三路径自动落库）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs/README.md) | [指南](./docs/BackgroundJobs/后台任务持久化扩展-使用指南.md) |
 | **BackgroundJobs.Quartz**   | V0.1.0          | Quartz AdoJobStore 一键封装（`UseTkfwAdoJobStore` 12 表自动建表/集群配置）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs.Quartz/README.md) | —（并入 BackgroundJobs） |
 | **HealthCheck**             | V0.2.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + **内置 DB 探针** `AddDatabaseHealthCheck<T>`（V0.2.0，`IEntityReadOnlyDAC` 红线合规路径））| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
@@ -71,7 +72,8 @@ _TKWF.Extensions/
 │   ├── AuditLogging/                # 审计日志 FreeSql 存储
 │   ├── Settings/                    # 设置管理 FreeSql 存储 + 分层读取
 │   ├── BlobStoring/                 # 二进制存储（本地文件系统 + FreeSql 记录）
-│   ├── Emailing/                    # SMTP/MailKit 邮件发送
+│   ├── Emailing/                    # SMTP/MailKit 邮件发送（V0.2.0：指数退避重试）
+│   ├── Emailing.Abstractions/       # 邮件发送契约（IEmailSender——ADR48 D7 依赖倒置）
 │   ├── DataDictionary/              # 数据字典集中管理
 │   ├── Tagging/                     # 标签存储扩展（算法已回归 TKW.Framework.Utility.Tags）
 │   ├── BackgroundJobs/              # 后台任务持久化增强（执行历史 + 业务结果追踪）

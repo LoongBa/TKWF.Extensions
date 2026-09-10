@@ -12,7 +12,8 @@ namespace TKWF.Ext.Notifications
     /// <summary>
     /// 通知发布器实现。
     /// <para>流程：定义校验 → 发布方权限门控（C1）→ 收件人解析 → 事务写入（C4：Notification + inbox 行原子提交）→
-    /// 通道投递（C5：InboxNotifier owns UserNotification 写入）。</para>
+    /// 多通道投递（C5：按定义 UseChannels() 声明逐通道匹配 notifier；InboxNotifier owns UserNotification 写入，
+    /// 外部通道 best-effort M1）。</para>
     /// <para>数据访问红线整改（2026-09-07）：经 <see cref="NotificationEntityDataService"/> +
     /// <see cref="NotificationSubscriptionEntityDataService"/>（SG1 DataService）委托持久化——不直接注入 IFreeSql。</para>
     /// </summary>
@@ -85,20 +86,23 @@ namespace TKWF.Ext.Notifications
 
                 foreach (var recipientId in recipients)
                 {
-                    var request = new NotificationDeliveryRequest(
-                        notification.Id,
-                        notification.Name,
-                        notification.DataJson,
-                        severity,
-                        recipientId,
-                        "Inbox");
-
-                    foreach (var notifier in _notifiers)
+                    // 多通道路由（v0.2.0）：按定义 UseChannels() 声明的通道逐通道构造请求并匹配 notifier 投递
+                    //（C5：通知器 owns 投递副作用；Inbox 通道参与事务 C4 异常传播，外部通道 best-effort M1）
+                    foreach (var channel in definition.Channels)
                     {
-                        // TODO(v0.2.0)：按定义 UseChannels() 或请求 Channel 路由多通道（Email/SignalR）；
-                        // v0.1.0 仅 Inbox 通道，硬编码过滤
-                        if (notifier.Name != "Inbox") continue;
-                        await notifier.DeliverAsync(request, ct);
+                        var request = new NotificationDeliveryRequest(
+                            notification.Id,
+                            notification.Name,
+                            notification.DataJson,
+                            severity,
+                            recipientId,
+                            channel);
+
+                        foreach (var notifier in _notifiers)
+                        {
+                            if (notifier.Name != channel) continue;
+                            await notifier.DeliverAsync(request, ct);
+                        }
                     }
                 }
 

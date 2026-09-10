@@ -1,7 +1,10 @@
+using System.Collections.Generic;
+using System.Linq;
+
 namespace TKWF.Ext.Notifications;
 
 /// <summary>
-/// 通知定义——描述一个业务通知（稳定名 + 显示名 + 严重级别 + 可选发布方权限）。
+/// 通知定义——描述一个业务通知（稳定名 + 显示名 + 严重级别 + 可选发布方权限 + 可选投递通道）。
 /// <para>由 <see cref="INotificationDefinitionProvider"/> 在启动时注册，发布前经
 /// <see cref="INotificationDefinitionManager.Get"/> 校验存在性（快速失败）。</para>
 /// </summary>
@@ -37,6 +40,24 @@ public sealed class NotificationDefinition
     public NotificationDefinition RequirePermission(string permissionName)
     {
         PermissionName = permissionName ?? throw new System.ArgumentNullException(nameof(permissionName));
+        return this;
+    }
+
+    /// <summary>
+    /// 投递通道（默认 ["Inbox"]）——发布时按此声明顺序逐通道投递（v0.2.0 多通道路由）。
+    /// <para>经 <see cref="NotificationPublisher"/> 逐通道匹配 <see cref="INotificationNotifier.Name"/> 投递；
+    /// 未声明通道名的 notifier 自然跳过。不存在的通道名不校验（投递时无匹配 notifier 即跳过，不抛异常）。</para>
+    /// </summary>
+    public IReadOnlyList<string> Channels { get; private set; } = new[] { "Inbox" };
+
+    /// <summary>设置投递通道（Fluent API）——按给定顺序去重存储。</summary>
+    /// <param name="channels">通道名（如 "Inbox"/"Email"/"SignalR"）。传空数组抛
+    /// <see cref="System.ArgumentException"/>。</param>
+    public NotificationDefinition UseChannels(params string[] channels)
+    {
+        if (channels is null || channels.Length == 0)
+            throw new System.ArgumentException("UseChannels 至少需要一个通道", nameof(channels));
+        Channels = channels.Distinct().ToArray();
         return this;
     }
 }

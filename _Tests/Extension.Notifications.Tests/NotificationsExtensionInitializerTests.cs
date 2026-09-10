@@ -64,19 +64,23 @@ public class NotificationsExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_RegistersInboxNotifier()
+    public void ConfigureServices_RegistersNotifiers_MultiInstanceCollection()
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        // 用 Build 容器（含 DataService 注册——模拟 SG 自动注册，InboxNotifier 可解析）
+        // 用 Build 容器（含 DataService 注册——模拟 SG 自动注册，Notifier 可解析）
         using var sp = NotificationTestHost.Build(fsql);
 
-        var descriptor = sp.GetRequiredService<INotificationNotifier>();
-        Assert.NotNull(descriptor);
+        // v0.2.0：多实例收集（TryAddEnumerable）——Inbox + Email 两个内置通道
+        var notifiers = sp.GetServices<INotificationNotifier>().ToList();
 
-        // 解析验证：v0.1.0 内置 InboxNotifier（通道名 "Inbox"）
-        var notifier = sp.GetRequiredService<INotificationNotifier>();
-        Assert.Equal("Inbox", notifier.Name);
+        Assert.Equal(2, notifiers.Count);
+        Assert.Contains(notifiers, n => n.Name == "Inbox");
+        Assert.Contains(notifiers, n => n.Name == "Email");
+
+        // Inbox 通道： Email 通道外部 best-effort
+        Assert.Contains(notifiers, n => n is InboxNotifier);
+        Assert.Contains(notifiers, n => n is EmailNotifier);
     }
 
     [Fact]

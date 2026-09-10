@@ -122,7 +122,7 @@ TKWF.Ext.BlobStoring.IBlobStorageService                 # Abstractions 契约�
 - **SQLite 时间语义**：`DateTime`（UTC）显式声明；FreeSql SQLite 存本地墙钟、读出 `Unspecified`——本扩展文件元数据时间仅记录用途（无范围计算），消费方如需严格 UTC 请自行归一（P4）。
 - **MIME 字典演进（P6）**：`FileManagementMimeMap` 为内部静态字典，新增扩展名在字典 + 白名单各追加一项即可。
 - **BlobStoring 静默模式限制（P7）**：`UploadAsync` 返回 null 表示存储可用性失败 → 本扩展 fail-fast（`InvalidOperationException`），不做静默重试；消费方如启用了 BlobStoring 的静默降级需自行权衡（v0.1.0 无感知）。
-- **版本化语义（V0.2.0）**：上传同名不同内容 → 新版本（`ManagedFileVersionEntity` 版本行，`UX_mfv_file_version` FileId+Version 唯一）；版本行存 `StoredPath` 指针不复制字节（BlobStoring 每次新 guid 路径——旧版本 Blob 天然保留）；回滚 = 主表指针切目标版本 + 新版本行（指针复用，回滚可追溯）；**删除文件清理全部版本行 + Distinct 去重删全部版本 Blob**（回滚共享 StoredPath 不重复删）。
+- **版本化语义（V0.2.0）**：上传同名不同内容 → 新版本（`ManagedFileVersionEntity` 版本行，`UX_mfv_file_version` FileId+Version 唯一）；版本行存 `StoredPath` 指针不复制字节（BlobStoring 每次新 guid 路径——旧版本 Blob 天然保留）；回滚 = 主表指针切目标版本 + 新版本行（指针复用，回滚可追溯）；**删除文件清理全部版本行 + Distinct 去重删全部版本 Blob**（回滚共享 StoredPath 不重复删）。**v0.1.0 存量文件在首次 v0.2.0 上传前无版本历史**——回滚仅适用于 v0.2.0 后创建的版本。
 - **配额语义（V0.2.0）**：三配额键可空默认不限制；检查在上传链 Blob 落盘前（预检前移——超限不产生 Blob/补偿）；**并发竞态"先到先得"**（读-比-写非原子，超限最终一致可接受——对齐 ABP 同级缺陷显式声明）。
 - **去重与版本交互**：SHA256 去重是内容级（同目录同名同内容幂等返回，Deduplicate=false 亦幂等——P1-3 分支 C），版本是文件级（不同内容才新版本）——语义不冲突，去重命中不产生版本。
 

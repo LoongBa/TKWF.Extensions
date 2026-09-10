@@ -11,6 +11,7 @@ namespace TKWF.Ext.BackgroundJobs;
 /// </summary>
 [Table("JobResult")]
 [FreeSql.DataAnnotations.Index("IX_JobResult_JobId", nameof(JobId))]
+[FreeSql.DataAnnotations.Index("IX_JobResult_CreateTime", nameof(CreateTime))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class JobResultEntity
 {

@@ -77,6 +77,20 @@ partial class JobExecutionEntityDataService(IDomainUser user, IEntityDAC<JobExec
         return new JobExecutionStats((int)total, (int)succeeded, (int)failed, (int)cancelled, avgDurationMs, maxDurationMs);
     }
 
+    /// <summary>
+    /// 删除早于 cutoffUtc 的过期执行历史（V0.2.0 历史清理）——锚点 <see cref="JobExecutionEntity.StartedAtUtc"/>（IX_JobExecution_StartedAt 索引）。
+    /// <para>先查过期 Id 列表（Take batchSize），再 <see cref="EntityDeleteBatchAsync"/> 物理批量删
+    /// （hasSoftDelete:false，绝不用 EntitySoftDeleteAsync——会抛 InvalidOperationException）；返回实际删除条数。</para>
+    /// </summary>
+    public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct = default)
+    {
+        var ids = (await Dac.ToListAsync(
+            QueryForUser().Where(e => e.StartedAtUtc < cutoffUtc).Take(batchSize), ct))
+            .Select(e => e.Id).ToList();
+        if (ids.Count == 0) return 0;
+        return await EntityDeleteBatchAsync(ids, ct);
+    }
+
     /// <summary>构建过滤谓词（AND 逻辑下推，全部可选条件）。</summary>
     private static Expression<Func<JobExecutionEntity, bool>> BuildFilterPredicate(
         string? jobId, string? jobType, string? provider,

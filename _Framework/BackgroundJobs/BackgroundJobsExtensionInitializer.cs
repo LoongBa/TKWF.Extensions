@@ -11,7 +11,7 @@ namespace TKWF.Ext.BackgroundJobs;
 /// <summary>
 /// 后台任务持久化扩展初始化器（V0.1.0）——经 [TKWFExtension] 被 SG1 编译期发现，三钩子接线：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——DI 构建前：注册 Options + SG1 DataService + 监听器（TryAddEnumerable）+ 查询/记录器（TryAddScoped）</item>
+/// <item><see cref="ConfigureServices"/>——DI 构建前：注册 Options + SG1 DataService + 监听器（TryAddEnumerable）+ 查询/记录器 + 历史清理服务（TryAddScoped）</item>
 /// <item><see cref="ConfigureFilters"/>——BackgroundJobs 无全局过滤器（空实现）</item>
 /// <item><see cref="InitializeAsync"/>——系统就绪后：空实现</item>
 /// </list>
@@ -47,6 +47,9 @@ public class BackgroundJobsExtensionInitializer<TUserInfo> : ExtensionInitialize
         // 4. 查询服务
         services.TryAddScoped<IJobExecutionQueryService, JobExecutionQueryService>();
         services.TryAddScoped<IJobResultQueryService, JobResultQueryService>();
+
+        // 5. 历史清理服务（v0.2.0）——不内建调度器，由消费方定时调用
+        services.TryAddScoped<IJobHistoryCleanupService, JobHistoryCleanupService>();
     }
 
     /// <summary>BackgroundJobs 无全局过滤器。</summary>

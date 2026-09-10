@@ -1,6 +1,6 @@
 # TKWF.Ext.BackgroundJobs 后台任务持久化增强技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.1.0（持久化增强——执行历史审计 + 业务结果追踪） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.2.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地） | **框架**: .NET 10
 
 **定位**（ADR-BackgroundJobs-持久化增强与执行追踪架构）：补齐主框架三实现（内置 `TKWF.BackgroundJobs` / `TKWF.BackgroundJobs.Hangfire` / `TKWF.BackgroundJobs.Quartz`）的持久化缺口：
 - **执行历史审计**：`JobExecution` 实体——每次执行一行（耗时/重试/异常归档），经统一 `IBackgroundJobExecutionListener` 同步回调自动落库
@@ -24,11 +24,13 @@ _Framework/BackgroundJobs/
 ├── JobExecutionQueryService.cs           # 查询服务实现
 ├── IJobResultQueryService.cs             # 业务结果查询接口 + DTO/Input 定义
 ├── JobResultQueryService.cs              # 结果查询服务实现
-├── BackgroundJobsPersistenceOptions.cs   # TKWF:BackgroundJobs 配置（RetentionDays 预留）
+├── IJobHistoryCleanupService.cs          # 历史清理接口 + 结果记录（v0.2.0）
+├── JobHistoryCleanupService.cs           # 历史清理服务（v0.2.0，分批 + 异常静默）
+├── BackgroundJobsPersistenceOptions.cs   # TKWF:BackgroundJobs 配置（RetentionDays 已启用 + CleanupBatchSize）
 ├── BackgroundJobsExtensionInitializer.cs # [TKWFExtension] + TryAddScoped 三钩子
 ├── DataServices/
-│   ├── JobExecutionEntityDataService.cs  # partial 业务方法（分页过滤 + SQL 级聚合）
-│   └── JobResultEntityDataService.cs     # partial 业务方法（分页 + 按 JobId 查最新）
+│   ├── JobExecutionEntityDataService.cs  # partial 业务方法（分页过滤 + SQL 级聚合 + DeleteExpiredAsync）
+│   └── JobResultEntityDataService.cs     # partial 业务方法（分页 + 按 JobId 查最新 + DeleteExpiredAsync）
 └── README.md
 ```
 
@@ -40,7 +42,8 @@ _Framework/BackgroundJobs/
 | `IJobResultRecorder` | 作业内记录业务产出 | `JobResultRecorder`（internal sealed） |
 | `IJobExecutionQueryService` | 执行历史分页/统计 | `JobExecutionQueryService`（internal sealed） |
 | `IJobResultQueryService` | 业务结果查询 | `JobResultQueryService`（internal sealed） |
-| `BackgroundJobsPersistenceOptions` | 配置（RetentionDays 预留） | 默认 180 天 |
+| `IJobHistoryCleanupService` | 历史清理（v0.2.0——按保留天数分批删除过期执行/结果） | `JobHistoryCleanupService`（internal sealed） |
+| `BackgroundJobsPersistenceOptions` | 配置（RetentionDays 已启用 + CleanupBatchSize） | 180 天 / 500 条 |
 
 ## 三、使用说明
 
@@ -82,6 +85,26 @@ public class ExecutionHistoryService(IJobExecutionQueryService queryService)
 }
 ```
 
+### 4. 历史清理（V0.2.0）
+
+`IJobHistoryCleanupService` 按 `RetentionDays`（默认 180 天）分批物理删除过期的执行历史（`JobExecution`，锚点 `StartedAtUtc`）与业务结果（`JobResult`，锚点 `CreateTime`）。扩展**不内建调度器**——由消费方经 BackgroundJob/Quartz/Hangfire 定时调用：
+
+```csharp
+public class HistoryCleanupTask : IBackgroundJob
+{
+    private readonly IJobHistoryCleanupService _cleanupService;
+
+    public HistoryCleanupTask(IJobHistoryCleanupService cleanupService) => _cleanupService = cleanupService;
+
+    public async Task ExecuteAsync(IDictionary<string, string> args, CancellationToken ct)
+        => await _cleanupService.CleanupAsync(ct);
+}
+```
+
+- 分批大小 `CleanupBatchSize`（默认 500）——每轮每表最多删除条数，循环至不足一批/清空，防大表一次性删爆事务
+- 时间锚点均有索引：`IX_JobExecution_StartedAt` / `IX_JobResult_CreateTime`（v0.2.0 补齐）
+- 异常静默——单表清理失败 LogWarning，不阻断另一表
+
 ## 四、数据模型
 
 ### JobExecution（执行历史）
@@ -115,7 +138,7 @@ public class ExecutionHistoryService(IJobExecutionQueryService queryService)
 | Summary | string(512)? | 摘要 |
 | CreateTime | DateTime | 创建时间 UTC |
 
-索引：IX_JobResult_JobId
+索引：IX_JobResult_JobId / IX_JobResult_CreateTime（v0.2.0——历史清理时间锚点）
 
 ## 五、架构决策
 
@@ -124,6 +147,8 @@ public class ExecutionHistoryService(IJobExecutionQueryService queryService)
 - **TryAddEnumerable 注册监听器**（Oracle C3）——多监听器可叠加，无注册时零开销
 - **v0.1.0 无 ExecutionId**（Oracle C4）——JobExecution 后置写入，执行中不可得（YAGNI）
 - **异常静默**——监听器/记录器异常不阻断作业执行，ILogger.Warning 记录
+- **历史清理经 DataService 物理删**（v0.2.0）——`DeleteExpiredAsync` 先查过期 Id 列表（Take batchSize）再 `EntityDeleteBatchAsync`（hasSoftDelete:false，绝不用 `EntitySoftDeleteAsync`——会抛 InvalidOperationException）；`JobHistoryCleanupService` 只依赖 2 个 DataService + IOptions + ILogger，红线合规
+- **不内建调度器**（v0.2.0）——BackgroundJobs 定位"持久化增强"，清理由消费方定时调度（BackgroundJob/Quartz/Hangfire），文档给接线示例
 
 ## 六、AI Agent 协作契约
 

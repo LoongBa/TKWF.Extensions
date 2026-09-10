@@ -51,6 +51,18 @@ public class SecurityLogExtensionInitializerTests
     }
 
     [Fact]
+    public void ConfigureServices_Registers_AnalyticsService_Descriptor()
+    {
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.First(d => d.ServiceType == typeof(ISecurityLogAnalyticsService));
+
+        Assert.Equal(typeof(SecurityLogAnalyticsService), descriptor.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
     public void ConfigureServices_Registers_DataService_Descriptor()
     {
         var services = new ServiceCollection();

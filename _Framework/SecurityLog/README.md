@@ -38,7 +38,7 @@ using TKWF.Ext.SecurityLog;
 [TKWFEnabledExtension(typeof(SecurityLogExtensionInitializer<>))]
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 {
-    // 启用后自动注册：ISecurityLogStore + ISecurityLogQueryService + SecurityLogEntityDataService + Options
+    // 启用后自动注册：ISecurityLogStore + ISecurityLogQueryService + ISecurityLogAnalyticsService + SecurityLogEntityDataService + Options
 }
 ```
 
@@ -150,11 +150,12 @@ public class SecurityAuditService(ISecurityLogQueryService queryService)
 - `GetDetailAsync(long id)`：含 Detail 全文。
 - `CountAsync(SecurityLogQueryInput)`：同条件计数。
 
-## 七、边界（V0.1.0 不实现）
+## 七、边界
 
-- ❌ 异常检测算法/告警（失败次数/来源 IP 聚合）——v0.2.0
-- ❌ 安全事件实时推送（WebSocket/SignalR）——v0.2.0
-- ❌ 保留天数清理——v0.2.0
+- ✅ **异常检测聚合**（失败次数 TopN by 用户名/来源 IP）——v0.2.0 已实施（`ISecurityLogAnalyticsService`：GetTopFailedUsersAsync / GetTopFailedIpsAsync，内存 GroupBy 范式，对齐 Tagging GetFrequencyAsync）
+- ✅ **保留天数清理**——v0.2.0 已实施（`SecurityLoggingOptions.RetentionDays` 默认 90 + `CleanupBatchSize` 默认 500；`ISecurityLogAnalyticsService.CleanupExpiredAsync` 分批清完）
+  > **决策记录（打破"只增不改" Oracle C2）**：保留清理引入**物理删除**路径——合规留存窗口（默认 90 天）下过期记录必须可回收，否则日志无限膨胀。限定：① 仅 `DeleteExpiredAsync` 单点物理删（`hasSoftDelete:false`，绝不走 `EntitySoftDeleteAsync`——对未启用软删实体抛 InvalidOperationException）；② 无管理端点/单条删除；③ `CreateTime` 仍 `CanUpdate=false`（列级不可改）、聚合仍只读。**主框架 ADR 待用户许可后补录**，本次以代码注释 + 本 README 承担决策记录职责。
+- ❌ 安全事件实时推送（WebSocket/SignalR）——v0.2.0 之后（超出后端扩展范围）
 - ❌ Account"登录历史"UI/接口——Account V0.3.0 消费本扩展查询
 - ❌ 修改主框架（AuthController/IAccountLockoutPolicy 不动）
 
@@ -163,5 +164,19 @@ public class SecurityAuditService(ISecurityLogQueryService queryService)
 - `SecurityLogFilterAttribute<TUserInfo>` 派生 `DomainFilterAttribute<TUserInfo>` + 实现 `IExceptionAwareFilter`（异常路径触发 PostProceed）——对齐 `AuditLogFilterAttribute` 模式。
 - IP 经 `IAmbientContext["ClientIp"]`（对齐 `AuthController.GetClientIp`）；`CanWeGo` 白名单判定 `Target is IAuthController` / `Target is IPasswordResetFlow` / 方法名集合。
 - `ISecurityLogStore` / `ISecurityLogQueryService` / `SecurityLogEntry` 均为扩展侧自建接口（不修改主框架）。
+
+## 九、组件清单（Component List）
+
+| **组件** | **职责** | **默认实现** |
+|----------|---------|------------|
+| **`SecurityLogEntity`** | 安全日志表实体（SG1 声明式，11 列，只增不改 + CreateTime UTC） | 内置，`partial class` + `[DomainGenerateCode]` |
+| **`SecurityLogFilterAttribute<TUserInfo>`** | 安全事件采集过滤器（Domain AOP + CanWeGo 白名单 + Result/Lockout 判定） | 内置（消费方 opt-in：`builder.AddSecurityLog()`） |
+| **`ISecurityLogStore`** | 安全事件写入存储（追加写） | `SecurityLogStore`（internal sealed，委托 DataService） |
+| **`ISecurityLogQueryService`** | 分页/过滤查询 + 详情 + 计数（列表 DTO 不含 Detail） | `SecurityLogQueryService`（internal sealed，委托 DataService） |
+| **`ISecurityLogAnalyticsService`** | v0.2.0 异常检测聚合（失败次数 TopN by 用户名/来源 IP）+ 保留天数清理 | `SecurityLogAnalyticsService`（internal sealed，委托 DataService + IOptions + ILogger，异常静默） |
+| **`SecurityLogEntityDataService`** | SG1 DataService——CRUD 转发 + v0.2.0 聚合（GetTopFailedByUserAsync/GetTopFailedByIpAsync）+ 清理（DeleteExpiredAsync） | xCodeGen 生成（.g.cs + 手写分部业务方法） |
+| **`SecurityLogEventTypes`** | v0.2.0 事件类型/结果/分类字符串常量（收敛字面量） | 内置静态类 |
+| **`SecurityLoggingOptions`** | 配置（`TKWF:SecurityLog`）：Enabled / EventTypes / v0.2.0 RetentionDays(90) + CleanupBatchSize(500) | 内置，`[Options]` + SG1 绑定 |
+| **`SecurityLogExtensionInitializer`** | 扩展初始化器（三钩子：注册 Options + DataService + Store + QueryService + AnalyticsService） | 内置，`[TKWFExtension]` SG1 发现 |
 
 <!-- EOF -->

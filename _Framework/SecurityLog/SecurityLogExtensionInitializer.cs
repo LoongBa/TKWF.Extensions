@@ -47,6 +47,9 @@ namespace TKWF.Ext.SecurityLog
 
             // 4. 查询服务（分页/过滤/Count/GetDetailAsync）
             services.TryAddScoped<ISecurityLogQueryService, SecurityLogQueryService>();
+
+            // 5. 分析服务（v0.2.0：失败次数 TopN 聚合 + 保留天数清理）
+            services.TryAddScoped<ISecurityLogAnalyticsService, SecurityLogAnalyticsService>();
         }
 
         /// <summary>过滤器不自动注册——消费方 opt-in：<c>builder.AddSecurityLog()</c>（对齐 AddAuditLog 先例）。</summary>

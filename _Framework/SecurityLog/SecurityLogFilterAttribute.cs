@@ -57,14 +57,14 @@ namespace TKWF.Ext.SecurityLog
         /// <summary>方法名 → 安全事件类型映射（白名单命中且非"锁定"异常时的 EventType）。</summary>
         private static readonly Dictionary<string, string> EventTypeByMethod = new(StringComparer.Ordinal)
         {
-            ["LoginByPasswordAsync"] = "Login",
-            ["LoginByContextAsync"] = "Login",
-            ["LogoutAsync"] = "Logout",
-            ["RequestChallengeAsync"] = "Challenge",
-            ["RegisterSecureAsync"] = "Register",
-            ["ChangePasswordSecureAsync"] = "PasswordChange",
-            ["InitiateResetAsync"] = "PasswordReset",
-            ["CompleteResetAsync"] = "PasswordReset",
+            ["LoginByPasswordAsync"] = SecurityLogEventTypes.Login,
+            ["LoginByContextAsync"] = SecurityLogEventTypes.Login,
+            ["LogoutAsync"] = SecurityLogEventTypes.Logout,
+            ["RequestChallengeAsync"] = SecurityLogEventTypes.Challenge,
+            ["RegisterSecureAsync"] = SecurityLogEventTypes.Register,
+            ["ChangePasswordSecureAsync"] = SecurityLogEventTypes.PasswordChange,
+            ["InitiateResetAsync"] = SecurityLogEventTypes.PasswordReset,
+            ["CompleteResetAsync"] = SecurityLogEventTypes.PasswordReset,
         };
 
         /// <summary>
@@ -137,20 +137,20 @@ namespace TKWF.Ext.SecurityLog
 
                 // C4 Lockout 判定：异常消息含"锁定"关键字 → 记 Lockout 事件
                 if (authEx.Message.Contains(LockoutKeyword, StringComparison.Ordinal))
-                    eventType = "Lockout";
+                    eventType = SecurityLogEventTypes.Lockout;
 
-                result = "Failed";
+                result = SecurityLogEventTypes.ResultFailed;
                 detail = authEx.Message; // 脱敏：仅异常消息（AuthController 异常消息不含密码/令牌明文，绝不含凭据输入）
             }
             else
             {
                 // 成功路径：正常返回 = Success；返回值承载业务失败（RegisterResult/bool/ResetResult）→ Failed
-                result = "Success";
+                result = SecurityLogEventTypes.ResultSuccess;
                 switch (context.Invocation.ReturnValue)
                 {
-                    case RegisterResult r: result = r.Success ? "Success" : "Failed"; detail = r.Message; break;
-                    case ResetResult r: result = r.Success ? "Success" : "Failed"; detail = r.Message; break;
-                    case bool b: result = b ? "Success" : "Failed"; break;
+                    case RegisterResult r: result = r.Success ? SecurityLogEventTypes.ResultSuccess : SecurityLogEventTypes.ResultFailed; detail = r.Message; break;
+                    case ResetResult r: result = r.Success ? SecurityLogEventTypes.ResultSuccess : SecurityLogEventTypes.ResultFailed; detail = r.Message; break;
+                    case bool b: result = b ? SecurityLogEventTypes.ResultSuccess : SecurityLogEventTypes.ResultFailed; break;
                 }
             }
 
@@ -171,7 +171,7 @@ namespace TKWF.Ext.SecurityLog
 
             return new SecurityLogEntry(
                 EventType: eventType,
-                EventCategory: "Authentication",
+                EventCategory: SecurityLogEventTypes.CategoryAuthentication,
                 UserName: userName,
                 UserId: userId,
                 IpAddress: ipAddress,

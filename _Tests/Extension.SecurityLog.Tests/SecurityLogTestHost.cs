@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
@@ -30,6 +31,13 @@ internal static class SecurityLogTestHost
     /// <summary>创建基于 SQLite 内存库的 SecurityLogQueryService（DataService 委托）。</summary>
     public static SecurityLogQueryService CreateQueryService(IFreeSql fsql)
         => new(CreateDataService(fsql), NullLogger<SecurityLogQueryService>.Instance);
+
+    /// <summary>创建基于 SQLite 内存库的 SecurityLogAnalyticsService（DataService 委托 + Options + 空日志）。</summary>
+    public static SecurityLogAnalyticsService CreateAnalyticsService(
+        IFreeSql fsql, SecurityLoggingOptions? options = null)
+        => new(CreateDataService(fsql),
+            new OptionsWrapper<SecurityLoggingOptions>(options ?? new SecurityLoggingOptions()),
+            NullLogger<SecurityLogAnalyticsService>.Instance);
 
     /// <summary>创建 SQLite 内存库（每次调用新连接 = 独立内存库）+ 同步实体表结构。</summary>
     public static IFreeSql CreateInMemoryFreeSql()

@@ -39,4 +39,13 @@ public class SecurityLoggingOptionsTests
         Assert.Contains("Login", options.EventTypes);
         Assert.Contains("LOGIN", options.EventTypes);
     }
+
+    [Fact]
+    public void Defaults_RetentionDays90_CleanupBatchSize500()
+    {
+        var options = new SecurityLoggingOptions();
+
+        Assert.Equal(90, options.RetentionDays);
+        Assert.Equal(500, options.CleanupBatchSize);
+    }
 }

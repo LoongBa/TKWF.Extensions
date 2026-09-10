@@ -8,6 +8,7 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Session;
 using TKW.Framework.Enumerations;
 using TKWF.Ext.Account;
+using TKWF.Ext.SecurityLog;
 
 namespace TKWF.Ext.Account.Tests;
 
@@ -20,8 +21,11 @@ namespace TKWF.Ext.Account.Tests;
 /// <para>V4.9.85 (ADR47)：消费方显式启用 Account 扩展——<see cref="TKWFEnabledExtensionAttribute"/>
 /// 声明后，SG1b 将 Account 的能力清单（GeneratedControllerCatalog）聚合进本消费方的
 /// 领域权威注册（GeneratedControllerRegistrations.InterfaceNames），扩展服务接口才能在消费方暴露。</para>
+/// <para>V0.3.0：测试项目引用 SecurityLog（登录历史数据源）——L3 门控（TKWF0032）要求领域宿主
+/// 对每个直接引用的扩展声明白名单，故补 <see cref="TKWF.Ext.SecurityLog.SecurityLogExtensionInitializer{TUserInfo}"/>。</para>
 /// </summary>
 [TKWFEnabledExtension(typeof(AccountExtensionInitializer<>))]
+[TKWFEnabledExtension(typeof(SecurityLogExtensionInitializer<>))]
 public sealed class ConsumerHostInitializer : DomainHostInitializerBase<TestUserInfo>
 {
     protected override IProjectMetaContext OnRegisterInfrastructureServices(

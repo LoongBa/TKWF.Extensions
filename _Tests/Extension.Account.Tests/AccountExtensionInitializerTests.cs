@@ -81,6 +81,20 @@ public class AccountExtensionInitializerTests
     }
 
     [Fact]
+    public void ConfigureServices_Registers_ILoginHistoryService_Descriptor()
+    {
+        // V0.3.0：登录历史与异常检测查询服务（消费 SecurityLog 扩展查询 API）
+        var services = new ServiceCollection();
+        new AccountExtensionInitializer<AccountUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ILoginHistoryService));
+
+        Assert.NotNull(descriptor);
+        Assert.Equal(typeof(LoginHistoryService), descriptor!.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
     public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerLockoutPolicy()
     {
         var services = new ServiceCollection();

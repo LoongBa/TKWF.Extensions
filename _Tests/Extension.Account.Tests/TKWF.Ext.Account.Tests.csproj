@@ -35,8 +35,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 本仓库扩展（Account）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
+    <!-- 本仓库扩展（Account + SecurityLog）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Account\TKWF.Ext.Account.csproj" />
+    <!-- V0.3.0 登录历史：SecurityLog 是登录历史唯一数据源——测试宿主建 SecurityLogEntity 表 + 真实契约服务 -->
+    <ProjectReference Include="..\..\_Framework\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
     <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />

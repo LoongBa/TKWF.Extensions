@@ -9,7 +9,7 @@ namespace TKWF.Ext.Account
     /// <summary>
     /// 账户管理扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
-    /// <item><see cref="ConfigureServices"/>——注册锁定/重置存储 + 主框架缺口实现（TryAddScoped）</item>
+    /// <item><see cref="ConfigureServices"/>——注册锁定/重置存储 + 主框架缺口实现 + 登录历史服务（TryAddScoped）</item>
     /// <item>ConfigureFilters——不调用（V0.1.0 无过滤器）</item>
     /// <item>InitializeAsync——不调用（V0.1.0 无种子）</item>
     /// </list>
@@ -38,6 +38,9 @@ namespace TKWF.Ext.Account
             services.TryAddScoped<IPasswordResetStore, PasswordResetStore>();
             services.TryAddScoped<IAccountLockoutPolicy, FreeSqlAccountLockoutPolicy>();
             services.TryAddScoped<IPasswordResetFlow, DefaultPasswordResetFlow>();
+            // V0.3.0：登录历史与异常检测——消费 SecurityLog 扩展查询 API（SecurityLog 是登录历史唯一数据源，
+            // 不重复建表；SecurityLog 契约经 IServiceProvider 延迟解析，未启用抛明确异常——C1 模式）
+            services.TryAddScoped<ILoginHistoryService, LoginHistoryService>();
             // IAccountPasswordManager 不注册默认实现——消费方实现（适配 Identity IUserManager）
         }
     }

@@ -1,6 +1,6 @@
 # TKWF.Ext.Account 账户管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (账户管理与安全策略) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 (登录历史与异常检测) | **框架**: .NET 10
 
 **核心约束**: 主框架缺口实现、FreeSql 持久化、异常静默处理、SG1 声明式实体、不重建 AuthController
 
@@ -70,7 +70,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-自动注册：`IAccountLockoutStore`（`FreeSqlAccountLockoutStore`）+ `IPasswordResetStore`（`FreeSqlPasswordResetStore`）+ `IAccountLockoutPolicy`（`FreeSqlAccountLockoutPolicy`）+ `IPasswordResetFlow`（`DefaultPasswordResetFlow`）。
+自动注册：`IAccountLockoutStore`（`FreeSqlAccountLockoutStore`）+ `IPasswordResetStore`（`FreeSqlPasswordResetStore`）+ `IAccountLockoutPolicy`（`FreeSqlAccountLockoutPolicy`）+ `IPasswordResetFlow`（`DefaultPasswordResetFlow`）+ `ILoginHistoryService`（`LoginHistoryService`，V0.3.0——登录历史与异常检测，消费 SecurityLog 扩展查询 API）。
 
 ### 2. 注册密码落地适配器
 
@@ -137,6 +137,7 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 | **`IAccountLockoutStore`** | 锁定状态存储抽象 | `FreeSqlAccountLockoutStore`（本扩展） |
 | **`IPasswordResetStore`** | 重置码存储抽象 | `FreeSqlPasswordResetStore`（本扩展） |
 | **`IAccountPasswordManager`** | 密码落地抽象 | 消费方实现（适配 Identity IUserManager） |
+| **`ILoginHistoryService`** | 登录历史与异常检测查询（V0.3.0——消费 SecurityLog 扩展查询 API，不重复建表） | `LoginHistoryService`（本扩展，经 IServiceProvider 延迟解析 SecurityLog 契约服务） |
 | **`AccountLockoutEntity`** | 锁定记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`PasswordResetCodeEntity`** | 重置码表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`AccountUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
@@ -165,7 +166,7 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0（已实施）
 - 账户锁定默认实现（`IAccountLockoutPolicy`——失败计数/锁定阈值/自动解锁）
 - 密码重置默认实现（`IPasswordResetFlow`——随机码/过期/幂等消费/防用户枚举）
 - 双实体 SG1 化 + FreeSql 持久化
@@ -175,6 +176,9 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 - 重置码通知渠道（对接 Emailing 扩展发送邮件）
 - 多因素认证（MFA）
 
-### V0.3.0（规划）
-- 管理 UI（账户锁定/解锁/重置审计）
-- 登录历史与异常检测
+### V0.3.0（已实施：登录历史与异常检测——无 UI 部分）
+- **登录历史与异常检测查询服务**（`ILoginHistoryService` + `LoginHistoryService`）——消费 SecurityLog 扩展查询 API：
+  - `GetLoginHistoryAsync`：分页/过滤登录历史（UserName/IP/Result/时间范围，EventType 固定 "Login"）+ DTO 投影（列表 DTO 不含 Detail/UserAgent，D5 安全决策）
+  - `GetTopFailedUsersAsync` / `GetTopFailedIpsAsync`：窗口内失败次数 TopN（暴力破解/撞库检测，TimeSpan 窗口）
+  - **划界**：SecurityLog 是登录历史唯一数据源（不重复建表）；SecurityLog 契约经 `IServiceProvider` 延迟解析（C1 模式，对齐 NotificationPublisher）——**未启用 SecurityLog 扩展 → 调用抛 `InvalidOperationException` 明确提示**；查询失败 → Warning + 空结果
+- 管理 UI（账户锁定/解锁/重置审计）——规划（本次迭代不做）

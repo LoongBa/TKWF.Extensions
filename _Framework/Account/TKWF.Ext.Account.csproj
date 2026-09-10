@@ -26,6 +26,10 @@
     <!-- V0.3.0 拆包（用户裁定 B）：账户契约抽象（IAccountPasswordManager）→ Abstractions（ADR48 D7） -->
     <ProjectReference Include="..\Account.Abstractions\TKWF.Ext.Account.Abstractions.csproj" />
 
+    <!-- V0.3.0 登录历史与异常检测：消费 SecurityLog 扩展查询 API（SecurityLog 是登录历史唯一数据源，
+         不重复建表——跨扩展走契约服务；SecurityLog 无 Abstractions 项目，直接引本体） -->
+    <ProjectReference Include="..\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
+
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 
@@ -61,5 +65,22 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Account.Tests" />
   </ItemGroup>
+
+  <!--
+    V0.3.0 登录历史与异常检测：Account → SecurityLog 直接引用的门控抑制（TKWF_SG1b_TKWF0022，Error）。
+
+    【架构决策记录——请用户/评审确认，勿复制此模式】
+    ADR50 L2 源头禁令要求扩展间耦合走 .Abstractions 依赖倒置；但：
+      ① SecurityLog 无 Abstractions 项目（契约接口内嵌于本体，implementation 为 internal）；
+      ② 本迭代任务严禁修改 SecurityLog 任何文件（提取 Abstractions 需改 SecurityLog 接口/实现——越界）；
+      ③ 消费形态是只读查询契约委托（ILoginHistoryService → ISecurityLogQueryService/AnalyticsService），
+         非写路径/非实体引用——符合 D17A "经 Abstractions 调被增强模块服务"的意图，仅缺 Abstractions 载体。
+    故按任务裁决（"无 Abstractions 项目则引本体，确认后定"）局部抑制本源禁令。
+    正式豁免机制（[TKWFExtensionConsumer] 程序集级特性，ADR50 规划）落地后应替换本 NoWarn；
+    或经用户许可后提取 SecurityLog.Abstractions（需修改 SecurityLog，另立迭代）。
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);TKWF_SG1b_TKWF0022</NoWarn>
+  </PropertyGroup>
 
 </Project>

@@ -1,6 +1,6 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (审计日志数据库存储与查询 API) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 (统计聚合 API + 保留天数清理) | **框架**: .NET 10
 
 **核心约束**: 方法级审计日志持久化、查询 API、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 
@@ -20,6 +20,8 @@
 
 - **查询缺失**（V0.2.0 解决）：V0.1.0 仅提供写入（`IAuditLogStore.SaveAsync`），消费方无法按条件查询审计日志——安全审计、问题排查均需标准化查询能力。
 
+- **统计聚合/清理缺失**（V0.3.0 解决）：查询 API 只提供列表/计数，无法做"哪个服务/用户调用最热、成功/失败比例、耗时分布"等聚合分析；且日志无限增长耗尽存储——需保留天数清理（合规留存窗口）回收。
+
 ---
 
 ## 二、设计原理 (Design Principles)
@@ -37,6 +39,8 @@
 - **持久化实现 (`FreeSqlAuditLogStore`)**：将 `AuditLogEntry` 映射为 `AuditLogEntity` 并持久化。异常静默处理（不阻塞业务）。
 
 - **查询实现 (`AuditLogQueryService`)**：V0.2.0 新增，internal sealed，FreeSql 查询 + 异常静默（Warning 日志 + 返回空结果）。
+
+- **分析服务 (`IAuditLogAnalyticsService`)**：V0.3.0 新增，internal sealed——调用次数 TopN 聚合（ByService/ByUser）+ SQL 级统计（Total/Succeeded/Failed/AvgDurationMs/MaxDurationMs）+ 保留天数清理（分批物理删），全走 DataService 委托（数据访问红线合规）。
 
 - **声明式实体 (`AuditLogEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` + `[Index]` 特性。
 
@@ -122,7 +126,9 @@ public class AuditQueryService(IAuditLogQueryService queryService)
       "IsEnabled": true,
       "LogAnonymous": false,
       "SaveReturnValues": false,
-      "AdditionalSensitiveFields": ["creditCard", "ssn"]
+      "AdditionalSensitiveFields": ["creditCard", "ssn"],
+      "RetentionDays": 90,
+      "CleanupBatchSize": 500
     }
   }
 }
@@ -144,6 +150,36 @@ services.AddScoped<IAuditLogStore, SiemAuditLogStore>();
 
 TryAdd 语义确保消费方实现优先。
 
+### 6. 统计聚合（V0.3.0）
+
+注入 `IAuditLogAnalyticsService`（自动注册，TryAddScoped）：
+
+```csharp
+public class AuditDashboardService(IAuditLogAnalyticsService analytics)
+{
+    // 调用次数 TopN（按服务名/用户名，窗口相对 UtcNow；null = 全量）
+    var topServices = await analytics.GetTopServicesAsync(topN: 10, window: TimeSpan.FromDays(7));
+    var topUsers = await analytics.GetTopUsersAsync(topN: 10);
+
+    // SQL 级统计（Total/Succeeded/Failed/AvgDurationMs/MaxDurationMs）
+    var stats = await analytics.GetStatsAsync(window: TimeSpan.FromHours(24));
+    var failureRate = stats.Total > 0 ? stats.Failed / (double)stats.Total : 0;
+}
+```
+
+### 7. 保留天数清理（V0.3.0）
+
+```csharp
+// 删除 ExecutionTime < UtcNow - RetentionDays（默认 90 天）的过期记录，分批循环清完
+var deleted = await analytics.CleanupExpiredAsync();
+Console.WriteLine($"清理审计日志 {deleted} 条");
+```
+
+- 分批大小 `CleanupBatchSize`（默认 500）——每批最多删除条数，循环至清完，防大表一次性删爆事务
+- 时间锚点 `ExecutionTime` 已有索引（`IX_AuditLog_ExecutionTime`）
+- **决策记录**：保留清理引入**物理删除**路径——合规留存窗口（默认 90 天）下过期日志必须可回收，否则无限膨胀。限定：① 仅 `AuditLogEntityDataService.DeleteExpiredAsync` 单点物理删（`hasSoftDelete:false`，绝不走 `EntitySoftDeleteAsync`——对未启用软删实体抛 InvalidOperationException）；② 无管理端点/单条删除；③ 聚合仍只读。以代码注释 + 本 README 承担决策记录职责。
+- 扩展**不内建调度器**——由消费方经 BackgroundJob/Quartz/Hangfire 定时调用。
+
 ---
 
 ## 四、核心组件清单 (Component List)
@@ -152,14 +188,17 @@ TryAdd 语义确保消费方实现优先。
 |----------|---------|------------|
 | **`IAuditLogStore`** | 审计日志存储抽象（主框架定义） | `FreeSqlAuditLogStore`（本扩展） |
 | **`IAuditLogQueryService`** | 审计日志查询服务（V0.2.0，扩展侧自建） | `AuditLogQueryService`（本扩展） |
+| **`IAuditLogAnalyticsService`** | 统计聚合 + 保留天数清理（V0.3.0，扩展侧自建） | `AuditLogAnalyticsService`（internal sealed，委托 DataService + IOptions + ILogger，异常静默） |
 | **`AuditLogEntry`** | 审计日志数据模型（主框架定义） | record 类型 |
 | **`AuditLogFilterAttribute`** | 方法级审计日志过滤器（主框架定义） | 消费方 opt-in 启用 |
 | **`AuditLogEntity`** | 审计日志表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`AuditLogQueryInput`** | 查询输入参数（V0.2.0） | record 类型 |
 | **`AuditLogListItemDto`** | 查询列表项 DTO（V0.2.0，不含 ArgumentsJson） | record 类型 |
+| **`AuditLogDimensionCount`** | 调用次数 TopN 聚合项（V0.3.0，Dimension=服务名/用户名） | record 类型 |
+| **`AuditLogStats`** | SQL 级统计输出项（V0.3.0，Total/Succeeded/Failed/AvgDurationMs/MaxDurationMs） | record 类型 |
 | **`AuditLogPagedResult`** | 分页查询结果（V0.2.0） | record 类型 |
 | **`AuditLoggingUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
-| **`AuditLoggingOptions`** | 配置选项（`TKWF:AuditLogging` 节） | 内置 |
+| **`AuditLoggingOptions`** | 配置选项（`TKWF:AuditLogging` 节，V0.3.0 + RetentionDays/CleanupBatchSize） | 内置 |
 | **`AuditLoggingExtensionInitializer`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 
 ---
@@ -183,7 +222,7 @@ TryAdd 语义确保消费方实现优先。
 | CorrelationId | NVARCHAR(128) | 关联 ID（分布式链路追踪） |
 | CreateTime | DATETIMEOFFSET | 记录创建时间 |
 
-**索引**（V0.2.0 新增）：`IX_AuditLog_ExecutionTime` / `IX_AuditLog_UserName` / `IX_AuditLog_CorrelationId`（均为非唯一索引）。
+**索引**：`IX_AuditLog_ExecutionTime` / `IX_AuditLog_UserName` / `IX_AuditLog_CorrelationId` / `IX_AuditLog_ServiceName`（均为非唯一索引；V0.2.0 补建前 3 个，V0.3.0 补 ServiceName——服务聚合查询的 WHERE/排序下推）。
 
 ---
 
@@ -207,13 +246,14 @@ TryAdd 语义确保消费方实现优先。
 - 基础查询（实体建表）
 - 异常静默处理
 
-### V0.2.0（当前）
+### V0.2.0
 - 查询 API（`IAuditLogQueryService`：按时间/用户/服务名/方法名等条件分页查询）
 - 索引补建（ExecutionTime / UserName / CorrelationId）
 - Options 绑定修复（`AddOptions<AuditLoggingOptions>` 注册）
 - DTO 安全（不含 ArgumentsJson）
 
-### V0.3.0（规划）
-- 统计聚合（CountByServiceAsync / CountByUserAsync 等）
-- 数据清理/归档策略
-- 审计日志统计分析
+### V0.3.0（当前）
+- 统计聚合 API（`IAuditLogAnalyticsService`：CountByServiceAsync / CountByUserAsync TopN + GetStatsAsync SQL 级统计）
+- 保留天数清理（`RetentionDays` 默认 90 + `CleanupBatchSize` 默认 500，分批物理删）
+- `CountAsync` 低效修复（内存计数 → SQL COUNT）
+- 索引补建（ServiceName——聚合查询全表扫描修复）

@@ -20,5 +20,19 @@ namespace TKWF.Ext.AuditLogging
 
         /// <summary>附加敏感字段名集合（参数 JSON 序列化时值替换为 "***"）。</summary>
         public HashSet<string> AdditionalSensitiveFields { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 审计日志保留天数（V0.3.0 保留天数清理）——<see cref="AuditLogAnalyticsService.CleanupExpiredAsync"/>
+        /// 删除 <c>ExecutionTime &lt; UtcNow - RetentionDays</c> 的过期记录（分批）。默认 90 天。
+        /// <para>注意：该清理引入物理删除——限定 DataService <c>DeleteExpiredAsync</c> 单点物理删
+        /// （hasSoftDelete:false，绝不走 EntitySoftDeleteAsync），不暴露管理端点。</para>
+        /// </summary>
+        public int RetentionDays { get; set; } = 90;
+
+        /// <summary>
+        /// 保留清理单批删除条数（V0.3.0）——分批删除防长事务/大锁（每批
+        /// <see cref="AuditLogEntityDataService.DeleteExpiredAsync"/> 查询 Take 后删除，循环至清完）。默认 500。
+        /// </summary>
+        public int CleanupBatchSize { get; set; } = 500;
     }
 }

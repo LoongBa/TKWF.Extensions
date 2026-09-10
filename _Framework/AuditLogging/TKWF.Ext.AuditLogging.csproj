@@ -22,6 +22,10 @@
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
 
+    <!-- SQL 级聚合扩展（FreeSqlQueryableExtensions——ADR15 聚合 API 分层：DataService 内 AvgAsync/MaxAsync
+         经 RestoreToSelect 走 FreeSql ISelect 原生聚合，SQL AVG/MAX 下推——GetStatsAsync 用，V0.3.0） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
     <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
 

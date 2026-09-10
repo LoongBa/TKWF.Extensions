@@ -431,6 +431,39 @@ public class AuditLogQueryServiceTests
         Assert.Equal(0, count);
     }
 
+    /// <summary>V0.3.0 修复验证：CountAsync 由内存计数改为 SQL COUNT——大批量下应快速且精确返回（防 int.MaxValue 全表拉取）。</summary>
+    [Fact]
+    public async Task CountAsync_SqlCount_Matches()
+    {
+        var (service, fsql, dataService) = CreateService();
+
+        // 插入 250 条（远超大页拉取阈值，验证 SQL COUNT 路径正确）
+        for (int i = 0; i < 250; i++)
+        {
+            await dataService.EntityCreateAsync(new AuditLogEntity
+            {
+                UserName = i % 2 == 0 ? "alice" : "bob",
+                UserId = $"u{i}",
+                ServiceName = "BulkService",
+                MethodName = $"Method{i}",
+                ExecutionTime = new DateTime(2026, 1, 20, 0, 0, 0).AddMinutes(i),
+                DurationMs = i,
+                Success = i % 3 != 0,
+                CreateTime = DateTimeOffset.Now
+            }, CancellationToken.None);
+        }
+
+        var total = await service.CountAsync(new AuditLogQueryInput());
+        Assert.Equal(250, total);
+
+        var alice = await service.CountAsync(new AuditLogQueryInput { UserName = "alice" });
+        Assert.Equal(125, alice);
+
+        var failed = await service.CountAsync(new AuditLogQueryInput { Success = false });
+        // i % 3 == 0 的 i：0,3,...,249 → 84 条失败
+        Assert.Equal(84, failed);
+    }
+
     // ── 无结果 ──
 
     [Fact]
@@ -573,12 +606,24 @@ public class AuditLogQueryServiceTests
     }
 
     [Fact]
-    public void AuditLogEntity_HasExactlyThreeNonUniqueIndexes()
+    public void AuditLogEntity_HasIndexAttribute_IX_AuditLog_ServiceName()
     {
         var type = typeof(AuditLogEntity);
         var indexes = type.GetCustomAttributes<FreeSql.DataAnnotations.IndexAttribute>(false).ToList();
 
-        Assert.Equal(3, indexes.Count);
+        var match = indexes.FirstOrDefault(i =>
+            i.Name == "IX_AuditLog_ServiceName" && !i.IsUnique);
+
+        Assert.NotNull(match);
+    }
+
+    [Fact]
+    public void AuditLogEntity_HasExactlyFourNonUniqueIndexes()
+    {
+        var type = typeof(AuditLogEntity);
+        var indexes = type.GetCustomAttributes<FreeSql.DataAnnotations.IndexAttribute>(false).ToList();
+
+        Assert.Equal(4, indexes.Count);
         Assert.All(indexes, idx => Assert.False(idx.IsUnique));
     }
 

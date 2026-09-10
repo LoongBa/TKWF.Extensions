@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
@@ -30,6 +31,13 @@ internal static class AuditLoggingTestHost
     /// <summary>创建基于 SQLite 内存库的 AuditLogQueryService（DataService 委托）。</summary>
     public static AuditLogQueryService CreateQueryService(IFreeSql fsql)
         => new(CreateDataService(fsql), NullLogger<AuditLogQueryService>.Instance);
+
+    /// <summary>创建基于 SQLite 内存库的 AuditLogAnalyticsService（DataService 委托 + Options + 空日志）。</summary>
+    public static AuditLogAnalyticsService CreateAnalyticsService(
+        IFreeSql fsql, AuditLoggingOptions? options = null)
+        => new(CreateDataService(fsql),
+            new OptionsWrapper<AuditLoggingOptions>(options ?? new AuditLoggingOptions()),
+            NullLogger<AuditLogAnalyticsService>.Instance);
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>

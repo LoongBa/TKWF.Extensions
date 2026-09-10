@@ -16,6 +16,7 @@ namespace TKWF.Ext.AuditLogging
     [FreeSql.DataAnnotations.Index("IX_AuditLog_ExecutionTime", nameof(ExecutionTime), IsUnique = false)]
     [FreeSql.DataAnnotations.Index("IX_AuditLog_UserName", nameof(UserName), IsUnique = false)]
     [FreeSql.DataAnnotations.Index("IX_AuditLog_CorrelationId", nameof(CorrelationId), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("IX_AuditLog_ServiceName", nameof(ServiceName), IsUnique = false)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuditLogEntity
     {

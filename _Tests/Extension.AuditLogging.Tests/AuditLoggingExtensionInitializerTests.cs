@@ -84,6 +84,50 @@ public class AuditLoggingExtensionInitializerTests
         Assert.Equal(1, count);
     }
 
+    // ── V0.3.0 分析服务注册 ──
+
+    [Fact]
+    public void ConfigureServices_Registers_IAuditLogAnalyticsService_Descriptor()
+    {
+        var services = new ServiceCollection();
+        new AuditLoggingExtensionInitializer<AuditLoggingUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IAuditLogAnalyticsService));
+
+        Assert.NotNull(descriptor);
+        Assert.Equal(typeof(AuditLogAnalyticsService), descriptor!.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerAnalyticsService()
+    {
+        var services = new ServiceCollection();
+        // 消费方先注册自定义 IAuditLogAnalyticsService → TryAddScoped 不应覆盖
+        services.AddScoped<IAuditLogAnalyticsService, ConsumerAuditLogAnalyticsService>();
+        new AuditLoggingExtensionInitializer<AuditLoggingUserInfo>().ConfigureServices(services);
+
+        var analyticsDescriptors = services.Where(d => d.ServiceType == typeof(IAuditLogAnalyticsService)).ToList();
+        Assert.Single(analyticsDescriptors);
+        Assert.Equal(typeof(ConsumerAuditLogAnalyticsService), analyticsDescriptors[0].ImplementationType);
+    }
+
+    /// <summary>测试专用 IAuditLogAnalyticsService：标记消费方自定义实现。</summary>
+    private sealed class ConsumerAuditLogAnalyticsService : IAuditLogAnalyticsService
+    {
+        public Task<IReadOnlyList<AuditLogDimensionCount>> GetTopServicesAsync(int topN = 10, TimeSpan? window = null, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<AuditLogDimensionCount>>([]);
+
+        public Task<IReadOnlyList<AuditLogDimensionCount>> GetTopUsersAsync(int topN = 10, TimeSpan? window = null, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<AuditLogDimensionCount>>([]);
+
+        public Task<AuditLogStats> GetStatsAsync(TimeSpan? window = null, CancellationToken ct = default)
+            => Task.FromResult(new AuditLogStats(0, 0, 0, 0, 0));
+
+        public Task<int> CleanupExpiredAsync(CancellationToken ct = default)
+            => Task.FromResult(0);
+    }
+
     /// <summary>测试专用 IAuditLogStore：标记消费方自定义实现。</summary>
     private sealed class ConsumerAuditLogStore : IAuditLogStore
     {

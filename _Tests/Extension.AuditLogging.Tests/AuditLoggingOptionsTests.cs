@@ -49,6 +49,22 @@ public class AuditLoggingOptionsTests
         Assert.Contains("PASSWORD", options.AdditionalSensitiveFields);
     }
 
+    // ── V0.3.0 保留清理默认值 ──
+
+    [Fact]
+    public void Default_RetentionDays_Is90()
+    {
+        var options = new AuditLoggingOptions();
+        Assert.Equal(90, options.RetentionDays);
+    }
+
+    [Fact]
+    public void Default_CleanupBatchSize_Is500()
+    {
+        var options = new AuditLoggingOptions();
+        Assert.Equal(500, options.CleanupBatchSize);
+    }
+
     // ── V0.2.0 Options 绑定测试 ──
 
     [Fact]

@@ -10,7 +10,8 @@ namespace TKWF.Ext.AuditLogging
     /// 审计日志扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
     /// <item><see cref="ConfigureServices"/>——注册 <see cref="IAuditLogStore"/> 默认 FreeSql 实现 +
-    ///       <see cref="IAuditLogQueryService"/> 查询服务（TryAddScoped）+ <see cref="AuditLoggingOptions"/> Options 绑定</item>
+    ///       <see cref="IAuditLogQueryService"/> 查询服务 + <see cref="IAuditLogAnalyticsService"/> 分析服务
+    ///       （均 TryAddScoped）+ <see cref="AuditLoggingOptions"/> Options 绑定</item>
     /// <item>ConfigureFilters——不调用（消费方 opt-in，通过 FilterBuilder.AddAuditLog 启用）</item>
     /// <item>InitializeAsync——不调用（V0.1.0 无种子）</item>
     /// </list>
@@ -44,6 +45,9 @@ namespace TKWF.Ext.AuditLogging
 
             // V0.2.0：审计日志查询服务（TryAddScoped：消费方可自定义查询实现覆盖默认）
             services.TryAddScoped<IAuditLogQueryService, AuditLogQueryService>();
+
+            // V0.3.0：审计日志分析服务（统计聚合 + 保留天数清理；TryAddScoped：消费方可自定义实现覆盖默认）
+            services.TryAddScoped<IAuditLogAnalyticsService, AuditLogAnalyticsService>();
         }
     }
 }

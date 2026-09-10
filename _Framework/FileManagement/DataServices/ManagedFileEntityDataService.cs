@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.FreeSql;   // V0.2.0：SumAsync（SQL SUM 聚合下推——FreeSqlQueryableExtensions，ADR15）
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.FileManagement.DTOs;
 
@@ -41,6 +42,29 @@ partial class ManagedFileEntityDataService(IDomainUser user, IEntityDAC<ManagedF
     /// <summary>按目录统计文件数（删除保护计数——SQL COUNT 下推；folderId 可空 → 根级文件计数）。</summary>
     public Task<long> CountByFolderIdAsync(long? folderId, CancellationToken ct = default)
         => Dac.CountAsync(QueryForUser().Where(BuildFolderPredicate(folderId)), ct);
+
+    /// <summary>
+    /// 按目录求文件总容量（V0.2.0 配额——SQL SUM 下推；folderId 可空 → 根级文件）。
+    /// <para>独立 QueryForUser() 起新查询（FreeSql ISelect 原地可变陷阱——禁止链式复用过滤后的 ISelect）。</para>
+    /// <para>P2-4：SQL SUM(Size) 空表/空目录返回 NULL——decimal → long 转换前 ?? 0（空目录返回 0）。</para>
+    /// </summary>
+    public async Task<long> SumSizeByFolderIdAsync(long? folderId, CancellationToken ct = default)
+    {
+        decimal sum = await QueryForUser()
+            .Where(BuildFolderPredicate(folderId))
+            .SumAsync(e => (decimal)e.Size, ct);
+        return (long)sum;
+    }
+
+    /// <summary>
+    /// 全局文件总容量（V0.2.0 配额——SQL SUM 下推全表）。
+    /// <para>独立 QueryForUser() 起新查询（ISelect 原地可变陷阱）。P2-4：空表 NULL → 0。</para>
+    /// </summary>
+    public async Task<long> SumSizeAllAsync(CancellationToken ct = default)
+    {
+        decimal sum = await QueryForUser().SumAsync(e => (decimal)e.Size, ct);
+        return (long)sum;
+    }
 
     /// <summary>新增文件（回写自增 Id）。</summary>
     public Task<ManagedFileEntity> CreateAsync(ManagedFileEntity entity, CancellationToken ct = default)

@@ -31,11 +31,12 @@ internal static class FileManagementTestSupport
             .UseAutoSyncStructure(true)
             .Build();
 
-    /// <summary>同步两张表结构（FileFolder + ManagedFile）。</summary>
+    /// <summary>同步三张表结构（FileFolder + ManagedFile + ManagedFileVersion——V0.2.0）。</summary>
     public static void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<FileFolderEntity>();
         fsql.CodeFirst.SyncStructure<ManagedFileEntity>();
+        fsql.CodeFirst.SyncStructure<ManagedFileVersionEntity>();
     }
 }
 
@@ -93,6 +94,8 @@ internal sealed class FileManagementTestHost : IDisposable
             stubUser, new FreeSqlEntityDAC<FileFolderEntity>(new UnitOfWorkManager(fsql))));
         services.AddSingleton(new ManagedFileEntityDataService(
             stubUser, new FreeSqlEntityDAC<ManagedFileEntity>(new UnitOfWorkManager(fsql))));
+        services.AddSingleton(new ManagedFileVersionEntityDataService(
+            stubUser, new FreeSqlEntityDAC<ManagedFileVersionEntity>(new UnitOfWorkManager(fsql))));   // V0.2.0
 
         // ITransactionManager（默认 Noop——Create/Update/Delete 写路径事务包裹依赖空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；Recording 由 configure 覆盖）
@@ -132,6 +135,10 @@ internal sealed class FileManagementTestHost : IDisposable
         await using var stream = new MemoryStream(content, writable: false);
         return await Manager.UploadFileAsync(folderId, fileName, stream, contentType, ct);
     }
+
+    /// <summary>快捷辅助：回滚文件到指定版本（委托 Manager，V0.2.0）。</summary>
+    public Task<ManagedFileEntity> RollbackFileAsync(long fileId, int version, CancellationToken ct = default)
+        => Manager.RollbackFileAsync(fileId, version, ct);
 
     /// <summary>Blob 临时目录根（断言物理文件落盘/补偿删除用）。</summary>
     public string BlobRoot => _blobRoot;

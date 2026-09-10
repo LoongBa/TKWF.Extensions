@@ -29,6 +29,7 @@ namespace TKWF.Ext.FileManagement
     {
         private readonly IFileFolderStore _folderStore;
         private readonly IManagedFileStore _fileStore;
+        private readonly IManagedFileVersionStore _versionStore;   // V0.2.0：文件版本历史（P2-2 定稿——internal Store 委托 DataService）
         private readonly IBlobStorageService _blobStorage;
         private readonly ITransactionManager _transactionManager;
         private readonly FileManagementOptions _options;
@@ -49,6 +50,7 @@ namespace TKWF.Ext.FileManagement
         internal FileManager(
             IFileFolderStore folderStore,
             IManagedFileStore fileStore,
+            IManagedFileVersionStore versionStore,
             IBlobStorageService blobStorage,
             ITransactionManager transactionManager,
             IOptions<FileManagementOptions> options,
@@ -56,6 +58,7 @@ namespace TKWF.Ext.FileManagement
         {
             _folderStore = folderStore ?? throw new ArgumentNullException(nameof(folderStore));
             _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
+            _versionStore = versionStore ?? throw new ArgumentNullException(nameof(versionStore));
             _blobStorage = blobStorage ?? throw new ArgumentNullException(nameof(blobStorage));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
             var opts = (options ?? throw new ArgumentNullException(nameof(options))).Value;
@@ -295,18 +298,18 @@ namespace TKWF.Ext.FileManagement
                 }
             }
 
-            // C2 根级同名预检 + P5 目录存在预检（前移 Blob 上传之前——避免先写物理再补偿的浪费 IO；
-            // 事务内保留二次校验作并发兜底）：根级（folderId=null）可空唯一索引 NULL 语义
-            // （SQLite/PostgreSQL 视 NULL 互不相同）——同名唯一由应用层保证，对齐 MoveFileAsync 目标重名检查
+            // P5 目录存在预检（前移 Blob 上传之前——避免先写物理再补偿的浪费 IO）。
+            // V0.2.0（Oracle P1-1）：**移除 C2 根级同名预检**——同名文件走版本化路径而非抛异常
+            // （原 `GetByFolderAndNameAsync(null, fileName) != null → throw` 删除）
             if (folderId.HasValue)
             {
                 var folder = await _folderStore.GetByIdAsync(folderId.Value, ct)
                     ?? throw new InvalidOperationException($"目录 {folderId.Value} 不存在");
             }
-            else if (await _fileStore.GetByFolderAndNameAsync(null, fileName, ct) != null)
-            {
-                throw new InvalidOperationException("该目录下已存在同名文件");   // 根级同名（应用层唯一保证，C2）
-            }
+
+            // V0.2.0 配额检查（步骤 7.5——目录守卫后、Blob 落盘前，预检前移避免浪费 IO）：
+            // 并发竞态"先到先得"（读-比-写非原子）——文档化，对齐 ABP 同级缺陷显式声明
+            await EnforceQuotaAsync(folderId, copy.Length, ct);
 
             // ContentType 服务端推导（C5）：由扩展名经 MIME 映射推导——不信任客户端传入值，未知 fallback application/octet-stream
             string resolvedContentType = FileManagementMimeMap.TryGet(extension) ?? "application/octet-stream";
@@ -329,24 +332,56 @@ namespace TKWF.Ext.FileManagement
                             ?? throw new InvalidOperationException($"目录 {folderId.Value} 不存在");
                     }
 
-                    var entity = new ManagedFileEntity
+                    // V0.2.0 Upsert 三分支（Oracle P1-3 定稿）：
+                    //   新文件 → CreateAsync 主表 + 首版 Version=1
+                    //   已有文件 + 内容变化 → UpdateAsync 主表指针 + 新版本 max+1
+                    //   Sha256 相同（Deduplicate=false 路径）→ 幂等返回既有（不产生冗余版本行）
+                    var existing = await _fileStore.GetByFolderAndNameAsync(folderId, fileName, ct);
+                    long fileSize = blob.Size > 0 ? blob.Size : copy.Length;
+
+                    if (existing == null)
                     {
-                        FolderId = folderId,
-                        Name = fileName,
-                        StoredPath = blob.Path,
-                        Extension = extension,
-                        ContentType = resolvedContentType,
-                        Size = blob.Size > 0 ? blob.Size : copy.Length,
-                        Sha256 = sha256,
-                        UploaderName = null,   // v0.1.0 预留（Manager 未注入当前用户上下文）
-                        CreateTime = DateTime.UtcNow,
-                        UpdateTime = DateTime.UtcNow
-                    };
+                        var entity = new ManagedFileEntity
+                        {
+                            FolderId = folderId,
+                            Name = fileName,
+                            StoredPath = blob.Path,
+                            Extension = extension,
+                            ContentType = resolvedContentType,
+                            Size = fileSize,
+                            Sha256 = sha256,
+                            UploaderName = null,   // 预留（Manager 未注入当前用户上下文）
+                            CreateTime = DateTime.UtcNow,
+                            UpdateTime = DateTime.UtcNow
+                        };
 
-                    await _fileStore.CreateAsync(entity, ct);
+                        await _fileStore.CreateAsync(entity, ct);
+                        await CreateVersionRowAsync(entity.Id, 1, blob.Path, extension, resolvedContentType, fileSize, sha256, ct);
+                        await scope.CommitAsync(ct);
+                        return entity;
+                    }
 
-                    await scope.CommitAsync(ct);
-                    return entity;
+                    if (existing.Sha256 != sha256)
+                    {
+                        // 新版本：主表指针更新 + 版本行 max+1
+                        existing.StoredPath = blob.Path;
+                        existing.Sha256 = sha256;
+                        existing.Size = fileSize;
+                        existing.UpdateTime = DateTime.UtcNow;
+                        await _fileStore.UpdateAsync(existing, ct);
+
+                        int nextVersion = await _versionStore.GetMaxVersionAsync(existing.Id, ct) + 1;
+                        await CreateVersionRowAsync(existing.Id, nextVersion, blob.Path, extension, resolvedContentType, fileSize, sha256, ct);
+                        await scope.CommitAsync(ct);
+                        return existing;
+                    }
+
+                    // Sha256 相同：Deduplicate=true 已在步骤 6 幂等返回；此处为 Deduplicate=false 路径——
+                    // 幂等返回既有（不产生冗余版本行，语义对齐去重）
+                    await scope.RollbackAsync(ct);
+                    await TryCleanupBlobAsync(blob.Path, ct);   // 内容相同不消费新 Blob——补偿清理
+                    _logger.LogInformation("上传内容与既有相同（Deduplicate=false 路径）：文件 {Id} 幂等返回", existing.Id);
+                    return existing;
                 }
                 catch
                 {
@@ -356,7 +391,7 @@ namespace TKWF.Ext.FileManagement
             }
             catch (Exception ex) when (IsUniqueConstraintViolation(ex))
             {
-                // 并发同目录同名上传（D17）：UX 唯一约束败者——补偿删除 Blob + 转业务异常
+                // 并发同目录同名上传 / 并发版本号冲突（D17/P2-5）：唯一约束败者——补偿删除 Blob + 转业务异常
                 await TryCleanupBlobAsync(blob.Path, ct);
                 throw new InvalidOperationException("该目录下已存在同名文件", ex);
             }
@@ -365,6 +400,55 @@ namespace TKWF.Ext.FileManagement
                 // 元数据落库其他失败（D16）：best-effort 清理 Blob + rethrow
                 await TryCleanupBlobAsync(blob.Path, ct);
                 throw;
+            }
+        }
+
+        /// <summary>新增版本行（首版 1 / 新版本 max+1——版本号经 GetMaxVersionAsync 计算）。</summary>
+        private async Task CreateVersionRowAsync(
+            long fileId, int version, string storedPath, string extension, string? contentType,
+            long size, string sha256, CancellationToken ct)
+        {
+            var versionEntity = new ManagedFileVersionEntity
+            {
+                FileId = fileId,
+                Version = version,
+                StoredPath = storedPath,
+                Extension = extension,
+                ContentType = contentType,
+                Size = size,
+                Sha256 = sha256,
+                UploaderName = null,
+                CreateTime = DateTime.UtcNow
+            };
+            await _versionStore.CreateAsync(versionEntity, ct);
+        }
+
+        /// <summary>V0.2.0 配额检查（上传步骤 7.5——Blob 落盘前，预检前移避免浪费 IO）：
+        /// 目录文件数 / 目录容量 / 全局容量三键可空（null 不限制）；超限 → InvalidOperationException（含配额信息）。</summary>
+        private async Task EnforceQuotaAsync(long? folderId, long contentLength, CancellationToken ct)
+        {
+            if (_options.MaxFilesPerFolder.HasValue && folderId.HasValue)
+            {
+                long count = await _fileStore.CountByFolderIdAsync(folderId, ct);
+                if (count >= _options.MaxFilesPerFolder.Value)
+                    throw new InvalidOperationException(
+                        $"目录文件数配额超限：当前 {count} / 上限 {_options.MaxFilesPerFolder.Value}");
+            }
+
+            if (_options.MaxFolderSizeBytes.HasValue && folderId.HasValue)
+            {
+                long current = await _fileStore.SumSizeByFolderIdAsync(folderId, ct);
+                if (current + contentLength > _options.MaxFolderSizeBytes.Value)
+                    throw new InvalidOperationException(
+                        $"目录容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxFolderSizeBytes.Value} 字节");
+            }
+
+            if (_options.MaxTotalSizeBytes.HasValue)
+            {
+                long current = await _fileStore.SumSizeAllAsync(ct);
+                if (current + contentLength > _options.MaxTotalSizeBytes.Value)
+                    throw new InvalidOperationException(
+                        $"全局容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxTotalSizeBytes.Value} 字节");
             }
         }
 
@@ -392,17 +476,29 @@ namespace TKWF.Ext.FileManagement
                 var file = await _fileStore.GetByIdAsync(id, ct)
                     ?? throw new InvalidOperationException($"文件 {id} 不存在");
 
-                // 删元数据 → 删 Blob（Blob 删失败/返回 false → 日志警告，孤儿容忍——不阻塞事务提交）
+                // V0.2.0（Oracle P1-2）：收集全部 StoredPath（主表 + 版本行，Distinct 去重——回滚指针复用
+                // 导致多行共享同一 StoredPath），事务内删主表 + 删全部版本行，随后 best-effort 删全部 Blob
+                var storedPaths = new HashSet<string>(StringComparer.Ordinal) { file.StoredPath };
+                var versions = await _versionStore.GetByFileAsync(id, ct);
+                foreach (var v in versions)
+                    storedPaths.Add(v.StoredPath);
+
                 await _fileStore.DeleteAsync(id, ct);
-                try
+                await _versionStore.DeleteByFileIdAsync(id, ct);
+
+                // 删 Blob（失败/返回 false → 日志警告，孤儿容忍——不阻塞事务提交）
+                foreach (var path in storedPaths)
                 {
-                    bool deleted = await _blobStorage.DeleteAsync(file.StoredPath, ct);
-                    if (!deleted)
-                        _logger.LogWarning("删除 Blob 返回 false（孤儿容忍）：{StoredPath}", file.StoredPath);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "删除 Blob 失败（孤儿容忍）：{StoredPath}", file.StoredPath);
+                    try
+                    {
+                        bool deleted = await _blobStorage.DeleteAsync(path, ct);
+                        if (!deleted)
+                            _logger.LogWarning("删除 Blob 返回 false（孤儿容忍）：{StoredPath}", path);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "删除 Blob 失败（孤儿容忍）：{StoredPath}", path);
+                    }
                 }
 
                 await scope.CommitAsync(ct);
@@ -497,6 +593,63 @@ namespace TKWF.Ext.FileManagement
             ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
             int pageSize = take ?? Math.Max(1, _options.DefaultPageSize);
             return _fileStore.SearchByNameAsync(keyword, skip, pageSize, ct);
+        }
+
+        // ── 版本（V0.2.0） ──
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<ManagedFileVersionEntity>> GetFileVersionsAsync(long fileId, CancellationToken ct = default)
+        {
+            // 文件存在守卫（版本查询目标必须存在）
+            _ = await _fileStore.GetByIdAsync(fileId, ct)
+                ?? throw new InvalidOperationException($"文件 {fileId} 不存在");
+            return await _versionStore.GetByFileAsync(fileId, ct);
+        }
+
+        /// <inheritdoc />
+        public async Task<ManagedFileVersionEntity?> GetFileVersionAsync(long fileId, int version, CancellationToken ct = default)
+        {
+            // 文件存在守卫
+            _ = await _fileStore.GetByIdAsync(fileId, ct)
+                ?? throw new InvalidOperationException($"文件 {fileId} 不存在");
+            return await _versionStore.GetByFileAndVersionAsync(fileId, version, ct);
+        }
+
+        /// <inheritdoc />
+        public async Task<ManagedFileEntity> RollbackFileAsync(long fileId, int version, CancellationToken ct = default)
+        {
+            var file = await _fileStore.GetByIdAsync(fileId, ct)
+                ?? throw new InvalidOperationException($"文件 {fileId} 不存在");
+
+            // 目标版本定位（不存在 → 业务异常）
+            var target = await _versionStore.GetByFileAndVersionAsync(fileId, version, ct)
+                ?? throw new InvalidOperationException($"文件 {fileId} 版本 {version} 不存在");
+
+            using var scope = await _transactionManager.BeginAsync(ct: ct);
+            try
+            {
+                // 主表指针切目标版本（StoredPath/Sha256/Size/UpdateTime；
+                // Extension/ContentType 不更新——由 Name 派生，P2-3）
+                file.StoredPath = target.StoredPath;
+                file.Sha256 = target.Sha256;
+                file.Size = target.Size;
+                file.UpdateTime = DateTime.UtcNow;
+                await _fileStore.UpdateAsync(file, ct);
+
+                // 版本表插入新行（Version=max+1；StoredPath 指针复用不复制字节；回滚可追溯）
+                int nextVersion = await _versionStore.GetMaxVersionAsync(fileId, ct) + 1;
+                await CreateVersionRowAsync(
+                    fileId, nextVersion, target.StoredPath, target.Extension, target.ContentType,
+                    target.Size, target.Sha256, ct);
+
+                await scope.CommitAsync(ct);
+                return file;
+            }
+            catch
+            {
+                await scope.RollbackAsync(ct);
+                throw;
+            }
         }
 
         // ── 内部工具 ──

@@ -20,5 +20,16 @@ namespace TKWF.Ext.FileManagement
 
         /// <summary>查询分页默认页大小。</summary>
         public int DefaultPageSize { get; set; } = 50;
+
+        // ── V0.2.0 配额（可空默认不限制——无配置消费方行为不变） ──
+
+        /// <summary>目录文件数上限（null = 不限制；超限上传 → InvalidOperationException）。</summary>
+        public int? MaxFilesPerFolder { get; set; }
+
+        /// <summary>目录容量上限（字节；null = 不限制；超限上传 → InvalidOperationException）。</summary>
+        public long? MaxFolderSizeBytes { get; set; }
+
+        /// <summary>全局总容量上限（字节；null = 不限制；超限上传 → InvalidOperationException）。</summary>
+        public long? MaxTotalSizeBytes { get; set; }
     }
 }

@@ -22,6 +22,10 @@
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
 
+    <!-- V0.2.0 配额 SQL 聚合下推：TKWF.Domain.FreeSql（FreeSqlQueryableExtensions.SumAsync——SQL SUM，
+         对齐 BackgroundJobs GetStatsAsync 先例；ADR15 聚合分层） -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+
     <!-- 扩展间契约（C1/ADR50 L2 门控）：只引 BlobStoring.Abstractions（IBlobStorageService/BlobInfo/BlobStoringOptions），
          不引 BlobStoring 实现项目——依赖倒置，物理存储经契约委托 -->
     <ProjectReference Include="..\BlobStoring.Abstractions\TKWF.Ext.BlobStoring.Abstractions.csproj" />

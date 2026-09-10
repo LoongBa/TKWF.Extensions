@@ -64,5 +64,16 @@ namespace TKWF.Ext.FileManagement
 
         /// <summary>按文件名关键字模糊分页查询（take 缺省用 Options.DefaultPageSize）。</summary>
         Task<IReadOnlyList<ManagedFileEntity>> SearchFilesAsync(string keyword, int skip = 0, int? take = null, CancellationToken ct = default);
+
+        // ── 版本（V0.2.0） ──
+
+        /// <summary>查询文件版本历史（按 Version 升序；上限 1000——高频版本文件防全量拉取）。</summary>
+        Task<IReadOnlyList<ManagedFileVersionEntity>> GetFileVersionsAsync(long fileId, CancellationToken ct = default);
+
+        /// <summary>查询指定版本详情（fileId + version 精确命中；不存在返回 null）。</summary>
+        Task<ManagedFileVersionEntity?> GetFileVersionAsync(long fileId, int version, CancellationToken ct = default);
+
+        /// <summary>回滚到历史版本（主表指针切目标版本 + 版本表插入新版本行 Version=max+1，指针复用不复制字节；目标版本不存在 → InvalidOperationException）。</summary>
+        Task<ManagedFileEntity> RollbackFileAsync(long fileId, int version, CancellationToken ct = default);
     }
 }

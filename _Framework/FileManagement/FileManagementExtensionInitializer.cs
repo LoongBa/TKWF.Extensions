@@ -46,10 +46,12 @@ namespace TKWF.Ext.FileManagement
             // 2. SG1 DataService（Store/Manager 构造依赖；显式注册保证 DI 可解析）
             services.TryAddScoped<FileFolderEntityDataService>();
             services.TryAddScoped<ManagedFileEntityDataService>();
+            services.TryAddScoped<ManagedFileVersionEntityDataService>();   // V0.2.0：版本表
 
             // 3. 存储（委托 DataService——数据访问红线合规，不注入 IFreeSql/IEntityDAC）
             services.TryAddScoped<IFileFolderStore, FileFolderStore>();
             services.TryAddScoped<IManagedFileStore, ManagedFileStore>();
+            services.TryAddScoped<IManagedFileVersionStore, ManagedFileVersionStore>();   // V0.2.0：版本 Store
 
             // 4. 管理门面（业务规则 + ITransactionManager 事务包裹）——工厂注册：
             //    FileManager 构造函数 internal（Store 为 internal 契约），
@@ -58,6 +60,7 @@ namespace TKWF.Ext.FileManagement
             services.TryAddScoped<IFileManager>(sp => new FileManager(
                 sp.GetRequiredService<IFileFolderStore>(),
                 sp.GetRequiredService<IManagedFileStore>(),
+                sp.GetRequiredService<IManagedFileVersionStore>(),
                 sp.GetRequiredService<IBlobStorageService>(),
                 sp.GetRequiredService<ITransactionManager>(),
                 sp.GetRequiredService<IOptions<FileManagementOptions>>(),

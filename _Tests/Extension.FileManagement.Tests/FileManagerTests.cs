@@ -163,19 +163,18 @@ public class FileManagerTests
     }
 
     [Fact]
-    public async Task Upload_DeduplicateDisabled_SameFolderSameName_ThrowsBusinessException()
+    public async Task Upload_DeduplicateDisabled_SameFolderSameName_SameContent_ReturnsExisting()
     {
+        // V0.2.0（Oracle P1-3 分支 C）：Deduplicate=false + 同内容 → 幂等返回既有（不产生冗余版本行），
+        // 不再撞 UX 约束抛异常（v0.1.0 旧行为——版本化后同名走版本路径）
         using var host = FileManagementTestHost.Create(options: new FileManagementOptions { Deduplicate = false });
         var folder = await host.CreateFolderAsync("docs", "文档");
-        await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
+        var first = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
 
-        // 关闭去重预查 → 直接撞 UX_ManagedFile_Folder_Name → 捕获转业务异常（P3/C6）
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.UploadFileAsync(folder.Id, "same.txt", HelloBytes));
+        var second = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
 
-        Assert.Contains("已存在同名文件", ex.Message);
-        // 败者元数据落库失败 → 步骤 10 补偿删除 Blob → 无残留
-        Assert.Equal(1, host.BlobCount());
+        Assert.Equal(first.Id, second.Id);   // 幂等返回既有
+        Assert.Equal(1, host.BlobCount());   // 不产生新 Blob
     }
 
     // ── D12 下载：返回流与元数据；不存在 → 异常 ──
@@ -284,20 +283,21 @@ public class FileManagerTests
             () => host.Manager.RenameFileAsync(file.Id, "a.exe", CancellationToken.None));
     }
 
-    // ── C2 审核修复：根级文件（FolderId=null）同名唯一由应用层保证（SQLite/PostgreSQL 可空唯一索引 NULL 互不相同） ──
+    // ── V0.2.0（Oracle P1-1）：C2 根级同名预检移除——根级同名不同内容走版本化路径 ──
 
     [Fact]
-    public async Task Upload_ToRoot_SameName_DuplicateRejected()
+    public async Task Upload_ToRoot_SameName_DifferentContent_CreatesNewVersion()
     {
-        // Deduplicate=false（关闭 SHA256 预查——纯靠应用层同名预检，C2）
+        // V0.2.0：Deduplicate=false + 根级同名不同内容 → 生成新版本（不再抛"已存在同名文件"）
         using var host = FileManagementTestHost.Create(options: new FileManagementOptions { Deduplicate = false });
-        await host.UploadFileAsync(null, "root.txt", HelloBytes);
+        var first = await host.UploadFileAsync(null, "root.txt", HelloBytes);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.UploadFileAsync(null, "root.txt", OtherBytes));
+        var second = await host.UploadFileAsync(null, "root.txt", OtherBytes);
 
-        Assert.Contains("已存在同名文件", ex.Message);
-        Assert.Equal(1, host.BlobCount());   // 预检在 Blob 落盘前——第二次上传无残留（仅首次 1 个 Blob）
+        Assert.Equal(first.Id, second.Id);   // 根级同名 → 同文件新版本
+        var versions = await host.Manager.GetFileVersionsAsync(first.Id);
+        Assert.Equal(2, versions.Count);
+        Assert.Equal(2, host.BlobCount());   // v1 + v2 两个 Blob
     }
 
     [Fact]
@@ -354,16 +354,16 @@ public class FileManagerTests
         Assert.Equal(0, host.BlobCount());
     }
 
-    // ── D17 并发同目录同名上传：唯一约束败者 → 业务异常 + 补偿，恰一个成功 ──
+    // ── V0.2.0（Oracle P1-3）：并发同目录同名同内容——幂等返回既有（不产生新版本/异常） ──
 
     [Fact]
-    public async Task ConcurrentUpload_SameFolderSameName_OneSucceeds_OneBusinessException()
+    public async Task ConcurrentUpload_SameFolderSameName_SameContent_IdempotentNoException()
     {
+        // V0.2.0：同内容并发（Deduplicate=false）——后完成者读到先行者已提交（同 SHA256）→ 幂等返回既有；
+        // 不再撞 UX 约束抛异常（v0.1.0 旧行为——版本化后同名同内容幂等）
         using var host = FileManagementTestHost.Create(options: new FileManagementOptions { Deduplicate = false });
         var folder = await host.CreateFolderAsync("docs", "文档");
 
-        // 去重预查关闭 → 两路都走完整路径（Blob + 元数据），UX_ManagedFile_Folder_Name 唯一约束败者
-        // （若保留去重预查，并发窗口可能让后完成者读到先行者已提交 → 幂等双成功，断言不确定性）
         var results = await Task.WhenAll(new[]
         {
             UploadCapture(host, folder.Id, HelloBytes),
@@ -373,13 +373,10 @@ public class FileManagerTests
         var success = results.Where(r => r.File is not null).ToList();
         var failures = results.Where(r => r.Error is not null).ToList();
 
-        // 恰一个成功 + 一个业务异常（唯一约束败者）
-        Assert.Single(success);
-        Assert.Single(failures);
-        Assert.IsAssignableFrom<InvalidOperationException>(failures[0].Error);
-        Assert.Contains("已存在同名文件", failures[0].Error!.Message);
-        // 败者补偿删除自身 Blob，成功者 Blob 保留 → 无 Blob 残留
-        Assert.Equal(1, host.BlobCount());
+        Assert.Empty(failures);               // 无异常（幂等返回既有）
+        Assert.Equal(2, success.Count);
+        Assert.Single(success.Select(r => r.File!.Id).Distinct());   // 同一文件
+        Assert.Equal(1, host.BlobCount());    // 仅 1 个 Blob（内容相同不重复写）
     }
 
     // ── Helpers ──

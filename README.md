@@ -36,13 +36,13 @@
 | **Approval**                | V0.2.0          | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 委派/加签/抄送/超时自动处理（v0.2.0）+ 完成事件回调；不依赖外部工作流引擎）| — | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
 | **OrganizationUnit**        | V0.1.0          | 组织单元（树形部门/团队/分组 + 物化路径 Level/Path + 循环防护/删除保护 + 用户关联 + 事务包裹）| — | [README](./_Framework/OrganizationUnit/README.md) | [指南](./docs/OrganizationUnit/组织单元扩展-使用指南.md) |
 | **Calendar**                | V0.1.0          | 日历/排程（日历+事件 CRUD + 重复规则子集（Utility 收纳：DAILY/WEEKLY/MONTHLY/YEARLY + 月末钳制 + 绝对索引）+ occurrence 查询/合并 + UTC 契约）| — | [README](./_Framework/Calendar/README.md) | [指南](./docs/Calendar/日历排程扩展-使用指南.md) |
-| **FileManagement**          | V0.1.0          | 文件管理（目录树 + 文件元数据 SHA256/去重 + 上传 10 步安全链（防穿越/白名单/大小/ContentType 服务端推导）+ 依赖倒置 BlobStoring.Abstractions）| — | [README](./_Framework/FileManagement/README.md) | [指南](./docs/FileManagement/文件管理扩展-使用指南.md) |
+| **FileManagement**          | V0.2.0          | 文件管理（目录树 + 文件元数据 SHA256/去重 + **文件版本化 + 配额（v0.2.0）** + 上传 10 步安全链（防穿越/白名单/大小/ContentType 服务端推导）+ 依赖倒置 BlobStoring.Abstractions）| — | [README](./_Framework/FileManagement/README.md) | [指南](./docs/FileManagement/文件管理扩展-使用指南.md) |
 | **BlobStoring.Abstractions**| V0.1.1          | Blob 存储契约抽取（`IBlobStorageService`/`BlobInfo`/`BlobStoringOptions`——ADR50 L2 依赖倒置，FileManagement 消费）| — | — | —（并入 BlobStoring）|
 | **FeatureManagement**      | V0.3.0          | 功能管理/特性开关（[FeatureContributor] 编译期定义 + Provider 链分层值（v0.2.0 扩展点）+ IFeatureChecker 实现（接入 [RequireFeature]）+ 复杂 ValueType 类型化读写（v0.3.0）+ 变更事件分布式广播（v0.3.0）+ 管理 API）| — | [README](./_Framework/FeatureManagement/README.md) | [指南](./docs/FeatureManagement/功能管理扩展-使用指南.md) |
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **1213 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 委派/加签/抄送/超时 + FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement 文件管理 + Calendar 日历排程 + OrganizationUnit 组织单元 + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 AC 自动机/Options + HealthCheck v0.2.0 DB 探针后）
+> 全量 **1231 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 委派/加签/抄送/超时 + FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement v0.2.0 版本化/配额 + Calendar 日历排程 + OrganizationUnit 组织单元 + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 AC 自动机/Options + HealthCheck v0.2.0 DB 探针后）
 
 ---
 
@@ -83,7 +83,7 @@ _TKWF.Extensions/
 │   ├── OrganizationUnit/            # 组织单元（树形部门/团队/分组 + 用户归属）
 │   ├── Calendar/                    # 日历/排程（日历+事件 + 重复规则子集）
 │   ├── BlobStoring.Abstractions/    # Blob 存储契约（IBlobStorageService——ADR50 L2 依赖倒置）
-│   ├── FileManagement/              # 文件管理（目录树 + 文件元数据 + 上传安全链）
+│   ├── FileManagement/              # 文件管理（目录树 + 文件元数据 + 版本化/配额 + 上传安全链）
 │   └── FeatureManagement/           # 功能管理（特性开关——定义收集 + 分层值 + IFeatureChecker）
 ├── _Tests/                          # 测试（一组扩展一个测试项目）
 │   ├── Extension.Permissions.Tests/

@@ -141,6 +141,26 @@ public class LocalStorageServiceTests : IDisposable
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task DownloadAsync_ReturnsFileStream_NotMemoryStream()
+    {
+        // Arrange
+        var service = CreateService();
+        var original = Encoding.UTF8.GetBytes("Streaming download content");
+        using var uploadStream = new MemoryStream(original);
+        var blobInfo = await service.UploadAsync("stream.txt", uploadStream, "text/plain");
+
+        // Act
+        var stream = await service.DownloadAsync(blobInfo.Path);
+
+        // Assert — V0.2.0：直接返回 FileStream（流式下载，大文件不占内存），而非复制到 MemoryStream
+        Assert.NotNull(stream);
+        using var fileStream = Assert.IsType<FileStream>(stream);
+        using var ms = new MemoryStream();
+        await fileStream.CopyToAsync(ms);
+        Assert.Equal(original, ms.ToArray());
+    }
+
     // ── Test helpers ──
 
     private sealed class FakeLogger<T> : ILogger<T>

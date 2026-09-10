@@ -101,9 +101,11 @@ public class BlobStoringSecurityTests
 
         var downloaded = await service.DownloadAsync(info.Path, ct);
         Assert.NotNull(downloaded);
-        using var reader = new StreamReader(downloaded!);
-        Assert.Equal("hello blob", await reader.ReadToEndAsync(ct));
-
+        using (var reader = new StreamReader(downloaded!))
+        {
+            Assert.Equal("hello blob", await reader.ReadToEndAsync(ct));
+        }
+        // V0.2.0 流式下载契约：返回的 FileStream 持有文件句柄，删除前须先释放（FileShare.Read 不授予删除权限）
         Assert.True(await service.DeleteAsync(info.Path, ct));
         Assert.False(await service.ExistsAsync(info.Path, ct));
     }

@@ -1,6 +1,6 @@
 # TKWF.Ext.BlobStoring 二进制存储扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (本地文件系统 + FreeSql 记录持久化) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (本地文件系统 + FreeSql 记录持久化 + 下载 FileStream 流式) | **框架**: .NET 10
 
 **核心约束**: 本地文件系统 Blob 存储、FreeSql 元数据持久化、异常静默处理、SG1 声明式实体、不引入外部存储 SDK
 
@@ -28,7 +28,7 @@
 
 - **存储抽象 (`IBlobStorageService`)**：定义上传/下载/删除/存在性检查操作。扩展提供本地文件系统默认实现。
 
-- **本地实现 (`LocalStorageService`)**：使用 `System.IO.File` / `System.IO.Directory` 在 RootPath 下读写文件，自定义子目录按 Guid 隔离，避免文件名冲突。异常静默处理（不阻塞业务）。
+- **本地实现 (`LocalStorageService`)**：使用 `System.IO.File` / `System.IO.Directory` 在 RootPath 下读写文件，自定义子目录按 Guid 隔离，避免文件名冲突。下载直接返回 `FileStream` 流式读取（V0.2.0，大文件不占内存），调用方负责释放。异常静默处理（不阻塞业务）。
 
 - **记录存储抽象 (`IBlobRecordStore`)**：定义 Blob 元数据记录的 CRUD 操作。扩展提供 FreeSql 默认实现。
 
@@ -153,7 +153,7 @@ TryAdd 语义确保消费方实现优先。
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`IBlobStorageService`** | Blob 存储抽象（上传/下载/删除/检查） | `LocalStorageService`（本扩展） |
+| **`IBlobStorageService`** | Blob 存储抽象（上传/流式下载/删除/检查） | `LocalStorageService`（本扩展） |
 | **`IBlobRecordStore`** | Blob 元数据记录存储抽象（CRUD） | `BlobRecordStore`（本扩展） |
 | **`BlobInfo`** | Blob 元数据信息模型（Name/Path/ContentType/Size） | 内置 |
 | **`BlobRecordEntity`** | Blob 记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
@@ -183,12 +183,13 @@ TryAdd 语义确保消费方实现优先。
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0（已发布）
 - 本地文件系统 Blob 存储（`System.IO`，无外部存储 SDK）
 - FreeSql Blob 元数据持久化
 - 异常静默处理
 
-### V0.2.0（规划）
+### V0.2.0（当前）
+- 下载改 FileStream 流式（V0.1.1 评审 P1：大文件不占内存）
 - Azure Blob / S3 / MinIO 存储实现（`IBlobStorageService` 不变）
 - 分片上传 / 断点续传
 - 存储配额与目录结构策略

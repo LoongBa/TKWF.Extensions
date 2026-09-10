@@ -67,8 +67,11 @@ namespace TKWF.Ext.BlobStoring
             }
         }
 
-        /// <inheritdoc />
-        public async Task<Stream?> DownloadAsync(string path, CancellationToken ct = default)
+        /// <summary>
+        /// V0.2.0：直接返回 <see cref="FileStream"/>（流式下载，大文件不占内存）——不再复制到 MemoryStream。
+        /// <para>接口契约 <c>Task&lt;Stream?&gt;</c> 语义：返回的流由调用方负责 Dispose；不存在返回 <c>null</c>。</para>
+        /// </summary>
+        public Task<Stream?> DownloadAsync(string path, CancellationToken ct = default)
         {
             // C2 防穿越：path 为用户可控相对路径，校验失败抛 ArgumentException（安全缺陷 fail-closed）。
             // 合法路径不受影响——BlobStoring 内部生成的 path 形如 {guid}/{name}，可通过校验。
@@ -76,23 +79,20 @@ namespace TKWF.Ext.BlobStoring
 
             try
             {
+                ct.ThrowIfCancellationRequested();
                 var opts = _options.Value;
                 var fullPath = Path.Combine(opts.RootPath, path);
 
                 if (!File.Exists(fullPath))
-                    return null;
+                    return Task.FromResult<Stream?>(null);
 
-                // 复制到 MemoryStream 以便返回（文件流可能被关闭）
-                var memoryStream = new MemoryStream();
-                await using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                await fileStream.CopyToAsync(memoryStream, ct);
-                memoryStream.Position = 0;
-                return memoryStream;
+                // V0.2.0：直接返回 FileStream（流式下载，大文件不占内存）——调用方负责 Dispose
+                return Task.FromResult<Stream?>(new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Blob 下载失败: Path={Path}", path);
-                return null;
+                return Task.FromResult<Stream?>(null);
             }
         }
 

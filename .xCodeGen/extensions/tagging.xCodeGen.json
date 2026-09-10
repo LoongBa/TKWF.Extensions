@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\Tagging\\TKWF.Ext.Tagging.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\Tagging\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\PrintTemplates\\TKWF.Ext.PrintTemplates.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\PrintTemplates\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

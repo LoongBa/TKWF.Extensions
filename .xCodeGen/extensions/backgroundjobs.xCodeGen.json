@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\BackgroundJobs\\TKWF.Ext.BackgroundJobs.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\BackgroundJobs\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

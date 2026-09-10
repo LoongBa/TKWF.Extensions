@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\BlobStoring\\TKWF.Ext.BlobStoring.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\BlobStoring\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

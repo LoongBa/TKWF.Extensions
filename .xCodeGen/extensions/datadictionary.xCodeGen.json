@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\DataDictionary\\TKWF.Ext.DataDictionary.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\DataDictionary\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

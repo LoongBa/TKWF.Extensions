@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\OrganizationUnit\\TKWF.Ext.OrganizationUnit.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\OrganizationUnit\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

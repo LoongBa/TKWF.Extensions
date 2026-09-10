@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\FeatureManagement\\TKWF.Ext.FeatureManagement.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\FeatureManagement\\Generated",
-  "TemplatesPath": "F:\\\\LoongBa_Git\\\\_TKWF\\\\_xCodeGen\\\\xCodeGen.Cli\\\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

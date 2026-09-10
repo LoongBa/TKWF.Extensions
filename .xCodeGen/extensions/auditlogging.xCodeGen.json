@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\AuditLogging\\TKWF.Ext.AuditLogging.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\AuditLogging\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

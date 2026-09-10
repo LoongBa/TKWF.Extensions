@@ -2,7 +2,7 @@
   "TargetProject": "..\\..\\_Framework\\SecurityLog\\TKWF.Ext.SecurityLog.csproj",
   "EnableSkipUnchanged": true,
   "OutputRoot": "..\\..\\_Framework\\SecurityLog\\Generated",
-  "TemplatesPath": "%TKWF_FRAMEWORK_PATH%\\xCodeGen\\Templates",
+  "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {
     "Entity": {

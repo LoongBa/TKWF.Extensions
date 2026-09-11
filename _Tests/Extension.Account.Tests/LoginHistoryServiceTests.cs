@@ -49,6 +49,23 @@ public class LoginHistoryServiceTests
         services.AddScoped<IEntityDAC<SecurityLogEntity>>(_ =>
             new FreeSqlEntityDAC<SecurityLogEntity>(new UnitOfWorkManager(fsql)));
 
+        // v4.10.8 (ADR61)：SecurityLog 初始器不再手动注册 DataService——测试 Host 经 SecurityLog 扩展
+        // 生成上下文聚合（镜像生产 RegisterGeneratedServices 的扩展聚合路径）注册其 DataService：
+        // internal 类型经 Type 对象注册（Account 测试项目无 IVT 不可命名），DI 兜底工厂 = ActivatorUtilities
+        // .CreateInstance + DI IDomainUser（免域作用域、xUnit 并行安全）。
+        foreach (var reg in TKWF.Ext.SecurityLog.Generated.ProjectMetaContext.GetOrCreateInstance().GetServiceRegistrations())
+        {
+            if (reg.Type == TKW.Framework.CodeGeneration.MetaType.DataService)
+            {
+                var impl = reg.Implementation;
+                services.AddScoped(impl, sp =>
+                {
+                    var user = sp.GetRequiredService<IDomainUser>();
+                    return ActivatorUtilities.CreateInstance(sp, impl, user);
+                });
+            }
+        }
+
         if (registerSecurityLog)
             new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         new AccountExtensionInitializer<TestUserInfo>().ConfigureServices(services);

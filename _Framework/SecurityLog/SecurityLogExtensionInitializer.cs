@@ -29,9 +29,7 @@ namespace TKWF.Ext.SecurityLog
         public override string Description => "安全日志扩展——认证/授权安全事件记录与查询（只增不改）";
 
         /// <summary>
-        /// 注册安全日志存储 + 查询服务 + Options 配置 + SG1 DataService。
-        /// <para>DataService 显式注册（<c>TryAddScoped</c>）——对齐 Permissions/BackgroundJobs 显式注册先例：
-        /// 保证 Store/QueryService 构造依赖在消费方 DI 中确定性可解析（扩展 DataService 为 internal，消费方无法自行注册）。</para>
+        /// 注册安全日志存储 + 查询服务 + Options 配置（SG1 DataService 经 v4.10.8 ADR61 自动注册）。
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
@@ -39,8 +37,7 @@ namespace TKWF.Ext.SecurityLog
             services.AddOptions<SecurityLoggingOptions>()
                 .BindConfiguration("TKWF:SecurityLog");
 
-            // 2. SG1 DataService（Store/QueryService 构造依赖；显式注册保证 DI 可解析）
-            services.TryAddScoped<SecurityLogEntityDataService>();
+            // 2. SG1 DataService——ADR61 起自动注册（可构造工厂），不再手动 TryAddScoped
 
             // 3. 写入存储（只增不改：仅 SaveAsync）
             services.TryAddScoped<ISecurityLogStore, SecurityLogStore>();

@@ -34,19 +34,14 @@ namespace TKWF.Ext.FileManagement
         public override string Description => "文件管理扩展——目录树（FileFolder 物化路径）+ 文件元数据（ManagedFile SHA256/去重）+ 上传/下载/删除/重命名/移动门面（安全校验链 + BlobStoring 契约委托物理存储）";
 
         /// <summary>
-        /// 注册 Options + DataService + Store + Manager。
-        /// <para>DataService 显式注册（<c>TryAddScoped</c>）——Store/Manager 构造依赖在消费方 DI 中确定性可解析
-        /// （扩展 DataService 为 internal，消费方无法自行注册）。</para>
+        /// 注册 Options + Store + Manager（SG1 DataService 经 v4.10.8 ADR61 基类类型判定 + 消费方聚合自动注册）。
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
             // 1. Options 绑定（TKWF:FileManagement 节——AllowedExtensions/AllowAnyExtension/MaxFileSizeBytes/Deduplicate/DefaultPageSize）
             services.AddOptions<FileManagementOptions>().BindConfiguration("TKWF:FileManagement");
 
-            // 2. SG1 DataService（Store/Manager 构造依赖；显式注册保证 DI 可解析）
-            services.TryAddScoped<FileFolderEntityDataService>();
-            services.TryAddScoped<ManagedFileEntityDataService>();
-            services.TryAddScoped<ManagedFileVersionEntityDataService>();   // V0.2.0：版本表
+            // 2. SG1 DataService——ADR61 起自动注册（可构造工厂），不再手动 TryAddScoped
 
             // 3. 存储（委托 DataService——数据访问红线合规，不注入 IFreeSql/IEntityDAC）
             services.TryAddScoped<IFileFolderStore, FileFolderStore>();

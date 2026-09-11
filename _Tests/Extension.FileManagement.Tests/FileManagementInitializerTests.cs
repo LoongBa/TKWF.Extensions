@@ -71,16 +71,14 @@ public class FileManagementInitializerTests
     [Fact]
     public void ConfigureServices_Registers_BothDataServices()
     {
-        var services = new ServiceCollection();
-        new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
+        // v4.10.8 (ADR61)：Initializer 不再手动注册 DataService——SG 基类类型判定生成，
+        // 经扩展 ProjectMetaContext.GetServiceRegistrations() 暴露（消费方聚合自动注册为可构造工厂）。
+        var regs = TKWF.Ext.FileManagement.Generated.ProjectMetaContext.GetOrCreateInstance()
+            .GetServiceRegistrations().ToList();
 
-        var folderDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(FileFolderEntityDataService));
-        var fileDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ManagedFileEntityDataService));
-
-        Assert.NotNull(folderDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, folderDescriptor!.Lifetime);
-        Assert.NotNull(fileDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, fileDescriptor!.Lifetime);
+        Assert.Contains(regs, r => r.Implementation == typeof(FileFolderEntityDataService));
+        Assert.Contains(regs, r => r.Implementation == typeof(ManagedFileEntityDataService));
+        Assert.Contains(regs, r => r.Implementation == typeof(ManagedFileVersionEntityDataService));
     }
 
     [Fact]

@@ -65,13 +65,12 @@ public class SecurityLogExtensionInitializerTests
     [Fact]
     public void ConfigureServices_Registers_DataService_Descriptor()
     {
-        var services = new ServiceCollection();
-        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        // v4.10.8 (ADR61)：Initializer 不再手动注册 DataService——SG 基类类型判定生成，
+        // 经扩展 ProjectMetaContext.GetServiceRegistrations() 暴露（消费方聚合自动注册为可构造工厂）。
+        var regs = TKWF.Ext.SecurityLog.Generated.ProjectMetaContext.GetOrCreateInstance()
+            .GetServiceRegistrations().ToList();
 
-        var descriptor = services.First(d => d.ServiceType == typeof(SecurityLogEntityDataService));
-
-        Assert.Equal(typeof(SecurityLogEntityDataService), descriptor.ImplementationType);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+        Assert.Contains(regs, r => r.Implementation == typeof(SecurityLogEntityDataService));
     }
 
     [Fact]

@@ -74,8 +74,7 @@ namespace TKWF.Ext.Permissions
             // V0.9.0：多用户批量检查器——与 IPermissionChecker 同实例（PermissionChecker<TUserInfo> 实现两者）
             services.TryAddScoped<IPermissionBatchChecker, PermissionChecker<TUserInfo>>();
 
-            // V0.3.0：权限管理 Service——TryAddScoped（消费方可自定义覆盖）
-            services.TryAddScoped<PermissionGrantEntityDataService>();
+            // V0.3.0：权限管理 Service——v4.10.8 (ADR61) 起经 SG 聚合自动注册（可构造工厂），不再手动 TryAddScoped
         }
 
         /// <summary>注册权限过滤器到 Tier-S（Security，与 AuthorityFilter 同层，S→F→O 排序自动生效）。</summary>

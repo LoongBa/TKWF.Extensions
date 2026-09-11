@@ -33,9 +33,7 @@ public class BackgroundJobsExtensionInitializer<TUserInfo> : ExtensionInitialize
         services.AddOptions<BackgroundJobsPersistenceOptions>()
             .BindConfiguration("TKWF:BackgroundJobs");
 
-        // 1.5 SG1 DataService（监听器/查询服务构造依赖；对齐 Permissions 显式注册先例）
-        services.TryAddScoped<JobExecutionEntityDataService>();
-        services.TryAddScoped<JobResultEntityDataService>();
+        // 1.5 SG1 DataService——v4.10.8 (ADR61) 起经 SG 基类类型判定 + 消费方聚合自动注册（可构造工厂），不再手动 TryAddScoped
 
         // 2. 执行历史监听器（TryAddEnumerable：多监听器可叠加——Oracle C3，与契约一致）
         services.TryAddEnumerable(

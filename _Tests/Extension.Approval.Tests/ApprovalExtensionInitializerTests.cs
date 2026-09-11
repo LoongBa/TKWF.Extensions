@@ -38,16 +38,19 @@ public class ApprovalExtensionInitializerTests
         var stubUser = new StubDomainUser();
         services.AddSingleton(fsql);
         services.AddSingleton<TKW.Framework.Domain.Interfaces.IDomainUser>(stubUser);
-        services.AddSingleton(new ApprovalFlowEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ApprovalFlowEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new ApprovalInstanceEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ApprovalInstanceEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new ApprovalTaskEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ApprovalTaskEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new ApprovalAppendEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ApprovalAppendEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new ApprovalCCEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ApprovalCCEntity>(new UnitOfWorkManager(fsql))));
+        // v4.10.8 (ADR61) 迁移：DataService 经 DI 兜底工厂注册（镜像生产 AddConstructibleDataService，
+        // 用户源 = DI IDomainUser，免域作用域）；IEntityDAC<T> 基础设施注册同生产 Host
+        services.AddScoped<UnitOfWorkManager>();
+        services.AddScoped<IEntityDAC<ApprovalFlowEntity>>(sp => new FreeSqlEntityDAC<ApprovalFlowEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<ApprovalInstanceEntity>>(sp => new FreeSqlEntityDAC<ApprovalInstanceEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<ApprovalTaskEntity>>(sp => new FreeSqlEntityDAC<ApprovalTaskEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<ApprovalAppendEntity>>(sp => new FreeSqlEntityDAC<ApprovalAppendEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<ApprovalCCEntity>>(sp => new FreeSqlEntityDAC<ApprovalCCEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        AddTestConstructibleDataService<ApprovalFlowEntityDataService>(services);
+        AddTestConstructibleDataService<ApprovalInstanceEntityDataService>(services);
+        AddTestConstructibleDataService<ApprovalTaskEntityDataService>(services);
+        AddTestConstructibleDataService<ApprovalAppendEntityDataService>(services);
+        AddTestConstructibleDataService<ApprovalCCEntityDataService>(services);
         services.AddSingleton<TKW.Framework.Domain.Transactions.ITransactionManager>(
             new NoopTransactionManager());
         services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus>(
@@ -77,6 +80,18 @@ public class ApprovalExtensionInitializerTests
         var timeoutService = provider.GetService<IApprovalTimeoutService>();
         Assert.NotNull(timeoutService);
         Assert.IsType<ApprovalTimeoutService>(timeoutService);
+    }
+
+    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产 AddConstructibleDataService
+    ///（ActivatorUtilities.CreateInstance + 域用户），用户源 = DI IDomainUser（免域作用域、xUnit 并行安全）。</summary>
+    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
+        where T : class
+    {
+        services.AddScoped<T>(sp =>
+        {
+            var user = sp.GetRequiredService<TKW.Framework.Domain.Interfaces.IDomainUser>();
+            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
+        });
     }
 
     [Fact]

@@ -60,16 +60,13 @@ public class CalendarInitializerTests
     [Fact]
     public void ConfigureServices_Registers_BothDataServices()
     {
-        var services = new ServiceCollection();
-        new CalendarExtensionInitializer<CalendarUserInfo>().ConfigureServices(services);
+        // v4.10.8 (ADR61)：Initializer 不再手动注册 DataService——SG 基类类型判定生成，
+        // 经扩展 ProjectMetaContext.GetServiceRegistrations() 暴露（消费方聚合自动注册为可构造工厂）。
+        var regs = TKWF.Ext.Calendar.Generated.ProjectMetaContext.GetOrCreateInstance()
+            .GetServiceRegistrations().ToList();
 
-        var calDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(CalendarEntityDataService));
-        var evtDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(CalendarEventEntityDataService));
-
-        Assert.NotNull(calDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, calDescriptor!.Lifetime);
-        Assert.NotNull(evtDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, evtDescriptor!.Lifetime);
+        Assert.Contains(regs, r => r.Implementation == typeof(CalendarEntityDataService));
+        Assert.Contains(regs, r => r.Implementation == typeof(CalendarEventEntityDataService));
     }
 
     [Fact]

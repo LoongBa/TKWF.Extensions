@@ -14,7 +14,8 @@ namespace TKWF.Ext.Calendar.Tests;
 /// <summary>
 /// 测试公共设施——SQLite 内存库创建 + 表结构同步。
 /// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
-/// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 OrganizationUnit/Approval/DataDictionary 测试同模式）。</para>
+/// <c>FreeSqlEntityDAC&lt;T&gt;</c> 驱动（与 OrganizationUnit/Approval/DataDictionary 测试同模式）；
+/// v4.10.8 (ADR61) 起 DataService 经测试版可构造工厂（DI 兜底，镜像生产 AddConstructibleDataService）注册。</para>
 /// </summary>
 internal static class CalendarTestSupport
 {
@@ -34,8 +35,9 @@ internal static class CalendarTestSupport
 }
 
 /// <summary>
-/// 完整测试宿主——构建 DI 容器：真实 DataService 链（FreeSqlEntityDAC + UnitOfWorkManager 驱动）
-/// + ITransactionManager（Noop，对齐 OrganizationUnit 测试宿主）+ 扩展初始化器注册 Store/Manager（TryAddScoped）。
+/// 完整测试宿主——构建 DI 容器：DataService（v4.10.8 ADR61 DI 兜底工厂注册：
+/// ActivatorUtilities.CreateInstance + DI IDomainUser）+ ITransactionManager（Noop，对齐 OrganizationUnit 测试宿主）
+/// + 扩展初始化器注册 Store/Manager（TryAddScoped）。
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库实例（用例隔离）。
 /// <paramref name="configure"/> 回调在初始化器之后执行——事务记录型测试可覆盖 ITransactionManager
 /// （RemoveAll + AddSingleton Recording，对齐 OrganizationUnitTransactionTests 模式）。</para>
@@ -73,11 +75,14 @@ internal sealed class CalendarTestHost : IDisposable
         var stubUser = new StubDomainUser();
         services.AddSingleton<IDomainUser>(stubUser);
 
-        // DataService 链（真实 FreeSql DAC——红线合规委托路径）
-        services.AddSingleton(new CalendarEntityDataService(
-            stubUser, new FreeSqlEntityDAC<CalendarEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new CalendarEventEntityDataService(
-            stubUser, new FreeSqlEntityDAC<CalendarEventEntity>(new UnitOfWorkManager(fsql))));
+        // v4.10.8 (ADR61) 迁移：模拟生产 DataService 自动注册——测试容器不走消费方 SG 聚合，
+        // 用与生产同构的 DI 兜底工厂（镜像 AddConstructibleDataService：ActivatorUtilities.CreateInstance
+        // + 域用户；测试用户源 = DI IDomainUser 而非 AsyncLocal CurrentAopUser——免域作用域，xUnit 并行安全）。
+        services.AddScoped<UnitOfWorkManager>();
+        services.AddScoped<IEntityDAC<CalendarEntity>>(sp => new FreeSqlEntityDAC<CalendarEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<CalendarEventEntity>>(sp => new FreeSqlEntityDAC<CalendarEventEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        AddTestConstructibleDataService<CalendarEntityDataService>(services);
+        AddTestConstructibleDataService<CalendarEventEntityDataService>(services);
 
         // ITransactionManager（Create/Update/Delete 写路径事务包裹依赖——Noop Begin/Commit 空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；对齐 OrganizationUnit 测试宿主共识）
@@ -89,6 +94,20 @@ internal sealed class CalendarTestHost : IDisposable
         configure?.Invoke(services);
 
         return new CalendarTestHost(services.BuildServiceProvider(), fsql);
+    }
+
+    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
+    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
+    /// 用户源改为 DI <c>IDomainUser</c>（StubDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
+    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
+    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
+        where T : class
+    {
+        services.AddScoped<T>(sp =>
+        {
+            var user = sp.GetRequiredService<IDomainUser>();
+            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
+        });
     }
 
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>

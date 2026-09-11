@@ -40,7 +40,9 @@ public class PermissionSeedInitializerTests
             var dac = new InMemoryEntityDac();
             services.AddScoped<IEntityDAC<PermissionGrantEntity>>(_ => dac);
             services.AddScoped<IDomainUser, StubDomainUser>();
-            services.AddScoped<PermissionGrantEntityDataService>();
+            // v4.10.8 (ADR61) 迁移：DataService 注册改为测试版可构造工厂（镜像生产 AddConstructibleDataService）——
+            // 测试项目不走消费方 SG 聚合，此注册是唯一注册路径；DI 兜底工厂正好补上（勿依赖扩展 Initializer）。
+            AddTestConstructibleDataService<PermissionGrantEntityDataService>(services);
         }
 
         if (seedRole is not null)
@@ -129,6 +131,20 @@ public class PermissionSeedInitializerTests
         var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
 
         await initializer.InitializeAsync(); // 不应抛异常
+    }
+
+    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
+    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
+    /// 用户源改为 DI <c>IDomainUser</c>（StubDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
+    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
+    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
+        where T : class
+    {
+        services.AddScoped<T>(sp =>
+        {
+            var user = sp.GetRequiredService<IDomainUser>();
+            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
+        });
     }
 
     /// <summary>最小 IDomainUser 桩——仅满足 DataService 构造。</summary>

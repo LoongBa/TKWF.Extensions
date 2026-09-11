@@ -42,8 +42,8 @@ namespace TKWF.Ext.Identity
             services.TryAddScoped<IRoleStore, RoleStore>();
             services.TryAddScoped<IUserManager, UserManager>();
 
-            // V0.2.0 VEntity：UserRoleViewDataService 手写（xCodeGen 跳过 VEntity DataService 模板→不自动注册），手动 TryAddScoped
-            services.TryAddScoped<UserRoleViewDataService>();
+            // V0.2.0 VEntity：UserRoleViewDataService 手写——v4.10.8 (ADR61) 起经 DomainReadOnlyDataServiceBase 基类判定自动注册
+            //（不再手动 TryAddScoped）
 
             // V0.3.0：Account 密码重置落地适配器（Account 不注册默认实现，Identity 注册即生效；
             // 消费方覆盖须 AddScoped——扩展钩子先于消费方 OnRegisterDomainServices，TryAdd 被跳过）

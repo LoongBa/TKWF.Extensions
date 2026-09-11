@@ -59,16 +59,13 @@ public class OrganizationUnitInitializerTests
     [Fact]
     public void ConfigureServices_Registers_BothDataServices()
     {
-        var services = new ServiceCollection();
-        new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
+        // v4.10.8 (ADR61)：Initializer 不再手动注册 DataService——SG 基类类型判定生成，
+        // 经扩展 ProjectMetaContext.GetServiceRegistrations() 暴露（消费方聚合自动注册为可构造工厂）。
+        var regs = TKWF.Ext.OrganizationUnit.Generated.ProjectMetaContext.GetOrCreateInstance()
+            .GetServiceRegistrations().ToList();
 
-        var ouDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(OrganizationUnitEntityDataService));
-        var userDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(OrganizationUnitUserEntityDataService));
-
-        Assert.NotNull(ouDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, ouDescriptor!.Lifetime);
-        Assert.NotNull(userDescriptor);
-        Assert.Equal(ServiceLifetime.Scoped, userDescriptor!.Lifetime);
+        Assert.Contains(regs, r => r.Implementation == typeof(OrganizationUnitEntityDataService));
+        Assert.Contains(regs, r => r.Implementation == typeof(OrganizationUnitUserEntityDataService));
     }
 
     [Fact]

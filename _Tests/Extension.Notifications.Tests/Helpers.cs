@@ -58,24 +58,39 @@ INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
         services.AddSingleton(fsql);
         services.AddSingleton<ITransactionManager>(new NoopTransactionManager());
         services.AddSingleton<INotificationDefinitionProvider, TestNotificationDefinitions>();
-        // 模拟 SG 自动注册（生产经 DomainHostInitializerBase.RegisterGeneratedServices 注册 DataService；
-        // 测试容器不走 SG 自动注册——手动补注册 DataService 链：UoW → DAC → DataService）
+        // v4.10.8 (ADR61) 迁移：模拟生产 DataService 自动注册——测试容器不走消费方 SG 聚合，
+        // 用与生产同构的 DI 兜底工厂（镜像 AddConstructibleDataService：ActivatorUtilities.CreateInstance
+        // + 域用户；测试用户源 = DI IDomainUser 而非 AsyncLocal CurrentAopUser——免域作用域，xUnit 并行安全）。
         services.AddScoped<UnitOfWorkManager>();
         services.AddScoped<IEntityDAC<NotificationEntity>>(sp => new FreeSqlEntityDAC<NotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<UserNotificationEntity>>(sp => new FreeSqlEntityDAC<UserNotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<NotificationSubscriptionEntity>>(sp => new FreeSqlEntityDAC<NotificationSubscriptionEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<NotificationPreferenceEntity>>(sp => new FreeSqlEntityDAC<NotificationPreferenceEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
-        services.AddScoped<NotificationEntityDataService>();
-        services.AddScoped<UserNotificationEntityDataService>();
-        services.AddScoped<NotificationSubscriptionEntityDataService>();
-        services.AddScoped<NotificationPreferenceEntityDataService>();   // V0.3.0：偏好 DataService
-        // V0.2.0 VEntity：IEntityReadOnlyDAC 只读契约 + 手写只读 DataService（模拟 SG 不生成 VEntity DataService，手动注册）
+        AddTestConstructibleDataService<NotificationEntityDataService>(services);
+        AddTestConstructibleDataService<UserNotificationEntityDataService>(services);
+        AddTestConstructibleDataService<NotificationSubscriptionEntityDataService>(services);
+        AddTestConstructibleDataService<NotificationPreferenceEntityDataService>(services);   // V0.3.0：偏好 DataService
+        // V0.2.0 VEntity：IEntityReadOnlyDAC 只读契约 + 手写只读 DataService（同路径 DI 兜底工厂）
         services.AddScoped<IEntityReadOnlyDAC<UserNotificationView>>(sp => new FreeSqlEntityDAC<UserNotificationView>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<UserNotificationViewDataService>();
+        AddTestConstructibleDataService<UserNotificationViewDataService>(services);
         configure?.Invoke(services);
         new NotificationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
+    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
+    /// 用户源改为 DI <c>IDomainUser</c>（StubDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
+    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
+    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
+        where T : class
+    {
+        services.AddScoped<T>(sp =>
+        {
+            var user = sp.GetRequiredService<IDomainUser>();
+            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
+        });
     }
 
     /// <summary>断言时间列与 <paramref name="reference"/>（UTC）在 1 秒容忍范围内。

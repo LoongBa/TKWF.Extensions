@@ -109,8 +109,9 @@ public class IdentityExtensionInitializerTests
         services.AddScoped<UnitOfWorkManager>();
         services.AddScoped<IEntityDAC<RoleEntity>>(sp => new FreeSqlEntityDAC<RoleEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<UserRoleEntity>>(sp => new FreeSqlEntityDAC<UserRoleEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<RoleEntityDataService>();
-        services.AddScoped<UserRoleEntityDataService>();
+        // v4.10.8 (ADR61) 迁移：DataService 注册改为测试版可构造工厂（镜像生产 AddConstructibleDataService）
+        AddTestConstructibleDataService<RoleEntityDataService>(services);
+        AddTestConstructibleDataService<UserRoleEntityDataService>(services);
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.TryAddScoped<IRoleStore, RoleStore>();
         var sp = services.BuildServiceProvider();
@@ -134,6 +135,20 @@ public class IdentityExtensionInitializerTests
 
         // 不应抛异常
         await init.InitializeAsync();
+    }
+
+    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
+    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
+    /// 用户源改为 DI <c>IDomainUser</c>（StubDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
+    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
+    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
+        where T : class
+    {
+        services.AddScoped<T>(sp =>
+        {
+            var user = sp.GetRequiredService<IDomainUser>();
+            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
+        });
     }
 
     /// <summary>测试专用 IUserStore：标记消费方自定义实现。</summary>

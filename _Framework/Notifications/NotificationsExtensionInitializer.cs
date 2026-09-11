@@ -51,16 +51,8 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         services.TryAddSingleton<INotificationDefinitionManager>(sp => sp.GetRequiredService<NotificationDefinitionManager>());
 
         // 数据访问红线整改（2026-09-07）：委托 SG1 DataService，禁裸 IFreeSql
-        // 2026-09-12 修正（Oracle 裁决）：扩展 DataService 必须显式注册——SG 自动注册不覆盖扩展 DataService：
-        //   ① SG1a IsCandidateClass 要求显式 public/internal 修饰符；生成的 DataService 为隐式 internal，不被采集 → 无元数据；
-        //   ② 消费方 RegisterGeneratedServices 仅消费自身 ProjectMetaContext，不聚合扩展上下文；
-        //   ③ 即便被发现，AddService 注册的是 throw-factory（供 User.Use<T>()），会击穿 Store 构造注入。
-        //（VEntity 另因 xCodeGen 跳过其 DataService 模板，同样需手动注册。）
-        services.TryAddScoped<NotificationEntityDataService>();
-        services.TryAddScoped<UserNotificationEntityDataService>();
-        services.TryAddScoped<NotificationSubscriptionEntityDataService>();
-        services.TryAddScoped<NotificationPreferenceEntityDataService>();   // V0.3.0：偏好表
-        services.TryAddScoped<UserNotificationViewDataService>();            // V0.2.0 VEntity：手写只读 DataService
+        // v4.10.8 (ADR61) 起：SG1 基类类型判定 + 消费方聚合自动注册扩展 DataService（可构造工厂）——
+        // 不再手动 TryAddScoped（含 VEntity 只读 DataService，经 DomainReadOnlyDataServiceBase 基类判定覆盖）。
 
         // 收件箱存储（Scoped）
         services.TryAddScoped<NotificationStore>();

@@ -30,15 +30,11 @@ namespace TKWF.Ext.OrganizationUnit
         public override string Description => "组织单元扩展——树形部门/团队/分组定义、维护与用户归属管理（FreeSql 持久化）";
 
         /// <summary>
-        /// 注册 SG1 DataService + Store + Manager。
-        /// <para>DataService 显式注册（<c>TryAddScoped</c>）——Store/Manager 构造依赖在消费方 DI 中确定性可解析
-        /// （扩展 DataService 为 internal，消费方无法自行注册）。</para>
+        /// 注册 Store + Manager（SG1 DataService 经 v4.10.8 ADR61 基类类型判定 + 消费方聚合自动注册）。
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
-            // 1. SG1 DataService（Store/Manager 构造依赖；显式注册保证 DI 可解析）
-            services.TryAddScoped<OrganizationUnitEntityDataService>();
-            services.TryAddScoped<OrganizationUnitUserEntityDataService>();
+            // 1. SG1 DataService——ADR61 起自动注册（可构造工厂），不再手动 TryAddScoped
 
             // 2. 存储（委托 DataService——数据访问红线合规，不注入 IFreeSql/IEntityDAC）
             services.TryAddScoped<IOrganizationUnitStore, OrganizationUnitStore>();

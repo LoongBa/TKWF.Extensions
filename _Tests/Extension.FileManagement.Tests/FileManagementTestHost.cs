@@ -89,13 +89,16 @@ internal sealed class FileManagementTestHost : IDisposable
         var stubUser = new StubDomainUser();
         services.AddSingleton<IDomainUser>(stubUser);
 
-        // DataService 链（真实 FreeSql DAC——红线合规委托路径）
-        services.AddSingleton(new FileFolderEntityDataService(
-            stubUser, new FreeSqlEntityDAC<FileFolderEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new ManagedFileEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ManagedFileEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(new ManagedFileVersionEntityDataService(
-            stubUser, new FreeSqlEntityDAC<ManagedFileVersionEntity>(new UnitOfWorkManager(fsql))));   // V0.2.0
+        // v4.10.8 (ADR61)：DataService 不再手动 new/注册——DI 兜底工厂（镜像生产 AddConstructibleDataService，
+        // 用户源 = DI IDomainUser，免域作用域）；IEntityDAC<T> 基础设施注册同生产 Host。
+        // 注：每 DataService 独立 UnitOfWorkManager（对齐旧 Host 语义——并发版本上传测试依赖
+        // 各 DataService 事务隔离，共享 UoW 会改变竞态时序）。
+        services.AddScoped<IEntityDAC<FileFolderEntity>>(sp => new FreeSqlEntityDAC<FileFolderEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
+        services.AddScoped<IEntityDAC<ManagedFileEntity>>(sp => new FreeSqlEntityDAC<ManagedFileEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
+        services.AddScoped<IEntityDAC<ManagedFileVersionEntity>>(sp => new FreeSqlEntityDAC<ManagedFileVersionEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
+        AddTestConstructibleDataService<FileFolderEntityDataService>(services);
+        AddTestConstructibleDataService<ManagedFileEntityDataService>(services);
+        AddTestConstructibleDataService<ManagedFileVersionEntityDataService>(services);   // V0.2.0
 
         // ITransactionManager（默认 Noop——Create/Update/Delete 写路径事务包裹依赖空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；Recording 由 configure 覆盖）
@@ -111,7 +114,7 @@ internal sealed class FileManagementTestHost : IDisposable
         // 初始化器经 AddOptions/Option 绑定注册的默认配置对已存在 IOptions 实例不生效，测试以显式 options 为准）
         services.AddSingleton<IOptions<FileManagementOptions>>(Options.Create(options ?? new FileManagementOptions()));
 
-        // 扩展初始化器注册 Store/Manager/DataService（TryAddScoped 不覆盖已注册 DataService）
+        // 扩展初始化器注册 Store/Manager（v4.10.8 ADR61：DataService 经 DI 兜底工厂注册，初始化器不再手动注册）
         new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
 
         configure?.Invoke(services);
@@ -122,6 +125,18 @@ internal sealed class FileManagementTestHost : IDisposable
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
     public T GetRequiredService<T>() where T : notnull
         => _serviceProvider.GetRequiredService<T>();
+
+    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产 AddConstructibleDataService
+    ///（ActivatorUtilities.CreateInstance + 域用户），用户源 = DI IDomainUser（免域作用域、xUnit 并行安全）。</summary>
+    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
+        where T : class
+    {
+        services.AddScoped<T>(sp =>
+        {
+            var user = sp.GetRequiredService<IDomainUser>();
+            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
+        });
+    }
 
     /// <summary>快捷辅助：创建目录（委托 Manager）。</summary>
     public Task<FileFolderEntity> CreateFolderAsync(

@@ -17,7 +17,7 @@ namespace TKWF.Ext.AuditLogging
     [FreeSql.DataAnnotations.Index("IX_AuditLog_UserName", nameof(UserName), IsUnique = false)]
     [FreeSql.DataAnnotations.Index("IX_AuditLog_CorrelationId", nameof(CorrelationId), IsUnique = false)]
     [FreeSql.DataAnnotations.Index("IX_AuditLog_ServiceName", nameof(ServiceName), IsUnique = false)]
-    [DomainGenerateCode(DefaultPageSize = 50)]
+    [DomainGenerateCode(SubDomain = "AuditLogging", SubDomainRoutePrefix = "/AuditLogging", DefaultPageSize = 50)]   // V0.4.0：SubDomain——管理 API 路由前缀（对齐 Permissions G2）
     public partial class AuditLogEntity
     {
         /// <summary>主键（自增）。</summary>

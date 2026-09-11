@@ -4,6 +4,8 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -12,7 +14,6 @@ using TKWF.Ext.AuditLogging.DTOs;
 
 namespace TKWF.Ext.AuditLogging;
 
-/// <summary>数据服务：&#x5BA1;&#x8BA1;&#x65E5;&#x5FD7;&#x8868;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x8BB0;&#x5F55;&#x65B9;&#x6CD5;&#x7EA7;&#x8C03;&#x7528;&#x4E8B;&#x4EF6;&#xFF08;&#x8C03;&#x7528;&#x8005;&#x3001;&#x76EE;&#x6807;&#x65B9;&#x6CD5;&#x3001;&#x53C2;&#x6570;&#x8131;&#x654F; JSON&#x3001;&#x8017;&#x65F6;&#x3001;&#x6210;&#x529F;/&#x5F02;&#x5E38;&#x3001;&#x5173;&#x8054; ID&#xFF09;&#x3002;     &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#x3002;     SG1 &#x81EA;&#x52A8;&#x751F;&#x6210; &lt;see cref=&quot;!:TKW.Framework.Domain.IDomainEntity&quot;/&gt; &#x90E8;&#x5206;&#x4E0E; DTO/DataService&#x3002;&lt;/para&gt;     &lt;para&gt;&#x4FDD;&#x7559; BCL &lt;c&gt;[Table(&quot;AuditLog&quot;)]&lt;/c&gt;&#xFF08;&lt;c&gt;FreeSqlTableStructureSynchronizer&lt;/c&gt; &#x9760;&#x5B83;&#x53D1;&#x73B0;&#x5B9E;&#x4F53;&#x5EFA;&#x8868;&#xFF09;&#xFF1B;     &#x5217;&#x6620;&#x5C04;&#x7528; FreeSql &lt;c&gt;[Column]&lt;/c&gt;&#xFF08;IsPrimary/IsIdentity/Position&#xFF0C;&#x5168;&#x9650;&#x5B9A;&#x907F;&#x514D;&#x4E0E; BCL Schema &#x7279;&#x6027;&#x540D;&#x51B2;&#x7A81;&#xFF09;&#x3002;&lt;/para&gt;</summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 AuditLogEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //
@@ -28,10 +29,21 @@ namespace TKWF.Ext.AuditLogging;
 // - GetStatsAsync：SQL 级聚合（Dac.CountAsync SQL COUNT × 分区 + FreeSqlQueryableExtensions.AvgAsync/MaxAsync
 //   SQL AVG/MAX）；每聚合独立 QueryForUser() 起新查询（FreeSql ISelect 原地可变陷阱）。
 // - DeleteExpiredAsync：物理批量删（hasSoftDelete:false——绝不用 EntitySoftDeleteAsync）。
-partial class AuditLogEntityDataService(IDomainUser user, IEntityDAC<AuditLogEntity> dac)
-        : DomainDataServiceBase<AuditLogEntity, AuditLogEntityDto>(user, dac, hasSoftDelete:false) 
+//
+// 【V0.4.0 管理 API（Oracle P1-1~6 + P2-1~5 修订）】
+// - [GenerateController(FromDataService=true, ExcludeMethods=*)]——排除含 ArgumentsJson 的标准 CRUD
+//   （GetById/Select/SelectPage/Create/Update/Count）防 D5 泄露 + 防伪造审计；仅保留 DeleteAsync 单条删除。
+// - 5 管理方法：SearchLogsAsync（列表裁剪 DTO）/ GetDetailAsync（含 ArgumentsJson，权限门控）/
+//   CleanupAsync（直接实现批量循环——不委托 AnalyticsService 避免循环依赖，P1-4）/
+//   GetStatsAsync（统计）/ DeleteAsync（单条删除）。
+// - DataService 改 public sealed partial（[GenerateController] 须 public——消费方 SG1 跨程序集引用，P1-6）。
+/// <summary>V0.4.0 管理 API 端点——经 ExcludeMethods 排除含 ArgumentsJson 的标准 CRUD，仅暴露受控自定义端点。</summary>
+[GenerateController(FromDataService = true,
+    ExcludeMethods = new[] { "GetByIdAsync", "SelectAsync", "SelectPageAsync", "CountAsync", "CreateAsync", "UpdateAsync" })]
+public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityDAC<AuditLogEntity> dac)
+        : DomainDataServiceBase<AuditLogEntity, AuditLogEntityDto>(user, dac, hasSoftDelete: false) 
 {
-     // 场景：业务驱动的删除（自动按 HasSoftDelete 分派：有软删→软删，无软删→物理删）
+     /// <summary>场景：业务驱动的删除（自动按 HasSoftDelete 分派：有软删→软删，无软删→物理删）。</summary>
      public async Task<bool> AdminDeleteAsync(long id, CancellationToken ct)
      {
          // 公共 DeleteAsync 自动分派——不调用 [Obsolete] 的 InternalHardDeleteAsync（ADR15）
@@ -104,6 +116,7 @@ partial class AuditLogEntityDataService(IDomainUser user, IEntityDAC<AuditLogEnt
     /// <param name="fromUtc">起始时间（ExecutionTime &gt;=，闭区间下界；null = 不限）。</param>
     /// <param name="toUtc">结束时间（ExecutionTime &lt;=，闭区间上界；null = 不限）。</param>
     /// <param name="ct">取消令牌。</param>
+    [GenerateControllerMethod]   // V0.4.0 管理 API（Oracle P1-5）：统计端点暴露
     public async Task<AuditLogStats> GetStatsAsync(
         DateTime? fromUtc, DateTime? toUtc, CancellationToken ct = default)
     {
@@ -159,4 +172,174 @@ partial class AuditLogEntityDataService(IDomainUser user, IEntityDAC<AuditLogEnt
     /// <summary>构建带窗口过滤的可组合 IQueryable（ExecutionTime 闭区间）。</summary>
     private IQueryable<AuditLogEntity> BuildWindowQuery(DateTime? fromUtc, DateTime? toUtc)
         => QueryForUser().Where(BuildWindowFilter(fromUtc, toUtc));
+
+    // ── V0.4.0 管理 API（Oracle P1-1~6 修订） ──
+
+    /// <summary>
+    /// 审计日志列表查询（管理 API）——返回**裁剪 DTO**（不含 ArgumentsJson，D5 保持，Oracle P1-2）。
+    /// <para>与 <see cref="IAuditLogQueryService.GetListAsync"/> 共享同一查询路径（QueryService 委托本方法，单一真相源 P2-2）：
+    /// 谓词构建（BuildQueryPredicate）+ 分页 + 裁剪映射在此集中。</para>
+    /// </summary>
+    [GenerateControllerMethod]
+    public async Task<AuditLogPagedResult> SearchLogsAsync(AuditLogQueryInput query, CancellationToken ct = default)
+    {
+        if (query == null) throw new ArgumentNullException(nameof(query));
+
+        var (skip, take) = NormalizePaging(query.Skip, query.Take);
+        var predicate = BuildQueryPredicate(query);
+
+        var countTask = CountAsync(predicate, ct);
+        var listTask = EntitySelectAsync(
+            predicate, skip, take, q => q.OrderByDescending(e => e.ExecutionTime), ct);
+
+        await Task.WhenAll(countTask, listTask);
+
+        var total = await countTask;
+        var entities = await listTask;
+
+        return new AuditLogPagedResult(total, entities.Select(MapToListItemDto).ToList());
+    }
+
+    /// <summary>审计日志详情（管理 API）——含 ArgumentsJson（Oracle P2-5 厘清：详情 DTO 显式暴露，须消费方控制器级 <c>[RequirePermission]</c> 门控）。</summary>
+    [GenerateControllerMethod]
+    public async Task<AuditLogDetailDto?> GetDetailAsync(long id, CancellationToken ct = default)
+    {
+        var entity = await EntityGetAsync(e => e.Id == id, ct);
+        if (entity == null) return null;
+        return new AuditLogDetailDto(
+            entity.Id, entity.UserName, entity.UserId, entity.ServiceName, entity.MethodName,
+            entity.ArgumentsJson, entity.ExecutionTime, entity.DurationMs, entity.Success,
+            entity.Exception, entity.CorrelationId, entity.CreateTime);
+    }
+
+    /// <summary>
+    /// 保留天数清理（管理 API）——**直接实现批量循环**（Oracle P1-4：不委托 AnalyticsService——避免循环依赖）。
+    /// <para>对齐 BackgroundJobs 清理范式：<c>MaxRounds</c> 死循环保护 + 循环内 <c>ct.ThrowIfCancellationRequested()</c>；
+    /// 分批 <c>DeleteExpiredAsync(cutoffUtc, CleanupBatchSize)</c> 直至清完或达轮次上限。
+    /// 配置经 <c>IDomainUser.GetService&lt;IOptions&lt;AuditLoggingOptions&gt;&gt;()</c> 解析（DataService 主构造函数固定，无额外注入——P1-4 定稿）。</para>
+    /// </summary>
+    [GenerateControllerMethod]
+    public async Task<int> CleanupAsync(CancellationToken ct = default)
+    {
+        var options = user.GetOptionalService<IOptions<AuditLoggingOptions>>()?.Value
+            ?? new AuditLoggingOptions();   // 测试宿主/无配置回退默认（RetentionDays 90/CleanupBatchSize 500）
+        var cutoffUtc = DateTime.UtcNow.AddDays(-options.RetentionDays);
+        var batchSize = Math.Max(1, options.CleanupBatchSize);
+
+        const int maxRounds = 100;   // 死循环保护（对齐 BackgroundJobs MaxRounds）
+        int totalDeleted = 0;
+
+        for (int round = 0; round < maxRounds; round++)
+        {
+            ct.ThrowIfCancellationRequested();
+            int deleted = await DeleteExpiredAsync(cutoffUtc, batchSize, ct);
+            if (deleted == 0) break;
+            totalDeleted += deleted;
+            if (deleted < batchSize) break;
+        }
+        return totalDeleted;
+    }
+
+    /// <summary>统计（管理 API）——暴露现有 <see cref="GetStatsAsync"/>（SQL 级聚合，Oracle P1-5）。</summary>
+    /// <summary>单条物理删除（管理 API）——经基类 DeleteAsync 分派（hasSoftDelete:false → 物理删），推翻 v0.3.0 "无单条删除"限定。
+    /// <c>new</c> 有意隐藏基类同签名方法（此方法加 [GenerateControllerMethod] 标注暴露端点，CS0108 预期）。</summary>
+    [GenerateControllerMethod]
+    public new Task<bool> DeleteAsync(long id, CancellationToken ct = default)
+        => base.DeleteAsync(id, ct);
+
+    /// <summary>构建查询过滤 predicate（10 条件 AND 组合）——集中于此供 SearchLogsAsync + QueryService 共享（P2-2 单一真相源）。</summary>
+    internal static Expression<Func<AuditLogEntity, bool>>? BuildQueryPredicate(AuditLogQueryInput query)
+    {
+        var param = Expression.Parameter(typeof(AuditLogEntity), "e");
+        Expression? combined = null;
+
+        if (query.StartTime.HasValue)
+            combined = CombinePredicate(combined, Expression.GreaterThanOrEqual(
+                Expression.Property(param, nameof(AuditLogEntity.ExecutionTime)),
+                Expression.Constant(query.StartTime.Value)));
+
+        if (query.EndTime.HasValue)
+            combined = CombinePredicate(combined, Expression.LessThanOrEqual(
+                Expression.Property(param, nameof(AuditLogEntity.ExecutionTime)),
+                Expression.Constant(query.EndTime.Value)));
+
+        if (!string.IsNullOrEmpty(query.UserName))
+        {
+            var userNameProp = Expression.Property(param, nameof(AuditLogEntity.UserName));
+            var contains = Expression.Call(
+                Expression.Coalesce(userNameProp, Expression.Constant(string.Empty)),
+                nameof(string.Contains),
+                Type.EmptyTypes,
+                Expression.Constant(query.UserName));
+            combined = CombinePredicate(combined, contains);
+        }
+
+        if (!string.IsNullOrEmpty(query.UserId))
+            combined = CombinePredicate(combined, Expression.Equal(
+                Expression.Property(param, nameof(AuditLogEntity.UserId)),
+                Expression.Constant(query.UserId)));
+
+        if (!string.IsNullOrEmpty(query.ServiceName))
+            combined = CombinePredicate(combined, Expression.Equal(
+                Expression.Property(param, nameof(AuditLogEntity.ServiceName)),
+                Expression.Constant(query.ServiceName)));
+
+        if (!string.IsNullOrEmpty(query.MethodName))
+            combined = CombinePredicate(combined, Expression.Equal(
+                Expression.Property(param, nameof(AuditLogEntity.MethodName)),
+                Expression.Constant(query.MethodName)));
+
+        if (query.Success.HasValue)
+            combined = CombinePredicate(combined, Expression.Equal(
+                Expression.Property(param, nameof(AuditLogEntity.Success)),
+                Expression.Constant(query.Success.Value)));
+
+        if (!string.IsNullOrEmpty(query.CorrelationId))
+            combined = CombinePredicate(combined, Expression.Equal(
+                Expression.Property(param, nameof(AuditLogEntity.CorrelationId)),
+                Expression.Constant(query.CorrelationId)));
+
+        if (query.MinDurationMs.HasValue)
+            combined = CombinePredicate(combined, Expression.GreaterThanOrEqual(
+                Expression.Property(param, nameof(AuditLogEntity.DurationMs)),
+                Expression.Constant(query.MinDurationMs.Value)));
+
+        if (query.MaxDurationMs.HasValue)
+            combined = CombinePredicate(combined, Expression.LessThanOrEqual(
+                Expression.Property(param, nameof(AuditLogEntity.DurationMs)),
+                Expression.Constant(query.MaxDurationMs.Value)));
+
+        return combined == null ? null : Expression.Lambda<Func<AuditLogEntity, bool>>(combined, param);
+    }
+
+    private static Expression CombinePredicate(Expression? left, Expression right)
+        => left == null ? right : Expression.AndAlso(left, right);
+
+    /// <summary>规范化分页——Take 默认 50 上限 200；Skip 下限 0（对齐 QueryService）。</summary>
+    internal static (int Skip, int Take) NormalizePaging(int skip, int take)
+    {
+        skip = Math.Max(0, skip);
+        take = Math.Clamp(take <= 0 ? DefaultTake : take, 1, MaxTake);
+        return (skip, take);
+    }
+
+    /// <summary>实体 → 列表 DTO（不含 ArgumentsJson——D5）。</summary>
+    internal static AuditLogListItemDto MapToListItemDto(AuditLogEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            UserName = entity.UserName,
+            UserId = entity.UserId,
+            ServiceName = entity.ServiceName,
+            MethodName = entity.MethodName,
+            ExecutionTime = entity.ExecutionTime,
+            DurationMs = entity.DurationMs,
+            Success = entity.Success,
+            Exception = entity.Exception,
+            CorrelationId = entity.CorrelationId,
+            CreateTime = entity.CreateTime
+        };
+
+    private const int DefaultTake = 50;
+    private const int MaxTake = 200;
 }

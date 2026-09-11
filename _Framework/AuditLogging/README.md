@@ -1,8 +1,8 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 (统计聚合 API + 保留天数清理) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 (管理 API——REST 端点暴露查询/详情/统计/清理/删除) | **框架**: .NET 10
 
-**核心约束**: 方法级审计日志持久化、查询 API、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
+**核心约束**: 方法级审计日志持久化、查询 API、统计聚合 + 保留天数清理、**管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD）**、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 
 ---
 
@@ -252,8 +252,15 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 - Options 绑定修复（`AddOptions<AuditLoggingOptions>` 注册）
 - DTO 安全（不含 ArgumentsJson）
 
-### V0.3.0（当前）
+### V0.3.0
 - 统计聚合 API（`IAuditLogAnalyticsService`：CountByServiceAsync / CountByUserAsync TopN + GetStatsAsync SQL 级统计）
 - 保留天数清理（`RetentionDays` 默认 90 + `CleanupBatchSize` 默认 500，分批物理删）
 - `CountAsync` 低效修复（内存计数 → SQL COUNT）
 - 索引补建（ServiceName——聚合查询全表扫描修复）
+
+### V0.4.0（当前）
+- **管理 API**（`[GenerateController(FromDataService=true)]` + `ExcludeMethods` 排除含 ArgumentsJson 标准 CRUD——防 D5 泄露 + 防伪造审计）+ **SubDomain 路由**（`/AuditLogging`）+ **DataService public**（消费方 SG1 生成控制器）
+- 5 管理端点：`SearchLogsAsync`（列表裁剪 DTO）/ `GetDetailAsync`（含 ArgumentsJson，权限门控）/ `CleanupAsync`（直接实现批量循环——MaxRounds + ct 取消检查，不委托 AnalyticsService 避循环依赖）/ `GetStatsAsync`（统计暴露）/ `DeleteAsync`（单条物理删除）
+- `AuditLogDetailDto`（含 ArgumentsJson——详情显式暴露，列表 D5 保持）
+- QueryService 单一真相源委托（谓词/分页/映射集中 DataService）
+- **推翻 v0.3.0 "无管理端点/单条删除"限定**（ADR-AuditLogging-管理API与删除端点）

@@ -34,21 +34,9 @@ namespace TKWF.Ext.AuditLogging
 
             try
             {
-                var (skip, take) = NormalizePaging(query.Skip, query.Take);
-                var predicate = BuildPredicate(query);
-
-                // DataService 基类转发方法（.g.cs 内部访问器）——Count + List 并行避免重复构建 IQueryable
-                var countTask = _dataService.CountAsync(predicate, ct);
-                var listTask = _dataService.EntitySelectAsync(
-                    predicate, skip, take, q => q.OrderByDescending(e => e.ExecutionTime), ct);
-
-                await Task.WhenAll(countTask, listTask);
-
-                var total = await countTask;
-                var entities = await listTask;
-
-                var dtos = entities.Select(MapToDto).ToList();
-                return new AuditLogPagedResult(total, dtos);
+                // V0.4.0（Oracle P2-2 单一真相源）：委托 DataService.SearchLogsAsync——谓词构建/分页/裁剪映射集中于此，
+                // 管理 API 端点与服务层共享同一查询路径（不再本地 BuildPredicate）。
+                return await _dataService.SearchLogsAsync(query, ct);
             }
             catch (Exception ex)
             {
@@ -64,7 +52,8 @@ namespace TKWF.Ext.AuditLogging
 
             try
             {
-                var predicate = BuildPredicate(query);
+                // V0.4.0（Oracle P2-2 单一真相源）：谓词构建委托 DataService.BuildQueryPredicate（与 SearchLogsAsync 共享）。
+                var predicate = AuditLogEntityDataService.BuildQueryPredicate(query);
                 return await _dataService.CountAsync(predicate, ct);
             }
             catch (Exception ex)
@@ -72,101 +61,6 @@ namespace TKWF.Ext.AuditLogging
                 _logger.LogWarning(ex, "审计日志统计失败: CountAsync");
                 return 0;
             }
-        }
-
-        /// <summary>用 Expression API 动态构建过滤 predicate（10 条件 AND 组合）。</summary>
-        private static Expression<Func<AuditLogEntity, bool>>? BuildPredicate(AuditLogQueryInput query)
-        {
-            var param = Expression.Parameter(typeof(AuditLogEntity), "e");
-            Expression? combined = null;
-
-            if (query.StartTime.HasValue)
-                combined = Combine(combined, Expression.GreaterThanOrEqual(
-                    Expression.Property(param, nameof(AuditLogEntity.ExecutionTime)),
-                    Expression.Constant(query.StartTime.Value)));
-
-            if (query.EndTime.HasValue)
-                combined = Combine(combined, Expression.LessThanOrEqual(
-                    Expression.Property(param, nameof(AuditLogEntity.ExecutionTime)),
-                    Expression.Constant(query.EndTime.Value)));
-
-            if (!string.IsNullOrEmpty(query.UserName))
-            {
-                var userNameProp = Expression.Property(param, nameof(AuditLogEntity.UserName));
-                var contains = Expression.Call(
-                    Expression.Coalesce(userNameProp, Expression.Constant(string.Empty)),
-                    nameof(string.Contains),
-                    Type.EmptyTypes,
-                    Expression.Constant(query.UserName));
-                combined = Combine(combined, contains);
-            }
-
-            if (!string.IsNullOrEmpty(query.UserId))
-                combined = Combine(combined, Expression.Equal(
-                    Expression.Property(param, nameof(AuditLogEntity.UserId)),
-                    Expression.Constant(query.UserId)));
-
-            if (!string.IsNullOrEmpty(query.ServiceName))
-                combined = Combine(combined, Expression.Equal(
-                    Expression.Property(param, nameof(AuditLogEntity.ServiceName)),
-                    Expression.Constant(query.ServiceName)));
-
-            if (!string.IsNullOrEmpty(query.MethodName))
-                combined = Combine(combined, Expression.Equal(
-                    Expression.Property(param, nameof(AuditLogEntity.MethodName)),
-                    Expression.Constant(query.MethodName)));
-
-            if (query.Success.HasValue)
-                combined = Combine(combined, Expression.Equal(
-                    Expression.Property(param, nameof(AuditLogEntity.Success)),
-                    Expression.Constant(query.Success.Value)));
-
-            if (!string.IsNullOrEmpty(query.CorrelationId))
-                combined = Combine(combined, Expression.Equal(
-                    Expression.Property(param, nameof(AuditLogEntity.CorrelationId)),
-                    Expression.Constant(query.CorrelationId)));
-
-            if (query.MinDurationMs.HasValue)
-                combined = Combine(combined, Expression.GreaterThanOrEqual(
-                    Expression.Property(param, nameof(AuditLogEntity.DurationMs)),
-                    Expression.Constant(query.MinDurationMs.Value)));
-
-            if (query.MaxDurationMs.HasValue)
-                combined = Combine(combined, Expression.LessThanOrEqual(
-                    Expression.Property(param, nameof(AuditLogEntity.DurationMs)),
-                    Expression.Constant(query.MaxDurationMs.Value)));
-
-            return combined == null ? null : Expression.Lambda<Func<AuditLogEntity, bool>>(combined, param);
-        }
-
-        private static Expression Combine(Expression? left, Expression right)
-            => left == null ? right : Expression.AndAlso(left, right);
-
-        /// <summary>规范化分页参数——Take 默认 50，上限 200（防滥用）；Skip 下限 0。</summary>
-        private static (int Skip, int Take) NormalizePaging(int skip, int take)
-        {
-            skip = Math.Max(0, skip);
-            take = Math.Clamp(take <= 0 ? DefaultTake : take, 1, MaxTake);
-            return (skip, take);
-        }
-
-        /// <summary>将 <see cref="AuditLogEntity"/> 投影为 <see cref="AuditLogListItemDto"/>（不含 ArgumentsJson）。</summary>
-        private static AuditLogListItemDto MapToDto(AuditLogEntity entity)
-        {
-            return new AuditLogListItemDto
-            {
-                Id = entity.Id,
-                UserName = entity.UserName,
-                UserId = entity.UserId,
-                ServiceName = entity.ServiceName,
-                MethodName = entity.MethodName,
-                ExecutionTime = entity.ExecutionTime,
-                DurationMs = entity.DurationMs,
-                Success = entity.Success,
-                Exception = entity.Exception,
-                CorrelationId = entity.CorrelationId,
-                CreateTime = entity.CreateTime
-            };
         }
     }
 }

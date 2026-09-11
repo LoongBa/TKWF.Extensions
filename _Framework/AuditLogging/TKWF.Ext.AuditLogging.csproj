@@ -15,7 +15,9 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>TKWF.Ext.AuditLogging</PackageId>
-    <Description>TKWF 扩展：审计日志数据库存储与基础查询</Description>
+    <Description>TKWF 扩展：审计日志数据库存储与基础查询 + 管理 API</Description>
+    <!-- V0.4.0 管理 API（对齐 Permissions G2）：CTRL003（扩展无 TUser 本地推断失败）+ CTRL006（建议 internal）均为预期诊断 -->
+    <NoWarn>$(NoWarn);TKWF_SG1b_CTRL003;TKWF_SG1b_CTRL006</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

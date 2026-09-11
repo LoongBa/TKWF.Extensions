@@ -18,7 +18,7 @@
 | **Identity**                 | V0.3.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.3.0）| `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
 | **Account**                  | V0.3.0          | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）+ **登录历史与异常检测（V0.3.0，消费 SecurityLog 查询）** | `Account/v0.3.0`        | [README](./_Framework/Account/README.md)       | [指南](./docs/Account/账户管理扩展-使用指南.md) |
 | **Navigation**               | V0.1.0          | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.0`     | [README](./_Framework/Navigation/README.md) | [指南](./docs/Navigation/导航扩展-使用指南.md)  |
-| **AuditLogging**             | V0.3.0          | 审计日志 FreeSql 存储 + SG1 实体 + 查询 API + **统计聚合 + 保留天数清理（V0.3.0）** | `AuditLogging/v0.3.0`   | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
+| **AuditLogging**             | V0.4.0          | 审计日志 FreeSql 存储 + SG1 实体 + 查询 API + 统计聚合与清理（V0.3.0）+ **管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD + 5 REST 端点）** | `AuditLogging/v0.3.0`   | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
 | **Settings**                 | V0.2.0          | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.1.0`       | [README](./_Framework/Settings/README.md)      | [指南](./docs/Settings/设置管理扩展-使用指南.md) |
 | **BlobStoring**              | V0.2.0          | 二进制大对象本地文件系统存储 + FreeSql 记录 + **FileStream 流式下载（V0.2.0）** | `BlobStoring/v0.2.0`    | [README](./_Framework/BlobStoring/README.md)   | [指南](./docs/BlobStoring/二进制存储扩展-使用指南.md) |
 | **Emailing**                 | V0.2.0          | SMTP/MailKit 邮件发送 + FreeSql 发送记录 + **指数退避重试（V0.2.0）**；契约抽取至 `Emailing.Abstractions`（ADR48 D7）| `Emailing/v0.1.1` | [README](./_Framework/Emailing/README.md)      | [指南](./docs/Emailing/邮件发送扩展-使用指南.md) |
@@ -43,7 +43,7 @@
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **1231 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 委派/加签/抄送/超时 + FeatureManagement v0.3.0 复杂 ValueType + 外部总线适配 + FileManagement v0.2.0 版本化/配额 + Calendar 日历排程 + OrganizationUnit 组织单元 + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 AC 自动机/Options + HealthCheck v0.2.0 DB 探针后）
+> 全量 **1301 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 + FeatureManagement v0.3.0 + FileManagement v0.2.0 + Calendar + OrganizationUnit + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 + HealthCheck v0.2.0 + Notifications v0.2.0 多通道路由 + AuditLogging v0.3.0/v0.4.0 统计聚合与管理 API 后）
 
 ---
 

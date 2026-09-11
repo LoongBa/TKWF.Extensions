@@ -53,6 +53,24 @@ public class PermissionCheckerTests
             }
             return Task.FromResult(granted);
         }
+
+        public Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            var keys = providerKeys == null ? null : new HashSet<string>(providerKeys);
+            var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            foreach (var kv in _grants)
+            {
+                if (!kv.Value) continue;
+                var parts = kv.Key.Split('|');
+                var (perm, prov, key) = (parts[0], parts[1], parts[2]);
+                if (prov != providerName) continue;
+                if (keys != null && !keys.Contains(key)) continue;
+                if (!result.TryGetValue(key, out var set)) { set = new HashSet<string>(StringComparer.Ordinal); result[key] = set; }
+                set.Add(perm);
+            }
+            return Task.FromResult(result);
+        }
     }
 
     /// <summary>构造含权限定义的 checker（默认仓库含 DefinedPermission）。</summary>
@@ -197,6 +215,13 @@ public class PermissionCheckerTests
         {
             BatchQueryCount++;
             return _inner.GetGrantedPermissionNamesAsync(providerName, providerKeys);
+        }
+
+        public Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            BatchQueryCount++;
+            return _inner.GetGrantedPermissionsByProviderKeyAsync(providerName, providerKeys);
         }
     }
 

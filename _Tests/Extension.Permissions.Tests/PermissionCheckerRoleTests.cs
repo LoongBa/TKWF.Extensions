@@ -52,6 +52,24 @@ public class PermissionCheckerRoleTests
             }
             return Task.FromResult(granted);
         }
+
+        public Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            var keys = providerKeys == null ? null : new HashSet<string>(providerKeys);
+            var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            foreach (var kv in _grants)
+            {
+                if (!kv.Value) continue;
+                var parts = kv.Key.Split('|');
+                var (perm, prov, key) = (parts[0], parts[1], parts[2]);
+                if (prov != providerName) continue;
+                if (keys != null && !keys.Contains(key)) continue;
+                if (!result.TryGetValue(key, out var set)) { set = new HashSet<string>(StringComparer.Ordinal); result[key] = set; }
+                set.Add(perm);
+            }
+            return Task.FromResult(result);
+        }
     }
 
     /// <summary>创建带指定角色的 ambient 用户上下文。</summary>

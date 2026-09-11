@@ -64,6 +64,31 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
         return new HashSet<string>(entities.Select(e => e.PermissionName), StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// 按 provider + 多键批量读取已授予权限名集合，<b>按 ProviderKey 分组归因</b>（V0.9.0，多用户批量）。
+    /// <para>Oracle P1-2 裁决：对应 <see cref="GetGrantedNamesByProviderAsync"/> 的扁平并集缺口——
+    /// 多用户权限检查需按用户归因（GetGrantedNamesByProviderAsync 投影丢弃 ProviderKey）。
+    /// 实现：同查询 GroupBy ProviderKey 保留归因——3N 查询 → N+2（1 分组用户级 + N 角色解析 + 1 分组角色级）。</para>
+    /// </summary>
+    public async Task<Dictionary<string, HashSet<string>>> GetGrantedNamesByProviderKeyAsync(
+        string providerName, IEnumerable<string>? providerKeys, CancellationToken ct = default)
+    {
+        var query = dac.Query.Where(g => g.ProviderName == providerName && g.IsGranted);
+        if (providerKeys != null)
+        {
+            var keys = providerKeys as IReadOnlyCollection<string> ?? providerKeys.ToList();
+            if (keys.Count == 0) return new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            query = query.Where(g => keys.Contains(g.ProviderKey));
+        }
+        var entities = await dac.ToListAsync(query, ct);
+        return entities
+            .GroupBy(e => e.ProviderKey)
+            .ToDictionary(
+                g => g.Key,
+                g => new HashSet<string>(g.Select(e => e.PermissionName), StringComparer.Ordinal),
+                StringComparer.Ordinal);
+    }
+
     /// <summary>查询指定权限名 + provider 的授予状态。</summary>
     [GenerateControllerMethod]
     public async Task<PermissionGrantEntityDto?> GetGrantAsync(

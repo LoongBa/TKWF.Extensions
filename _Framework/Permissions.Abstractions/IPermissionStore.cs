@@ -21,8 +21,17 @@ namespace TKWF.Ext.Permissions.Abstractions
 
         /// <summary>按 provider 批量读取已授予权限名集合（<c>IsGranted == true</c>）——N+1 优化（V0.8.1）。
         /// <para><paramref name="providerKeys"/> 为空时返回该 provider 下全部已授予；否则限定指定键。
-        /// 返回集合语义：仅含已授予的权限名（未授予/未设置 = 不在集合），调用方以此做内存 fail-closed 判定。</para></summary>
+        /// 返回集合语义：仅含已授予的权限名（未授予/未设置 = 不在集合），调用方以此做内存 fail-closed 判定。</para>
+        /// <para>⚠️ 多 providerKeys 时返回<b>扁平并集</b>（无按键归因）——多用户归因用
+        /// <see cref="GetGrantedPermissionsByProviderKeyAsync"/>（V0.9.0）。</para></summary>
         Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+            string providerName, IEnumerable<string>? providerKeys = null);
+
+        /// <summary>按 provider + 多键批量读取已授予权限名集合，<b>按 providerKey 分组归因</b>（V0.9.0，多用户批量）。
+        /// <para>返回 <c>providerKey → 该键已授予权限名集合</c>——支持多用户权限检查按用户归因
+        /// （对应 <see cref="GetGrantedPermissionNamesAsync"/> 的扁平并集缺口）。
+        /// providerKeys 为空 = 全部；每键仅含已授予（未授予/未设置 = 该键不在字典或集合为空）。</para></summary>
+        Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
             string providerName, IEnumerable<string>? providerKeys = null);
     }
 }

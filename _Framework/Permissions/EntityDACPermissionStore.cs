@@ -41,5 +41,14 @@ namespace TKWF.Ext.Permissions
                 providerName, providerKeys, CancellationToken.None);
             return names;
         }
+
+        /// <summary>按 provider + 多键批量读取已授予权限名集合，按 providerKey 分组归因（V0.9.0）——委托 DataService。</summary>
+        public async Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+        {
+            var map = await _dataService.GetGrantedNamesByProviderKeyAsync(
+                providerName, providerKeys, CancellationToken.None);
+            return map;
+        }
     }
 }

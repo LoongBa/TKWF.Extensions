@@ -71,6 +71,8 @@ namespace TKWF.Ext.Permissions
             // V0.6.0：角色提供者——TryAddScoped（消费方可自定义覆盖，如从角色服务/外部身份提供商解析）
             services.TryAddScoped<IRoleProvider<TUserInfo>, DefaultRoleProvider<TUserInfo>>();
             services.TryAddScoped<IPermissionChecker, PermissionChecker<TUserInfo>>();
+            // V0.9.0：多用户批量检查器——与 IPermissionChecker 同实例（PermissionChecker<TUserInfo> 实现两者）
+            services.TryAddScoped<IPermissionBatchChecker, PermissionChecker<TUserInfo>>();
 
             // V0.3.0：权限管理 Service——TryAddScoped（消费方可自定义覆盖）
             services.TryAddScoped<PermissionGrantEntityDataService>();
@@ -156,7 +158,7 @@ namespace TKWF.Ext.Permissions
     /// fail-closed：用户未授权 + 角色未授权 → 拒绝。</para>
     /// <para>providers 约定：用户权限 <c>("User", UserIdString)</c>；角色权限 <c>("Role", roleName)</c>。</para>
     /// </summary>
-    internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker
+    internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermissionBatchChecker
         where TUserInfo : class, IUserInfo, new()
     {
         private readonly IPermissionDefinitionRepository _repository;
@@ -217,6 +219,51 @@ namespace TKWF.Ext.Permissions
             return EvaluatePermission(permissionName, userGranted, roleGranted);
         }
 
+        /// <summary>
+        /// 多用户批量检查（V0.9.0，IPermissionBatchChecker）——判定每个 userId 对指定权限的授予状态（单权限 × 多用户）。
+        /// <para>Oracle P1-2/P1-3 定稿：
+        /// ① 分组 API <c>GetGrantedPermissionsByProviderKeyAsync</c>（1 用户级 + 1 角色级查询——N+2，非逐用户 3N）；
+        /// ② 角色解析直接复用 <c>_roleProvider</c>（IRoleProvider&lt;TUserInfo&gt;）——IdentityRoleProvider 已按
+        /// UserIdString 解析 + Scoped 缓存（new TUserInfo { UserIdString = uid.ToString() } 载体——无需新 IRoleResolver）；
+        /// ③ 逐用户复用 <c>EvaluatePermission</c> 安全逻辑（Admin.All + fail-closed + 用户→角色回退）——单一真相源。</para>
+        /// <para>⚠️ 不得读写 <c>_userGrantedCache</c>/<c>_roleGrantedCache</c>（当前用户 Scoped 缓存）——独立批量查询。</para>
+        /// </summary>
+        public async Task<Dictionary<long, bool>> IsGrantedAsync(IReadOnlyList<long> userIds, string permissionName)
+        {
+            var result = new Dictionary<long, bool>();
+            if (userIds.Count == 0 || string.IsNullOrWhiteSpace(permissionName))
+                return result;
+
+            var userIdStrings = userIds.Select(id => id.ToString()).ToList();
+
+            // 1. 用户级授权集分组批量查询（1 次查询，按 userId 归因）
+            var userGrantedMap = await _store.GetGrantedPermissionsByProviderKeyAsync("User", userIdStrings).ConfigureAwait(false);
+
+            // 2. 角色解析（N 次——IdentityRoleProvider Scoped 缓存去重）+ 角色级授权集分组批量查询（1 次）
+            var allRoles = new HashSet<string>(StringComparer.Ordinal);
+            var userRolesMap = new Dictionary<long, List<string>>();
+            foreach (var uid in userIds)
+            {
+                var userInfo = new TUserInfo { UserIdString = uid.ToString() };
+                var roles = (await _roleProvider.GetRolesAsync(userInfo).ConfigureAwait(false)).ToList();
+                userRolesMap[uid] = roles;
+                foreach (var r in roles) allRoles.Add(r);
+            }
+            var roleGrantedMap = await _store.GetGrantedPermissionsByProviderKeyAsync("Role", allRoles).ConfigureAwait(false);
+
+            // 3. 每用户评估（逐字复用 EvaluatePermission——Admin.All + fail-closed + 用户→角色回退）
+            foreach (var uid in userIds)
+            {
+                var userGranted = userGrantedMap.TryGetValue(uid.ToString(), out var u)
+                    ? u : new HashSet<string>(StringComparer.Ordinal);
+                var roleGranted = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var role in userRolesMap[uid])
+                    if (roleGrantedMap.TryGetValue(role, out var r)) roleGranted.UnionWith(r);
+                result[uid] = EvaluatePermission(permissionName, userGranted, roleGranted);
+            }
+            return result;
+        }
+
         /// <summary>内存判定：Admin.All 系统权限（用户或角色）→ 放行；未定义 → 拒绝；用户级授予优先；回退角色级。</summary>
         private bool EvaluatePermission(string permissionName, HashSet<string> userGranted, HashSet<string> roleGranted)
         {
@@ -265,5 +312,9 @@ namespace TKWF.Ext.Permissions
         public Task<HashSet<string>> GetGrantedPermissionNamesAsync(
             string providerName, IEnumerable<string>? providerKeys = null)
             => Task.FromResult(new HashSet<string>(StringComparer.Ordinal));   // 恒拒绝——空授权集
+
+        public Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
+            string providerName, IEnumerable<string>? providerKeys = null)
+            => Task.FromResult(new Dictionary<string, HashSet<string>>(StringComparer.Ordinal));   // 恒拒绝——空映射
     }
 }

@@ -1,8 +1,8 @@
 # TKWF.Ext.Notifications 通知中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 | **框架**: .NET 10
 
-**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、SG1 声明式实体
+**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SG1 声明式实体
 
 ---
 
@@ -80,6 +80,7 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 | **`INotificationDefinitionManager`** | 通知定义注册/校验（Singleton） | `NotificationDefinitionManager` |
 | **`INotificationDefinitionProvider`** | 通知定义贡献者（`[NotificationDefinitionProvider]` 扫描） | 消费方实现 |
 | **`INotificationNotifier`** | 通道抽象（多实例收集 TryAddEnumerable：Inbox + Email） | `InboxNotifier` / `EmailNotifier` |
+| **`INotificationPreferenceManager`** | 用户通道偏好管理（Get/Set/Clear + 批量预取，V0.3.0） | `NotificationPreferenceStore` |
 | **`IUserEmailProvider`** | 用户邮箱提供者（Email 通道收件地址，消费方实现） | 消费方实现（扩展不注册） |
 | **`NotificationsOptions`** | 配置（`TKWF:Notifications` 节） | 内置 |
 
@@ -126,12 +127,25 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 
 > **已知限制（M4）**：唯一索引含 NULL 列（EntityTypeName/EntityId），标准数据库（SQL Server/PostgreSQL/SQLite）唯一约束中 NULL 视为互异——定义级订阅（两列均为 NULL）的并发幂等**仅靠应用层 check-then-insert 保证**，DB 约束不覆盖。并发重复订阅极窄竞态下可能产生重复行。v0.2.0 修复（过滤索引/哨兵列）；当前单线程/常规并发场景由应用层幂等 + 事务保证。
 
+### NotificationPreference → `NotificationPreference` 表（V0.3.0 偏好）
+
+| 列名 | 类型 | 说明 |
+|------|------|------|
+| Id | BIGINT (PK, Identity) | 主键 |
+| UserId | BIGINT | 偏好用户 |
+| NotificationName | NVARCHAR(128) | 偏好通知名（对齐 Notification.Name） |
+| ChannelsJson | NVARCHAR(256)? | 通道列表 JSON（如 `["Email"]`；null = 回退定义级；`[]` = 不接收） |
+| CreateTime | DATETIME | 创建时间 |
+| UpdateTime | DATETIME | 更新时间 |
+
+索引：**`UX_NotificationPreference_User_Notification`（唯一：UserId + NotificationName）**——每用户每通知至多一条偏好
+
 ## 五、依赖关系
 
 ```
 TKWF.Ext.Notifications
 ├── 主框架 Domain + SG1（实体）
-├── TKWF.Ext.Permissions.Abstractions（发布方权限门控 IPermissionChecker，ADR48 D7）
+├── TKWF.Ext.Permissions.Abstractions（发布方权限门控 IPermissionChecker + 逐用户门控 IPermissionBatchChecker V0.3.0，ADR48 D7）
 ├── TKWF.Ext.Emailing.Abstractions（Email 通道契约 IEmailSender/EmailMessage，ADR48 D7——不引 Emailing 实现）
 └── 事件总线（[DomainEventHandler] + ILocalEventHandler）
 ```
@@ -153,6 +167,15 @@ TKWF.Ext.Notifications
   ——Emailing 扩展未启用或消费方未实现邮箱提供者时构造不失败、投递 LogWarning 跳过；发送异常 catch 不重抛阻塞发布流程
 - **消费方接线**：注册 `IUserEmailProvider`（从用户存储查邮箱）+ `UseChannels("Inbox","Email")` 声明；Email 通道失败不影响发布事务（C4）与 inbox 写入
 
+### V0.3.0（已实施：用户偏好路由 + 逐用户权限门控）
+- **用户偏好路由**：新增 `NotificationPreference` 独立偏好表（UserId+NotificationName 唯一 `UX_NotificationPreference_User_Notification`；ChannelsJson 存通道列表 JSON）——用户通道偏好**覆盖定义级 UseChannels**（无偏好回退定义级零迁移；空列表 `[]` = 显式不接收该通知）
+- **`INotificationPreferenceManager`**（Scoped）：`GetChannelsAsync`/`SetAsync`/`ClearAsync` + **`GetChannelsBatchAsync` 批量预取**（Oracle P2-1：收件人解析后、事务前一次预取，避免事务内 N 次往返）；`NotificationPreferenceStore` 经 `NotificationPreferenceEntityDataService`（SG1 DataService）委托持久化（红线合规）
+- **Publisher 改造**：发布流程 收件人解析 → **逐用户权限门控（V0.3.0）** → **偏好批量预取覆盖** → 事务写入；最终通道列表 = 有偏好用偏好（空列表不投递）、无偏好回退定义级
+- **逐用户权限门控（委托 Permissions v0.9.0 `IPermissionBatchChecker`）**：定义 `RequirePermission(...)` 时仅向有权限收件人投递（Oracle P1-4 定稿——不直连 IPermissionStore、不定义角色解析器、不重实现角色回退，Admin.All/fail-closed/用户→角色回退归 Permissions `PermissionChecker` 单一真相源）；`IPermissionBatchChecker` 未注册 → LogWarning 跳过门控（降级仅发布方 C1，Oracle P2-2）；顺序 = 先权限过滤 → 再偏好覆盖（Oracle P1-3）
+- **顺序语义**：偏好 `["Email"]`（排除 Inbox）→ 订阅者不在收件箱出现（用户主动降噪，Oracle P2-2 显式化）
+- **前置依赖**：Permissions v0.9.0 `IPermissionBatchChecker`（Oracle P1-1 裁定现扁平并集 API 无法按用户归因，须 Permissions 补齐多用户 API）
+- **测试**：61/61（v0.2.0 48 + v0.3.0 +13：偏好 9 + 权限门控 4）
+
 ### 远期 / 评估
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）
 - 通知模板渲染（复用 Emailing V0.2.0 TextTemplates / PrintTemplates）
@@ -160,4 +183,4 @@ TKWF.Ext.Notifications
 - 短信通道
 - 批量派发优化（RecipientBatchSize 落地）
 
-**文档信息**: V0.2.0 | 2026-09-11 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md（主框架私有）
+**文档信息**: V0.3.0 | 2026-09-12 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md、ADR-Notifications-v0.3.0-用户偏好路由与权限门控.md（主框架私有）

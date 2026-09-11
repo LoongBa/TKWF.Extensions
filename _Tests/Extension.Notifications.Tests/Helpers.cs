@@ -36,6 +36,7 @@ internal static class NotificationTestHost
         fsql.CodeFirst.SyncStructure<NotificationEntity>();
         fsql.CodeFirst.SyncStructure<UserNotificationEntity>();
         fsql.CodeFirst.SyncStructure<NotificationSubscriptionEntity>();
+        fsql.CodeFirst.SyncStructure<NotificationPreferenceEntity>();   // V0.3.0：偏好表
         // V0.2.0 VEntity：建真实视图（SQLite 方言，来自 UserNotificationView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync
         fsql.Ado.ExecuteNonQuery(
             @"CREATE VIEW IF NOT EXISTS ""vw_UserNotificationView"" AS
@@ -63,10 +64,12 @@ INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
         services.AddScoped<IEntityDAC<NotificationEntity>>(sp => new FreeSqlEntityDAC<NotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<UserNotificationEntity>>(sp => new FreeSqlEntityDAC<UserNotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<NotificationSubscriptionEntity>>(sp => new FreeSqlEntityDAC<NotificationSubscriptionEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<IEntityDAC<NotificationPreferenceEntity>>(sp => new FreeSqlEntityDAC<NotificationPreferenceEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.AddScoped<NotificationEntityDataService>();
         services.AddScoped<UserNotificationEntityDataService>();
         services.AddScoped<NotificationSubscriptionEntityDataService>();
+        services.AddScoped<NotificationPreferenceEntityDataService>();   // V0.3.0：偏好 DataService
         // V0.2.0 VEntity：IEntityReadOnlyDAC 只读契约 + 手写只读 DataService（模拟 SG 不生成 VEntity DataService，手动注册）
         services.AddScoped<IEntityReadOnlyDAC<UserNotificationView>>(sp => new FreeSqlEntityDAC<UserNotificationView>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<UserNotificationViewDataService>();
@@ -141,6 +144,17 @@ internal sealed class FakePermissionChecker : IPermissionChecker
 
     public Task<Dictionary<string, bool>> IsGrantedAsync(params string[] permissionNames)
         => Task.FromResult(permissionNames.ToDictionary(n => n, n => _grants.GetValueOrDefault(n, false)));
+}
+
+/// <summary>测试批量权限 mock（V0.3.0 逐用户权限门控）——按预置"用户 ID 集合"返回授予结果（未列入默认拒绝）。</summary>
+internal sealed class FakePermissionBatchChecker : IPermissionBatchChecker
+{
+    private readonly HashSet<long> _grantedUserIds;
+
+    public FakePermissionBatchChecker(params long[] grantedUserIds) => _grantedUserIds = new HashSet<long>(grantedUserIds);
+
+    public Task<Dictionary<long, bool>> IsGrantedAsync(IReadOnlyList<long> userIds, string permissionName)
+        => Task.FromResult(userIds.Distinct().ToDictionary(id => id, id => _grantedUserIds.Contains(id)));
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>

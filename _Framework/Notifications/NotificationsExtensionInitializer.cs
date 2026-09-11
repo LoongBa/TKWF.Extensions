@@ -51,17 +51,28 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         services.TryAddSingleton<INotificationDefinitionManager>(sp => sp.GetRequiredService<NotificationDefinitionManager>());
 
         // 数据访问红线整改（2026-09-07）：委托 SG1 DataService，禁裸 IFreeSql
+        // 2026-09-12 修正（Oracle 裁决）：扩展 DataService 必须显式注册——SG 自动注册不覆盖扩展 DataService：
+        //   ① SG1a IsCandidateClass 要求显式 public/internal 修饰符；生成的 DataService 为隐式 internal，不被采集 → 无元数据；
+        //   ② 消费方 RegisterGeneratedServices 仅消费自身 ProjectMetaContext，不聚合扩展上下文；
+        //   ③ 即便被发现，AddService 注册的是 throw-factory（供 User.Use<T>()），会击穿 Store 构造注入。
+        //（VEntity 另因 xCodeGen 跳过其 DataService 模板，同样需手动注册。）
+        services.TryAddScoped<NotificationEntityDataService>();
+        services.TryAddScoped<UserNotificationEntityDataService>();
+        services.TryAddScoped<NotificationSubscriptionEntityDataService>();
+        services.TryAddScoped<NotificationPreferenceEntityDataService>();   // V0.3.0：偏好表
+        services.TryAddScoped<UserNotificationViewDataService>();            // V0.2.0 VEntity：手写只读 DataService
 
         // 收件箱存储（Scoped）
         services.TryAddScoped<NotificationStore>();
         services.TryAddScoped<INotificationStore>(sp => sp.GetRequiredService<NotificationStore>());
 
-        // V0.2.0 VEntity：UserNotificationViewDataService 手写（xCodeGen 跳过 VEntity DataService 模板→不自动注册），手动 TryAddScoped
-        services.TryAddScoped<UserNotificationViewDataService>();
-
         // 订阅管理（Scoped）
         services.TryAddScoped<NotificationSubscriptionStore>();
         services.TryAddScoped<INotificationSubscriptionManager>(sp => sp.GetRequiredService<NotificationSubscriptionStore>());
+
+        // V0.3.0：通知偏好（Scoped）——用户通道偏好覆盖定义级 UseChannels
+        services.TryAddScoped<NotificationPreferenceStore>();
+        services.TryAddScoped<INotificationPreferenceManager>(sp => sp.GetRequiredService<NotificationPreferenceStore>());
 
         // 通道（Scoped 多实例收集 v0.2.0：TryAddEnumerable——InboxNotifier owns UserNotification 写入 C5；
         // EmailNotifier 外部通道 best-effort M1，延迟解析 IEmailSender/IUserEmailProvider）

@@ -59,6 +59,10 @@
       <!-- 优先部署根环境变量（去软链、真实复制），fallback 本仓库 build\refs -->
       <_RefsDir Condition="'$(TKWFDeployPath)' != ''">$([System.IO.Path]::GetFullPath('$(TKWFDeployPath)'))\build\refs\</_RefsDir>
       <_RefsDir Condition="'$(_RefsDir)' == ''">$(MSBuildThisFileDirectory)build\refs\</_RefsDir>
+      <!-- BUG004 (v4.10.17): 源码树 refs 双写——消费端（DMP-Lite 等）经 $(TKWExtRoot)build\refs 引用扩展 DLL，
+           仅推部署 refs 时本仓库 refs 陈旧（CS0436 复现根因之一）；TKWFDeployPath 设置时同时推本仓库 refs。
+           未设置环境变量时 _RefsDir 已指向本仓库 refs，避免重复复制。 -->
+      <_RefsDirSource Condition="'$(TKWFDeployPath)' != ''">$(MSBuildThisFileDirectory)build\refs\</_RefsDirSource>
     </PropertyGroup>
     <MakeDir Directories="$(_RefsDir)" />
     <Copy SourceFiles="$(TargetPath)"
@@ -68,5 +72,15 @@
           DestinationFolder="$(_RefsDir)"
           SkipUnchangedFiles="true"
           Condition="Exists('$(TargetDir)$(TargetName).xml')" />
+    <!-- 双写：本仓库源码树 refs（消费端引用点） -->
+    <MakeDir Directories="$(_RefsDirSource)" Condition="'$(_RefsDirSource)' != ''" />
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="$(_RefsDirSource)"
+          SkipUnchangedFiles="true"
+          Condition="'$(_RefsDirSource)' != ''" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).xml"
+          DestinationFolder="$(_RefsDirSource)"
+          SkipUnchangedFiles="true"
+          Condition="'$(_RefsDirSource)' != '' And Exists('$(TargetDir)$(TargetName).xml')" />
   </Target>
 </Project>

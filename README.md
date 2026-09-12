@@ -12,7 +12,7 @@
 
 | 扩展                         | 版本            | 说明                                                                     | Tag                     | README                                   | 指南                                     |
 | ---------------------------- | --------------- | ------------------------------------------------------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------------- |
-| **Permissions**              | V0.7.0 + V0.8.0 + V0.9.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）/ **多用户批量权限检查（V0.9.0：`IPermissionBatchChecker`——单权限×多用户，按 ProviderKey 分组归因）** | `v0.9.0`                | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
+| **Permissions**              | V0.7.0 + V0.8.0 + V0.9.0 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）/ **多用户批量权限检查（V0.9.0：`IPermissionBatchChecker`——单权限×多用户，按 ProviderKey 分组归因）** | `Permissions/v0.9.0`    | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
 | **Permissions.Abstractions** | V0.1.0          | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       | —                                        | —（并入 Permissions）                    |
 | **Permissions.Validation**   | V0.8.0          | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）                      | —                       | —                                        | —（并入 Permissions）                    |
 | **Identity**                 | V0.3.0          | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.3.0）| `Identity/v0.1.0`       | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |

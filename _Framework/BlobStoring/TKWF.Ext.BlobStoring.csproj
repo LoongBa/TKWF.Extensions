@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>BlobStoring/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.BlobStoring</PackageId>
     <Description>TKWF 扩展：二进制大对象存储（本地文件系统、FreeSql 记录持久化）</Description>
   </PropertyGroup>

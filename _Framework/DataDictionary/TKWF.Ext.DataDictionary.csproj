@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>DataDictionary/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.DataDictionary</PackageId>
     <Description>TKWF 扩展：数据字典集中管理（字典定义 + 字典项 + 按编码查询）</Description>
   </PropertyGroup>

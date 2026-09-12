@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Emailing.Abstractions/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Emailing.Abstractions</PackageId>
     <Description>TKWF 扩展抽象：邮件发送契约（IEmailSender / EmailMessage）——依赖倒置（ADR48 D7），替代"扩展引扩展"耦合</Description>
   </PropertyGroup>

@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Dashboard/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Dashboard</PackageId>
     <Description>TKWF 扩展：仪表盘数据服务（Metrics 展示层——JSON 描述符定义 + Widget 数据查询 + 消费 TKWF.Utility.Metrics 复合指标；不引入图表库，UI 渲染归消费方）</Description>
   </PropertyGroup>

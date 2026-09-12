@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>RateLimiting/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.RateLimiting</PackageId>
     <Description>TKWF 扩展：Web 层限流接线（ASP.NET Core AddRateLimiter 中间件——固定/滑动窗口/令牌桶 + IP/用户分区 + 429/Retry-After + TKWF:RateLimiting 配置节；与 Domain 层 [RateLimit] AOP 双层互补；零第三方依赖）</Description>
   </PropertyGroup>

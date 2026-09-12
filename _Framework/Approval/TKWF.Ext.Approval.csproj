@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Approval/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Approval</PackageId>
     <Description>TKWF 扩展：轻量审批引擎（三实体模型 + 内置自建状态机 + 审批任务 + 完成事件回调 + 查询门面；不依赖外部工作流引擎）</Description>
   </PropertyGroup>

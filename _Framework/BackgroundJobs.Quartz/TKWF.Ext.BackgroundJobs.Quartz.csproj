@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>BackgroundJobs.Quartz/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.BackgroundJobs.Quartz</PackageId>
     <Description>TKWF 扩展：Quartz AdoJobStore 一键封装（12 表自动建表 + 集群配置，配置级封装不碰 SQL）</Description>
   </PropertyGroup>

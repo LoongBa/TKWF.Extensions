@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Tagging/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Tagging</PackageId>
     <Description>TKWF 扩展：标签存储扩展（标签算法来自 TKWF.Utility.Tags，ADR52；规则/命中持久化 + 聚合分析 V0.3.0）</Description>
   </PropertyGroup>

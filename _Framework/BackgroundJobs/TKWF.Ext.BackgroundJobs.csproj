@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>BackgroundJobs/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.BackgroundJobs</PackageId>
     <Description>TKWF 扩展：后台任务持久化增强——执行历史审计 + 业务结果追踪（IBackgroundJobExecutionListener 自动落库 + IJobResultRecorder 显式记录 + SQL 级聚合查询）</Description>
   </PropertyGroup>

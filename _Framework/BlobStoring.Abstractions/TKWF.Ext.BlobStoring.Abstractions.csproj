@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>BlobStoring.Abstractions/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.BlobStoring.Abstractions</PackageId>
     <Description>TKWF 扩展抽象：二进制存储契约（IBlobStorageService / BlobInfo / BlobStoringOptions）——依赖倒置（ADR50 L2 门控），替代"扩展引扩展"耦合</Description>
   </PropertyGroup>

@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Metrics/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Metrics</PackageId>
     <Description>TKWF 扩展：业务指标计算引擎（规格文档驱动的复合业务指标计算；核心计算在 TKWF.Utility.Metrics，本包为 TKWF 集成层）</Description>
   </PropertyGroup>

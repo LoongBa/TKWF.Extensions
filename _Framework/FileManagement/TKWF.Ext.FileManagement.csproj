@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>FileManagement/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.FileManagement</PackageId>
     <Description>TKWF 扩展：文件管理（目录树 FileFolder 物化路径 + 文件元数据 ManagedFile SHA256/去重 + 安全校验链上传/下载/删除/重命名/移动门面；物理存储委托 BlobStoring.Abstractions）</Description>
   </PropertyGroup>

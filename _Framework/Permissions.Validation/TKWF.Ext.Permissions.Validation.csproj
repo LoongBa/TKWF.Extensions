@@ -9,6 +9,7 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <NoWarn>$(NoWarn);RS2008</NoWarn>
     <IsPackable>false</IsPackable>
+    <MinVerTagPrefix>Permissions.Validation/v</MinVerTagPrefix>
   </PropertyGroup>
 
   <ItemGroup>

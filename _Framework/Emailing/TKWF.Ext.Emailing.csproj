@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Emailing/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Emailing</PackageId>
     <Description>TKWF 扩展：邮件发送与记录存储（SMTP/MailKit、FreeSql 持久化）</Description>
   </PropertyGroup>

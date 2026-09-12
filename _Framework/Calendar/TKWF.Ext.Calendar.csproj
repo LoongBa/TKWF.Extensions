@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Calendar/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Calendar</PackageId>
     <Description>TKWF 扩展：日历/排程（日历 + 事件 CRUD + UTC 时间范围查询 + 重复规则 DAILY/WEEKLY/MONTHLY/YEARLY occurrence 展开 + FreeSql 持久化）</Description>
   </PropertyGroup>

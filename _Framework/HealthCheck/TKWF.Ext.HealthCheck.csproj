@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>HealthCheck/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.HealthCheck</PackageId>
     <Description>TKWF 扩展：系统健康探测（接线型——net10 内置 HealthChecks 聚合 + /health 端点映射 + TKWF:HealthCheck 配置节；不内置探针，消费方经 AddCheck 注册）</Description>
   </PropertyGroup>

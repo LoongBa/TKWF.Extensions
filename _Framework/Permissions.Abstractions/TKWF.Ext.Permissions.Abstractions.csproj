@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Permissions.Abstractions/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Permissions.Abstractions</PackageId>
     <Description>TKWF 扩展抽象：权限管理契约（IPermissionChecker / IPermissionStore / RequirePermission）——依赖倒置，替代"扩展引扩展"耦合</Description>
   </PropertyGroup>

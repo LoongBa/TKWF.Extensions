@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Notifications/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Notifications</PackageId>
     <Description>TKWF 扩展：通知中心（站内通知收件箱 + 订阅 + 事件驱动通知 + 多通道抽象）</Description>
   </PropertyGroup>

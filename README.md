@@ -199,9 +199,16 @@ public class AuthService(IUserManager userManager)
 ## 版本管理
 
 ```
-MinVer：V{major}.{minor}.{patch}（git tag 命名空间前缀，如 Identity/v0.1.0）
+MinVer：各扩展包独立版本（git tag 命名空间前缀 + csproj MinVerTagPrefix 对齐，如 Identity/v0.3.2 → 0.3.2）
+公共内容（构建基建/无扩展归属）：无前缀 v tag（如 v0.8.2）
 
-扩展包独立版本：与主框架 _TKWF 版本完全独立
+机制：
+- 每个扩展 csproj 设 <MinVerTagPrefix>{扩展名}/v</MinVerTagPrefix>——MinVer 只匹配该扩展自己的前缀 tag，
+  各扩展版本完全独立（Permissions 0.9.x 与 Identity 0.3.x 互不影响）
+- 扩展 tag 命名：{扩展名}/v{major}.{minor}.{patch}（如 Permissions/v0.9.0、Notifications/v0.3.0）
+- 公共内容（Directory.Build.props/构建脚本等无扩展归属的变更）：打无前缀 v tag（既有 v0.1.0~v0.8.2）
+- 契约包（*.Abstractions）独立 tag：Account.Abstractions/v0.1.0 等，版本与主扩展独立演进
+- 与主框架 _TKWF 版本完全独立
 Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 ```
 

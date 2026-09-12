@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>FeatureManagement/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.FeatureManagement</PackageId>
     <Description>TKWF 扩展：功能管理（特性开关）——编译期 Contributor 定义声明 + 分层值（Global/Tenant/Role/User）+ IFeatureChecker 实现（接入框架 [RequireFeature] 过滤器）+ 管理 API</Description>
   </PropertyGroup>

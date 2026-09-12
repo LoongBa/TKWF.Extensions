@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>OrganizationUnit/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.OrganizationUnit</PackageId>
     <Description>TKWF 扩展：组织单元管理（树形部门/团队/分组定义维护 + 用户归属 + FreeSql 持久化）</Description>
   </PropertyGroup>

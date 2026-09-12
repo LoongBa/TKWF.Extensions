@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>PrintTemplates/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.PrintTemplates</PackageId>
     <Description>TKWF 扩展：打印模板引擎与版本化（Scriban 沙箱渲染 + Draft/Active/Archived 生命周期 + {Key}@{Version} 审计固定渲染）</Description>
   </PropertyGroup>

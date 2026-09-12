@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Account/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Account</PackageId>
     <Description>TKWF 扩展：账户管理与安全策略（账户锁定 + 密码重置流程默认实现）</Description>
   </PropertyGroup>

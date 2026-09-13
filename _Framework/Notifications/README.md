@@ -1,8 +1,8 @@
 # TKWF.Ext.Notifications 通知中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 | **框架**: .NET 10
 
-**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SG1 声明式实体
+**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SignalR 实时推送通道（v0.4.0 独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）、SG1 声明式实体
 
 ---
 
@@ -83,6 +83,8 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 | **`INotificationPreferenceManager`** | 用户通道偏好管理（Get/Set/Clear + 批量预取，V0.3.0） | `NotificationPreferenceStore` |
 | **`IUserEmailProvider`** | 用户邮箱提供者（Email 通道收件地址，消费方实现） | 消费方实现（扩展不注册） |
 | **`NotificationsOptions`** | 配置（`TKWF:Notifications` 节） | 内置 |
+| **`NotificationsSignalRExtensionInitializer<T>`** | SignalR 通道初始器（V0.4.0，独立包）——注册 SignalRNotifier + Options（`TKWF:Notifications:SignalR`） | SignalR 包 |
+| **`SignalRNotifier`** | SignalR 通道通知器（V0.4.0，独立包）——best-effort 经 `IHubContext<NotificationsHub>` 推送在线用户 | SignalR 包 |
 
 ## 四、实体表结构 (Entity Schema)
 
@@ -143,11 +145,15 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 ## 五、依赖关系
 
 ```
-TKWF.Ext.Notifications
+TKWF.Ext.Notifications（主包——纯 Domain，零 Web 依赖）
 ├── 主框架 Domain + SG1（实体）
 ├── TKWF.Ext.Permissions.Abstractions（发布方权限门控 IPermissionChecker + 逐用户门控 IPermissionBatchChecker V0.3.0，ADR48 D7）
 ├── TKWF.Ext.Emailing.Abstractions（Email 通道契约 IEmailSender/EmailMessage，ADR48 D7——不引 Emailing 实现）
 └── 事件总线（[DomainEventHandler] + ILocalEventHandler）
+
+TKWF.Ext.Notifications.SignalR（v0.4.0 独立包——按需引入，不引则零 Web 负担）
+├── TKWF.Ext.Notifications（通道契约 INotificationNotifier/NotificationDeliveryRequest）
+└── FrameworkReference Microsoft.AspNetCore.App（SignalR 类型共享框架——零 NuGet 包，对齐 HealthCheck 接线先例）
 ```
 
 ## 六、架构演进路线 (Architecture Roadmap)
@@ -176,11 +182,21 @@ TKWF.Ext.Notifications
 - **前置依赖**：Permissions v0.9.0 `IPermissionBatchChecker`（Oracle P1-1 裁定现扁平并集 API 无法按用户归因，须 Permissions 补齐多用户 API）
 - **测试**：61/61（v0.2.0 48 + v0.3.0 +13：偏好 9 + 权限门控 4）
 
+### V0.4.0（已实施：SignalR 实时推送通道——独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）
+- **独立包**：`TKWF.Ext.Notifications.SignalR`（对齐 BackgroundJobs.Quartz 拆包先例）——主包保持纯 Domain 零 Web 依赖；`FrameworkReference Microsoft.AspNetCore.App` 复用 SignalR 类型（**零 NuGet 包**，共享框架，对齐 HealthCheck 接线先例）
+- **组件**：`NotificationsHub`（空 Hub 类型锚，server-side push only）+ `SignalRNotifier`（`INotificationNotifier`，`Name="SignalR"`，best-effort M1：延迟可空解析 `IHubContext<NotificationsHub>`——未 `AddSignalR()` 构造不失败投递 LogWarning 跳过）+ `SignalRNotificationPayload`（精简 DTO）+ `NotificationsSignalROptions`（`TKWF:Notifications:SignalR` 节：MethodName/Path/AllowAnonymous）+ `NotificationsSignalRExtensionInitializer`（[TKWFExtension] + 消费方白名单 `[TKWFEnabledExtension]` 双声明）+ `SignalREndpointExtensions.MapTkfwNotificationsHub`
+- **通道接入零改动主包**：Publisher 按 `notifier.Name == channel` 匹配投递——`UseChannels("Inbox","SignalR")` 或用户偏好 `["SignalR"]` 触发；未引包/未白名单/未 AddSignalR → 自然跳过（既有「未注册通道跳过」语义）
+- **用户标识契约**：`Clients.User(userId.ToString(CultureInfo.InvariantCulture))`——默认对齐 `DefaultUserIdProvider`（`ClaimTypes.NameIdentifier` claim = userId InvariantCulture 字符串）；非标准 claim → 消费方自定义 `IUserIdProvider`
+- **端点认证**：`MapTkfwNotificationsHub` 默认 `RequireAuthorization`（通知敏感须登录；`AllowAnonymous` 可配）；SignalR token 认证（WebSocket query string `?access_token=`）由消费方 `AddJwtBearer` events 处理（扩展只追加授权元数据不实现认证，接线型边界）
+- **边界**：离线不补推（Inbox 是真相源，前端重连后拉取未读）；不做 backplane（多实例各推各的连接，消费方按需 Redis 背板）；不含前端 JS/TS 客户端（指南给示例）；不做非 Web 客户端推送
+- **测试**：12/12（SignalRNotifier 8 单测 + 3 集成——双通道路由/偏好覆盖×通道联动/SignalR-only + Options/MapHub 默认值）；全量 **1337/1337**（28 项目）回归绿；Oracle 评审 PASS WITH CONDITIONS（6 P2 全部落实）
+- **ADR**：`ADR-Notifications-SignalR通道-拆包与接线设计`（拆包/FrameworkReference/插入式实现/best-effort/用户标识/接线归消费方/端点认证/白名单位置/Options 绑定——Oracle 6 P2 修订纳入）
+
 ### 远期 / 评估
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）
 - 通知模板渲染（复用 Emailing V0.2.0 TextTemplates / PrintTemplates）
-- SignalR 实时推送通道（需 AspNetCore.SignalR 依赖评估）
 - 短信通道
 - 批量派发优化（RecipientBatchSize 落地）
+- 已读状态多端联动广播（`IHubContext<NotificationsHub>` 在已读 API 中复用推送已读事件——扩展点，非 v0.4.0 交付）
 
-**文档信息**: V0.3.0 | 2026-09-12 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md、ADR-Notifications-v0.3.0-用户偏好路由与权限门控.md（主框架私有）
+**文档信息**: V0.4.0 | 2026-09-13 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md、ADR-Notifications-v0.3.0-用户偏好路由与权限门控.md、v0.4.0-Notifications-SignalR通道-开发方案.md、ADR-Notifications-SignalR通道-拆包与接线设计.md（主框架私有）

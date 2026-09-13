@@ -64,6 +64,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Notifications.Tests" />
+    <!-- SignalR 子包集成测试（P2-4 Oracle：真实 Publisher + Fake IHubContext 跨包协作——需访问主包 internal DataService 建独立 Host） -->
+    <InternalsVisibleTo Include="TKWF.Ext.Notifications.SignalR.Tests" />
   </ItemGroup>
 
 </Project>

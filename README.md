@@ -28,7 +28,8 @@
 | **PrintTemplates**           | V0.1.0          | 打印模板引擎与版本化（Scriban 沙箱渲染 + Draft/Active/Archived 生命周期）| `PrintTemplates/v0.1.0` | [README](./_Framework/PrintTemplates/README.md) | [指南](./docs/PrintTemplates/打印模板扩展-使用指南.md) |
 | **Dashboard**                | V0.1.0          | 仪表盘数据服务（Metrics 展示层——JSON 描述符 + Widget 数据查询；不引入图表库）| `Dashboard/v0.1.0` | [README](./_Framework/Dashboard/README.md) | [指南](./docs/Dashboard/仪表盘扩展-使用指南.md) |
 | **DataPort**                 | V0.1.0          | 数据导入导出（三层架构——核心运行库+MiniExcel Provider+SG1 持久化；FileHash 幂等）| `DataPort/v0.1.0` | [README](./_Framework/DataPort/README.md) | [指南](./docs/DataPort/数据导入导出扩展-使用指南.md) |
-| **Notifications**            | V0.3.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.1.0）；+ 多通道路由 UseChannels/Email（V0.2.0）；+ **用户偏好路由 + 逐用户权限门控（V0.3.0，委托 Permissions v0.9.0 `IPermissionBatchChecker`）**| `Notifications/v0.3.0`  | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
+| **Notifications**            | V0.4.0          | 通知中心（站内通知收件箱+订阅+事件驱动通知+多通道抽象；第一个事件总线消费者）；`GetListAsync(name)` VEntity 跨表 JOIN（V0.1.0）；+ 多通道路由 UseChannels/Email（V0.2.0）；+ 用户偏好路由 + 逐用户权限门控（V0.3.0，委托 Permissions v0.9.0 `IPermissionBatchChecker`）；+ **SignalR 实时推送通道（V0.4.0，独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）**| `Notifications/v0.3.0`  | [README](./_Framework/Notifications/README.md) | [指南](./docs/Notifications/通知中心扩展-使用指南.md) |
+| **Notifications.SignalR**    | V0.1.0          | 通知中心 SignalR 实时推送通道（独立包——Hub 类型锚 + SignalRNotifier best-effort 推送 + 端点映射；`FrameworkReference` 共享框架零 NuGet；服务端非 UI，前端归消费方）| `Notifications.SignalR/v0.1.0` | —（并入 Notifications） | —（并入 Notifications 指南） |
 | **BackgroundJobs**          | V0.2.0          | 后台任务持久化增强（执行历史 `JobExecution` + 业务结果 `JobResult` 追踪 + **历史清理任务 V0.2.0（RetentionDays 启用）**）| `BackgroundJobs/v0.2.0` | [README](./_Framework/BackgroundJobs/README.md) | [指南](./docs/BackgroundJobs/后台任务持久化扩展-使用指南.md) |
 | **BackgroundJobs.Quartz**   | V0.1.0          | Quartz AdoJobStore 一键封装（`UseTkfwAdoJobStore` 12 表自动建表/集群配置）| `BackgroundJobs/v0.1.0` | [README](./_Framework/BackgroundJobs.Quartz/README.md) | —（并入 BackgroundJobs） |
 | **HealthCheck**             | V0.2.0          | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + **内置 DB 探针** `AddDatabaseHealthCheck<T>`（V0.2.0，`IEntityReadOnlyDAC` 红线合规路径））| — | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
@@ -43,7 +44,7 @@
 
 > 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
 
-> 全量 **1321 测试全绿**（27 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 + FeatureManagement v0.3.0 + FileManagement v0.2.0 + Calendar + OrganizationUnit + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 + HealthCheck v0.2.0 + Notifications v0.2.0 多通道路由 + AuditLogging v0.3.0/v0.4.0 统计聚合与管理 API + Permissions v0.9.0 多用户批量权限检查 + Notifications v0.3.0 偏好路由与权限门控 后）
+> 全量 **1337 测试全绿**（28 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 + FeatureManagement v0.3.0 + FileManagement v0.2.0 + Calendar + OrganizationUnit + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 + HealthCheck v0.2.0 + Notifications v0.2.0 多通道路由 + AuditLogging v0.3.0/v0.4.0 统计聚合与管理 API + Permissions v0.9.0 多用户批量权限检查 + Notifications v0.3.0 偏好路由与权限门控 + **Notifications v0.4.0 SignalR 通道（12 用例，独立包）** 后）
 
 ---
 
@@ -76,6 +77,8 @@ _TKWF.Extensions/
 │   ├── Emailing.Abstractions/       # 邮件发送契约（IEmailSender——ADR48 D7 依赖倒置）
 │   ├── DataDictionary/              # 数据字典集中管理
 │   ├── Tagging/                     # 标签存储扩展（算法已回归 TKW.Framework.Utility.Tags）
+│   ├── Notifications/              # 通知中心（发布/收件箱/订阅 + 多通道路由 + 偏好路由/权限门控）
+│   ├── Notifications.SignalR/      # 通知中心 SignalR 实时推送通道（v0.4.0 独立包，服务端非 UI）
 │   ├── BackgroundJobs/              # 后台任务持久化增强（执行历史 + 业务结果追踪）
 │   ├── BackgroundJobs.Quartz/       # Quartz AdoJobStore 一键封装
 │   ├── HealthCheck/                 # 系统健康探测（/health 端点接线 + 内置 DB 探针 v0.2.0）

@@ -60,6 +60,9 @@
   <Folder Name="/_Framework/Notifications/">
     <Project Path="_Framework/Notifications/TKWF.Ext.Notifications.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Notifications.SignalR/">
+    <Project Path="_Framework/Notifications.SignalR/TKWF.Ext.Notifications.SignalR.csproj" />
+  </Folder>
   <Folder Name="/_Framework/BackgroundJobs/">
     <Project Path="_Framework/BackgroundJobs/TKWF.Ext.BackgroundJobs.csproj" />
   </Folder>
@@ -141,6 +144,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Notifications.Tests/">
     <Project Path="_Tests/Extension.Notifications.Tests/TKWF.Ext.Notifications.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Notifications.SignalR.Tests/">
+    <Project Path="_Tests/Extension.Notifications.SignalR.Tests/TKWF.Ext.Notifications.SignalR.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.BackgroundJobs.Tests/">
     <Project Path="_Tests/Extension.BackgroundJobs.Tests/TKWF.Ext.BackgroundJobs.Tests.csproj" />

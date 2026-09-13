@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Notifications.SignalR</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Notifications.SignalR/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.Notifications.SignalR</PackageId>
+    <Description>TKWF 扩展：通知中心 SignalR 实时推送通道（服务端——Hub 类型锚 + SignalRNotifier best-effort 推送 + 端点映射；消费方按需引入，对齐 BackgroundJobs.Quartz 拆包先例）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 主包引用（通道契约 INotificationNotifier/NotificationDeliveryRequest 所在） -->
+    <ProjectReference Include="..\Notifications\TKWF.Ext.Notifications.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      SignalR 类型（Hub/IHubContext/IHubClients/IClientProxy）在 Microsoft.AspNetCore.App 共享框架——
+      FrameworkReference 零 NuGet 包/零传输依赖/版本随 .NET（对齐 HealthCheck v0.1.0 已验证接线先例）。
+    -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Notifications.SignalR.Tests" />
+  </ItemGroup>
+
+</Project>

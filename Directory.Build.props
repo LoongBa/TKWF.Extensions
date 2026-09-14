@@ -23,6 +23,8 @@
     <Copyright>Copyright © LoongBa.cn 2026</Copyright>
     <!-- 包页面显示仓库根 README（2026-09-15 补：此前 Pack 打包 README 但未声明 PackageReadmeFile→NuGet 警告"缺少自述文件"且不显示） -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- 许可证声明（2026-09-15 补：首 30 包发布时 nuget.org 提示 License missing——仓库 LICENSE 为 Apache-2.0） -->
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
 
   <!--

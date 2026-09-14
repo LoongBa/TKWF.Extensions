@@ -234,8 +234,13 @@ Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 ## 扩展规划
 
 - **P0（必须）**：**11/11 全部完成** ✅——Identity / Account / Navigation / AuditLogging / Settings / BlobStoring / Emailing / DataDictionary / Tagging / PrintTemplates + Permissions（V0.9.0）。注：Tagging 标签算法已按 ADR52 回归主框架 `TKW.Framework.Utility.Tags`，扩展保留存储层。
-- **P1（推荐）**：**13 扩展已实施**（后台任务/功能管理/通知+SignalR/限流/健康检查/安全日志/组织单元/文件管理/审批/导入导出/日历/仪表盘/打印模板）；剩余 15 项按需推进（OpenIddict/MFA/SSO/LDAP/后台服务/安全防护/媒体库/搜索/动态表单/动态字段/工作流/文本模板/报表/文档管理/ApiDocs）。
+- **P1（推荐）**：**17 扩展已实施**（后台任务/功能管理/通知+SignalR/限流/健康检查/安全日志/组织单元/文件管理/审批/导入导出/日历/仪表盘/打印模板/指标/标签存储/数据字典）；剩余 15 项按需推进（OpenIddict/MFA/SSO/LDAP/后台服务/安全防护/媒体库/搜索/动态表单/动态字段/工作流/文本模板/报表/文档管理/ApiDocs）。
 - **P2（待定）**：20 项全部按需启用（CMS/支付/订阅/聊天/GraphQL/可观测性/数据分析BI 等）。
+
+## NuGet 发布（2026-09-15）
+
+- **30 包已发布 nuget.org**（`TKWF.Ext.*`，v0.1.x–v0.9.x，依赖主框架稳定包 4.10.24）——经 GitHub Actions + **Trusted Publishing**（OIDC 免 API key：`NuGet/login@v1` + nuget.org policy + `NUGET_USER` secret）自动发布，CI run 34897984278 30/30 pushed 确认。
+- **后续版本发布**：各扩展打 `{扩展名}/v{x.y.z}` tag（patch bump 指向目标 commit）→ push tag 即触发 CI 全量重建 + 发布（--skip-duplicate 幂等）。
 
 > 设计思路与 ABP 兼容策略（最优设计为默认、兼容 ABP 为特殊需求、碰巧兼容只记录）+ 各扩展设计分类见 [`docs/扩展模块设计思路与ABP兼容策略.md`](./docs/扩展模块设计思路与ABP兼容策略.md)；状态跟踪见主框架私有 [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](https://github.com/LoongBa/TKW.Framework/blob/master/docs/03_扩展模块/总览和跟踪.md)。
 

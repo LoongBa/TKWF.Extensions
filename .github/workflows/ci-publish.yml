@@ -1,6 +1,6 @@
 name: CI & Publish (Extensions)
 
-# TKWF.Extensions 统一 CI + NuGet 发布（2026-09-15 独立构建模式）
+# TKWF.Extensions 统一 CI + NuGet 发布（2026-09-15 独立构建模式 + Trusted Publishing）
 #
 # 触发：
 # - push main / PR：构建 + 全量测试回归
@@ -11,6 +11,11 @@ name: CI & Publish (Extensions)
 # 扩展经 PackageReference 引用主框架 NuGet 包（TKWF.Domain 4.10.24 等，版本集中 Directory.Packages.props），
 # SG1 分析器经纯 Analyzer 包 TKWF.CodeGeneration（analyzers/dotnet/cs/，Roslyn 自动加载）。
 # → 无需检出主框架源码、无需 build/refs，CI 从 nuget.org 直接还原，完全独立。
+#
+# Trusted Publishing（2026-09-15）：
+# publish job 经 GitHub OIDC（id-token: write）→ NuGet/login@v1 换取短时效临时 API key（≈1h）→ push。
+# nuget.org 端校验 trusted publishing policy（repo=LoongBa/TKWF.Extensions + workflow=ci-publish.yml）；
+# 唯一 secret 为 NUGET_USER（nuget.org 用户名，公开信息，非 API key）。无需长期 API key secrets。
 
 on:
   push:
@@ -58,7 +63,7 @@ jobs:
           path: ${{ env.NUGET_OUTPUT }}/*.nupkg
           retention-days: 7
 
-publish:
+  publish:
     needs: build-test
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -72,8 +77,6 @@ publish:
           name: nupkgs
           path: ${{ env.NUGET_OUTPUT }}
 
-      # Trusted Publishing（2026-09-15 启用）：OIDC → nuget.org 校验 policy（repo=LoongBa/TKWF.Extensions,
-      # workflow=ci-publish.yml）→ 签发短时效临时 API key（≈1h）。无需长期 API key secrets。
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
         id: login

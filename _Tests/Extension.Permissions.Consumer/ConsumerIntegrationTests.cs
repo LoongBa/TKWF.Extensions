@@ -14,6 +14,7 @@ namespace TKWF.Ext.Permissions.Consumer.Tests;
 /// <para>注：完整 REST 控制器生成需消费方 ApiService.SG (SG#2) + Web 宿主管线，超出本仓库扩展测试范围
 /// （README §五.4 注明控制器由消费方 SG#2 生成）。本测试验证扩展侧在消费方编译期的接线契约。</para>
 /// </summary>
+[Collection("SharedProjectMetaContextInstance")]
 public class ConsumerIntegrationTests
 {
     // ─── 1. SG1b 编译期发现：扩展 DataService 控制器接口名在消费方记录 ───

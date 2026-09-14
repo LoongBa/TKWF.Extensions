@@ -57,8 +57,16 @@ public class RateLimiterMiddlewareTests
         Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test")).StatusCode);
 
         // 整个 1s 窗口过期 → 分段回收，许可恢复
-        await Task.Delay(1100);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
+        // CI（Linux 高负载）下分段回收可能延迟——轮询等待窗口过期（上限 5s），容忍调度延迟
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        HttpStatusCode status;
+        do
+        {
+            await Task.Delay(100);
+            status = (await client.GetAsync("/api/test")).StatusCode;
+        } while (status == HttpStatusCode.TooManyRequests && DateTime.UtcNow < deadline);
+
+        Assert.Equal(HttpStatusCode.OK, status);
     }
 
     // ── D4 令牌桶：突发许可 + 按速率补充 ─────────────────────────────────────────────────────

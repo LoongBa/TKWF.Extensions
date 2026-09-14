@@ -107,20 +107,18 @@ public class LocalStorageServiceTests : IDisposable
     [Fact]
     public async Task UploadAsync_ExceptionThrown_LogsWarningAndDoesNotThrow()
     {
-        // Arrange — 使用一个只读目录来触发异常
-        var readOnlyDir = Path.Combine(_tempDir, "readonly");
-        Directory.CreateDirectory(readOnlyDir);
-        var options = Options.Create(new BlobStoringOptions { RootPath = readOnlyDir });
+        // Arrange — 触发上传失败的跨平台路径：
+        //   原实现 "Z:\nonexistent\deeply\nested" 依赖 Windows 无效盘符（Linux 上是合法相对路径，目录被创建→不会失败）。
+        //   改用 RootPath 指向一个已存在文件——Directory.CreateDirectory 在任何平台都抛 IOException（路径占位冲突）。
+        var pathAsFile = Path.Combine(_tempDir, "not-a-directory");
+        await File.WriteAllTextAsync(pathAsFile, "occupied");
+        var invalidOptions = Options.Create(new BlobStoringOptions { RootPath = pathAsFile });
         var logger = new FakeLogger<LocalStorageService>();
-        var service = new LocalStorageService(options, logger);
-
-        // 在 macOS/Linux 上文件系统可能不会抛异常，所以用一个不存在的无效路径模拟
-        var invalidOptions = Options.Create(new BlobStoringOptions { RootPath = "Z:\\nonexistent\\deeply\\nested" });
-        var service2 = new LocalStorageService(invalidOptions, logger);
+        var service = new LocalStorageService(invalidOptions, logger);
         var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
 
         // Act — should not throw
-        var result = await service2.UploadAsync("test.txt", content, "text/plain");
+        var result = await service.UploadAsync("test.txt", content, "text/plain");
 
         // Assert — V0.1.1 评审修复：失败返回 null（区分成功/失败）
         Assert.Null(result);

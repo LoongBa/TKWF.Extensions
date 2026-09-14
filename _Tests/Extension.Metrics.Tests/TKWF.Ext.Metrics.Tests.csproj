@@ -40,21 +40,18 @@
   <ItemGroup>
     <!-- 本仓库扩展（Metrics）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Metrics\TKWF.Ext.Metrics.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <PackageReference Include="TKWF.Core" />
+    <PackageReference Include="TKWF.Domain" />
     <!-- T0（v0.2.0）：FreeSql DAC 接线（消费方模拟——测试内定义实体 + 真实 FreeSqlEntityDAC 驱动） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+    <PackageReference Include="TKWF.Domain.FreeSql" />
     <!-- T0（v0.2.0）：SG1 化——框架抽象引用（[DomainGenerateCode] 属性所在程序集，保留既有） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
 
     <!-- T0（v0.2.0）：SG1 分析器（build/refs 预编译 DLL，测试宿主首次定义 [DomainGenerateCode] 实体——
          若生成器不识别测试项目，按方案 §四 T0 替代路径改手写 DataService 分部子类，详见 TestMetricResultEntity 注释） -->
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
 
     <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
-                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突，对齐扩展 csproj） -->

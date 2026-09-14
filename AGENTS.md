@@ -10,8 +10,8 @@
 | 项 | 说明 |
 |----|------|
 | 本仓库 | TKWF 业务扩展包（`TKWF.Ext.*`）——标签、权限、导航、身份、审计等 |
-| 主框架 | `../_TKWF/`（TKW.Framework 领域框架）——经 `$(TKWFSourceRoot)` ProjectReference 跨仓库引用 |
-| 关系 | 扩展引用主框架**源码**（`Directory.Build.props` 定义 `TKWFSourceRoot`）；**不进入**主框架 slnx |
+| 主框架 | `../_TKWF/`（TKW.Framework 领域框架）——经 **PackageReference** 引用其 NuGet 包（2026-09-15 迁移，独立于源码构建） |
+| 关系 | 扩展引用主框架**发布的 NuGet 包**（`Directory.Packages.props` CPM 集中版本）；**不进入**主框架 slnx |
 | 解决方案 | `TKWF.Extensions.slnx`——本仓库扩展的统一构建入口 |
 
 ### 公开/私有边界
@@ -90,9 +90,10 @@
 
 ## 6. 跨仓库引用规则
 
-- **主框架引用**：扩展项目通过 `$(TKWFSourceRoot)`（`Directory.Build.props` 定义 = `../_TKWF/`）引用主框架源码（ProjectReference，编译期依赖）。
-- **扩展间引用**：扩展间依赖走 ProjectReference（编译期确定），不走运行时能力发现。
-- **NuGet 模式**（后续）：扩展成熟后独立发布 NuGet 包（`TKWF.Ext.{扩展名}`），消费方切 PackageReference。
+- **主框架引用（2026-09-15 迁移为 PackageReference）**：扩展项目通过 **PackageReference** 引用主框架 NuGet 包（`TKWF.Domain` / `TKWF.Utility` / `TKWF.Core` / `TKWF.Domain.FreeSql` / `TKWF.BackgroundJobs(.Quartz)` / `TKWF.Utility.DataPort(.Providers.MiniExcel)` / `TKWF.CodeGeneration.Abstractions` 等，版本集中管理于 `Directory.Packages.props` CPM）——**独立于主框架源码构建/发布**（消费方亦按 NuGet 模式使用，提前暴露兼容问题；无需检出 `../_TKWF`）。
+- **SG1 分析器**：实体扩展经 `<PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />` 引入——该包为**纯 Analyzer 包**（`analyzers/dotnet/cs/`，Roslyn 自动加载），**不要**用 `<Analyzer>` 元素 / `OutputItemType="Analyzer"`（Roslyn 增量缓存 bug）/ `build\refs` 预编译 DLL（废弃路径）。
+- **扩展间引用**：扩展间依赖走 ProjectReference（编译期确定，打包时自动转版本依赖），不走运行时能力发现。
+- **双模式并存**：本地开发/扩展仓库构建 = PackageReference（主框架包）；若需调试主框架源码新 API，可临时切 ProjectReference 或等主框架发新包——**消费方视角与 NuGet 模式一致**。
 
 ---
 
@@ -140,7 +141,7 @@ public class TaggingInitializer : ExtensionInitializer<MyUserInfo>
 
 ```
 _Framework/{扩展名}/
-├── TKWF.Ext.{扩展名}.csproj    # net10.0，引用 $(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj
+├── TKWF.Ext.{扩展名}.csproj    # net10.0，PackageReference 引用 TKWF.Domain（CPM 集中版本）
 ├── README.md                    # 技术规范（随 NuGet）
 └── *.cs
 
@@ -174,21 +175,21 @@ _Tests/Extension.{扩展名}.Tests/
 >
 > **扩展启用（V4.9.85）**：扩展 DLL 被消费方引用后，SG1 经 `ReferencedAssemblySymbols` 发现 `[TKWFExtension]` 初始化器（生成能力清单）；但**发现 ≠ 启用**——扩展的 `IsEnabled` 默认 false，三钩子默认不执行。消费方须在自身 `DomainHostInitializerBase<T>` 派生类上标注 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明（AllowMultiple），扩展才真正启用、三钩子才执行。未声明 → 发现但默认不启用。
 
-**csproj 接线要点**（对齐 DMP-Lite 消费模式，`$(TKWFSourceRoot)` 定义于仓库根 `Directory.Build.props`）：
+**csproj 接线要点**（2026-09-15 迁移为 PackageReference 独立构建——主框架包版本集中 `Directory.Packages.props` CPM）：
 
 ```xml
-<ItemGroup>
-  <!-- ① 框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-  <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+<!-- ① 框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
+<PackageReference Include="TKWF.CodeGeneration.Abstractions" />
 
-  <!-- ② SG1 分析器：用预编译 DLL（不用 ProjectReference+OutputItemType="Analyzer"——
-        Roslyn 增量缓存可能导致生成器不执行，DMP-Lite 已验证；用 build\refs 预编译 DLL 生成器稳定执行） -->
-  <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
-  <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+<!-- ② SG1 分析器：纯 Analyzer 包（analyzers/dotnet/cs/，Roslyn 自动加载）——
+     不用 <Analyzer> 元素（Roslyn 增量缓存 bug）/ 不用 OutputItemType="Analyzer" /
+     不用 build\refs 预编译 DLL（废弃路径，2026-09-15 迁移前方式）；
+     PrivateAssets="all" 防止作为运行时依赖透传给消费方 -->
+<PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
 
-  <!-- ③ VS FastUpToDateCheck：让 VS 识别 SG 依赖（ReferenceOutputAssembly=false 不产生运行时引用） -->
-  <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
-                    ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+<!-- ③ 主框架运行时引用（按需） -->
+<PackageReference Include="TKWF.Domain" />
+<PackageReference Include="TKWF.Domain.FreeSql" />
 </ItemGroup>
 
 <!-- ④ SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
@@ -214,7 +215,7 @@ _Tests/Extension.{扩展名}.Tests/
 
 **注意**：
 - SG1 自诊断门禁（V4.9.15+）编译语义判断，不依赖 `TKWFRole`——扩展无需设 TKWFRole 即可接入
-- `build\refs\` 需在主框架编译后生成（`_PushToRefs` 目标自动推送）
+- 主框架发布新版本后，升级 `Directory.Packages.props` 中 `TKWF.*` 版本并重新构建验证（PackageReference 模式）
 - 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存。发现 ≠ 启用：消费方须 `[TKWFEnabledExtension]` 白名单声明后三钩子才执行（V4.9.85 ADR47）
 
 ### xCodeGen 生成物管理（.g.cs 入库政策，2026-09-14 裁定）
@@ -264,3 +265,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-10 | — | §8 新增「分布式事件 handler 注册机制」要点（FeatureManagement v0.3.0 先例）——扩展内建 `[DomainEventHandler]` + `IDistributedEventHandler<T>` handler **必须 public**（SG4 消费方编译期经 ReferencedAssemblySymbols 生成 `typeof(Handler)` 引用，internal 无 IVT → CS0122；public 构造器依赖类型亦不可 internal——CS0051）；Initializer 不手动注册；扩展自身构建不触发 EVT003/EVT004（消费方 WebApi 编译时执行） |
 | 2026-09-14 | — | §8 新增「xCodeGen 生成物管理（.g.cs 入库政策）」——生成物入库（源码库自包含）；修复 permissions 配置绝对路径 bug（OutputDir 相对 OutputRoot 解析）；metrics-tests 配置先例（测试宿主走标准管线 + 生成 ProjectMetaContext）；重生成纪律 |
 | 2026-09-14 | — | §8 新增「扩展模块生成物健康自检清单」7 项（配置 1:1 / 相对路径 / 重生成纪律 / 时间戳新鲜 / 分部对 / 宿主生成上下文 / 骨架编译）+ 已知缺陷记录——审计固话（Approval 缺配置 4-5 天陈旧 + EntityEmpty 模板缺 using 双修）；经验归入主框架私有《扩展模块生成物与测试宿主规范》 |
+| 2026-09-15 | — | **PackageReference 独立构建迁移**（§1 边界 + §6 引用规则 + §8 接线要点/项目模板/变更记录）：31 扩展 ProjectReference→PackageReference（TKWF.* 4.10.24 CPM 集中版本）；SG1 分析器改用纯 Analyzer 包 `TKWF.CodeGeneration`（替代 build/refs 预编译 DLL + FUTC 桥）；扩展间 Abstractions 保持 ProjectReference；全量 1352/1352 通过；CI workflow 独立化（移除主框架检出）；配套 facts：主框架 DummyConsumer 包 ID 已陈旧（`TKWF.Framework.*` 404）、`TKWF.Domain.Api` analyzer bundle 路径失效（均已记录待办） |

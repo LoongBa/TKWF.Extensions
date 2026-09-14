@@ -20,23 +20,22 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <!-- 2026-09-15 迁移（ProjectReference → PackageReference）：主框架已发布稳定版 4.10.24，
+         扩展独立于主框架源码构建/发布（消费方亦按 NuGet 模式使用，提前暴露兼容问题）。
+         版本集中管理于 Directory.Packages.props（CPM），此处不写 Version。
+         扩展间依赖（Permissions.Abstractions）保持 ProjectReference（同仓库编译期确定）。 -->
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
 
-    <!-- V4.9.85 (ADR48 D7)：抽象项目引用（依赖倒置——接口/契约在 Abstractions，实现在本项目） -->
+    <!-- SG1 分析器：TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
+         Roslyn 自动加载，无需 <Analyzer> 元素（勿用 OutputItemType="Analyzer"——G17A 已验证增量缓存bug）。
+         原表格：<Analyzer Include="$(TKWFSourceRoot)build\refs\..."> 两条 → 一条 PackageReference 替代。
+         VS FastUpToDateCheck 引用（ReferenceOutputAssembly=false 的 CodeGeneration.csproj）删除——
+         PackageReference 天然被 VS 识别，无需 FUTC 桥。 -->
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
+
+    <!-- 依赖倒置（ADR48 D7）：抽象项目引用（接口/契约在 Abstractions，实现在本项目） -->
     <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
-
-    <!-- V0.2.0 (SG1 化)：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
-
-    <!-- V0.2.0 (SG1 化)：SG1 分析器用预编译 DLL（build\refs，DMP-Lite 验证稳定执行；
-         不用 ProjectReference+OutputItemType="Analyzer"——Roslyn 增量缓存可能导致生成器不执行） -->
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
-
-    <!-- V0.2.0 (SG1 化)：VS FastUpToDateCheck——让 VS 识别 SG 依赖（ReferenceOutputAssembly=false 不产生运行时引用） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
-                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <!-- V0.2.0 (SG1 化)：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations）。

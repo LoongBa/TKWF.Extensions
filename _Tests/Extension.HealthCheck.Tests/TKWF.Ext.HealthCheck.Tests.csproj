@@ -41,11 +41,11 @@
   <ItemGroup>
     <!-- 本仓库扩展（HealthCheck）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\HealthCheck\TKWF.Ext.HealthCheck.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.Core" />
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
     <!-- V0.2.0 DB 探针测试：FreeSqlEntityDAC 解析路径（UseFreeSqlEntityDAC → IEntityReadOnlyDAC<> Scoped） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+    <PackageReference Include="TKWF.Domain.FreeSql" />
   </ItemGroup>
 
 </Project>

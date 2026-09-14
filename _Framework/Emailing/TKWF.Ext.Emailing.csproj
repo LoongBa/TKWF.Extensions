@@ -24,18 +24,15 @@
     <ProjectReference Include="..\Emailing.Abstractions\TKWF.Ext.Emailing.Abstractions.csproj" />
 
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <PackageReference Include="TKWF.Domain" />
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
 
     <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
 
     <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
-                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->

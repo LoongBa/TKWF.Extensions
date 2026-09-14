@@ -1,13 +1,16 @@
 name: CI & Publish (Extensions)
 
-# TKWF.Extensions 统一 CI + NuGet 发布
-# - PR / push main：构建 + 测试全量回归（对齐主框架 ci-publish 门禁）
-# - tag 推入（{扩展名}/v*，如 Permissions/v0.9.0 / Account.Abstractions/v0.1.0）：构建 + 测试 + Pack + 推送 NuGet
+# TKWF.Extensions 统一 CI + NuGet 发布（2026-09-15 独立构建模式）
 #
-# 依赖主框架（_TKWF）源码：扩展经 $(TKWFSourceRoot) ProjectReference 引用上一级 ../_TKWF，
-# 且 SG1 分析器用主框架 build/refs 预编译 DLL（未入库，主框架构建时 _PushToRefs 生成）。
-# CI 布局：主框架检出到 $GITHUB_WORKSPACE/../_TKWF（checkout path 支持 ../），与本地布局一致；
-# build/refs 由 prepare-core job 编译主框架生成后传 artifact。
+# 触发：
+# - push main / PR：构建 + 全量测试回归
+# - push tag（{扩展名}/v*，如 Permissions/v0.9.1 / Account.Abstractions/v0.1.1）：构建 + 测试 + Pack + 推送 NuGet（--skip-duplicate）
+# - workflow_dispatch：手动触发
+#
+# 独立构建模式（2026-09-15 迁移：ProjectReference → PackageReference）：
+# 扩展经 PackageReference 引用主框架 NuGet 包（TKWF.Domain 4.10.24 等，版本集中 Directory.Packages.props），
+# SG1 分析器经纯 Analyzer 包 TKWF.CodeGeneration（analyzers/dotnet/cs/，Roslyn 自动加载）。
+# → 无需检出主框架源码、无需 build/refs，CI 从 nuget.org 直接还原，完全独立。
 
 on:
   push:
@@ -22,54 +25,12 @@ env:
   NUGET_OUTPUT: ./nupkgs
 
 jobs:
-  prepare-core:
-    # 检出主框架 + 编译生成 build/refs（SG1 分析器预编译 DLL 来源）
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: LoongBa/TKW.Framework
-          path: _TKWF
-          fetch-depth: 0
-
-      - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Build core framework (generate build/refs)
-        run: dotnet build -c Release --nologo
-        working-directory: _TKWF
-
-      - name: Upload core refs
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-refs
-          path: _TKWF/build/refs
-          retention-days: 1
-
   build-test:
-    needs: prepare-core
     runs-on: ubuntu-latest
     steps:
-      # 扩展仓库检出到 $GITHUB_WORKSPACE
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # 主框架检出到上一级（path 相对 workspace 支持 ../，与本地 ../_TKWF 布局一致）
-      - uses: actions/checkout@v4
-        with:
-          repository: LoongBa/TKW.Framework
-          path: ../_TKWF
-          fetch-depth: 0
-
-      # refs 下载到主框架检出目录（prepare-core 已编译生成）
-      - name: Download core refs
-        uses: actions/download-artifact@v4
-        with:
-          name: core-refs
-          path: ${{ github.workspace }}/../_TKWF/build/refs
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4

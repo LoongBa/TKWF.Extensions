@@ -21,8 +21,8 @@
 
   <ItemGroup>
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.Core" />
 
     <!-- V0.3.0 拆包（用户裁定 B）：账户契约抽象（IAccountPasswordManager）→ Abstractions（ADR48 D7） -->
     <ProjectReference Include="..\Account.Abstractions\TKWF.Ext.Account.Abstractions.csproj" />
@@ -32,15 +32,10 @@
     <ProjectReference Include="..\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
 
-    <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
-
-    <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
-                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <!-- SG1 分析器：TKWF.CodeGeneration 纯 Analyzer 包（analyzers/dotnet/cs/，Roslyn 自动加载，2026-09-15 由 build\refs 预编译 DLL 迁移） -->
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->

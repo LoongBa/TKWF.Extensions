@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <PackageReference Include="TKWF.Domain" />
   </ItemGroup>
 
   <ItemGroup>

@@ -21,9 +21,9 @@
 
   <ItemGroup>
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <PackageReference Include="TKWF.Domain" />
     <!-- 核心计算：TKW.Framework.Utility.Metrics（零第三方依赖，无 SG1/FreeSql 接线——本扩展无持久化实体，对齐 Tagging 瘦身模式） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Utility\TKWF.Utility.csproj" />
+    <PackageReference Include="TKWF.Utility" />
   </ItemGroup>
 
   <!-- 测试项目访问 internal（如有） -->

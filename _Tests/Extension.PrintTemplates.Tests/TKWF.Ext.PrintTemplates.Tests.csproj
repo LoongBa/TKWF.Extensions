@@ -41,10 +41,10 @@
     <!-- 本仓库扩展（PrintTemplates）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\PrintTemplates\TKWF.Ext.PrintTemplates.csproj" />
     <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动两个 DataService -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.Domain.FreeSql" />
+    <PackageReference Include="TKWF.Core" />
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
   </ItemGroup>
 
 </Project>

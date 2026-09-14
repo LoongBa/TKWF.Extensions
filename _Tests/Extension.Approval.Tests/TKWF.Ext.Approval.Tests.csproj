@@ -41,10 +41,10 @@
     <!-- 本仓库扩展（Approval）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\Approval\TKWF.Ext.Approval.csproj" />
     <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 DataService -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.Domain.FreeSql" />
+    <PackageReference Include="TKWF.Core" />
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
   </ItemGroup>
 
 </Project>

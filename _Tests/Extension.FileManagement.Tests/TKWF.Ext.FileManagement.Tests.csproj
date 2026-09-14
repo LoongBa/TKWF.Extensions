@@ -43,12 +43,12 @@
     <ProjectReference Include="..\..\_Framework\BlobStoring\TKWF.Ext.BlobStoring.csproj" />
     <ProjectReference Include="..\..\_Framework\BlobStoring.Abstractions\TKWF.Ext.BlobStoring.Abstractions.csproj" />
     <!-- 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Core\TKWF.Core.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Utility\TKWF.Utility.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.Core" />
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.Utility" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
     <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 DataService（红线合规委托路径） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+    <PackageReference Include="TKWF.Domain.FreeSql" />
   </ItemGroup>
 
 </Project>

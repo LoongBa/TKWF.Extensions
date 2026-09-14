@@ -21,8 +21,8 @@
 
   <ItemGroup>
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\BackgroundJobs.Quartz\TKWF.BackgroundJobs.Quartz.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <PackageReference Include="TKWF.BackgroundJobs.Quartz" />
+    <PackageReference Include="TKWF.Domain" />
   </ItemGroup>
 
   <!-- Quartz 4.0.0 单一包（含 Extensions.DependencyInjection/Hosting/序列化——net10.0 ONLY） -->

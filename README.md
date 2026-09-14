@@ -55,7 +55,7 @@
 | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | 主框架   | [`_TKWF/`](https://github.com/LoongBa/TKW.Framework)（TKW.Framework 领域框架）                                     |
 | 本仓库   | TKWF 业务扩展包（`TKWF.Ext.*`）——独立版本，与主框架版本无关                                                        |
-| 引用模式 | 扩展经 `$(TKWFSourceRoot)` ProjectReference 引用主框架源码（跨仓库编译期依赖）；主框架发布 NuGet 后可切 PackageReference |
+| 引用模式 | 扩展经 **PackageReference** 引用主框架**发布的 NuGet 包**（`TKWF.Domain` 等，CPM 集中 `Directory.Packages.props`；2026-09-15 迁移——独立构建，消费方视角与 NuGet 模式一致） |
 | 版本管理 | MinVer 自动管理（git tag 即版本）；各扩展独立版本（各打各的 tag，命名空间前缀如 `Identity/v0.1.0`）                |
 
 ---
@@ -178,10 +178,23 @@ Navigation → Permissions（❌ TKWF0022 Error）
 
 ### 消费方引用扩展
 
+**NuGet 包模式**（消费方推荐——扩展已发布 `TKWF.Ext.*` NuGet 包）：
+
 ```xml
 <!-- 消费方 .csproj -->
-<ProjectReference Include="..\..\_Framework\Identity\TKWF.Ext.Identity.csproj" />
+<PackageReference Include="TKWF.Ext.Identity" Version="0.3.3" />
+<!-- 扩展经 PackageReference 传递引用主框架包（TKWF.Domain 4.10.24 等）；
+     依赖扩展（如 Identity → Permissions.Abstractions）自动解析 -->
 ```
+
+**源码模式**（本仓库开发/联调主框架新 API 时）：
+
+```xml
+<!-- 消费方 .csproj -->
+<ProjectReference Include="..\_TKWF.Extensions\_Framework\Identity\TKWF.Ext.Identity.csproj" />
+```
+
+> 双模式并存：扩展自身构建用 PackageReference（主框架包）；需调试主框架源码新 API 时可临时切源码引用——消费方视角与 NuGet 模式一致。
 
 ### 启用 + 使用
 

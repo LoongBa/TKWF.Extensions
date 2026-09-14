@@ -21,23 +21,20 @@
 
   <ItemGroup>
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\BackgroundJobs\TKWF.BackgroundJobs.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+    <PackageReference Include="TKWF.BackgroundJobs" />
+    <PackageReference Include="TKWF.Domain" />
 
     <!-- SQL 级聚合扩展（FreeSqlQueryableExtensions——ADR15 聚合 API 分层：DataService 内 AvgAsync/MaxAsync
          经 RestoreToSelect 走 FreeSql ISelect 原生聚合，SQL AVG/MAX 下推，Oracle C1 禁内存 GroupBy） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.Infrastructure\FreeSql\TKWF.Domain.FreeSql.csproj" />
+    <PackageReference Include="TKWF.Domain.FreeSql" />
 
     <!-- SG1 接线（AGENTS.md §8 ①）：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration.Abstractions\TKWF.CodeGeneration.Abstractions.csproj" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
 
     <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行）（AGENTS.md §8 ②） -->
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.dll" />
-    <Analyzer Include="$(TKWFSourceRoot)build\refs\TKWF.CodeGeneration.Abstractions.dll" />
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
 
     <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖（AGENTS.md §8 ③） -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Domain.SG\CodeGeneration\TKWF.CodeGeneration.csproj"
-                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <!-- FreeSql 特性引用（AGENTS.md §8——实体用 FreeSql [Column]/[Index]） -->

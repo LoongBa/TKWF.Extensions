@@ -190,21 +190,38 @@ public class FileVersionManagerTests
     public async Task Concurrent_Upload_DifferentContent_SameFile_UniqueConstraint_OneWins()
     {
         // 文件模式 SQLite（多连接共享库，FreeSql ObjectPool 正常出借）——:memory: 单连接池
-        // 在 CI 高负载并发下多线程争用 ObjectPool.Get() 会超时（FreeSql discussions/1081）。
+        // 使并发任务实际串行（未真正竞争），只在 CI 高负载下 ObjectPool.Get() 超时；
+        // 文件模式才真正并发 → UX 唯一约束败者补偿路径被真实触发。
         using var host = FileManagementTestHost.CreateFile(out _);
         var v1 = await host.UploadFileAsync(null, "report.txt", "v1 content"u8.ToArray());
 
-        // 两并发上传不同内容 → 都读 max=1 → 都插 Version=2 → UX 唯一约束败者补偿
-        Task<ManagedFileEntity> Upload(string content)
-            => host.UploadFileAsync(null, "report.txt", System.Text.Encoding.UTF8.GetBytes(content));
+        // 两并发上传不同内容：都读 max=1 → 都插 Version=2 → UX 唯一约束败者补偿
+        // （败者抛 InvalidOperationException("并发版本号冲突，请重试")，Blob 已补偿清理）
+        var results = await Task.WhenAll(new[]
+        {
+            UploadWithTolerance("concurrent-A-content"),
+            UploadWithTolerance("concurrent-B-content"),
+        });
 
-        var results = await Task.WhenAll(
-            Upload("concurrent-A-content"),
-            Upload("concurrent-B-content"));
-
-        // 至少一个成功；成功者主表指针为某并发内容
-        var file = results.First(r => r != null && r.Id == v1.Id);
+        // 至少一个成功，且并发版本行已落库（首版 + ≥1 并发版本）
+        var successful = results.Count(r => r is not null);
         var versions = await host.Manager.GetFileVersionsAsync(v1.Id);
-        Assert.True(versions.Count >= 2);   // 首版 + 至少一个并发版本
+        Assert.True(successful >= 1, $"并发竞争应至少一个成功，实际成功 {successful}");
+        Assert.True(versions.Count >= 2, $"应产生 ≥2 个版本（首版+并发版），实际 {versions.Count}");
+
+        Task<ManagedFileEntity?> UploadWithTolerance(string content)
+        {
+            return Task.Run(async () =>
+            {
+                try
+                {
+                    return await host.UploadFileAsync(null, "report.txt", System.Text.Encoding.UTF8.GetBytes(content));
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("并发版本号冲突", StringComparison.Ordinal))
+                {
+                    return null;   // UX 唯一约束败者（补偿已清理 Blob）——胜负允许任一
+                }
+            });
+        }
     }
 }

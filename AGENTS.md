@@ -214,6 +214,18 @@ _Tests/Extension.{扩展名}.Tests/
 - `build\refs\` 需在主框架编译后生成（`_PushToRefs` 目标自动推送）
 - 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存。发现 ≠ 启用：消费方须 `[TKWFEnabledExtension]` 白名单声明后三钩子才执行（V4.9.85 ADR47）
 
+### xCodeGen 生成物管理（.g.cs 入库政策，2026-09-14 裁定）
+
+**标准管线**（实体型扩展固有）：实体 `[DomainGenerateCode]` → SG1 分析器产生元数据（obj/GeneratedFiles Meta/ProjectMetaContext）→ **xCodeGen CLI 生成 `.g.cs`**（`DataService` 基座含 internal 原子转发 `EntityCreateBatchAsync`/`EntitySelectAsync`/`EntityDeleteBatchAsync`、`Entity`/`Dto`/`Conditions`）→ 手写分部 `.cs` 只编写**业务方法**（public 委托包装，对齐 `AuditLogEntityDataService.cs` + `.g.cs` 分部对）。
+
+**`*.g.cs` 入库（不忽略）**——本仓库是**源码库**（消费方 ProjectReference/源码审查），生成物是提交的组成部分：
+- fresh clone / CI 必须无前置步骤可构建；提交必须可复现；PR 可见生成物变更。
+- `.gitignore` 已移除全局 `*.g.cs` 规则（2026-09-14）；obj/GeneratedFiles 分析器中间产物仍由 `obj/` 规则忽略。
+- **重生成纪律**：实体/模板变更后运行 `pwsh .xCodeGen/run-xcodegen.ps1`（单扩展 `-Ext {扩展名}`），将更新的 `.g.cs` 一并提交。**禁止**只改实体不重新生成/提交生成物（= 源码与生成物漂移，曾致 Permissions 生成物 2 周陈旧）。
+- 配置集中：`.xCodeGen\extensions\{扩展名}.xCodeGen.json`（`TargetProject` 指向项目；`OutputDir` 用**相对 OutputRoot 的 `..\Entities`/`..\DataServices`** 风格——2026-09-14 修复 permissions 配置曾用绝对式 `..\..\_Framework\...` 导致生成物落入 `_Framework\_Framework\` 重复目录 + 真实文件 2 周未刷新）。
+- 测试项目模拟消费方时同样走此管线（先例：`metrics-tests.xCodeGen.json`——测试宿主内实体 → xCodeGen 生成 → 手写分部业务方法）；宿主元数据上下文用 **SG1 生成的 `ProjectMetaContext`**（消费方真实形态，含 ADR61 DataService 自动注册），不手写空桩。
+- 本仓库 MSBuild 未导入 `TKWF.Domain.targets`（`_XCG_Run` 构建期自动生成目标不生效）——xCodeGen 由 `run-xcodegen.ps1` 手动驱动（对齐 DMP-Lite 模式的前提是构建期自动生成，未接入则必须入库，二者择一；本仓库取入库）。
+
 ### 构建/编译操作纪律
 
 - **dll 被占用（`CS2012`/`file in use by another process`）时，用 `dotnet build-server shutdown` 优雅关闭 MSBuild/VBCSCompiler 编译服务器**，而非强杀进程——编译服务器是常驻进程（MSBuild node + Roslyn compiler server），强杀会留下孤儿进程/状态损坏；shutdown 后重试构建即可。若 shutdown 后仍占用，再检查是否残留 dotnet 测试宿主进程。
@@ -231,3 +243,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-07 | — | §8 新增「数据访问红线」（用户裁定 2026-09-07）——扩展禁裸 ORM / 禁直接 IEntityDAC / 应发挥组装优势；标准路径 = DataService → IEntityDAC → 实现层；待整改清单 10+1 扩展分批改造 |
 | 2026-09-07 | — | §8 新增「跨表查询 VEntity」实践——多对一 JOIN 用 VEntity（ViewSql 双方言 + 手写只读 DataService + Initializer 手动注册 + 生产 DBA 建视图）；一对多主从聚合保持两步；先例 Identity/Notifications |
 | 2026-09-10 | — | §8 新增「分布式事件 handler 注册机制」要点（FeatureManagement v0.3.0 先例）——扩展内建 `[DomainEventHandler]` + `IDistributedEventHandler<T>` handler **必须 public**（SG4 消费方编译期经 ReferencedAssemblySymbols 生成 `typeof(Handler)` 引用，internal 无 IVT → CS0122；public 构造器依赖类型亦不可 internal——CS0051）；Initializer 不手动注册；扩展自身构建不触发 EVT003/EVT004（消费方 WebApi 编译时执行） |
+| 2026-09-14 | — | §8 新增「xCodeGen 生成物管理（.g.cs 入库政策）」——生成物入库（源码库自包含）；修复 permissions 配置绝对路径 bug（OutputDir 相对 OutputRoot 解析）；metrics-tests 配置先例（测试宿主走标准管线 + 生成 ProjectMetaContext）；重生成纪律 |

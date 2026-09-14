@@ -21,6 +21,8 @@
     <RepositoryUrl>https://github.com/LoongBa/TKWF.Extensions</RepositoryUrl>
     <PackageTags>TKWF;Extension;LoongBa</PackageTags>
     <Copyright>Copyright © LoongBa.cn 2026</Copyright>
+    <!-- 包页面显示仓库根 README（2026-09-15 补：此前 Pack 打包 README 但未声明 PackageReadmeFile→NuGet 警告"缺少自述文件"且不显示） -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <!--

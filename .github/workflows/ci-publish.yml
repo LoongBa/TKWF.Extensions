@@ -58,10 +58,13 @@ jobs:
           path: ${{ env.NUGET_OUTPUT }}/*.nupkg
           retention-days: 7
 
-  publish:
+publish:
     needs: build-test
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # Trusted Publishing：允许 GitHub 向该 job 签发 OIDC token（免 API key）
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -69,11 +72,18 @@ jobs:
           name: nupkgs
           path: ${{ env.NUGET_OUTPUT }}
 
+      # Trusted Publishing（2026-09-15 启用）：OIDC → nuget.org 校验 policy（repo=LoongBa/TKWF.Extensions,
+      # workflow=ci-publish.yml）→ 签发短时效临时 API key（≈1h）。无需长期 API key secrets。
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          # nuget.org 用户名（profile name，非邮箱）——唯一需要配置的 secret（公开信息）
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push NuGet packages
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           dotnet nuget push ${{ env.NUGET_OUTPUT }}/*.nupkg \
             --source https://api.nuget.org/v3/index.json \
-            --api-key $NUGET_API_KEY \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate

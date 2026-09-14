@@ -1,0 +1,20 @@
+﻿using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using TKW.Framework;
+using TKW.Framework.CodeGeneration;
+
+namespace TKWF.Ext.Approval;
+
+/// <summary>加签记录实体——审批运行时当前审批人动态追加审批人（钉钉步骤内模型）。     <para>每加签人一行（Participate/Notify 均记录）；Participate 额外创建审批任务，Notify 仅记录 + 事件。     索引 UX_aa_instance_user（InstanceId+UserId，非唯一——同实例可多次加签同一人不同步骤）。</para></summary>
+public partial class ApprovalAppendEntity
+{
+    /// <summary>
+    /// 根据需要添加业务验证逻辑 (例如跨表验证、状态机检查) 
+    /// </summary>
+    partial void OnBusinessValidate(EnumSceneFlags scene, List<ValidationResult> results)
+    {
+        // 示例：领域驱动设计的业务验证规则 
+        // if (this.Status == Status.Disabled && this.Stock > 0)
+        //     results.Add(new ValidationResult("禁用状态下不能有库存", new[] { nameof(Status) }));
+    }
+}

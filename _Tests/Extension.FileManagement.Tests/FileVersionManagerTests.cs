@@ -189,7 +189,9 @@ public class FileVersionManagerTests
     [Fact]
     public async Task Concurrent_Upload_DifferentContent_SameFile_UniqueConstraint_OneWins()
     {
-        using var host = FileManagementTestHost.Create();
+        // 文件模式 SQLite（多连接共享库，FreeSql ObjectPool 正常出借）——:memory: 单连接池
+        // 在 CI 高负载并发下多线程争用 ObjectPool.Get() 会超时（FreeSql discussions/1081）。
+        using var host = FileManagementTestHost.CreateFile(out _);
         var v1 = await host.UploadFileAsync(null, "report.txt", "v1 content"u8.ToArray());
 
         // 两并发上传不同内容 → 都读 max=1 → 都插 Version=2 → UX 唯一约束败者补偿

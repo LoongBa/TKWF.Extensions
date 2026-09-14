@@ -31,6 +31,23 @@ internal static class FileManagementTestSupport
             .UseAutoSyncStructure(true)
             .Build();
 
+    /// <summary>
+    /// 创建使用 SQLite <b>文件模式</b>的 IFreeSql 实例（自动同步表结构）。
+    /// <para>与 <see cref="CreateInMemoryFreeSql"/>（:memory: 单连接独占）不同——文件模式允许多连接同时访问同一库文件，
+    /// FreeSql 连接池（ObjectPool）可正常出借/归还连接，多线程并发写由 SQLite 文件锁协调。
+    /// 用于并发测试（如 FileVersionManager 并发版本上传——:memory: 单连接池在 CI 高负载下
+    /// 多线程争用 ObjectPool.Get() 可能超时 10s，见 FreeSql discussions/1081）。</para>
+    /// <param name="dbPath">输出：库文件路径（调用方负责删除清理）。</param>
+    /// </summary>
+    public static IFreeSql CreateFileFreeSql(out string dbPath)
+    {
+        dbPath = Path.Combine(Path.GetTempPath(), "tkfw-fm-db-" + Guid.NewGuid().ToString("N") + ".db");
+        return new FreeSqlBuilder()
+            .UseConnectionString(DataType.Sqlite, $"Data Source={dbPath}")
+            .UseAutoSyncStructure(true)
+            .Build();
+    }
+
     /// <summary>同步三张表结构（FileFolder + ManagedFile + ManagedFileVersion——V0.2.0）。</summary>
     public static void SyncStructure(IFreeSql fsql)
     {
@@ -52,6 +69,7 @@ internal sealed class FileManagementTestHost : IDisposable
 {
     private readonly ServiceProvider _serviceProvider;
     private readonly string _blobRoot;
+    private readonly string? _dbPath;   // 文件模式 SQLite 库路径（若有，Dispose 清理）
 
     public IFreeSql Fsql { get; }
 
@@ -63,11 +81,12 @@ internal sealed class FileManagementTestHost : IDisposable
 
     public ManagedFileEntityDataService FileDataService => _serviceProvider.GetRequiredService<ManagedFileEntityDataService>();
 
-    private FileManagementTestHost(ServiceProvider serviceProvider, IFreeSql fsql, string blobRoot)
+    private FileManagementTestHost(ServiceProvider serviceProvider, IFreeSql fsql, string blobRoot, string? dbPath = null)
     {
         _serviceProvider = serviceProvider;
         Fsql = fsql;
         _blobRoot = blobRoot;
+        _dbPath = dbPath;
     }
 
     /// <summary>全新宿主（每次调用独立 SQLite 内存库 + 独立 Blob 临时目录根）。</summary>
@@ -78,10 +97,40 @@ internal sealed class FileManagementTestHost : IDisposable
         var fsql = FileManagementTestSupport.CreateInMemoryFreeSql();
         FileManagementTestSupport.SyncStructure(fsql);
 
-        // BlobStoring 真实链：临时目录根（每用例独立，宿主 Dispose 清理）
         var blobRoot = Path.Combine(Path.GetTempPath(), "tkfw-fm-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(blobRoot);
 
+        return BuildHost(fsql, blobRoot, dbPath: null, options, configure);
+    }
+
+    /// <summary>
+    /// 文件模式 SQLite 宿主场（供并发测试用）——与 <see cref="Create"/> 相同注册，
+    /// 但用文件模式库（多连接共享，FreeSql ObjectPool 正常出借，避免 :memory: 单连接池
+    /// 在 CI 高负载并发下 ObjectPool.Get() 超时 10s——FreeSql discussions/1081）。
+    /// <paramref name="dbPath"/> 输出库文件路径，由宿主 Dispose 清理。
+    /// </summary>
+    public static FileManagementTestHost CreateFile(
+        out string dbPath,
+        FileManagementOptions? options = null,
+        Action<IServiceCollection>? configure = null)
+    {
+        var fsql = FileManagementTestSupport.CreateFileFreeSql(out dbPath);
+        FileManagementTestSupport.SyncStructure(fsql);
+
+        var blobRoot = Path.Combine(Path.GetTempPath(), "tkfw-fm-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(blobRoot);
+
+        return BuildHost(fsql, blobRoot, dbPath, options, configure);
+    }
+
+    /// <summary>宿主构建公共路径（Create 内存模式与 CreateFile 文件模式共用；dbPath 非空=文件模式）。</summary>
+    private static FileManagementTestHost BuildHost(
+        IFreeSql fsql,
+        string blobRoot,
+        string? dbPath,
+        FileManagementOptions? options,
+        Action<IServiceCollection>? configure)
+    {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(fsql);
@@ -119,7 +168,7 @@ internal sealed class FileManagementTestHost : IDisposable
 
         configure?.Invoke(services);
 
-        return new FileManagementTestHost(services.BuildServiceProvider(), fsql, blobRoot);
+        return new FileManagementTestHost(services.BuildServiceProvider(), fsql, blobRoot, dbPath);
     }
 
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
@@ -173,6 +222,12 @@ internal sealed class FileManagementTestHost : IDisposable
         _serviceProvider.Dispose();
         if (Directory.Exists(_blobRoot))
             Directory.Delete(_blobRoot, recursive: true);
+        // 文件模式 SQLite 库清理（宿主释放后连接池已归还，可安全删除）
+        if (_dbPath is not null && File.Exists(_dbPath))
+        {
+            try { File.Delete(_dbPath); }
+            catch (IOException) { /* 连接未完全释放时忽略，由系统临时目录回收 */ }
+        }
     }
 }
 

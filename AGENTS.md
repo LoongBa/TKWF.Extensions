@@ -226,6 +226,22 @@ _Tests/Extension.{扩展名}.Tests/
 - 测试项目模拟消费方时同样走此管线（先例：`metrics-tests.xCodeGen.json`——测试宿主内实体 → xCodeGen 生成 → 手写分部业务方法）；宿主元数据上下文用 **SG1 生成的 `ProjectMetaContext`**（消费方真实形态，含 ADR61 DataService 自动注册），不手写空桩。
 - 本仓库 MSBuild 未导入 `TKWF.Domain.targets`（`_XCG_Run` 构建期自动生成目标不生效）——xCodeGen 由 `run-xcodegen.ps1` 手动驱动（对齐 DMP-Lite 模式的前提是构建期自动生成，未接入则必须入库，二者择一；本仓库取入库）。
 
+### 扩展模块生成物健康自检清单（2026-09-14 审计固化）
+
+实体型扩展迭代收尾时逐项核对（防止重犯 Permissions/Approval 类漂移缺陷）：
+
+| # | 检查项 | 判定 | 失败后果 |
+|---|--------|------|---------|
+| 1 | 实体型扩展 ↔ `.xCodeGen/extensions/{扩展名}.xCodeGen.json` **1:1 存在** | 每个含 `[DomainGenerateCode]` 实体的扩展必须有配置 | 无配置 → run-xcodegen.ps1 无法重生成 → 生成物陈旧（Approval 4-5 天陈旧先例） |
+| 2 | 配置 `OutputDir` 用**相对 OutputRoot 的相对路径**（`..\Entities`/`..\DataServices`），`TargetProject` 存在 | 相对风格 + TargetProject 可解析 | 绝对式路径相对 OutputRoot 解析翻出目录 → `_Framework\_Framework\` 重复目录 + 真实文件不刷新（Permissions 先例） |
+| 3 | 实体变更后已重跑 `run-xcodegen.ps1` 并提交 `.g.cs` | git diff 含本次实体对应的 `.g.cs` 变更 | 源码与生成物漂移；提交无法复现 |
+| 4 | 生成物时间戳新鲜（提交前核对 `Get-Item *.g.cs | select LastWriteTime`） | 与实体最后变更同日 | 陈旧生成物静默编译通过但内容过时（Permissions/Approval 先例） |
+| 5 | 每个 DataService 为"生成 `.g.cs` 基座 + 手写分部业务方法"分部对 | 手写 `.cs` 不含完整 CRUD/构造器（那些在 `.g.cs`） | 手写基座绕过生成管线，消费方路径不忠实（Metrics 测试早期先例） |
+| 6 | 测试宿主 `OnRegisterInfrastructureServices` 返回 **SG1 生成的 `ProjectMetaContext`** | 不手写 `IProjectMetaContext` 空桩（`TestMetaContext` 类反例） | 空桩缺 `GetOrCreateInstance`（xCodeGen 读取失败）；缺 ADR61 自动注册验证 |
+| 7 | 生成骨架 `.biz.cs` 编译通过 | `.biz.cs` 含 `using System.Collections.Generic;`（EntityEmpty 模板缺陷 2026-09-14 已修源码+部署副本） | 模板回归致 `List<ValidationResult>` 无法解析（CS0246/CS0759） |
+
+**已知缺陷修复记录**（2026-09-14）：permissions.xCodeGen.json 绝对式路径 bug；Approval 缺配置（4-5 天陈旧 + 缺 Conditions）；EntityEmpty.cshtml 模板缺 `using System.Collections.Generic`（源码 `_TKWF/_xCodeGen/xCodeGen.Cli/Templates/` + 部署 `%TKWFDeployPath%/xCodeGen/Templates/` 双修）。
+
 ### 构建/编译操作纪律
 
 - **dll 被占用（`CS2012`/`file in use by another process`）时，用 `dotnet build-server shutdown` 优雅关闭 MSBuild/VBCSCompiler 编译服务器**，而非强杀进程——编译服务器是常驻进程（MSBuild node + Roslyn compiler server），强杀会留下孤儿进程/状态损坏；shutdown 后重试构建即可。若 shutdown 后仍占用，再检查是否残留 dotnet 测试宿主进程。
@@ -244,3 +260,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-07 | — | §8 新增「跨表查询 VEntity」实践——多对一 JOIN 用 VEntity（ViewSql 双方言 + 手写只读 DataService + Initializer 手动注册 + 生产 DBA 建视图）；一对多主从聚合保持两步；先例 Identity/Notifications |
 | 2026-09-10 | — | §8 新增「分布式事件 handler 注册机制」要点（FeatureManagement v0.3.0 先例）——扩展内建 `[DomainEventHandler]` + `IDistributedEventHandler<T>` handler **必须 public**（SG4 消费方编译期经 ReferencedAssemblySymbols 生成 `typeof(Handler)` 引用，internal 无 IVT → CS0122；public 构造器依赖类型亦不可 internal——CS0051）；Initializer 不手动注册；扩展自身构建不触发 EVT003/EVT004（消费方 WebApi 编译时执行） |
 | 2026-09-14 | — | §8 新增「xCodeGen 生成物管理（.g.cs 入库政策）」——生成物入库（源码库自包含）；修复 permissions 配置绝对路径 bug（OutputDir 相对 OutputRoot 解析）；metrics-tests 配置先例（测试宿主走标准管线 + 生成 ProjectMetaContext）；重生成纪律 |
+| 2026-09-14 | — | §8 新增「扩展模块生成物健康自检清单」7 项（配置 1:1 / 相对路径 / 重生成纪律 / 时间戳新鲜 / 分部对 / 宿主生成上下文 / 骨架编译）+ 已知缺陷记录——审计固话（Approval 缺配置 4-5 天陈旧 + EntityEmpty 模板缺 using 双修）；经验归入主框架私有《扩展模块生成物与测试宿主规范》 |

@@ -98,6 +98,7 @@
 - **SG1 分析器**：实体扩展经 `<PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />` 引入——该包为**纯 Analyzer 包**（`analyzers/dotnet/cs/`，Roslyn 自动加载），**不要**用 `<Analyzer>` 元素 / `OutputItemType="Analyzer"`（Roslyn 增量缓存 bug）/ `build\refs` 预编译 DLL（废弃路径）。
 - **扩展间引用**：扩展间依赖走 ProjectReference（编译期确定，打包时自动转版本依赖），不走运行时能力发现。
 - **双模式并存**：本地开发/扩展仓库构建 = PackageReference（主框架包）；若需调试主框架源码新 API，可临时切 ProjectReference 或等主框架发新包——**消费方视角与 NuGet 模式一致**。
+- **双模式引用开关（2026-09-16 方案 B，用户裁定）**：`UseLocalFw`（`Directory.Build.props` 集中定义，默认 `true`）——`true` = 本地联调（ProjectReference → `../_TKWF/` 主框架源码，联调未发布 API）；`false` = NuGet 发布（PackageReference，CI/发布用，`ci-publish.yml` env `UseLocalFw: 'false'`）。扩展 csproj 引用块按 `Condition="'$(UseLocalFw)' == 'true'"` 条件化；命令行 `-p:UseLocalFw=false` 覆盖。**CI Analytics 门控**：4.10.27（含 Utility.Analytics）发布前 `ANALYTICS_ENABLED=false` 排除 Analytics（nuget 模式 restore 失败），CI 用显式项目列表（slnx 不支持按属性排除项目）。
 
 ---
 
@@ -270,3 +271,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-14 | — | §8 新增「xCodeGen 生成物管理（.g.cs 入库政策）」——生成物入库（源码库自包含）；修复 permissions 配置绝对路径 bug（OutputDir 相对 OutputRoot 解析）；metrics-tests 配置先例（测试宿主走标准管线 + 生成 ProjectMetaContext）；重生成纪律 |
 | 2026-09-14 | — | §8 新增「扩展模块生成物健康自检清单」7 项（配置 1:1 / 相对路径 / 重生成纪律 / 时间戳新鲜 / 分部对 / 宿主生成上下文 / 骨架编译）+ 已知缺陷记录——审计固话（Approval 缺配置 4-5 天陈旧 + EntityEmpty 模板缺 using 双修）；经验归入主框架私有《扩展模块生成物与测试宿主规范》 |
 | 2026-09-16 | — | §1 新增「维护/提交归属裁定」（用户 2026-09-16）：**主框架 `_TKWF/docs/03_扩展模块/` 全目录 + 主框架文档中扩展模块状态段落由本仓库负责维护与提交**（含 push 不打 tag，不依赖框架组）——因本仓库是 public（扩展模块内容对外可见、随扩展演进），主框架仅作物理承载；§3 流程 6/7 补充提交归属注记 |
+| 2026-09-16 | — | §6 新增「双模式引用开关」（用户裁定方案 B）——`UseLocalFw` 集中开关（默认 true=本地 ProjectReference 联调 / false=nuget 发布 CI 用）；Analytics csproj 条件化引用先例（4.10.27 前 ProjectReference，发布后切 nuget）+ CI `ANALYTICS_ENABLED` 门控 |

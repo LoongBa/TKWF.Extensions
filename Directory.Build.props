@@ -38,6 +38,25 @@
     <TKWFDeployPath>$([MSBuild]::EnsureTrailingSlash('$(TKWFDeployPath)'))</TKWFDeployPath>
   </PropertyGroup>
 
+  <!--
+    ════════════════════════════════════════════════════════════════════════
+    双模式引用开关（2026-09-16 用户裁定，方案 B）：
+    UseLocalFw = true  → 本地联调模式：扩展经 ProjectReference 引用主框架源码（../_TKWF）
+                         ——可联调主框架未发布的 API（如 Analytics 依赖 4.10.27 Utility.Analytics）
+    UseLocalFw = false → NuGet 发布模式：扩展经 PackageReference 引用主框架 NuGet 包
+                         ——CI/发布走此模式，验证真实消费方视角（2026-09-15 迁移后的默认 CI 语义）
+
+    优先级：命令行/环境变量 UseLocalFw > 默认 true（本地开发零配置）。
+    CI workflow 显式设 UseLocalFw=false（ci-publish.yml env）。
+    扩展 csproj 引用块按此开关条件化（见各 csproj）：
+      Condition="'$(UseLocalFw)' == 'true'" → ProjectReference
+      Condition="'$(UseLocalFw)' != 'true'" → PackageReference
+    ════════════════════════════════════════════════════════════════════════
+  -->
+  <PropertyGroup>
+    <UseLocalFw Condition="'$(UseLocalFw)' == ''">true</UseLocalFw>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)README.md" Link="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>

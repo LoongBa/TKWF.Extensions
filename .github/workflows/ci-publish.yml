@@ -28,6 +28,11 @@ on:
 env:
   DOTNET_VERSION: '10.0.x'
   NUGET_OUTPUT: ./nupkgs
+  # 双模式（2026-09-16 方案 B）：CI/发布走 NuGet 消费方视角（false = PackageReference）
+  UseLocalFw: 'false'
+  # 4.10.27（含 Utility.Analytics）发布前 Analytics 依赖本地 ProjectReference 无法走 nuget——
+  # 门控排除（true = CI 包含 Analytics，需 4.10.27 已发布；false = 跳过 Analytics）
+  ANALYTICS_ENABLED: 'false'
 
 jobs:
   build-test:
@@ -42,18 +47,37 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      # 双模式（2026-09-16 方案 B）：UseLocalFw=false → PackageReference（nuget 消费方视角）。
+      # slnx 不支持按 MSBuild 属性排除项目——Analytics 4.10.27 发布前用显式项目列表构建。
+      # 生成项目列表：slnx 全部项目 - Analytics（${{ env.ANALYTICS_ENABLED }} == 'true' 时含 Analytics）
+      - name: Resolve project list
+        id: projlist
+        run: |
+          # 从 slnx 提取项目路径（排除 slnx 自身），Analytics 门控
+          PROJECTS=$(grep -oP 'Project Path="\K[^"]+' TKWF.Extensions.slnx || true)
+          if [ "${{ env.ANALYTICS_ENABLED }}" = "false" ]; then
+            PROJECTS=$(echo "$PROJECTS" | grep -v -i analytics || true)
+          fi
+          # 转为引号包裹的空格分隔（dotnet build 多项目）
+          LIST=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LIST="$LIST \"$line\""
+          done <<< "$PROJECTS"
+          echo "projects=$LIST" >> $GITHUB_OUTPUT
+
       - name: Restore
-        run: dotnet restore --nologo
+        run: dotnet restore ${{ steps.projlist.outputs.projects }} --nologo
 
       - name: Build
-        run: dotnet build -c Release --no-restore --nologo
+        run: dotnet build ${{ steps.projlist.outputs.projects }} -c Release --no-restore --nologo
 
       - name: Test
-        run: dotnet test -c Release --no-build --verbosity normal
+        run: dotnet test ${{ steps.projlist.outputs.projects }} -c Release --no-build --verbosity normal
 
       - name: Pack
         if: startsWith(github.ref, 'refs/tags/')
-        run: dotnet pack -c Release --no-build -o ${{ env.NUGET_OUTPUT }} --nologo
+        run: dotnet pack ${{ steps.projlist.outputs.projects }} -c Release --no-build -o ${{ env.NUGET_OUTPUT }} --nologo
 
       - name: Upload artifacts
         if: startsWith(github.ref, 'refs/tags/')

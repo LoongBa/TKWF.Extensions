@@ -31,5 +31,15 @@ namespace TKWF.Ext.FileManagement
 
         /// <summary>全局总容量上限（字节；null = 不限制；超限上传 → InvalidOperationException）。</summary>
         public long? MaxTotalSizeBytes { get; set; }
+
+        // ── V0.3.0 用户级配额（OwnerId 归属维度；可空默认不限制——未配置消费方行为不变） ──
+
+        /// <summary>用户文件数上限（null = 不限制；OwnerId 归属文件计数；超限上传 → InvalidOperationException）。
+        /// <para>⚠️ 仅支持数值型 UserId（long.TryParse 失败 → OwnerId null → 本配额跳过，全局兜底）。</para></summary>
+        public int? MaxUserFilesCount { get; set; }
+
+        /// <summary>用户容量上限（字节；null = 不限制；OwnerId 归属文件大小求和；超限上传 → InvalidOperationException）。
+        /// <para>⚠️ 仅支持数值型 UserId（同 <see cref="MaxUserFilesCount"/> 约束）。</para></summary>
+        public long? MaxUserSizeBytes { get; set; }
     }
 }

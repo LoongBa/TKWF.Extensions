@@ -43,6 +43,12 @@ namespace TKWF.Ext.FileManagement
         public Task<long> SumSizeAllAsync(CancellationToken ct = default)
             => _dataService.SumSizeAllAsync(ct);
 
+        public Task<long> CountByOwnerAsync(long ownerId, CancellationToken ct = default)
+            => _dataService.CountByOwnerAsync(ownerId, ct);
+
+        public Task<long> SumSizeByOwnerAsync(long ownerId, CancellationToken ct = default)
+            => _dataService.SumSizeByOwnerAsync(ownerId, ct);
+
         public async Task<long> CreateAsync(ManagedFileEntity entity, CancellationToken ct = default)
         {
             await _dataService.CreateAsync(entity, ct);

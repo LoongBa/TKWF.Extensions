@@ -66,6 +66,25 @@ partial class ManagedFileEntityDataService(IDomainUser user, IEntityDAC<ManagedF
         return (long)sum;
     }
 
+    /// <summary>
+    /// 按归属用户统计文件数（V0.3.0 用户级配额——SQL COUNT 下推，IX_ManagedFile_Owner 索引）。
+    /// <para>独立 QueryForUser() 起新查询（ISelect 原地可变陷阱）。</para>
+    /// </summary>
+    public Task<long> CountByOwnerAsync(long ownerId, CancellationToken ct = default)
+        => Dac.CountAsync(QueryForUser().Where(f => f.OwnerId == ownerId), ct);
+
+    /// <summary>
+    /// 按归属用户求文件总容量（V0.3.0 用户级配额——SQL SUM 下推，IX_ManagedFile_Owner 索引）。
+    /// <para>独立 QueryForUser() 起新查询（ISelect 原地可变陷阱）。P2-4：空表/无归属文件 NULL → 0。</para>
+    /// </summary>
+    public async Task<long> SumSizeByOwnerAsync(long ownerId, CancellationToken ct = default)
+    {
+        decimal sum = await QueryForUser()
+            .Where(f => f.OwnerId == ownerId)
+            .SumAsync(e => (decimal)e.Size, ct);
+        return (long)sum;
+    }
+
     /// <summary>新增文件（回写自增 Id）。</summary>
     public Task<ManagedFileEntity> CreateAsync(ManagedFileEntity entity, CancellationToken ct = default)
         => EntityCreateAsync(entity, ct);

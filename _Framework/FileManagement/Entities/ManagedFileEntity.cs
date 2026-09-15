@@ -20,6 +20,7 @@ namespace TKWF.Ext.FileManagement
     [Table("ManagedFile")]
     [FreeSql.DataAnnotations.Index("UX_ManagedFile_Folder_Name", nameof(FolderId) + "," + nameof(Name), IsUnique = true)]
     [FreeSql.DataAnnotations.Index("IX_ManagedFile_Sha256", nameof(Sha256))]
+    [FreeSql.DataAnnotations.Index("IX_ManagedFile_Owner", nameof(OwnerId))]   // V0.3.0：用户配额聚合查询（WHERE owner_id = @id）
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class ManagedFileEntity
     {
@@ -72,5 +73,15 @@ namespace TKWF.Ext.FileManagement
         /// <summary>更新时间（UTC，显式声明）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 11)]
         public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        /// 归属用户 ID（V0.3.0 用户级配额；null = 匿名/未归属，不计入用户配额）。
+        /// <para><b>所有权保留语义（ADR-FileManagement-用户级配额所有权语义）</b>：仅新建文件分支写入，
+        /// 一经写入不可变（CanUpdate=false）——版本化新版本/回滚均不动 OwnerId（谁首传谁拥有，
+        /// 新版本字节计入原 owner 配额，SumSizeByOwnerAsync 按主表 Size 单指针求和）。</para>
+        /// <para>Position = 12（追加末尾，对齐增量 ALTER TABLE；Position 1-11 已占用）。</para>
+        /// </summary>
+        [FreeSql.DataAnnotations.Column(Position = 12, IsNullable = true, CanUpdate = false)]
+        public long? OwnerId { get; set; }
     }
 }

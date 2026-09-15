@@ -300,16 +300,29 @@ internal sealed class NoopTransactionScope : ITransactionScope
     public void Rollback() { }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约。
+/// <para>默认匿名（IsAuthenticated=false，无租户，兼容既有测试）；可参数化 userId/isAuthenticated/isSystemActor
+/// 支持 V0.3.0 用户级配额测试场景（Oracle 条件 9）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly string? _userId;
+    private readonly bool _isAuthenticated;
+    private readonly bool _isSystemActor;
+
+    public StubDomainUser(string? userId = null, bool isAuthenticated = false, bool isSystemActor = false)
+    {
+        _userId = userId;
+        _isAuthenticated = isAuthenticated;
+        _isSystemActor = isSystemActor;
+    }
+
     public string SessionKey => "test-session";
-    public bool IsAuthenticated => false;
-    public bool IsSystemActor => false;
+    public bool IsAuthenticated => _isAuthenticated;
+    public bool IsSystemActor => _isSystemActor;
     public IUserInfo? UserInfo => null;
     public long? TenantId => null;
     public bool IsNoAuditActive => false;
-    public string? UserId => null;
+    public string? UserId => _userId;
     public string? UserName => null;
     public bool IsInRole(string role) => false;
 

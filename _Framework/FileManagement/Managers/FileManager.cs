@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.BlobStoring;
 
@@ -34,6 +35,7 @@ namespace TKWF.Ext.FileManagement
         private readonly ITransactionManager _transactionManager;
         private readonly FileManagementOptions _options;
         private readonly ILogger<FileManager> _logger;
+        private readonly IDomainUser _domainUser;   // V0.3.0：用户级配额（OwnerId 归属维度，对齐 Settings/FeatureManagement 先例）
 
         /// <summary>物化路径最大长度（对齐实体列 MaxLength(1024)，对齐 OU C3）。</summary>
         private const int MaxPathLength = 1024;
@@ -54,7 +56,8 @@ namespace TKWF.Ext.FileManagement
             IBlobStorageService blobStorage,
             ITransactionManager transactionManager,
             IOptions<FileManagementOptions> options,
-            ILogger<FileManager> logger)
+            ILogger<FileManager> logger,
+            IDomainUser domainUser)   // V0.3.0：用户级配额（OwnerId 归属维度）
         {
             _folderStore = folderStore ?? throw new ArgumentNullException(nameof(folderStore));
             _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
@@ -68,6 +71,7 @@ namespace TKWF.Ext.FileManagement
                 .Where(e => e.Length > 0)
                 .ToHashSet(StringComparer.Ordinal);
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _domainUser = domainUser ?? throw new ArgumentNullException(nameof(domainUser));
         }
 
         // ── 目录 ──
@@ -351,6 +355,7 @@ namespace TKWF.Ext.FileManagement
                             Size = fileSize,
                             Sha256 = sha256,
                             UploaderName = null,   // 预留（Manager 未注入当前用户上下文）
+                            OwnerId = ResolveOwnerId(),   // V0.3.0：新建文件写入归属（所有权保留——一经写入不可变，版本化/回滚不动）
                             CreateTime = DateTime.UtcNow,
                             UpdateTime = DateTime.UtcNow
                         };
@@ -427,10 +432,34 @@ namespace TKWF.Ext.FileManagement
             await _versionStore.CreateAsync(versionEntity, ct);
         }
 
-        /// <summary>V0.2.0 配额检查（上传步骤 7.5——Blob 落盘前，预检前移避免浪费 IO）：
-        /// 目录文件数 / 目录容量 / 全局容量三键可空（null 不限制）；超限 → InvalidOperationException（含配额信息）。</summary>
+        /// <summary>V0.2.0 配额检查（上传步骤 7.5——Blob 落盘前，预检前移避免浪费 IO）+ V0.3.0 用户级配额：
+        /// 目录文件数 / 目录容量 / 全局容量（V0.2.0）+ 用户文件数 / 用户容量（V0.3.0）——键可空（null 不限制）；超限 → InvalidOperationException（含配额信息）。
+        /// <para><b>检查顺序契约（ADR-FileManagement-用户级配额所有权语义 §决策 5）</b>：
+        /// 用户计数 → 用户容量 → 目录计数 → 目录容量 → 全局容量（最具体 → 最兜底；用户维度早失败省一次目录聚合 IO）。</para></summary>
         private async Task EnforceQuotaAsync(long? folderId, long contentLength, CancellationToken ct)
         {
+            // ── V0.3.0 用户维度（顶部插入——Oracle 条件 7 顺序契约）──
+            // 归属解析：认证 + 非系统账号 + 数值型 UserId → OwnerId；否则 null（匿名/系统/非数值 → 跳过用户配额，全局兜底）
+            long? ownerId = ResolveOwnerId();
+            if (ownerId.HasValue)
+            {
+                if (_options.MaxUserFilesCount.HasValue)
+                {
+                    long count = await _fileStore.CountByOwnerAsync(ownerId.Value, ct);
+                    if (count >= _options.MaxUserFilesCount.Value)
+                        throw new InvalidOperationException(
+                            $"用户文件数配额超限：当前 {count} / 上限 {_options.MaxUserFilesCount.Value}");
+                }
+
+                if (_options.MaxUserSizeBytes.HasValue)
+                {
+                    long current = await _fileStore.SumSizeByOwnerAsync(ownerId.Value, ct);
+                    if (current + contentLength > _options.MaxUserSizeBytes.Value)
+                        throw new InvalidOperationException(
+                            $"用户容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxUserSizeBytes.Value} 字节");
+                }
+            }
+
             if (_options.MaxFilesPerFolder.HasValue && folderId.HasValue)
             {
                 long count = await _fileStore.CountByFolderIdAsync(folderId, ct);
@@ -455,6 +484,31 @@ namespace TKWF.Ext.FileManagement
                         $"全局容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxTotalSizeBytes.Value} 字节");
             }
         }
+
+        /// <summary>
+        /// V0.3.0 归属用户解析——认证 + 非系统账号 + 数值型 UserId → OwnerId；否则 null。
+        /// <para>非数值 UserId 首次失败 Warning 告警（Oracle 条件 5：便于消费方排查"配额配置了但不生效"）。</para>
+        /// </summary>
+        private long? ResolveOwnerId()
+        {
+            if (!_domainUser.IsAuthenticated || _domainUser.IsSystemActor || string.IsNullOrWhiteSpace(_domainUser.UserId))
+                return null;
+
+            if (long.TryParse(_domainUser.UserId, out var uid))
+                return uid;
+
+            // 非数值 UserId（GUID/字符串）——用户配额不可用（全局兜底）；首次告警
+            if (!_nonNumericUserIdWarned)
+            {
+                _nonNumericUserIdWarned = true;
+                _logger.LogWarning(
+                    "用户级配额跳过：UserId '{UserId}' 非数值型（用户配额仅支持数值型 UserId，已降级到全局配额兜底）",
+                    _domainUser.UserId);
+            }
+            return null;
+        }
+
+        private bool _nonNumericUserIdWarned;
 
         /// <inheritdoc />
         public async Task<(Stream Stream, ManagedFileEntity File)?> DownloadFileAsync(long id, CancellationToken ct = default)

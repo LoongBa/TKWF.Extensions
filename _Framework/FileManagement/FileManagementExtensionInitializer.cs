@@ -59,7 +59,8 @@ namespace TKWF.Ext.FileManagement
                 sp.GetRequiredService<IBlobStorageService>(),
                 sp.GetRequiredService<ITransactionManager>(),
                 sp.GetRequiredService<IOptions<FileManagementOptions>>(),
-                sp.GetRequiredService<ILogger<FileManager>>()));
+                sp.GetRequiredService<ILogger<FileManager>>(),
+                sp.GetRequiredService<IDomainUser>()));   // V0.3.0：用户级配额（OwnerId 归属维度，对齐 FeatureManagement 先例）
         }
 
         /// <summary>过滤器不注册（v0.1.0 无过滤器）。</summary>

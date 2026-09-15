@@ -37,6 +37,12 @@ namespace TKWF.Ext.FileManagement
         /// <summary>全局文件总容量（V0.2.0 配额——SQL SUM 下推全表；空表返回 0）。</summary>
         Task<long> SumSizeAllAsync(CancellationToken ct = default);
 
+        /// <summary>按归属用户统计文件数（V0.3.0 用户级配额——SQL COUNT 下推，IX_ManagedFile_Owner）。</summary>
+        Task<long> CountByOwnerAsync(long ownerId, CancellationToken ct = default);
+
+        /// <summary>按归属用户求文件总容量（V0.3.0 用户级配额——SQL SUM 下推，IX_ManagedFile_Owner；无归属文件返回 0）。</summary>
+        Task<long> SumSizeByOwnerAsync(long ownerId, CancellationToken ct = default);
+
         /// <summary>新增文件（回写自增 Id，返回 Id）。</summary>
         Task<long> CreateAsync(ManagedFileEntity entity, CancellationToken ct = default);
 

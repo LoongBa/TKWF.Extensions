@@ -1,0 +1,11 @@
+{
+  "chartType": "Bar Chart",
+  "title": "每日销售趋势（柱状）",
+  "encodings": {
+    "x": { "field": "BizDate" },
+    "y": [
+      { "field": "TotalAmount", "aggregate": "sum" }
+    ]
+  },
+  "baseSize": { "width": 960, "height": 400 }
+}

@@ -1,0 +1,11 @@
+{
+  "specKey": "PaymentLogStatView--weekly-sales-trend",
+  "version": "1.0.0",
+  "sourceVEntity": "PaymentLogStatView",
+  "sourceViewSqlHash": "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+  "generatedAt": "2026-09-10T10:00:00Z",
+  "generatedBy": "tkwf-analytics-view@0.1.0",
+  "status": "stale",
+  "primaryChartSpecFile": "line.json",
+  "fields": ["BizDate", "TotalAmount"]
+}

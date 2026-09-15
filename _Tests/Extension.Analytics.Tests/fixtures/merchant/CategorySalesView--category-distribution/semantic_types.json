@@ -1,0 +1,6 @@
+{
+  "semantic_types": {
+    "CategoryName": { "semanticType": "Category" },
+    "TotalAmount":  { "semanticType": "Price", "unit": "CNY" }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "chartType": "Line Chart",
+  "title": "每日销售趋势",
+  "subtitle": "销售总额与已付订单数，按营业日",
+  "encodings": {
+    "x": { "field": "BizDate" },
+    "y": [
+      { "field": "TotalAmount", "aggregate": "sum" },
+      { "field": "PaidCount", "aggregate": "count" }
+    ]
+  },
+  "baseSize": { "width": 960, "height": 400 }
+}

@@ -1,0 +1,9 @@
+{
+  "chartType": "Pie Chart",
+  "title": "品类分布",
+  "encodings": {
+    "category": { "field": "CategoryName" },
+    "value": { "field": "TotalAmount", "aggregate": "sum" }
+  },
+  "baseSize": { "width": 960, "height": 400 }
+}

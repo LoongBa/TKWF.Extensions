@@ -1,0 +1,11 @@
+{
+  "chartType": "Bar Chart",
+  "title": "门店排行",
+  "encodings": {
+    "x": { "field": "StoreName" },
+    "y": [
+      { "field": "TotalAmount", "aggregate": "sum" }
+    ]
+  },
+  "baseSize": { "width": 960, "height": 400 }
+}

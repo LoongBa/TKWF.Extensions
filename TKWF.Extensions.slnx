@@ -48,6 +48,9 @@
   <Folder Name="/_Framework/Metrics/">
     <Project Path="_Framework/Metrics/TKWF.Ext.Metrics.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Analytics/">
+    <Project Path="_Framework/Analytics/TKWF.Ext.Analytics.csproj" />
+  </Folder>
   <Folder Name="/_Framework/PrintTemplates/">
     <Project Path="_Framework/PrintTemplates/TKWF.Ext.PrintTemplates.csproj" />
   </Folder>
@@ -126,6 +129,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Metrics.Tests/">
     <Project Path="_Tests/Extension.Metrics.Tests/TKWF.Ext.Metrics.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Analytics.Tests/">
+    <Project Path="_Tests/Extension.Analytics.Tests/TKWF.Ext.Analytics.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Identity.Tests/">
     <Project Path="_Tests/Extension.Identity.Tests/TKWF.Ext.Identity.Tests.csproj" />

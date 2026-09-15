@@ -1,0 +1,11 @@
+{
+  "specKey": "CategorySalesView--category-distribution",
+  "version": "1.0.0",
+  "sourceVEntity": "CategorySalesView",
+  "sourceViewSqlHash": "sha256:1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
+  "generatedAt": "2026-09-01T10:00:00Z",
+  "generatedBy": "tkwf-analytics-view@0.1.0",
+  "status": "deprecated",
+  "primaryChartSpecFile": "pie.json",
+  "fields": ["CategoryName", "TotalAmount"]
+}

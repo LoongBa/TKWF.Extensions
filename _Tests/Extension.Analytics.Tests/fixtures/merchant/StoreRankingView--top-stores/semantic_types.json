@@ -1,0 +1,6 @@
+{
+  "semantic_types": {
+    "StoreName":   { "semanticType": "Category" },
+    "TotalAmount": { "semanticType": "Price", "unit": "CNY" }
+  }
+}

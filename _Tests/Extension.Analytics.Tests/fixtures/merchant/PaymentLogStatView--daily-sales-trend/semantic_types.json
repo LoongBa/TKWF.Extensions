@@ -1,0 +1,12 @@
+{
+  "semantic_types": {
+    "BizDate":     { "semanticType": "Date",  "unit": "day" },
+    "TotalAmount": { "semanticType": "Price", "unit": "CNY" },
+    "PaidCount":   { "semanticType": "Count" }
+  },
+  "field_display_names": {
+    "BizDate": "营业日",
+    "TotalAmount": "销售总额",
+    "PaidCount": "已付笔数"
+  }
+}

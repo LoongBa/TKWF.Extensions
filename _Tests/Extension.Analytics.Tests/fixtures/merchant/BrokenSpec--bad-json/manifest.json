@@ -1,0 +1,7 @@
+{
+  "specKey": "BrokenSpec--bad-json",
+  "version": "1.0.0",
+  "status": "active",
+  "primaryChartSpecFile": "line.json",
+  "fields": ["Field1"]
+}

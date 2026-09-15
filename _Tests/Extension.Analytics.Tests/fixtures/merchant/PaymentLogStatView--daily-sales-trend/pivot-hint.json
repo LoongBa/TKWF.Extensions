@@ -1,0 +1,8 @@
+{
+  "specKey": "PaymentLogStatView--daily-sales-trend",
+  "primaryChartSpecFile": "chart_spec/line.json",
+  "pivotHint": {
+    "allowedTransitions": ["bar", "area"],
+    "notes": "flint 按数据形态 + pivot 门控自行裁决可切换图型"
+  }
+}

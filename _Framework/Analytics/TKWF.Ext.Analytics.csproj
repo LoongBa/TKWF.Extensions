@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Analytics</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Analytics/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.Analytics</PackageId>
+    <Description>TKWF 扩展：分析服务（AnalysisSpec 读取/校验/透传——语义层设计期静态产物对齐 flint ChartAssemblyInput；核心加载校验在 TKWF.Utility.Analytics，本包为 TKWF 集成层门面）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ⚠️ 临时调试模式（对齐 AGENTS.md §6 双模式并存）：主框架 4.10.27（含 Utility.Analytics）发布前，
+         暂用 ProjectReference 验证编译；4.10.27 发布后切回 PackageReference（TKWF.Utility + TKWF.Domain）。
+         正式接线：<PackageReference Include="TKWF.Utility" /> + <PackageReference Include="TKWF.Domain" /> -->
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Utility\TKWF.Utility.csproj" />
+    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal（如有） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Analytics.Tests" />
+  </ItemGroup>
+
+</Project>

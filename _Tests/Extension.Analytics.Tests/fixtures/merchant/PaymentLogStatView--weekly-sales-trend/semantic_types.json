@@ -1,0 +1,6 @@
+{
+  "semantic_types": {
+    "BizDate":     { "semanticType": "Date",  "unit": "week" },
+    "TotalAmount": { "semanticType": "Price", "unit": "CNY" }
+  }
+}

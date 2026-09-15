@@ -25,6 +25,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 方案 2（2026-09-16，CI 负载治理）：concurrency 串行化——同 ref 连续 push 只保留最新 run，
+# 排队中的旧 run 立即取消（不浪费共享 runner slot）。
+concurrency:
+  group: ext-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   DOTNET_VERSION: '10.0.x'
   NUGET_OUTPUT: ./nupkgs
@@ -35,7 +41,41 @@ env:
   ANALYTICS_ENABLED: 'false'
 
 jobs:
+  # 方案 1（2026-09-16，CI 负载治理）：changes 检测——分支 push 且纯 docs/文档变更 → docs-only=true，
+  # build-test 跳过全量构建（纯文档提交不再空转 runner）。tag push / PR 永远全量（发布链路必须）。
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      docs-only: ${{ steps.filter.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only changes
+        id: filter
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "branch" ]]; then
+            CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
+            echo "changed:"
+            echo "$CHANGED"
+            # 所有变更均在 docs/ 或 *.md → docs-only；跳过全量构建
+            if [[ -z "$(echo "$CHANGED" | grep -vE '^(docs/|.*\.md$)')" ]]; then
+              echo "docs-only=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "docs-only=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # tag/PR/manual 全量
+            echo "docs-only=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-test:
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +86,16 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # 方案 3（2026-09-16，CI 负载治理）：NuGet 包缓存——跨 run 复用 ~/.nuget/packages，
+      # 缩短 restore 时长（28 测试项目全量 restore 是每个 run 的主要耗时之一）。
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/*.slnx', 'Directory.Packages.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       # 双模式（2026-09-16 方案 B）：UseLocalFw=false → PackageReference（nuget 消费方视角）。
       # slnx 不支持按 MSBuild 属性排除项目——Analytics 4.10.27 发布前用显式项目列表构建。

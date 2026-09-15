@@ -25,6 +25,8 @@
 | 内部规划（总览跟踪 / 开发计划 / 审核报告 / 对标清单规划表） | **私有** 主框架 | `_TKWF/docs/03_扩展模块/`（不公开） |
 | 扩展机制基座（D17/ADR37-39） | **私有** 主框架 | `_TKWF/docs/` 根与 `_TKWF/docs/02-迭代开发/ADR/` |
 
+> **维护/提交归属裁定（2026-09-16）**：**主框架中扩展模块相关内容**（`_TKWF/docs/03_扩展模块/` 全目录 + 主框架文档中扩展模块状态段落）**由本仓库负责维护与提交**——因本仓库是 public（扩展模块内容对外可见、随扩展演进），主框架仅作物理承载。即：扩展模块相关文档的增改由本仓库侧执行并直接提交到主框架 git（含 push，不打 tag），不依赖框架组代劳；框架机制基座（D17/ADR37-39 等）仍归主框架维护。
+
 ---
 
 ## 2. 版本体系
@@ -44,6 +46,8 @@
 6. 审核代码 → 编写/更新**主框架私有** `_TKWF/docs/03_扩展模块/{扩展名称}/{扩展名称}-审核报告.md`（审核报告属内部）
 7. 更新**主框架** `_TKWF/docs/03_扩展模块/总览和跟踪.md`（状态勾选）
 8. **推送（push）但不打 tag** → **tag 必须征求同意**（见 §5）
+
+> **主框架扩展模块文档提交（2026-09-16 裁定）**：步骤 6/7 产生的**主框架 `_TKWF/docs/03_扩展模块/` 文档增改由本仓库侧直接提交到主框架 git（含 push，不打 tag）**——不依赖框架组代劳（见 §1 维护/提交归属裁定）。
 
 ### 提交纪律
 
@@ -265,4 +269,4 @@ _Tests/Extension.{扩展名}.Tests/
 | 2026-09-10 | — | §8 新增「分布式事件 handler 注册机制」要点（FeatureManagement v0.3.0 先例）——扩展内建 `[DomainEventHandler]` + `IDistributedEventHandler<T>` handler **必须 public**（SG4 消费方编译期经 ReferencedAssemblySymbols 生成 `typeof(Handler)` 引用，internal 无 IVT → CS0122；public 构造器依赖类型亦不可 internal——CS0051）；Initializer 不手动注册；扩展自身构建不触发 EVT003/EVT004（消费方 WebApi 编译时执行） |
 | 2026-09-14 | — | §8 新增「xCodeGen 生成物管理（.g.cs 入库政策）」——生成物入库（源码库自包含）；修复 permissions 配置绝对路径 bug（OutputDir 相对 OutputRoot 解析）；metrics-tests 配置先例（测试宿主走标准管线 + 生成 ProjectMetaContext）；重生成纪律 |
 | 2026-09-14 | — | §8 新增「扩展模块生成物健康自检清单」7 项（配置 1:1 / 相对路径 / 重生成纪律 / 时间戳新鲜 / 分部对 / 宿主生成上下文 / 骨架编译）+ 已知缺陷记录——审计固话（Approval 缺配置 4-5 天陈旧 + EntityEmpty 模板缺 using 双修）；经验归入主框架私有《扩展模块生成物与测试宿主规范》 |
-| 2026-09-15 | — | **PackageReference 独立构建迁移**（§1 边界 + §6 引用规则 + §8 接线要点/项目模板/变更记录）：31 扩展 ProjectReference→PackageReference（TKWF.* 4.10.24 CPM 集中版本）；SG1 分析器改用纯 Analyzer 包 `TKWF.CodeGeneration`（替代 build/refs 预编译 DLL + FUTC 桥）；扩展间 Abstractions 保持 ProjectReference；全量 1352/1352 通过；CI workflow 独立化（移除主框架检出）；配套 facts：主框架 DummyConsumer 包 ID 已陈旧（`TKWF.Framework.*` 404）、`TKWF.Domain.Api` analyzer bundle 路径失效（均已记录待办） |
+| 2026-09-16 | — | §1 新增「维护/提交归属裁定」（用户 2026-09-16）：**主框架 `_TKWF/docs/03_扩展模块/` 全目录 + 主框架文档中扩展模块状态段落由本仓库负责维护与提交**（含 push 不打 tag，不依赖框架组）——因本仓库是 public（扩展模块内容对外可见、随扩展演进），主框架仅作物理承载；§3 流程 6/7 补充提交归属注记 |

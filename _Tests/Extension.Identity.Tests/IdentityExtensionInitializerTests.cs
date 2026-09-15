@@ -116,9 +116,9 @@ public class IdentityExtensionInitializerTests
         services.TryAddScoped<IRoleStore, RoleStore>();
         var sp = services.BuildServiceProvider();
 
-        var init = new IdentityExtensionInitializer<IdentityUserInfo> { ServiceProvider = sp };
-        await init.InitializeAsync();
-        await init.InitializeAsync(); // 第二次调用应幂等
+        var init = new IdentityExtensionInitializer<IdentityUserInfo>();
+        await init.InitializeAsync(sp);
+        await init.InitializeAsync(sp); // 第二次调用应幂等
 
         var roleStore = sp.GetRequiredService<IRoleStore>();
         var roleList = await roleStore.GetListAsync(take: 100, ct: CancellationToken.None);
@@ -129,12 +129,11 @@ public class IdentityExtensionInitializerTests
     }
 
     [Fact]
-    public async Task InitializeAsync_NoServiceProvider_NoOp()
+    public async Task InitializeAsync_NullServiceProvider_Throws()
     {
-        var init = new IdentityExtensionInitializer<IdentityUserInfo>(); // ServiceProvider = null
-
-        // 不应抛异常
-        await init.InitializeAsync();
+        // V4.10.25 (ADR78)：签名强制带 IServiceProvider——null 属误用（DomainHost 保证非 null），抛异常而非静默
+        var init = new IdentityExtensionInitializer<IdentityUserInfo>();
+        await Assert.ThrowsAsync<ArgumentNullException>(() => init.InitializeAsync(null!));
     }
 
     /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产

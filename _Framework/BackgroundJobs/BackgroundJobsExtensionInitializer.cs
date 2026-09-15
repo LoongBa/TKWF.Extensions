@@ -54,5 +54,5 @@ public class BackgroundJobsExtensionInitializer<TUserInfo> : ExtensionInitialize
     public override void ConfigureFilters(FilterBuilder<TUserInfo> builder) { /* BackgroundJobs 无全局过滤器 */ }
 
     /// <summary>系统就绪后初始化（空实现）。</summary>
-    public override Task InitializeAsync() => Task.CompletedTask;
+    public override Task InitializeAsync(System.IServiceProvider sp) => Task.CompletedTask;
 }

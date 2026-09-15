@@ -51,7 +51,7 @@ public class TaggingOptionsTests
         init.ConfigureServices(services);
         extra?.Invoke(services);
         var sp = services.BuildServiceProvider();
-        init.ServiceProvider = sp;   // IServiceProviderAware 注入
+        // V4.10.25 (ADR78)：InitializeAsync(IServiceProvider sp) 签名带参——不再 setter 注入
         return (init, sp);
     }
 
@@ -64,7 +64,7 @@ public class TaggingOptionsTests
         };
         var (init, sp) = Build(s => s.Configure<TaggingOptions>(o => o.DefaultRules = defaultRules));
 
-        await init.InitializeAsync();
+        await init.InitializeAsync(sp);
 
         var tagService = sp.GetRequiredService<ITagService>();
         var hits = tagService.GetTags("华为手机");
@@ -86,7 +86,7 @@ public class TaggingOptionsTests
             s.Configure<TaggingOptions>(o => o.AutoLoadRulesFromStore = true);
         });
 
-        await init.InitializeAsync();
+        await init.InitializeAsync(sp);
 
         var tagService = sp.GetRequiredService<ITagService>();
         var hits = tagService.GetTags("手机");
@@ -110,7 +110,7 @@ public class TaggingOptionsTests
             });
         });
 
-        await init.InitializeAsync();
+        await init.InitializeAsync(sp);
 
         var tagService = sp.GetRequiredService<ITagService>();
         var hits = tagService.GetTags("苹果");
@@ -119,11 +119,11 @@ public class TaggingOptionsTests
     }
 
     [Fact]
-    public async Task Initialize_NoServiceProvider_SkipsSilently()
+    public async Task Initialize_NullServiceProvider_Throws()
     {
-        // Direct 场景（未注入 sp）→ 静默跳过（不抛异常）
+        // V4.10.25 (ADR78)：签名强制带 IServiceProvider——null 属误用（DomainHost 保证非 null），抛异常而非静默
         var init = new TaggingExtensionInitializer<TestUserInfo>();
-        await init.InitializeAsync();              // ServiceProvider = null → return
+        await Assert.ThrowsAsync<ArgumentNullException>(() => init.InitializeAsync(null!));
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class TaggingOptionsTests
     {
         // 双路径均未配置 → 软校验 Warning（不阻断启动，不抛异常）
         var (init, sp) = Build();
-        await init.InitializeAsync();
+        await init.InitializeAsync(sp);
 
         var tagService = sp.GetRequiredService<ITagService>();
         Assert.Empty(tagService.GetTags("任何文本"));

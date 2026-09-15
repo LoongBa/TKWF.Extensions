@@ -25,7 +25,7 @@ namespace TKWF.Ext.Permissions
     /// <para>命名空间 <c>TKWF.Ext.Permissions</c>（D17 §5.1 设计 + 包名约定 §4.6）。</para>
     /// </summary>
     [TKWFExtension("Permissions")]
-    public class PermissionExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>, IServiceProviderAware
+    public class PermissionExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
         where TUserInfo : class, IUserInfo, new()
     {
         /// <summary>扩展名称（对齐 [TKWFExtension] Name）。</summary>
@@ -33,9 +33,6 @@ namespace TKWF.Ext.Permissions
 
         /// <summary>扩展描述。</summary>
         public override string Description => "权限管理扩展——细粒度权限定义/检查";
-
-        /// <summary>注入的 IServiceProvider（InitializeExtensionsAsync 阶段设置，V4.9.76 D2）。</summary>
-        public IServiceProvider? ServiceProvider { get; set; }
 
         /// <summary>
         /// 注册权限服务 + 从 ProjectMetaContext 桥收集权限贡献者定义。
@@ -94,16 +91,13 @@ namespace TKWF.Ext.Permissions
         /// 系统权限（替代 V0.4.0 的逐权限授予——Admin.All 拥有者对全部权限放行，未来新增权限自动覆盖）。
         /// 幂等：仅当记录不存在时授予，绝不覆盖消费方已设置的授予/撤销。</item>
         /// </list>
-        /// <para>经 <see cref="IServiceProviderAware.ServiceProvider"/> 解析 <see cref="PermissionGrantEntityDataService"/>。
+        /// <para>经 <c>sp</c>（InitializeAsync(IServiceProvider) 参数，V4.10.25 ADR78）解析 <see cref="PermissionGrantEntityDataService"/>。
         /// 通过 <see cref="PermissionOptions.SeedAdminRoleName"/> 控制种子角色；
         /// 空字符串 = 禁用种子。未注册 <see cref="IEntityDAC{TEntity}"/>（无真实持久化）时跳过。</para>
         /// </summary>
-        public override async Task InitializeAsync()
+        public override async Task InitializeAsync(IServiceProvider sp)
         {
-            // 无 DI 容器（未实现 IServiceProviderAware 或未注入）→ 跳过
-            if (ServiceProvider is null) return;
-
-            using var scope = ServiceProvider.CreateScope();
+            using var scope = sp.CreateScope();
             var scoped = scope.ServiceProvider;
 
             // ── V4.9.92（ADR49）：建表由主框架统一托管 ──

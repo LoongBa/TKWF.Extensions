@@ -67,6 +67,6 @@ namespace TKWF.Ext.Navigation
         public override void ConfigureFilters(FilterBuilder<TUserInfo> builder) { }
 
         /// <summary>菜单定义已在 ConfigureServices 收集，无需初始化。</summary>
-        public override Task InitializeAsync() => Task.CompletedTask;
+        public override Task InitializeAsync(System.IServiceProvider sp) => Task.CompletedTask;
     }
 }

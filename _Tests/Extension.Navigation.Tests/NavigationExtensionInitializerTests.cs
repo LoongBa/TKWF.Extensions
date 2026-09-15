@@ -85,8 +85,9 @@ public class NavigationExtensionInitializerTests
     [Fact]
     public void InitializeAsync_CompletesImmediately()
     {
+        // V4.10.25 (ADR78)：签名带 IServiceProvider——空实现不接受 sp，传 null 验证立即完成
         var initializer = new NavigationExtensionInitializer<SimpleUserInfo>();
-        var task = initializer.InitializeAsync();
+        var task = initializer.InitializeAsync(null!);
         Assert.True(task.IsCompleted);
     }
 

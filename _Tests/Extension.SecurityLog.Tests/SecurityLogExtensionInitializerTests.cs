@@ -134,8 +134,9 @@ public class SecurityLogExtensionInitializerTests
     [Fact]
     public async Task InitializeAsync_Completes()
     {
+        // V4.10.25 (ADR78)：签名带 IServiceProvider——空实现不接受 sp，传 null 验证不抛
         var initializer = new SecurityLogExtensionInitializer<TestUserInfo>();
-        await initializer.InitializeAsync();
+        await initializer.InitializeAsync(null!);
         Assert.Equal("SecurityLog", initializer.Name);
         Assert.False(string.IsNullOrEmpty(initializer.Description));
     }

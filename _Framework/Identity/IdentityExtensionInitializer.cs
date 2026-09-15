@@ -18,7 +18,7 @@ namespace TKWF.Ext.Identity
     /// </list>
     /// </summary>
     [TKWFExtension("Identity")]
-    public class IdentityExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>, IServiceProviderAware
+    public class IdentityExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
         where TUserInfo : class, IUserInfo, new()
     {
         /// <summary>扩展名称。</summary>
@@ -26,9 +26,6 @@ namespace TKWF.Ext.Identity
 
         /// <summary>扩展描述。</summary>
         public override string Description => "身份管理扩展——用户、角色、用户角色分配与凭据验证";
-
-        /// <summary>注入的 IServiceProvider（InitializeExtensionsAsync 阶段设置，IServiceProviderAware）。</summary>
-        public IServiceProvider? ServiceProvider { get; set; }
 
         /// <summary>
         /// 注册用户/角色存储与管理服务。
@@ -56,11 +53,12 @@ namespace TKWF.Ext.Identity
 
         /// <summary>
         /// 幂等创建 Admin 系统角色种子——仅示初始化钩子用法，不创建默认用户。
-        /// <para>Admin 角色已存在则跳过（幂等）；创建失败静默，不阻塞扩展启动。</para>
+        /// <para>Admin 角色已存在则跳过（幂等）；创建失败静默，不阻塞扩展启动。
+        /// V4.10.25 (ADR78)：sp 经参数传入（替代 IServiceProviderAware setter 注入）。</para>
         /// </summary>
-        public override async Task InitializeAsync()
+        public override async Task InitializeAsync(IServiceProvider sp)
         {
-            var roleStore = ServiceProvider?.GetService<IRoleStore>();
+            var roleStore = sp.GetService<IRoleStore>();
             if (roleStore == null) return;
 
             var admin = await roleStore.GetByNameAsync("Admin");

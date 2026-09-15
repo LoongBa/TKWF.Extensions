@@ -56,9 +56,9 @@ public class PermissionSeedInitializerTests
     public async Task InitializeAsync_SeedsAdminRole_AdminAllSystemPermission()
     {
         var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create", "Order.Delete");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
+        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
 
-        await initializer.InitializeAsync();
+        await initializer.InitializeAsync(sp);
 
         using var scope = sp.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
@@ -76,10 +76,10 @@ public class PermissionSeedInitializerTests
     public async Task InitializeAsync_Idempotent_DoesNotDuplicate()
     {
         var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
+        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
 
-        await initializer.InitializeAsync();
-        await initializer.InitializeAsync();
+        await initializer.InitializeAsync(sp);
+        await initializer.InitializeAsync(sp);
 
         using var scope = sp.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
@@ -91,7 +91,7 @@ public class PermissionSeedInitializerTests
     public async Task InitializeAsync_DoesNotOverwriteExistingRevoke()
     {
         var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
+        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
 
         using (var scope = sp.CreateScope())
         {
@@ -100,7 +100,7 @@ public class PermissionSeedInitializerTests
             await svc.SetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", isGranted: false);
         }
 
-        await initializer.InitializeAsync();
+        await initializer.InitializeAsync(sp);
 
         using var verifyScope = sp.CreateScope();
         var verifySvc = verifyScope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
@@ -113,9 +113,9 @@ public class PermissionSeedInitializerTests
     public async Task InitializeAsync_EmptySeedRole_DisablesSeeding()
     {
         var sp = BuildSvcProvider(registerDac: true, seedRole: "", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
+        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
 
-        await initializer.InitializeAsync();
+        await initializer.InitializeAsync(sp);
 
         using var scope = sp.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
@@ -128,9 +128,9 @@ public class PermissionSeedInitializerTests
     {
         // 未注册 IEntityDAC（真实持久化未接线）→ 无 DataService → 跳过种子
         var sp = BuildSvcProvider(registerDac: false, seedRole: "admin", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo> { ServiceProvider = sp };
+        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
 
-        await initializer.InitializeAsync(); // 不应抛异常
+        await initializer.InitializeAsync(sp); // 不应抛异常
     }
 
     /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产

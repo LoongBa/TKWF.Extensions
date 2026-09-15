@@ -94,5 +94,5 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         => builder.AddFeatureCheck();
 
     /// <summary>系统就绪后初始化（空实现——无种子数据）。</summary>
-    public override Task InitializeAsync() => Task.CompletedTask;
+    public override Task InitializeAsync(System.IServiceProvider sp) => Task.CompletedTask;
 }

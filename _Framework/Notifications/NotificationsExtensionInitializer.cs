@@ -43,7 +43,7 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
 
         // 通知定义 Provider 发现（M3 修订）：反射扫描已加载程序集中标 [NotificationDefinitionProvider] 的类，
         // 注册为 INotificationDefinitionProvider（启动一次性成本可接受）。
-        // 对齐 Navigation [MenuContributor] 先例——特性驱动 + DI 收集。
+        // 对齐 Navigation IMenuContributor 接口判定先例——特性驱动 + DI 收集。
         RegisterNotificationDefinitionProviders(services);
 
         // 定义管理器（Singleton：定义启动时收集后不可变，m2）

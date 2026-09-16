@@ -28,7 +28,7 @@
 
 - **菜单项模型（`MenuItemDefinition`）**：树形数据模型（`Parent` 层级关联），不含渲染信息——Name/DisplayName/Url/Icon/Order/Parent/RequiredPermissions/Logic/IsEnabled/IsVisible。
 
-- **贡献契约（`IMenuContributor` + `MenuContributorAttribute`）**：业务模块实现 `ConfigureMenu(context)` 声明菜单项；`[MenuContributor]` 标记后由 SG1 编译期扫描发现并生成注册表（与 `[PermissionContributor]` 同构）。
+- **贡献契约（`IMenuContributor`，Navigation.Abstractions）**：业务模块实现 `ConfigureMenu(context)` 声明菜单项；**A+ 阶段 2（V4.10.30）起实现接口即被 SG1 接口判定自动发现**（`Contributors["Menu"]` 统一描述符），`[MenuContributor]` 特性已删除（接口语义，消除漏标静默漏收）。
 
 - **配置上下文（`MenuConfigurationContext`）**：贡献者调用 `Add()` 声明菜单项（Name 必填且唯一，重复抛异常）。
 
@@ -74,7 +74,6 @@ public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ...
 ### 2. 贡献菜单项（业务模块侧）
 
 ```csharp
-[MenuContributor]
 public class MainMenuContributor : IMenuContributor
 {
     public void ConfigureMenu(MenuConfigurationContext context)
@@ -103,7 +102,7 @@ public class MainMenuContributor : IMenuContributor
 }
 ```
 
-SG1 扫描 `[MenuContributor]` → 生成注册表 → 扩展初始化器在 ConfigureServices 阶段实例化并调用 `ConfigureMenu` 收集。
+SG1 接口判定扫描 `IMenuContributor` 实现 → 生成统一贡献者清单 `Contributors["Menu"]` → 扩展初始化器在 ConfigureServices 阶段实例化并调用 `ConfigureMenu` 收集。
 
 ### 3. 读取菜单（渲染层侧）
 
@@ -156,7 +155,7 @@ public class NavMenuViewComponent(IMenuManager menuManager)
 |----------|---------|------------|
 | **`IMenuManager`** | 菜单读取门面（权限过滤 + 排序 + 循环检测） | `MenuManager<TUserInfo>`（本扩展） |
 | **`IMenuDefinitionRepository`** | 菜单定义仓库（只读） | `MenuDefinitionRepository`（本扩展，填充实例） |
-| **`IMenuContributor`** | 菜单贡献契约（`ConfigureMenu` 同步声明） | 业务模块实现 + `[MenuContributor]` 标记 |
+| **`IMenuContributor`** | 菜单贡献契约（`ConfigureMenu` 同步声明，Navigation.Abstractions） | 业务模块实现 `IMenuContributor` 即被 SG1 接口判定自动发现（A+ 阶段 2） |
 | **`MenuItemDefinition`** | 菜单项数据模型（树形，无渲染信息） | 内置 |
 | **`MenuConfigurationContext`** | 贡献上下文（`Add()` 声明，Name 唯一校验） | 内置 |
 | **`NavigationOptions`** | 配置选项（`TKWF:Navigation` 节） | 内置 |
@@ -188,7 +187,7 @@ public class NavMenuViewComponent(IMenuManager menuManager)
 ## 六、架构演进路线 (Architecture Roadmap)
 
 ### V0.1.0（当前）
-- 菜单数据模型 + 贡献机制（`[MenuContributor]` + SG1 发现）
+- 菜单数据模型 + 贡献机制（`IMenuContributor` 接口判定 + `Contributors["Menu"]` 统一清单，A+ 阶段 2）
 - 权限过滤（All/Any + checker 缺失降级不过滤）
 - 扁平排序 + 循环检测
 - 配置选项（`TKWF:Navigation`）

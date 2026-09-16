@@ -28,6 +28,8 @@
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
     <!-- V4.9.85 (ADR48 D7)：Navigation 引用 Permissions.Abstractions（依赖倒置），不引用 Permissions 实现项目 -->
     <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+    <!-- V4.10.30 (A+ 阶段 2)：契约归位 Navigation.Abstractions（IMenuContributor/MenuItemDefinition/MenuConfigurationContext 迁入） -->
+    <ProjectReference Include="..\Navigation.Abstractions\TKWF.Ext.Navigation.Abstractions.csproj" />
   </ItemGroup>
 
   <!-- V4.9.74 (W6): 单元测试访问 internal 默认实现（MenuDefinitionRepository/MenuManager） -->

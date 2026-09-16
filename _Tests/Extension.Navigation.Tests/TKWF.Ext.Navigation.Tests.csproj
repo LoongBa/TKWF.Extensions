@@ -7,6 +7,11 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>TKWF.Ext.Navigation.Tests</RootNamespace>
+    <!-- V4.10.30 (A+ 阶段 2)：显式钉 UseLocalFw=true——DLL 模式开发（对齐扩展 AGENTS §6 双模式）。
+         不设时 restore 用 undefined → Navigation 的 CodeGeneration.Abstractions PackageReference（Condition="!= 'true'"）
+         进 assets → 编译双引用（部署根 DLL 新 + NuGet 4.10.27 旧）冲突 CS0246/CS0115 实证。
+         钉死后 restore + build 一致走 DLL（部署根含 ContributorDescriptor 桥）。 -->
+    <UseLocalFw>true</UseLocalFw>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,9 +39,13 @@
     <!-- 本仓库扩展（Navigation + Permissions.Abstractions）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Navigation\TKWF.Ext.Navigation.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <!-- V4.10.30 (A+ 阶段 2)：测试 FakeMetaContext override Contributors 需 ContributorDescriptor（含桥的 DLL）。
+         根因实证：Core/Domain NuGet 包（4.10.27）传递 CodeGeneration.Abstractions 4.10.27（旧无桥）→ 编译双引用 CS0246。
+         DLL 模式（UseLocalFw=true）：Core/Domain 走 Directory.Build.props 集中 DLL 块（含桥）+ 显式 Reference
+         CodeGeneration.Abstractions；NuGet 模式（false）：PackageReference（CPM 4.10.29+ 需含桥）。 -->
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true'" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>

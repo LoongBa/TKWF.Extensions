@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
@@ -93,7 +94,11 @@ public class NavigationExtensionInitializerTests
 
     // ─── 测试基础设施 ───
 
-    /// <summary>测试用 ProjectMetaContext——override MenuContributors 返回固定清单。</summary>
+    /// <summary>
+    /// 测试用 ProjectMetaContext——override Contributors 返回固定清单（A+ 阶段 2：新桥 Contributors["Menu"]）。
+    /// <para>V4.10.30 迁移：原 override MenuContributors（旧桥）改为 override Contributors（统一描述符字典，
+    /// key=ContributorTargetKinds.Menu）——对齐 NavigationExtensionInitializer 读新桥（含 ContributorDescriptor）。</para>
+    /// </summary>
     private sealed class FakeMetaContext : ProjectMetaContextBase
     {
         private readonly bool _empty;
@@ -104,15 +109,19 @@ public class NavigationExtensionInitializerTests
 
         public static void Restore(IProjectMetaContext? original) => Instance = original;
 
-        public override IReadOnlyList<MenuContributorData> MenuContributors =>
+        public override IReadOnlyDictionary<string, IReadOnlyList<ContributorDescriptor>> Contributors =>
             _empty
-                ? Array.Empty<MenuContributorData>()
-                : new[]
+                ? new Dictionary<string, IReadOnlyList<ContributorDescriptor>>()
+                : new Dictionary<string, IReadOnlyList<ContributorDescriptor>>
                 {
-                    new MenuContributorData(
-                        "TKWF.Ext.Navigation.Tests.MainMenuContributor",
-                        "MainMenuContributor",
-                        typeof(MainMenuContributor))
+                    [ContributorTargetKinds.Menu] = new[]
+                    {
+                        new ContributorDescriptor(
+                            "TKWF.Ext.Navigation.Tests.MainMenuContributor",
+                            "MainMenuContributor",
+                            typeof(MainMenuContributor),
+                            ContributorTargetKinds.Menu)
+                    }
                 };
 
         public override ProjectConfiguration Configuration => null!;
@@ -120,7 +129,7 @@ public class NavigationExtensionInitializerTests
         public override string MetadataSchemaVersion => "test";
     }
 
-    [MenuContributor]
+    // V4.10.30 (A+ 阶段 2)：MainMenuContributor 删 [MenuContributor] 特性——实现 IMenuContributor 即自动发现（接口判定）
     public sealed class MainMenuContributor : IMenuContributor
     {
         public void ConfigureMenu(MenuConfigurationContext context)

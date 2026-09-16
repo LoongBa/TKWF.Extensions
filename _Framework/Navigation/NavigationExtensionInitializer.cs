@@ -13,8 +13,9 @@ namespace TKWF.Ext.Navigation
     /// <summary>
     /// V4.9.74 (扩展机制业务模块 W4)：导航扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
-    /// <item><see cref="ConfigureServices"/>——DI 构建前：从 <c>ProjectMetaContextBase.Instance.MenuContributors</c>
-    /// 收集贡献者（同步调用 <c>ConfigureMenu</c>，Oracle H1），填充 <c>MenuDefinitionRepository</c>，
+    /// <item><see cref="ConfigureServices"/>——DI 构建前：从 <c>ProjectMetaContextBase.Instance.Contributors["Menu"]</c>
+    /// （A+ 贡献者机制阶段 2，V4.10.30：统一描述符 ContributorDescriptor，接口判定收集）收集贡献者
+    /// （同步调用 <c>ConfigureMenu</c>，Oracle H1），填充 <c>MenuDefinitionRepository</c>，
     /// 注册 IMenuDefinitionRepository + IMenuManager</item>
     /// <item><see cref="ConfigureFilters"/>——空（菜单不注册 AOP 过滤器）</item>
     /// <item><see cref="InitializeAsync"/>——空（菜单定义已在 ConfigureServices 收集）</item>
@@ -36,6 +37,9 @@ namespace TKWF.Ext.Navigation
         /// <para>时序保证：V4.9.71 修复后 <see cref="DomainHostInitializerBase{TUserInfo}.InitializeDiContainer"/>
         /// 在 RegisterInfrastructureInternal（赋 Instance）之后调用本钩子，<c>ProjectMetaContextBase.Instance</c> 已就绪。
         /// 贡献者同步收集（Oracle H1——ConfigureServices 同步 void 无法 await 异步贡献者）。</para>
+        /// <para>V4.10.30 (A+ 阶段 2)：读新桥 <c>Contributors[ContributorTargetKinds.Menu]</c>（统一 ContributorDescriptor，
+        /// 接口判定收集）——替代旧桥 <c>MenuContributors</c>（已标 Obsolete）。ContainsKey+索引器（P1-1：
+        /// IReadOnlyDictionary 无 TryGetValue）。</para>
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
@@ -44,19 +48,20 @@ namespace TKWF.Ext.Navigation
             services.AddOptions<NavigationOptions>();
 
             // 1. 收集菜单贡献者定义（编译期清单 → 运行时实例化 → 同步 ConfigureMenu）
-            var contributors = (ProjectMetaContextBase.Instance as ProjectMetaContextBase)
-                               ?.MenuContributors
-                               ?? Array.Empty<MenuContributorData>();
+            var ctx = ProjectMetaContextBase.Instance as ProjectMetaContextBase;
+            var contributors = ctx != null && ctx.Contributors.ContainsKey(ContributorTargetKinds.Menu)
+                ? ctx.Contributors[ContributorTargetKinds.Menu]
+                : Array.Empty<ContributorDescriptor>();
             var repository = new MenuDefinitionRepository();
             if (contributors.Count > 0)
             {
                 var context = new MenuConfigurationContext();
-                foreach (var contributorData in contributors)
+                foreach (var descriptor in contributors)
                 {
-                    if (contributorData.ContributorType == null) continue;
-                    var contributor = (IMenuContributor?)Activator.CreateInstance(contributorData.ContributorType);
+                    if (descriptor.ContributorType == null) continue;
+                    var contributor = (IMenuContributor?)Activator.CreateInstance(descriptor.ContributorType);
                     if (contributor == null)
-                        throw new InvalidOperationException($"菜单贡献者无法实例化: {contributorData.FullName}（需要无参构造器）");
+                        throw new InvalidOperationException($"菜单贡献者无法实例化: {descriptor.FullName}（需要无参构造器）");
                     contributor.ConfigureMenu(context);
                 }
                 repository.AddRange(context.MenuItems);

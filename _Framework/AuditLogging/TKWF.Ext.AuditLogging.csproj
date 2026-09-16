@@ -22,15 +22,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <PackageReference Include="TKWF.Domain" />
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
 
     <!-- SQL 级聚合扩展（FreeSqlQueryableExtensions——ADR15 聚合 API 分层：DataService 内 AvgAsync/MaxAsync
-         经 RestoreToSelect 走 FreeSql ISelect 原生聚合，SQL AVG/MAX 下推——GetStatsAsync 用，V0.3.0） -->
-    <PackageReference Include="TKWF.Domain.FreeSql" />
+         经 RestoreToSelect 走 FreeSql ISelect 原生聚合，SQL AVG/MAX 下推——GetStatsAsync 用，V0.3.0）
+         双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→DLL 引用；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
 
-    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
 
     <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />

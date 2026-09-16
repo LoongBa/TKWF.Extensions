@@ -21,8 +21,9 @@
 
   <ItemGroup>
     <!-- 2026-09-15 迁移（ProjectReference → PackageReference）：主框架 TKWF.Domain 4.10.24（CPM 集中版本）
-         需要 DomainFlagAttribute（RequirePermissionAttribute 基类）+ IUserInfo（IRoleProvider 约束） -->
-    <PackageReference Include="TKWF.Domain" />
+         需要 DomainFlagAttribute（RequirePermissionAttribute 基类）+ IUserInfo（IRoleProvider 约束）
+         2026-09-16 双模式 DLL 定案：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>

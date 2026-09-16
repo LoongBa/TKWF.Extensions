@@ -30,6 +30,9 @@
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <!-- DLL 模式（UseLocalFw=true）Reference 不传递 NuGet 依赖——主框架 Domain 的运行时传递依赖需显式声明
+         （System.Threading.RateLimiting，V4.9.26 官方类型，对齐主框架 TKWF.Domain.targets 做法） -->
+    <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.11" />
@@ -49,6 +52,8 @@
     <PackageVersion Include="Quartz" Version="4.0.0" />
     <!-- Microsoft.Data.Sqlite — Quartz 4.0 UseSqlite 内部需要的 SQLite 驱动元数据 -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+<!-- MiniExcel — DataPort MiniExcel Provider 的第三方读写引擎（DLL 模式 Reference 不传递 NuGet 依赖，测试项目须显式包） -->
+<PackageVersion Include="MiniExcel" Version="1.46.0" />
     <!-- Microsoft.AspNetCore.TestHost — ASP.NET Core 测试宿主（RateLimiting 测试 HTTP 级验证，对齐 Microsoft.Extensions 10.0.11） -->
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════

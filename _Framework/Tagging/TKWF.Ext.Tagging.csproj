@@ -20,13 +20,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
-    <PackageReference Include="TKWF.Domain" />
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props 含 Utility）；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- ADR52：标签算法引擎在运行时工具库 TKWF.Utility（TKW.Framework.Utility.Tags） -->
-    <PackageReference Include="TKWF.Utility" />
+    <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
 
-    <!-- SG1 化（V0.3.0 接线）：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <!-- SG1 化（V0.3.0 接线）：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
 
     <!-- SG1 分析器：用预编译 DLL（build\refs，稳定执行） -->
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />

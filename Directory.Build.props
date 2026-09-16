@@ -40,22 +40,53 @@
 
   <!--
     ════════════════════════════════════════════════════════════════════════
-    双模式引用开关（2026-09-16 用户裁定，方案 B）：
-    UseLocalFw = true  → 本地联调模式：扩展经 ProjectReference 引用主框架源码（../_TKWF）
-                         ——可联调主框架未发布的 API（如 Analytics 依赖 4.10.27 Utility.Analytics）
-    UseLocalFw = false → NuGet 发布模式：扩展经 PackageReference 引用主框架 NuGet 包
+    双模式引用开关（2026-09-16 用户裁定，方案 B 定案为 DLL 模式）：
+    UseLocalFw = true  → 本地联调模式（默认）：DLL 引用部署根 build\refs（TKWFDeployPath）
+                         ——对齐消费方（DMP-Lite）DLL 模式，零跨仓库源码耦合（不 ProjectReference 源码）
+    UseLocalFw = false → NuGet 发布模式：PackageReference 主框架 NuGet 包
                          ——CI/发布走此模式，验证真实消费方视角（2026-09-15 迁移后的默认 CI 语义）
+
+    实现：不导入主框架 TKWF.Domain.targets（其会无条件注入 build/refs 的 Analyzer，
+    与扩展纯 Analyzer NuGet 包冲突——Roslyn 增量缓存 bug，AGENTS §6 裁定废弃 build/refs 预编译 DLL）。
+    仅自建 DLL 引用块（下方 _LocalFwRefsDir），SG1 分析器恒用纯 Analyzer 包（TKWF.CodeGeneration）。
 
     优先级：命令行/环境变量 UseLocalFw > 默认 true（本地开发零配置）。
     CI workflow 显式设 UseLocalFw=false（ci-publish.yml env）。
     扩展 csproj 引用块按此开关条件化（见各 csproj）：
-      Condition="'$(UseLocalFw)' == 'true'" → ProjectReference
-      Condition="'$(UseLocalFw)' != 'true'" → PackageReference
+      Condition="'$(UseLocalFw)' == 'true'" → Reference HintPath（DLL 模式）
+      Condition="'$(UseLocalFw)' != 'true'" → PackageReference（NuGet 模式）
     ════════════════════════════════════════════════════════════════════════
   -->
   <PropertyGroup>
     <UseLocalFw Condition="'$(UseLocalFw)' == ''">true</UseLocalFw>
+    <!-- DLL 模式引用目录：部署根 build\refs（TKWFDeployPath 环境变量，对齐消费方 DMP-Lite） -->
+    <_LocalFwRefsDir Condition="'$(TKWFDeployPath)' != ''">$([System.IO.Path]::GetFullPath('$(TKWFDeployPath)'))\build\refs\</_LocalFwRefsDir>
   </PropertyGroup>
+
+  <!--
+    DLL 模式集中引用（UseLocalFw=true）：主框架通用核心程序集（所有扩展共用——
+    Core/Utility/Abstractions/Domain）。SG1 分析器（TKWF.CodeGeneration）不在此（各扩展
+    PackageReference 纯 Analyzer 包，Roslyn 增量缓存正确性）。
+    ⚠️ Domain.FreeSql / CodeGeneration.Abstractions / 扩展特定包（BackgroundJobs/DataPort 等）：
+    由各扩展 csproj 按需条件化声明（实体型扩展才引 FreeSql；纯内存扩展不引）——
+    集中块仅承载"所有扩展都引"的核心，避免污染。
+    扩展 csproj 内主框架引用条件化模式（样板）：
+      <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+      <Reference Include="TKWF.Domain" HintPath="$(_LocalFwRefsDir)TKWF.Domain.dll" Condition="'$(UseLocalFw)' == 'true'" />
+  -->
+  <ItemGroup Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.dll')">
+    <Reference Include="TKWF.Core" HintPath="$(_LocalFwRefsDir)TKWF.Core.dll" />
+    <Reference Include="TKWF.Utility" HintPath="$(_LocalFwRefsDir)TKWF.Utility.dll" />
+    <Reference Include="TKWF.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.Abstractions.dll" />
+    <Reference Include="TKWF.Domain" HintPath="$(_LocalFwRefsDir)TKWF.Domain.dll" />
+    <!-- DLL 模式 RT 引用不传递 NuGet 依赖——显式补齐运行时传递依赖（对齐主框架 targets 做法） -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="System.Threading.RateLimiting" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)README.md" Link="README.md" Pack="true" PackagePath="\" />

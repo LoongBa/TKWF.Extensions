@@ -44,6 +44,14 @@
     <PackageReference Include="TKWF.Domain" />
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
     <PackageReference Include="TKWF.Domain.FreeSql" />
+    <!-- 双模式：DLL 模式（UseLocalFw=true）下 ProjectReference 不传递 Utility.DataPort——测试引 ImportRow 等核心类型须显式补 -->
+    <PackageReference Include="TKWF.Utility.DataPort" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Utility.DataPort" HintPath="$(_LocalFwRefsDir)TKWF.Utility.DataPort.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Utility.DataPort.dll')" />
+    <!-- MiniExcel Provider（测试用 MiniExcelProvider/MiniExcelLibs——双模式条件化） -->
+    <PackageReference Include="TKWF.Utility.DataPort.Providers.MiniExcel" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Utility.DataPort.Providers.MiniExcel" HintPath="$(_LocalFwRefsDir)TKWF.Utility.DataPort.Providers.MiniExcel.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Utility.DataPort.Providers.MiniExcel.dll')" />
+    <!-- MiniExcelLibs（MiniExcel 第三方引擎——DLL 模式下 Provider dll 的 NuGet 传递依赖不生效，须显式） -->
+    <PackageReference Include="MiniExcel" />
   </ItemGroup>
 
 </Project>

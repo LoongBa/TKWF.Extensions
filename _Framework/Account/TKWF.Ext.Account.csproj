@@ -20,9 +20,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props） -->
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.Core" />
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
 
     <!-- V0.3.0 拆包（用户裁定 B）：账户契约抽象（IAccountPasswordManager）→ Abstractions（ADR48 D7） -->
     <ProjectReference Include="..\Account.Abstractions\TKWF.Ext.Account.Abstractions.csproj" />
@@ -31,8 +31,9 @@
          不重复建表——跨扩展走契约服务；SecurityLog 无 Abstractions 项目，直接引本体） -->
     <ProjectReference Include="..\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
 
-    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集） -->
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
 
     <!-- SG1 分析器：TKWF.CodeGeneration 纯 Analyzer 包（analyzers/dotnet/cs/，Roslyn 自动加载，2026-09-15 由 build\refs 预编译 DLL 迁移） -->
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />

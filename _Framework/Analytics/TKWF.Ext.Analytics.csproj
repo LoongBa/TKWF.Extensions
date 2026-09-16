@@ -20,19 +20,16 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseLocalFw)' == 'true'">
-    <!-- 双模式（2026-09-16 方案 B）：UseLocalFw=true（默认）本地联调——ProjectReference 主框架源码。
-         4.10.27（含 Utility.Analytics）发布前唯一可用模式；主框架发布后 CI 切 UseLocalFw=false 走 nuget -->
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Utility\TKWF.Utility.csproj" />
-    <ProjectReference Include="$(TKWFSourceRoot)_Framework\Domain\TKWF.Domain.csproj" />
-    <!-- 传递依赖（Utility/Domain 的 ProjectReference 引用不自动带 BCL 包——本地模式需显式补） -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
+    <!-- 双模式（2026-09-16 方案 B 定案 DLL 模式）：UseLocalFw=true（默认）本地联调——DLL 引用部署根
+         build/refs（TKWFDeployPath，对齐消费方 DMP-Lite，零跨仓库源码耦合）。
+         Utility 4.10.28 已含 Utility.Analytics（部署根已同步），无需 ProjectReference 源码。
+         传递依赖（Microsoft.Extensions.*）由集中块（Directory.Build.props）补齐，不在此重复。 -->
+    <Reference Include="TKWF.Utility" HintPath="$(_LocalFwRefsDir)TKWF.Utility.dll" Condition="Exists('$(_LocalFwRefsDir)TKWF.Utility.dll')" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalFw)' != 'true'">
     <!-- 双模式（2026-09-16 方案 B）：UseLocalFw=false（CI/发布）——PackageReference 主框架 NuGet 包。
-         依赖 TKWF.Utility 4.10.27（含 Utility.Analytics）——4.10.27 发布前此模式 restore 失败，
-         CI 在 4.10.27 发布前须排除 Analytics（见 ci-publish.yml AnalyticsEnabled 门控） -->
+         依赖 TKWF.Utility 4.10.27+（含 Utility.Analytics）——发布后 CI 置 ANALYTICS_ENABLED=true 纳入 -->
     <PackageReference Include="TKWF.Domain" />
     <PackageReference Include="TKWF.Utility" />
   </ItemGroup>

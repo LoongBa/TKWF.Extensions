@@ -20,12 +20,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 2026-09-15 迁移（ProjectReference → PackageReference）：主框架已发布稳定版 4.10.24，
-         扩展独立于主框架源码构建/发布（消费方亦按 NuGet 模式使用，提前暴露兼容问题）。
-         版本集中管理于 Directory.Packages.props（CPM），此处不写 Version。
-         扩展间依赖（Permissions.Abstractions）保持 ProjectReference（同仓库编译期确定）。 -->
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <!-- 双模式引用（2026-09-16 用户裁定，DLL 模式定案）：
+         UseLocalFw=true（本地，默认）→ 集中 DLL 引用（Directory.Build.props _LocalFwRefsDir 部署根 build/refs）
+            + 本块按需 Reference（CodeGeneration.Abstractions——SG 元数据类型所在）；
+         UseLocalFw=false（CI/发布）→ PackageReference 主框架 NuGet 包（CPM 集中版本，2026-09-15 语义）。
+         Domain/Core/Utility/Abstractions 由集中块承载（Directory.Build.props）——本块仅补按需项。 -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
 
     <!-- SG1 分析器：TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          Roslyn 自动加载，无需 <Analyzer> 元素（勿用 OutputItemType="Analyzer"——G17A 已验证增量缓存bug）。

@@ -1,7 +1,7 @@
 # ADR-Navigation-MenuContributorAttribute移除与契约归属收敛
 
-> **版本**：V0.2.0（目标）· 范围扩至 A+（三套贡献者统一收敛）
-> **状态**：✅ 框架组已确认，可实施（2026-09-17 修订 1——裁定升级为 A+ 全局最优，见 [ADR-Navigation-贡献者发现机制范围讨论](ADR-Navigation-贡献者发现机制范围讨论.md) §五：统一 ContributorDescriptor + 接口判定 + 单桥字典 + 编译期实例化，V5 前 4 阶段分步完成）
+> **版本**：V0.2.0（目标）· 范围扩至 A+ 完整形态（三套贡献者统一收敛 + xCodeGen 活态文档/校验 + 编译期诊断）
+> **状态**：✅ 框架组已确认，可实施（2026-09-17 修订 2——裁定 A+ 完整形态，见 [ADR-Navigation-贡献者发现机制范围讨论](ADR-Navigation-贡献者发现机制范围讨论.md) §五：统一 ContributorDescriptor + 接口判定 + 单桥字典 + 编译期实例化 + xCodeGen 活态文档/校验 + CTRB001-003 诊断码，V5 前 4 阶段分步完成）
 > **关联**：ADR48（依赖倒置 D7）、ADR61（SG 基类类型判定 + DataService 自动注册）、ADR50（三层门控）、v4.9.74（扩展机制业务模块 W2/W5）、V5前收尾清单 #12、ADR《扩展数据访问红线》
 > **关键字**：Navigation、MenuContributor、SG1 字符串常量耦合、契约归属、Abstractions、V5 前破坏性变更消除、贡献者统一收敛
 

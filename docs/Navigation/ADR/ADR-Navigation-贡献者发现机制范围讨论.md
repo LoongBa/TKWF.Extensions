@@ -121,6 +121,34 @@ TKWF 的扩展机制基座（D17/ADR37-39）定义扩展的"发现 → 启用 �
 3. 扩展侧 Abstractions 拆包前置（Permissions/Navigation/FeatureManagement 若缺 `.Abstractions`，对齐 Emailing V0.2.0 拆包先例）。
 4. 阶段 4 与 V5 窗口对齐；Permission/Feature 收敛不再单独登记（并入本路径）。
 
+### 6. 换视角评审（2026-09-17，用户要求发挥 TKWF 框架优势，不受 ABP 思路限制）
+
+> 勘察依据：双 explore 实证——xCodeGen 外部生成机制（ADR32 编排器定位 + ADR76 可插拔校验 + 活态文档模板 + VEntitySql.cshtml 零代码新增先例）+ SG 门控机制与扩展优势（D18 三级门控哲学 + ADR48 零反射 + ADR47 发现≠启用 + ADR61 扩展融入消费方）。
+
+**结论：A+ 已正确把握核心编译期优势，但未充分发挥 xCodeGen 活态文档/可插拔校验 + 门控诊断两大特有优势。** 增强为 **A+ 完整形态**（A+ 基础 + 两层补充）：
+
+| 层 | 能力 | 机制 | 对齐 |
+|----|------|------|------|
+| **编译期**（SG） | 贡献者类型判定 + 描述符生成 + 零反射实例化 + **编译期诊断码** | `AllInterfaces` 判定 + `CreateContributorInstances()` + **CTRB001-003** | ADR61/48 + D18 门控哲学 |
+| **生成期**（xCodeGen） | **活态文档**（贡献者清单 .md）+ **设计校验**（命名/权限码格式） | `ContributorRegistry.cshtml` Project-scope Artifact + IValidationChecker（Fast 档） | ADR32/76 + VEntitySql.cshtml 先例 |
+| **运行时**（Initializer） | 读 `Contributors` 桥 → 编译期实例数组 → 同步回调 | `Instance.Contributors["Menu"]` + `CreateContributorInstances()` | A+ 原有 |
+| **门控**（D18） | 编译期诊断码 + GateRules 运行时检查（如"贡献者引用权限码未定义"） | 对齐 DI001/Gate001 模式 | D18 越早越好 |
+
+**新增编译期诊断码（CTRB001-003，阶段 4 实施）**：
+- `CTRB001`（Warning）：实现 `I*Contributor` 接口但无归属扩展程序集声明（如缺 `[TKWFExtension]`）→ 编译期提示
+- `CTRB002`（Error）：贡献者实现类非 public 或无 public 无参构造（`CreateContributorInstances()` 无法 new）→ 编译失败
+- `CTRB003`（Error）：TargetKind 冲突（同一类型实现多贡献者接口且 TargetKind 声明重复）→ 编译失败
+
+**新增 xCodeGen 产物（阶段 1 实施，纯模板+配置零代码）**：
+- `ContributorRegistry.cshtml`（Project-scope Artifact，@model IProjectMetaContext 遍历 `Contributors` 字典 → 贡献者清单 .md，开发/Agent 可读，硬性禁止读 *.g.cs 哲学延续）
+- `ContributorValidationChecker`（Fast 档 IValidationChecker：贡献者命名规范 / 权限码格式 / TargetKind 合法性——对齐 SqlTypeNameCompatibilityChecker 先例）
+
+**为什么这是 TKWF 优势而非 ABP 思路**：贡献者实例化零反射（ADR48）、配置错误编译期诊断（D18 门控）、开发者可读清单（活态文档）、设计正确性生成期校验（ADR76）、新增贡献者类型主框架零代码（xCodeGen 模板/校验注册）——五项全部是 ABP 不具备的 TKWF 编译期确定性能力。
+
+**对 4 阶段路径的增量**（在 A+ 基础上）：
+- 阶段 1 追加：`ContributorRegistry.cshtml` 活态文档 + `ContributorValidationChecker`（Fast 档）
+- 阶段 4 追加：编译期诊断码 CTRB001-003（登记 D18A 诊断码总表 + Guard.cs 注册）
+
 ---
 
 ## 变更记录
@@ -130,3 +158,4 @@ TKWF 的扩展机制基座（D17/ADR37-39）定义扩展的"发现 → 启用 �
 | 2026-09-17 | 📋 讨论稿 | 用户提出（#12 不局限于 menu 的问题）——三机制同构证据勘察完成（FrameworkTypes 3 常量 + ProjectMetaContextBase 3 属性）；A/B/C 三方案影响面评估；待框架组裁定 |
 | 2026-09-17 | ✅ 已裁定（v1） | 框架组确认：C（Menu 闭环）+ 通用形状铺路（IContributorDescriptor + Permission 先实现）；Permission/Feature 收敛登记 V5 后立项 |
 | 2026-09-17 | ✅ 已裁定（修订 1） | 用户裁定"V5 前破坏性升级零成本，无需留 V5 后"→ 升级为 **A+ 全局最优**（Oracle bg_16c84343）：统一 ContributorDescriptor + 接口判定 + 单桥字典 + 编译期实例化；V5 前 4 阶段分步完成（每步最终形态子集，无二次破坏）；B（ContributorFor）保持 V5 候选 |
+| 2026-09-17 | ✅ 已裁定（修订 2） | 用户换视角评审"发挥 TKWF 框架优势"→ **A+ 完整形态**（双 explore 实证）：补 xCodeGen 活态文档（ContributorRegistry.cshtml）+ 设计校验（ContributorValidationChecker Fast 档）+ 编译期诊断码（CTRB001-003）；4 阶段路径增量（阶段 1 补 xCodeGen 产物、阶段 4 补诊断码） |

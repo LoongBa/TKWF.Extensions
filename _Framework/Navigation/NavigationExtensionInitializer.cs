@@ -39,6 +39,10 @@ namespace TKWF.Ext.Navigation
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
+            // V0.2.0（Oracle 条件 1 BLOCKER）：Options 默认值注册——确保 IOptions<NavigationOptions>
+            // 在所有宿主（含非 SG1/测试）可解析（MenuManager 构造注入；对齐 Settings/FeatureManagement AddOptions 先例）
+            services.AddOptions<NavigationOptions>();
+
             // 1. 收集菜单贡献者定义（编译期清单 → 运行时实例化 → 同步 ConfigureMenu）
             var contributors = (ProjectMetaContextBase.Instance as ProjectMetaContextBase)
                                ?.MenuContributors

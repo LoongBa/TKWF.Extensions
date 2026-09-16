@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using TKWF.Ext.Navigation;
 using TKWF.Ext.Permissions.Abstractions;
 
@@ -191,15 +192,148 @@ public class MenuManagerTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => manager.GetMainMenuAsync());
     }
 
+    // ─── V0.2.0 多菜单分区 ───
+
+    [Fact]
+    public async Task GetMenu_MultiMenu_FiltersByMenuName()
+    {
+        // Main + Admin 双菜单：GetMenuAsync("Admin") 只含 Admin 项，GetMainMenuAsync 只含 Main 项
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[]
+        {
+            new MenuItemDefinition { Name = "Orders", MenuName = "Main" },          // 主菜单
+            new MenuItemDefinition { Name = "Admin.Users", MenuName = "Admin" },    // 管理菜单
+            new MenuItemDefinition { Name = "System", MenuName = "Admin", Order = 1 }
+        });
+        var manager = CreateManager(repo, checker: null);
+
+        var admin = await manager.GetMenuAsync("Admin");
+        var main = await manager.GetMainMenuAsync();
+
+        Assert.Equal(new[] { "Admin.Users", "System" }, admin.Select(i => i.Name));
+        Assert.Equal(new[] { "Orders" }, main.Select(i => i.Name));
+    }
+
+    [Fact]
+    public async Task GetMenu_DefaultMenuName_IsMain()
+    {
+        // 既有单菜单（未设 MenuName）→ 默认 "Main"，GetMainMenuAsync 返回全部项（零迁移）
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[]
+        {
+            new MenuItemDefinition { Name = "A" },
+            new MenuItemDefinition { Name = "B" }
+        });
+        var manager = CreateManager(repo, checker: null);
+
+        var result = await manager.GetMainMenuAsync();
+
+        Assert.Equal(2, result.Length);
+        Assert.All(result, i => Assert.Equal("Main", i.MenuName));
+    }
+
+    [Fact]
+    public async Task GetMenu_DefaultMenuName_Configured_ReturnsConfiguredMenu()
+    {
+        // 配置 DefaultMenuName = "Admin" → GetMainMenuAsync 返回 Admin 菜单
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[]
+        {
+            new MenuItemDefinition { Name = "Orders", MenuName = "Main" },
+            new MenuItemDefinition { Name = "Admin.Users", MenuName = "Admin" }
+        });
+        var manager = CreateManager(repo, checker: null, defaultMenuName: "Admin");
+
+        var result = await manager.GetMainMenuAsync();
+
+        Assert.Equal(new[] { "Admin.Users" }, result.Select(i => i.Name));
+    }
+
+    [Fact]
+    public async Task GetMenu_CrossMenuParent_TreatedAsTopLevel()
+    {
+        // Oracle 条件 3：Admin 项 Parent 指向 Main 项 → scoped 过滤后 byName 不含跨菜单项 →
+        // 深度计算视为顶层（depth 0，不抛异常）。Parent 字符串保留（前端建树跨菜单解析不到即拉平）。
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[]
+        {
+            new MenuItemDefinition { Name = "Root", MenuName = "Main" },
+            new MenuItemDefinition { Name = "Admin.Child", MenuName = "Admin", Parent = "Root" }
+        });
+        var manager = CreateManager(repo, checker: null);
+
+        var admin = await manager.GetMenuAsync("Admin");
+        var main = await manager.GetMainMenuAsync();
+
+        // 不抛异常 + 正常返回：Admin.Child 在 Admin 菜单（Parent 字符串保留，深度按顶层处理）
+        Assert.Single(admin);
+        Assert.Equal("Admin.Child", admin[0].Name);
+        Assert.Equal("Root", admin[0].Parent);          // Parent 保留（前端解析不到即拉平）
+        Assert.Single(main);                            // Main 不受影响
+        Assert.Equal("Root", main[0].Name);
+    }
+
+    [Fact]
+    public async Task GetMenu_PermissionFilter_IndependentPerMenu()
+    {
+        // 权限过滤在多菜单内独立生效：Admin 项权限过滤不影响 Main（checker 存在时）
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[]
+        {
+            new MenuItemDefinition { Name = "Orders", MenuName = "Main" },
+            new MenuItemDefinition { Name = "Admin.Users", MenuName = "Admin", RequiredPermissions = new[] { "Admin.Manage" } },
+            new MenuItemDefinition { Name = "Admin.Audit", MenuName = "Admin", RequiredPermissions = new[] { "Audit.View" } }
+        });
+        var checker = new FakePermissionChecker(new Dictionary<string, bool> { ["Admin.Manage"] = true });   // 仅 Admin.Manage 授予
+        var manager = CreateManager(repo, checker);
+
+        var admin = await manager.GetMenuAsync("Admin");
+        var main = await manager.GetMainMenuAsync();
+
+        Assert.Equal(new[] { "Admin.Users" }, admin.Select(i => i.Name));   // Audit.View 未授予 → 隐藏
+        Assert.Equal(new[] { "Orders" }, main.Select(i => i.Name));         // Main 项无权限要求 → 始终显示
+    }
+
+    [Fact]
+    public async Task GetMenu_NoContributorsForMenu_ReturnsEmpty()
+    {
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[]
+        {
+            new MenuItemDefinition { Name = "Orders", MenuName = "Main" }
+        });
+        var manager = CreateManager(repo, checker: null);
+
+        var mobile = await manager.GetMenuAsync("Mobile");
+
+        Assert.Empty(mobile);
+    }
+
+    [Fact]
+    public async Task GetMenu_NullOrEmptyMenuName_Throws()
+    {
+        var repo = new MenuDefinitionRepository();
+        repo.AddRange(new[] { new MenuItemDefinition { Name = "Orders", MenuName = "Main" } });
+        var manager = CreateManager(repo, checker: null);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => manager.GetMenuAsync(null!));
+        await Assert.ThrowsAsync<ArgumentException>(() => manager.GetMenuAsync(""));
+    }
+
     // ─── 基础设施 ───
 
-    private static MenuManager<SimpleUserInfo> CreateManager(IMenuDefinitionRepository repo, IPermissionChecker? checker)
+    private static MenuManager<SimpleUserInfo> CreateManager(IMenuDefinitionRepository repo, IPermissionChecker? checker,
+        string? defaultMenuName = null)   // V0.2.0：可注入 DefaultMenuName（多菜单测试用）
     {
         var services = new ServiceCollection();
         if (checker != null)
             services.AddSingleton(checker);
         var sp = services.BuildServiceProvider();
-        return new MenuManager<SimpleUserInfo>(repo, sp);
+        var options = Options.Create(new NavigationOptions
+        {
+            DefaultMenuName = defaultMenuName ?? "Main"
+        });
+        return new MenuManager<SimpleUserInfo>(repo, sp, options);
     }
 
     private sealed class FakePermissionChecker : IPermissionChecker

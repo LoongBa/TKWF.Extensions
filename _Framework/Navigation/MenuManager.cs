@@ -3,12 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Navigation
 {
     /// <summary>
     /// V4.9.74 (扩展机制业务模块 W3)：菜单管理器默认实现——权限过滤 + 扁平排序 + 循环检测。
+    /// <para><b>V0.2.0 多菜单分区（Oracle PASS WITH CONDITIONS）</b>：<see cref="GetMenuAsync"/> 按
+    /// <c>MenuItemDefinition.MenuName</c> 精确过滤（替代单一集合全部返回）——Main/Admin/Mobile 多菜单组开箱即用；
+    /// <see cref="GetMainMenuAsync"/> 读 <see cref="NavigationOptions.DefaultMenuName"/>（替代硬编码 "Main"）。
+    /// 跨菜单 Parent 引用（A 菜单项 Parent 指向 B 菜单项）→ 过滤后 byName 不含跨菜单项 → 视为顶层（depth 0），不抛异常。</para>
     /// <para><b>权限过滤</b>（Oracle ✅）：<see cref="MenuItemDefinition.RequiredPermissions"/> 非空时调
     /// <see cref="IPermissionChecker"/> 判定（<c>Logic=All</c> 全部授予显示 / <c>Logic=Any</c> 任一授予显示）；
     /// checker 未注册 → <b>降级不过滤</b>（返回全菜单——菜单是展示层数据非安全边界，安全由
@@ -22,27 +27,42 @@ namespace TKWF.Ext.Navigation
     {
         private readonly IMenuDefinitionRepository _repository;
         private readonly IServiceProvider _serviceProvider;
+        private readonly IOptions<NavigationOptions> _options;   // V0.2.0：DefaultMenuName 驱动
 
-        public MenuManager(IMenuDefinitionRepository repository, IServiceProvider serviceProvider)
+        public MenuManager(
+            IMenuDefinitionRepository repository,
+            IServiceProvider serviceProvider,
+            IOptions<NavigationOptions> options)   // V0.2.0（Oracle 条件 1——Initializer 补 AddOptions 保证 DI 解析）
         {
-            _repository = repository;
-            _serviceProvider = serviceProvider;
+            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _options = options ?? throw new ArgumentNullException(nameof(options));
         }
 
-        /// <summary>获取主菜单（"Main"）——便捷入口。</summary>
-        public Task<MenuItemDefinition[]> GetMainMenuAsync() => GetMenuAsync("Main");
+        /// <summary>获取主菜单——读配置 DefaultMenuName（V0.2.0 替代硬编码 "Main"；未配置 = 默认 Main）。</summary>
+        public Task<MenuItemDefinition[]> GetMainMenuAsync()
+            => GetMenuAsync(_options.Value.DefaultMenuName);
 
         /// <summary>获取指定菜单的扁平菜单项（含权限过滤 + 排序 + 循环检测）。</summary>
         public async Task<MenuItemDefinition[]> GetMenuAsync(string menuName)
         {
-            // 注：V4.9.74 简化——单一菜单定义集（未按 menuName 分区）；menuName 为前瞻扩展点
-            // （Main/Admin/Mobile 多菜单组），当前所有项归入传入的菜单名。
+            // V0.2.0：参数校验（Oracle NICE——null/空白菜单名属误用，fail-fast）
+            if (string.IsNullOrWhiteSpace(menuName))
+                throw new ArgumentException("menuName 不能为空", nameof(menuName));
+
+            // V0.2.0：按 menuName 分区（替代单一集合全部返回）——Main/Admin/Mobile 多菜单组
+            // 跨菜单 Parent（A 菜单项 Parent 指向 B 菜单项）→ scoped 过滤后 byName 不含跨菜单项 → 视为顶层（depth 0）
             var all = _repository.GetAll();
+            var scoped = all
+                .Where(i => string.Equals(i.MenuName, menuName, StringComparison.Ordinal))
+                .ToList();
+            if (scoped.Count == 0) return Array.Empty<MenuItemDefinition>();
+
             var checker = _serviceProvider.GetService<IPermissionChecker>();
 
             // 1. 权限过滤（checker 缺失 → 不过滤，降级）
             var visible = new List<MenuItemDefinition>();
-            foreach (var item in all)
+            foreach (var item in scoped)
                 if (await IsVisibleAsync(item, checker)) visible.Add(item);
             if (visible.Count == 0) return Array.Empty<MenuItemDefinition>();
 

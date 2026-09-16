@@ -18,14 +18,16 @@ namespace TKWF.Ext.Navigation
         /// <summary>
         /// 声明一个菜单项。
         /// </summary>
-        /// <param name="menuItem">菜单项（Name 必填且唯一）。</param>
-        /// <exception cref="ArgumentNullException">menuItem 或 menuItem.Name 为空。</exception>
+        /// <param name="menuItem">菜单项（Name + MenuName 必填，Name 唯一）。</param>
+        /// <exception cref="ArgumentNullException">menuItem / Name / MenuName 为空。</exception>
         /// <exception cref="InvalidOperationException">菜单项名重复。</exception>
         public void Add(MenuItemDefinition menuItem)
         {
             if (menuItem == null) throw new ArgumentNullException(nameof(menuItem));
             if (string.IsNullOrWhiteSpace(menuItem.Name))
                 throw new ArgumentNullException(nameof(menuItem), "菜单项 Name 不能为空");
+            if (string.IsNullOrWhiteSpace(menuItem.MenuName))
+                throw new ArgumentNullException(nameof(menuItem), "菜单项 MenuName 不能为空");   // V0.2.0：多菜单分区校验（Oracle 条件 2）
             if (_menuItems.Any(m => m.Name == menuItem.Name))
                 throw new InvalidOperationException($"菜单项名重复: {menuItem.Name}");
 

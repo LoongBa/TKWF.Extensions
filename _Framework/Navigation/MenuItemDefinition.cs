@@ -28,6 +28,14 @@ namespace TKWF.Ext.Navigation
         public string? Parent { get; set; }
 
         /// <summary>
+        /// 所属菜单名（V0.2.0 多菜单分区；默认 "Main"——对齐 <see cref="NavigationOptions.DefaultMenuName"/>）。
+        /// <para>贡献者不设置 = 归入默认菜单（向后兼容既有贡献者零迁移）；设置 "Admin"/"Mobile" 等 = 归入对应菜单组。
+        /// <b>init 不可变</b>（分区键一经设置不可变，对齐 <see cref="Name"/> 身份属性语义）；
+        /// 不可为 null/空白（<see cref="MenuConfigurationContext.Add"/> 校验，fail-fast）。</para>
+        /// </summary>
+        public string MenuName { get; init; } = "Main";
+
+        /// <summary>
         /// 所需权限名列表（对齐 <see cref="RequirePermissionAttribute"/> 语义，Oracle M2）。
         /// <para>null/空 → 不设权限限制（始终显示）；非空 → <see cref="Logic"/> 决定判定方式
         /// （All 全部授予显示 / Any 任一授予显示）。</para>

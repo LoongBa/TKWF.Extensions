@@ -38,6 +38,23 @@ public class MenuDefinitionTests
     }
 
     [Fact]
+    public void Context_Add_EmptyMenuName_Throws()
+    {
+        // Oracle 条件 2（V0.2.0 多菜单分区）：MenuName null/空白 → fail-fast（对齐 Name 校验）
+        var ctx = new MenuConfigurationContext();
+        Assert.Throws<ArgumentNullException>(() => ctx.Add(new MenuItemDefinition { Name = "X", MenuName = null! }));
+        Assert.Throws<ArgumentNullException>(() => ctx.Add(new MenuItemDefinition { Name = "Y", MenuName = "  " }));
+    }
+
+    [Fact]
+    public void MenuItem_MenuName_DefaultsToMain()
+    {
+        // Oracle 条件（V0.2.0）：未设置 MenuName → 默认 "Main"；init 不可变
+        var item = new MenuItemDefinition { Name = "Orders" };
+        Assert.Equal("Main", item.MenuName);
+    }
+
+    [Fact]
     public void Context_Add_DuplicateName_Throws()
     {
         var ctx = new MenuConfigurationContext();

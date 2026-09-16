@@ -70,30 +70,56 @@ TKWF 的扩展机制基座（D17/ADR37-39）定义扩展的"发现 → 启用 �
 
 ---
 
-## 五、框架组裁定（2026-09-17）
+## 五、框架组裁定（2026-09-17 修订 1——全局最优 A+，Oracle bg_16c84343 咨询）
 
-> 框架组对 §二 四个问题的正式答复。勘察依据：主框架 explore 实证（FrameworkTypes 3 常量 + ProjectMetaContextBase 3 属性 + SG 收集链路 + ADR38/39/67/FeatureManagement D2）+ 扩展侧 explore 实证（Navigation 贡献者链路 + v0.2.0 未触及 + 母 ADR Oracle 定案）。
+> 框架组对 §二 四个问题的正式答复。勘察依据：主框架 explore 实证（FrameworkTypes 3 常量 + ProjectMetaContextBase 3 属性 + SG 收集链路 + ADR38/39/67/FeatureManagement D2）+ 扩展侧 explore 实证 + **Oracle 架构咨询（bg_16c84343）**。
+> **2026-09-17 修订 1**：用户裁定「V5 前暂无事、无对外宣传，有利于破坏性升级——无需留 V5 后」→ 裁定从 C 升级为 **A+（全局最优，V5 前分步完成）**。
 
-### 裁定结论
+### 裁定结论（修订后）
 
 | # | 问题 | 裁定 |
 |---|------|------|
-| 1 | **范围** | **C（Menu 闭环）+ 通用形状铺路**——母 ADR（MenuContributorAttribute 移除）已 Oracle PASS，按既有工作分解执行；Permission/Feature 完整收敛（删特性 + 接口判定）**登记后续立项（V5 后）**，不阻塞本 ADR。理由：V5 前窗口已有 ADR78 等破坏性变更收尾，三扩展回归风险不宜挤入 |
-| 2 | **归属** | 贡献者发现的**通用能力**方向正确（可登记 D17/ADR 层），但实施导向是**"解耦收缩"而非"扩编"**——与 V5 前 MenuContributorAttribute 移除方向一致（Permissions v0.8.0 审核报告 L32"不扩大该耦合"立场延续）；归属立项不阻塞本 ADR 执行 |
-| 3 | **设计** | **认可** `IContributorDescriptor` 通用形状 + Permission 先实现接口（纯加性零行为变化）——正是为 A 铺路的低风险路径，且已 Oracle 背书（母 ADR Oracle PASS 否决运行时反射选项，定案接口解耦） |
-| 4 | **时序** | V5 前**只做 C**；A/B 登记 V5 候选（B 尤其大，V5 后评估） |
+| 1 | **范围** | **A+（三套统一收敛 + 接口判定 + 单桥字典）V5 前完成**——不做 B 的 `ContributorFor` 通用声明（当前 3 种贡献者目标都是接口本身，ContributorFor 是冗余抽象；A+ 落地后 B 为加性演进非破坏性，等真实需求涌现，见 Oracle 升级触发条件） |
+| 2 | **归属** | 贡献者发现立项为**扩展机制基础能力**（D17/ADR 层）——V5 前集中实施；实施导向"解耦收缩 + 编译期化"（延续 Permissions v0.8.0"不扩大耦合"立场，且消除 ADR38 L54 遗留反射点） |
+| 3 | **设计** | **全局最优形态 = A+**：统一 `ContributorDescriptor`（FullName/Name/ContributorType/TargetKind 四元组）+ SG `AllInterfaces` 接口判定（对齐 ADR61）+ 单桥 `Contributors` 字典（`IReadOnlyDictionary<string, IReadOnlyList<ContributorDescriptor>>`）+ 可选 `CreateContributorInstances()` 编译期实例化（对齐 ADR48，消除 Activator.CreateInstance 遗留反射） |
+| 4 | **时序** | **V5 前 4 阶段分步完成**（每步是最终形态子集，无二次破坏）——阶段 1 建基础设施（加性）/ 阶段 2 迁 Menu（原子验证）/ 阶段 3 迁 Permission+Feature（同模式批量）/ 阶段 4 V5 破坏性清理（删旧机制 + 编译期化一次到位）。B（ContributorFor）保持 V5 候选 |
+
+### A+ 最终形态（Oracle 推荐，具体到归属）
+
+| 元素 | 命名 | 归属 |
+|------|------|------|
+| 统一描述符 | `ContributorDescriptor`（FullName/Name/ContributorType/TargetKind 四元组） | 主框架 `_Domain.SG/CodeGeneration.Abstractions/Metadata/`（替换 Permission/Menu Data 2 类） |
+| 贡献者接口 | `IMenuContributor` / `IPermissionContributor` / `IFeatureContributor`（业务方法 Define/ConfigureMenu） | **扩展侧 Abstractions**（Navigation/Permissions/FeatureManagement）——接口定义"贡献者做什么"=扩展业务契约 |
+| SG 判定常量 | `FrameworkTypes.IMenuContributorShort` 等 3 短名（对齐 `IUserInfoShortName` 模式） | 主框架 `FrameworkTypes.cs`（替换 `*ContributorAttribute` 3 常量） |
+| 单桥属性 | `ProjectMetaContextBase.Contributors`（`IReadOnlyDictionary<string, IReadOnlyList<ContributorDescriptor>>`，key=TargetKind） | 主框架（替换 3 个 virtual 属性；**基类 virtual 不入 IProjectMetaContext 接口**，沿用 L109-110/L135-136 向后兼容模式） |
+| 扩展侧消费 | Initializer 读 `Instance.Contributors["Menu"]`（向下转型 `ProjectMetaContextBase`） | 扩展侧（已事实位置） |
+| 编译期实例化（可选，建议 V5 一并做） | `CreateContributorInstances()` 桥（对齐 `CreateExtensionInstances()`/`CreateEntityRegistrarInstances()` 先例） | 主框架——消除 ADR38 L54 遗留 `Activator.CreateInstance` 反射点 |
+
+### 4 阶段实施路径（无二次破坏）
+
+| 阶段 | 内容 | 破坏性 | 验收 |
+|------|------|:---:|------|
+| **1 建基础设施**（主框架，加性） | `ContributorDescriptor` + `Contributors` 字典桥 + SG 通用收集器骨架（接口判定扫 IMenuContributor）；**保留**旧 3 常量/3 桥/2 Data 类（标 `[Obsolete]`） | 无 | 旧扩展照常 + Domain.SG.Tests 全绿 + 新桥空字典 |
+| **2 迁 Menu**（原子验证） | Navigation.Abstractions 加 `IMenuContributor`；实现类删 `[MenuContributor]` 改实现接口；SG 扫 `IMenuContributor` → `Contributors["Menu"]`；旧 `MenuContributors` 桥转发到新桥；Initializer 读新桥 | 无（内部转发） | Menu 贡献者照常收集 + ConfigureMenu 调用 + 回归全绿 |
+| **3 迁 Permission+Feature**（同模式批量） | 同阶段 2 迁 Permissions/FeatureManagement；三套全走新机制；旧 3 桥全部转发 | 无 | 三套贡献者全绿 + 旧桥转发证明无差异 |
+| **4 V5 破坏性清理**（一次到位） | 删 3 `*ContributorAttribute` 常量 + 3 旧桥属性 + 2 Data 类 + SG 旧特性扫描；扩展侧删 3 特性类；**同步实施 `CreateContributorInstances()` 编译期化** | ✅ V5 窗口 | 旧机制归零 + 编译期零反射 + 全量回归 0 警告 0 错误 |
+
+> **为什么无二次破坏**：阶段 1-3 加性扩展（旧机制仍工作，新机制叠加）→ 零破坏；阶段 4 在 V5 破坏性窗口内一次清理到位。每个扩展的迁移是原子的（特性→接口 + Initializer 读新桥同 commit）→ 无"特性已删接口未加"中间破坏态。
 
 ### 裁定依据（关键事实）
 
-1. **母 ADR 的 Oracle 定案（接口解耦）本身已是通用方案**——`IContributorDescriptor` 非 Menu 专属命名；**C 与 A 不冲突，C 就是 A 的骨架**（扩展侧折中建议与母 ADR 一致）。
-2. **贡献者发现当前 100% 主框架 SG1 承载**（扩展侧零自行实现，仅消费 `ProjectMetaContextBase.Instance.MenuContributors` 桥 + `Activator.CreateInstance` 回调）——问题实质是"主框架承载方式是否合理"（字符串常量耦合 + 元数据归属），非"是否迁移到扩展侧"。
-3. **团队既有立场"不扩大该耦合"**（Permissions v0.8.0 L32 + V5 前清单 #12 已列 MenuContributorAttribute 移除）——裁定方向与收缩方向一致。
+1. **Oracle 全局最优论证**：A 方案只把"特性"换"接口"，主框架仍需为每种贡献者改 4 处（OCP 未解决）；A+ 用"SG 通用收集器扫任意 I*Contributor 接口 + 按 TargetKind 分桶"使新增贡献者类型只需扩展侧加接口（主框架 SG 配置 +1 行）——真正闭合 OCP。
+2. **B 的 ContributorFor 当前冗余**：3 种贡献者目标都是接口本身，`[ContributorFor(typeof(XxxHost))]` 比实现 `IMenuContributor` 多一层无信息量间接；A+ 落地后若真现"一贡献者服务多 host"需求，ContributorFor 是接口判定之上**叠加**特性（加性非破坏）——数据驱动评估，V5 前不押注。
+3. **ADR61 背书**：基类链遍历与接口遍历（`AllInterfaces` 含 I*Contributor）同属"基于类型身份判定"——SG 遍历先例已确立。
+4. **ADR48 一脉相承**：`CreateExtensionInstances()`/`CreateEntityRegistrarInstances()` 已建立编译期零反射模式，贡献者 `Activator.CreateInstance` 是 ADR38 L54 明示遗留反射点——V5 窗口一并消除，避免 V5 后再改二次破坏。
+5. **ADR39 D5 同步裁定维持**：贡献者回调保持同步（ConfigureServices 同步钩子）；异步贡献者与 SG 化哲学冲突（动态定义走 Provider 扩展点，FeatureManagement 先例）——不预留异步。
 
 ### 待扩展组执行
 
-1. 母 ADR 状态更新为"框架组已确认，可实施"（本裁定同步至母 ADR）。
-2. 按母 ADR 工作分解 1a-1e（主框架）/ 2a-2e（扩展侧）/ 3a-3c（测试文档）执行——依赖顺序：主框架先发包（含 `IContributorDescriptor` + 接口判定）→ 部署根同步 → 扩展侧后（DLL 模式）。
-3. Permission/Feature 收敛登记后续立项（V5 后），总览跟踪 #12 拆分子项记录。
+1. 母 ADR 状态更新为"框架组已确认，可实施（A+ 范围）"（本裁定同步至母 ADR）。
+2. 按 4 阶段路径执行：阶段 1 主框架先（v4.10.29+ 发包 + 部署根同步）→ 阶段 2/3 扩展侧迁移（DLL 模式）。
+3. 扩展侧 Abstractions 拆包前置（Permissions/Navigation/FeatureManagement 若缺 `.Abstractions`，对齐 Emailing V0.2.0 拆包先例）。
+4. 阶段 4 与 V5 窗口对齐；Permission/Feature 收敛不再单独登记（并入本路径）。
 
 ---
 
@@ -102,4 +128,5 @@ TKWF 的扩展机制基座（D17/ADR37-39）定义扩展的"发现 → 启用 �
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-09-17 | 📋 讨论稿 | 用户提出（#12 不局限于 menu 的问题）——三机制同构证据勘察完成（FrameworkTypes 3 常量 + ProjectMetaContextBase 3 属性）；A/B/C 三方案影响面评估；待框架组裁定 |
-| 2026-09-17 | ✅ 已裁定 | 框架组确认：C（Menu 闭环）+ 通用形状铺路（IContributorDescriptor + Permission 先实现）；Permission/Feature 收敛登记 V5 后立项；贡献者发现归属方向正确但实施导向"解耦收缩" |
+| 2026-09-17 | ✅ 已裁定（v1） | 框架组确认：C（Menu 闭环）+ 通用形状铺路（IContributorDescriptor + Permission 先实现）；Permission/Feature 收敛登记 V5 后立项 |
+| 2026-09-17 | ✅ 已裁定（修订 1） | 用户裁定"V5 前破坏性升级零成本，无需留 V5 后"→ 升级为 **A+ 全局最优**（Oracle bg_16c84343）：统一 ContributorDescriptor + 接口判定 + 单桥字典 + 编译期实例化；V5 前 4 阶段分步完成（每步最终形态子集，无二次破坏）；B（ContributorFor）保持 V5 候选 |

@@ -62,16 +62,16 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.26" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.26" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.26" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.26" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.24" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.24" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.24" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.24" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.26" />
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.24" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.26" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.27" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.27" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.27" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.27" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.27" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.27" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.27" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.27" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.27" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.27" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.27" />
   </ItemGroup>
 </Project>

@@ -36,9 +36,8 @@ env:
   NUGET_OUTPUT: ./nupkgs
   # 双模式（2026-09-16 方案 B）：CI/发布走 NuGet 消费方视角（false = PackageReference）
   UseLocalFw: 'false'
-  # 4.10.27（含 Utility.Analytics）发布前 Analytics 依赖本地 ProjectReference 无法走 nuget——
-  # 门控排除（true = CI 包含 Analytics，需 4.10.27 已发布；false = 跳过 Analytics）
-  ANALYTICS_ENABLED: 'false'
+  # 4.10.27（含 Utility.Analytics）已发布——Analytics 纳入 CI（true = 包含）
+  ANALYTICS_ENABLED: 'true'
 
 jobs:
   # 方案 1（2026-09-16，CI 负载治理）：changes 检测——分支 push 且纯 docs/文档变更 → docs-only=true，

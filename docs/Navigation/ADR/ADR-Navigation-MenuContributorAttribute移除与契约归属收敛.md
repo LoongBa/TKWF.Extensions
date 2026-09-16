@@ -156,11 +156,54 @@
 3. **`PermissionContributorData`/`FeatureContributorData` 同构问题**：本 ADR 不动，另立评估（避免范围膨胀）。⚠️ 事实约束：`PermissionContributors`（L69）与 `FeatureContributors`（L88）**共享 `PermissionContributorData` 单一类型**——本 ADR 新增 `IContributorDescriptor` 接口后，二者**可选**未来迁移至接口（低风险、纯增强），但不构成本 ADR 承诺。
 4. **`MenuItemDefinition` 的 `PermissionLogic` 依赖**（Oracle 条件 3）：Navigation.Abstractions 须 `ProjectReference → Permissions.Abstractions`——已列入决策 2 依赖矩阵。
 
-### 迁移路径（Oracle 条件 5——含测试侧改造）
-1. 主框架：`FrameworkTypes` 常量改接口 + `IContributorDescriptor` 新增 + SG1 收集改判定 + `ProjectMetaContextBase.MenuContributors` 改接口 + `MenuContributorData` 移除（迁扩展侧）+ 回归（Domain.SG.Tests + slnx）。
-2. 扩展仓库：新建 `Navigation.Abstractions`（契约迁入：`IMenuContributor`/`MenuItemDefinition`/`MenuConfigurationContext`/`MenuContributorData`，命名空间保持）+ Navigation 改引 + 删特性 + Initializer 改接口读取 + 测试回归。
-3. **测试侧改造**：`Extension.Navigation.Tests/NavigationExtensionInitializerTests.cs`——`FakeMetaContext` override 的 `MenuContributorData MenuContributors` 改 `IContributorDescriptor MenuContributors`（元素类型 `MenuContributorData` 协变兼容）；测试类 `MainMenuContributor` 移除 `[MenuContributor]` 标注（保留 `: IMenuContributor`）。
-4. 文档：使用指南 §贡献菜单 更新（删 `[MenuContributor]` 示例，改纯接口实现）；主框架 G17B/总览同步。
+### 迁移路径（Oracle 条件 5——含测试侧改造；2026-09-17 落档细化）
+
+> **依赖顺序**：主框架先（v4.10.28 发包 + 部署根同步）→ 扩展侧后（DLL 模式需新 DLL）。
+
+**步骤 1：主框架 `_TKWF`（SG1 改造 + 接口新增）——框架组权限与工作**
+
+| # | 文件 | 改动 |
+|---|------|------|
+| 1a | `_Domain.SG/CodeGeneration.Abstractions/FrameworkTypes.cs` | 删 `MenuContributorAttribute`（L217）；增 `MenuContributorInterface = "TKWF.Ext.Navigation.IMenuContributor"` |
+| 1b | `_Domain.SG/CodeGeneration.Abstractions/Metadata/` | 新增 `IContributorDescriptor` 接口（FullName/Name/ContributorType 三成员） |
+| 1c | `_Domain.SG/CodeGeneration.Abstractions/Metadata/MenuContributorData.cs` | 删除（迁扩展侧） |
+| 1d | `_Domain.SG/CodeGeneration.Abstractions/Metadata/ProjectMetaContextBase.cs` | `MenuContributors` 返回类型 → `IReadOnlyList<IContributorDescriptor>`（L78） |
+| 1e | `_Domain.SG/CodeGeneration/EntityMetadataGenerator.Generation.cs` | `CollectFeatureGates`（L1104）`menuAttr` 改解析接口；`CollectInNamespace` 收集改 `AllInterfaces` 判定；`BuildMenuContributorsSource` 引用改扩展侧类型 |
+
+主框架回归：`Domain.SG.Tests` 专项 + slnx 全量 0 警告 0 错误。
+
+**步骤 2：扩展仓库 `_TKWF.Extensions`（契约归位）**
+
+| # | 文件 | 改动 |
+|---|------|------|
+| 2a | `_Framework/Navigation.Abstractions/TKWF.Ext.Navigation.Abstractions.csproj`（新建） | 契约包（PackageReference CodeGeneration.Abstractions + ProjectReference Permissions.Abstractions + MinVerTagPrefix `Navigation.Abstractions/v`） |
+| 2b | `Navigation.Abstractions/` 迁入 | `IMenuContributor`/`MenuItemDefinition`/`MenuConfigurationContext`/`MenuContributorData`（`: IContributorDescriptor`）命名空间保持 `TKWF.Ext.Navigation` |
+| 2c | `Navigation/MenuContributorAttribute.cs` | 删除 |
+| 2d | `Navigation/TKWF.Ext.Navigation.csproj` | 增 ProjectReference → Navigation.Abstractions |
+| 2e | `Navigation/NavigationExtensionInitializer.cs` | 读取改 `IReadOnlyList<IContributorDescriptor>` |
+
+**步骤 3：测试 + 文档**
+
+| # | 文件 | 改动 |
+|---|------|------|
+| 3a | `Navigation.Tests/NavigationExtensionInitializerTests.cs` | `FakeMetaContext.MenuContributors` 改 `IContributorDescriptor[]`；`MainMenuContributor` 删 `[MenuContributor]` |
+| 3b | `docs/Navigation/导航扩展-使用指南.md` | 贡献菜单示例删特性，改纯接口 |
+| 3c | 主框架 `G17B` | 菜单贡献者用法同步 |
+
+回归门禁：扩展 Navigation 29/29（含多菜单）+ 全量 slnx。
+
+---
+
+## 五、范围讨论（2026-09-17 用户提出，待框架组裁定）
+
+> **架构本质**：本 ADR 当前仅处理 Navigation 的 MenuContributor——但勘察证明 **Permission/Menu/Feature 三套贡献者机制完全同构**（FrameworkTypes 3 字符串常量 + ProjectMetaContextBase 3 属性，机制逐一复制）。只修 Menu 是**局部修补**，深层问题是"扩展机制贡献者发现"的基础设计。
+
+**讨论问题**（详见 `docs/Navigation/ADR/ADR-Navigation-贡献者发现机制范围讨论.md`）：
+1. **范围**：是否不局限于 Menu——三套同构机制（Permission/Menu/Feature）是否统一收敛？
+2. **归属**：贡献者发现是否属于扩展机制基础（SG 基座/D17 层）而非各扩展自理？——ADR61 已确立"基类类型判定"先例，接口判定同向。
+3. **更好设计**：框架组是否有统一方案（如通用贡献者声明机制）？
+
+**裁定前**：本 ADR 决策 1-4 的工作分解保持"仅 Menu"最小范围可实施；若裁定统一收敛，本 ADR 升级为"扩展机制贡献者发现统一"并扩大工作分解。
 
 ### 回归门禁
 - 主框架：Domain.SG.Tests（收集逻辑改动专项）+ slnx Release 0 警告 0 错误 + 全量测试。

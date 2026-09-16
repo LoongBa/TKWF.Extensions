@@ -1,7 +1,7 @@
 # ADR-Navigation-MenuContributorAttribute移除与契约归属收敛
 
 > **版本**：V0.2.0（目标）
-> **状态**：📋 提议（修订 1——Oracle 评审 PASS WITH CONDITIONS 条件已吸收，待框架组确认）
+> **状态**：✅ 框架组已确认，可实施（2026-09-17——范围讨论裁定：C 落地 + 通用形状铺路，见 [ADR-Navigation-贡献者发现机制范围讨论](ADR-Navigation-贡献者发现机制范围讨论.md) §五）
 > **关联**：ADR48（依赖倒置 D7）、ADR61（SG 基类类型判定 + DataService 自动注册）、ADR50（三层门控）、v4.9.74（扩展机制业务模块 W2/W5）、V5前收尾清单 #12、ADR《扩展数据访问红线》
 > **关键字**：Navigation、MenuContributor、SG1 字符串常量耦合、契约归属、Abstractions、V5 前破坏性变更消除
 

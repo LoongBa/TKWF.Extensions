@@ -1,6 +1,6 @@
 # ADR-Navigation-贡献者发现机制范围讨论
 
-> **状态**：📋 讨论稿（2026-09-17 用户提出，待框架组裁定）
+> **状态**：✅ 已裁定（2026-09-17 框架组确认，见 §五；本 ADR 作为范围讨论存档，母 ADR 按裁定执行）
 > **关联**：ADR-Navigation-MenuContributorAttribute移除与契约归属收敛.md（本讨论的母 ADR）、ADR61（SG 基类类型判定）、D17（扩展机制基座）、ADR47/48（编译期能力聚合）
 > **关键字**：贡献者发现、SG1、接口判定、统一收敛、扩展机制基础
 
@@ -70,8 +70,36 @@ TKWF 的扩展机制基座（D17/ADR37-39）定义扩展的"发现 → 启用 �
 
 ---
 
+## 五、框架组裁定（2026-09-17）
+
+> 框架组对 §二 四个问题的正式答复。勘察依据：主框架 explore 实证（FrameworkTypes 3 常量 + ProjectMetaContextBase 3 属性 + SG 收集链路 + ADR38/39/67/FeatureManagement D2）+ 扩展侧 explore 实证（Navigation 贡献者链路 + v0.2.0 未触及 + 母 ADR Oracle 定案）。
+
+### 裁定结论
+
+| # | 问题 | 裁定 |
+|---|------|------|
+| 1 | **范围** | **C（Menu 闭环）+ 通用形状铺路**——母 ADR（MenuContributorAttribute 移除）已 Oracle PASS，按既有工作分解执行；Permission/Feature 完整收敛（删特性 + 接口判定）**登记后续立项（V5 后）**，不阻塞本 ADR。理由：V5 前窗口已有 ADR78 等破坏性变更收尾，三扩展回归风险不宜挤入 |
+| 2 | **归属** | 贡献者发现的**通用能力**方向正确（可登记 D17/ADR 层），但实施导向是**"解耦收缩"而非"扩编"**——与 V5 前 MenuContributorAttribute 移除方向一致（Permissions v0.8.0 审核报告 L32"不扩大该耦合"立场延续）；归属立项不阻塞本 ADR 执行 |
+| 3 | **设计** | **认可** `IContributorDescriptor` 通用形状 + Permission 先实现接口（纯加性零行为变化）——正是为 A 铺路的低风险路径，且已 Oracle 背书（母 ADR Oracle PASS 否决运行时反射选项，定案接口解耦） |
+| 4 | **时序** | V5 前**只做 C**；A/B 登记 V5 候选（B 尤其大，V5 后评估） |
+
+### 裁定依据（关键事实）
+
+1. **母 ADR 的 Oracle 定案（接口解耦）本身已是通用方案**——`IContributorDescriptor` 非 Menu 专属命名；**C 与 A 不冲突，C 就是 A 的骨架**（扩展侧折中建议与母 ADR 一致）。
+2. **贡献者发现当前 100% 主框架 SG1 承载**（扩展侧零自行实现，仅消费 `ProjectMetaContextBase.Instance.MenuContributors` 桥 + `Activator.CreateInstance` 回调）——问题实质是"主框架承载方式是否合理"（字符串常量耦合 + 元数据归属），非"是否迁移到扩展侧"。
+3. **团队既有立场"不扩大该耦合"**（Permissions v0.8.0 L32 + V5 前清单 #12 已列 MenuContributorAttribute 移除）——裁定方向与收缩方向一致。
+
+### 待扩展组执行
+
+1. 母 ADR 状态更新为"框架组已确认，可实施"（本裁定同步至母 ADR）。
+2. 按母 ADR 工作分解 1a-1e（主框架）/ 2a-2e（扩展侧）/ 3a-3c（测试文档）执行——依赖顺序：主框架先发包（含 `IContributorDescriptor` + 接口判定）→ 部署根同步 → 扩展侧后（DLL 模式）。
+3. Permission/Feature 收敛登记后续立项（V5 后），总览跟踪 #12 拆分子项记录。
+
+---
+
 ## 变更记录
 
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-09-17 | 📋 讨论稿 | 用户提出（#12 不局限于 menu 的问题）——三机制同构证据勘察完成（FrameworkTypes 3 常量 + ProjectMetaContextBase 3 属性）；A/B/C 三方案影响面评估；待框架组裁定 |
+| 2026-09-17 | ✅ 已裁定 | 框架组确认：C（Menu 闭环）+ 通用形状铺路（IContributorDescriptor + Permission 先实现）；Permission/Feature 收敛登记 V5 后立项；贡献者发现归属方向正确但实施导向"解耦收缩" |

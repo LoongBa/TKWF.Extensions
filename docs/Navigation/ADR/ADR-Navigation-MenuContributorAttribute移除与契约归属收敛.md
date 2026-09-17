@@ -1,5 +1,12 @@
 # ADR-Navigation-MenuContributorAttribute移除与契约归属收敛
 
+> **⚠️ 已废弃（2026-09-17）——被 [ADR-Navigation-贡献者机制A+迁移](ADR-Navigation-贡献者机制A+迁移.md) 取代**
+>
+> 框架组裁定升级为 **A+ 完整形态**（三套贡献者机制 Menu/Permission/Feature 统一收敛，v4.10.29/30/31 三迭代已完成）：
+> - 本 ADR 原定案"`IContributorDescriptor` 接口 + `MenuContributorData` 迁入 Abstractions"**未实施**——A+ 裁定用统一 `ContributorDescriptor`（四元组含 TargetKind）替代，阶段 1 已落地；
+> - 阶段 2（迁 Menu）+ 阶段 3（迁 Permission/Feature）已在扩展仓库完成（提交 `95ce3dd`/`5bebcd6`），`[MenuContributor]`/`[PermissionContributor]`/`[FeatureContributor]` 特性类已删除；
+> - 本 ADR 的**范围讨论**（§五）与**工作分解**（迁移路径）为 A+ 裁定提供了勘察基础，但其**决策章节描述的设计已被取代**——以下正文保留仅供追溯，**实施以新 ADR 为准**。
+
 > **版本**：V0.2.0（目标）· 范围扩至 A+ 完整形态（三套贡献者统一收敛 + xCodeGen 活态文档/校验 + 编译期诊断）
 > **状态**：✅ 框架组已确认，可实施（2026-09-17 修订 2——裁定 A+ 完整形态，见 [ADR-Navigation-贡献者发现机制范围讨论](ADR-Navigation-贡献者发现机制范围讨论.md) §五：统一 ContributorDescriptor + 接口判定 + 单桥字典 + 编译期实例化 + xCodeGen 活态文档/校验 + CTRB001-003 诊断码，V5 前 4 阶段分步完成）
 > **关联**：ADR48（依赖倒置 D7）、ADR61（SG 基类类型判定 + DataService 自动注册）、ADR50（三层门控）、v4.9.74（扩展机制业务模块 W2/W5）、V5前收尾清单 #12、ADR《扩展数据访问红线》

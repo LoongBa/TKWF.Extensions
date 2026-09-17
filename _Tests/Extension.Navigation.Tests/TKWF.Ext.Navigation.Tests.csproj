@@ -11,7 +11,7 @@
          不设时 restore 用 undefined → Navigation 的 CodeGeneration.Abstractions PackageReference（Condition="!= 'true'"）
          进 assets → 编译双引用（部署根 DLL 新 + NuGet 4.10.27 旧）冲突 CS0246/CS0115 实证。
          钉死后 restore + build 一致走 DLL（部署根含 ContributorDescriptor 桥）。 -->
-    <UseLocalFw>true</UseLocalFw>
+    <UseLocalFw Condition="'$(UseLocalFw)' == ''">true</UseLocalFw>
   </PropertyGroup>
 
   <ItemGroup>

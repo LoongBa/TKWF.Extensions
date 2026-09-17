@@ -7,9 +7,9 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>TKWF.Ext.FeatureManagement.Tests</RootNamespace>
-    <!-- V4.10.31 (A+ 阶段 3)：显式钉 UseLocalFw=true（DLL 模式）——不设时 NuGet 4.10.27 旧包覆盖部署根 DLL，
-         运行时 TypeLoadException（ContributorDescriptor 不存在）实证 -->
-    <UseLocalFw>true</UseLocalFw>
+    <!-- V4.10.31 (A+ 阶段 3)：默认 DLL 模式（UseLocalFw 未显式设置时 true——Directory.Build.props 同默认）。
+         不硬编码（CI env UseLocalFw=false 须尊重——否则 CI 强制 DLL 模式但无部署根 → 编译失败实证） -->
+    <UseLocalFw Condition="'$(UseLocalFw)' == ''">true</UseLocalFw>
   </PropertyGroup>
 
   <ItemGroup>

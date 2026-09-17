@@ -9,7 +9,7 @@
     <RootNamespace>TKWF.Ext.Permissions.Tests</RootNamespace>
     <!-- V4.10.31 (A+ 阶段 3)：显式钉 UseLocalFw=true（DLL 模式）——不设时 NuGet 4.10.27 旧包覆盖部署根 DLL，
          运行时 TypeLoadException（ContributorDescriptor 不存在，阶段 1 才加）实证 -->
-    <UseLocalFw>true</UseLocalFw>
+    <UseLocalFw Condition="'$(UseLocalFw)' == ''">true</UseLocalFw>
   </PropertyGroup>
 
   <ItemGroup>

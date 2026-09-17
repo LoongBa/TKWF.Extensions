@@ -8,11 +8,11 @@ Permissions 扩展的编译期权限名校验组件——把"未知权限名"从
 
 ## 校验语义（PERM001）
 
-1. 扫描源码中 `[PermissionContributor]` 类的 `Define()` 方法体，提取 `context.Add(new PermissionDefinition { Name = "..." })` 的权限名字面量；
+1. 扫描源码中实现 `IPermissionDefinitionContributor` 接口（v4.10.31 A+ 阶段 3 起接口判定，不再用 `[PermissionContributor]` 特性）的类的 `Define()` 方法体，提取 `context.Add(new PermissionDefinition { Name = "..." })` 的权限名字面量；
 2. 收集全部 `[RequirePermission]` 特性参数字符串（含位置）；
 3. 交叉比对——`[RequirePermission]` 引用了**未在贡献者中声明**的权限名 → **PERM001 Warning**（`Severity = Warning`，可升级为 Error）。
 
-**边界（ADR D2）**：引用了 DLL 贡献者的项目（编译期程序集中含 `[PermissionContributor]` 类型，其 `Define()` 方法体无 SyntaxTree）→ **跳过整项校验**，由运行时 fail-closed 兜底（避免误报）；DLL 的 `[RequirePermission]` 参数仍经源码侧语法收集。未引用 `TKWF.Ext.Permissions.Abstractions` 的项目不触发（无契约可校验）。
+**边界（ADR D2）**：引用了 DLL 贡献者的项目（编译期程序集中含 `IPermissionDefinitionContributor` 类型，其 `Define()` 方法体无 SyntaxTree）→ **跳过整项校验**，由运行时 fail-closed 兜底（避免误报）；DLL 的 `[RequirePermission]` 参数仍经源码侧语法收集。未引用 `TKWF.Ext.Permissions.Abstractions` 的项目不触发（无契约可校验）。
 
 ## 接入方式（消费方）
 
@@ -35,8 +35,7 @@ public interface IOrderService
     Task DeleteAsync(int id);
 }
 
-// ✓ 修复：在 [PermissionContributor] 中声明该权限名，PERM001 消除
-[PermissionContributor]
+// ✓ 修复：实现 IPermissionDefinitionContributor 声明该权限名（v4.10.31 A+ 阶段 3 起纯接口判定），PERM001 消除
 public class OrderPermissions : IPermissionDefinitionContributor
 {
     public void Define(PermissionDefinitionContext context)

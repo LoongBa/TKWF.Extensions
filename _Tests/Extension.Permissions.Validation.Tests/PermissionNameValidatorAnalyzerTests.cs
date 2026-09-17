@@ -22,7 +22,7 @@ public class PermissionNameValidatorAnalyzerTests
 
         namespace TestApp;
 
-        [PermissionContributor]
+        // V4.10.31 (A+ 阶段 3)：删 [PermissionContributor]——实现 IPermissionDefinitionContributor 即贡献者（Analyzer 接口判定）
         public class OrderPermissions : IPermissionDefinitionContributor
         {
             public void Define(PermissionDefinitionContext context)
@@ -100,7 +100,7 @@ public class PermissionNameValidatorAnalyzerTests
 
             namespace ContribLib;
 
-            [PermissionContributor]
+            // V4.10.31 (A+ 阶段 3)：删 [PermissionContributor]——接口实现即贡献者（Analyzer 接口判定）
             public class HiddenPermissions : IPermissionDefinitionContributor
             {
                 public void Define(PermissionDefinitionContext context)

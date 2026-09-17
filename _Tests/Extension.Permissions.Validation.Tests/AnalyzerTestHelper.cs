@@ -38,8 +38,9 @@ public static class AnalyzerTestHelper
 
         if (includeAbstractions)
         {
+            // V4.10.31 (A+ 阶段 3)：特性已删——用接口类型定位 Abstractions 程序集（接口仍存在）
             var abstractions = MetadataReference.CreateFromFile(
-                typeof(TKWF.Ext.Permissions.Abstractions.PermissionContributorAttribute).Assembly.Location);
+                typeof(TKWF.Ext.Permissions.Abstractions.IPermissionDefinitionContributor).Assembly.Location);
             result = result.Add(abstractions);
         }
 

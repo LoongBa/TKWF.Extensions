@@ -169,8 +169,9 @@ internal sealed class FeatureManagementTestHost : IDisposable
 }
 
 /// <summary>
-/// 测试用 ProjectMetaContext——override <c>FeatureContributors</c> 返回 <see cref="ConsumerFeatureContributor"/> 清单。
-/// <para>主框架 C1 改动已落地：<c>ProjectMetaContextBase.FeatureContributors</c>（virtual，仅基类不入接口——ADR D2）。
+/// 测试用 ProjectMetaContext——override <c>Contributors["Feature"]</c> 返回 <see cref="ConsumerFeatureContributor"/> 清单。
+/// <para>V4.10.31 (A+ 阶段 3)：由 override <c>FeatureContributors</c>（旧桥，已 Obsolete）改为 override
+/// <c>Contributors[ContributorTargetKinds.Feature]</c>（统一描述符字典，对齐 Navigation/Permissions 测试）。
 /// <c>ProjectMetaContextBase.Instance</c> setter 是 protected，经子类公开 Install/Restore。
 /// 静态隔离约束（镜像 Permissions/Navigation 测试）：进程级单例，try/finally 恢复 + 宿主锁串行化。</para>
 /// </summary>
@@ -180,13 +181,17 @@ internal sealed class FeatureTestMetaContext : ProjectMetaContextBase
 
     public static void Restore(IProjectMetaContext? original) => Instance = original;
 
-    public override IReadOnlyList<PermissionContributorData> FeatureContributors =>
-        new[]
+    public override IReadOnlyDictionary<string, IReadOnlyList<ContributorDescriptor>> Contributors =>
+        new Dictionary<string, IReadOnlyList<ContributorDescriptor>>
         {
-            new PermissionContributorData(
-                "TKWF.Ext.FeatureManagement.Tests.ConsumerFeatureContributor",
-                "ConsumerFeatureContributor",
-                typeof(ConsumerFeatureContributor))
+            [ContributorTargetKinds.Feature] = new[]
+            {
+                new ContributorDescriptor(
+                    "TKWF.Ext.FeatureManagement.Tests.ConsumerFeatureContributor",
+                    "ConsumerFeatureContributor",
+                    typeof(ConsumerFeatureContributor),
+                    ContributorTargetKinds.Feature)
+            }
         };
 
     public override ProjectConfiguration Configuration => null!;

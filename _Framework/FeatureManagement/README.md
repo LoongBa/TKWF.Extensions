@@ -32,7 +32,7 @@ FeatureManagementApiService（[GenerateController] 管理 API——写路径委�
 - **版本号缓存（v0.2.0 D3）**：缓存 key 带版本（`Feature:{name}:v{version}:...`）——写后 `version++` 全层（User/Role/Tenant/Global）即时失效（修复 v0.1.0 动态 key 仅 TTL 收敛缺陷）；旧 key TTL 清理无泄漏。
 - **变更事件（v0.2.0 D2 → v0.3.0 分布式）**：写路径（Set/Delete）Commit 后 `ILocalEventBus.PublishAsync(new FeatureValueChangedEvent(...))`——事件标 `[DistributedEvent]`（v0.3.0），AOP 路径经框架 `EventDispatchFilter` 自动路由：注册真实分布式总线（RabbitMQ）→ 分布式广播（多实例即时失效 + 外部服务订阅）；默认（LocalDistributedEventBus）→ 进程内。**跨实例失效内建**：`DistributedFeatureChangedHandler`（`[DomainEventHandler]` + `IDistributedEventHandler`，SG4 消费方编译期自动注册）收到远程事件 bump 版本表——消费方无需自接总线。
 - **类型化读写（v0.3.0）**：`GetValueAsync<T>`/`SetValueAsync<T>`——序列化/反序列化映射集中于 `FeatureManager`（bool/数字/DateTime 规范字符串 + 其他类型 JSON）+ 写时校验（对齐定义 `ValueType`，违反 → `ArgumentException`；未定义 Feature 跳过校验向后兼容）。
-- **SG1 收集（C1）**：主框架 V4.9.114 新增 `[FeatureContributor]` 编译期收集——业务模块标注 + `Define` 声明定义。
+- **SG1 收集（C1）**：主框架 V4.9.114 起编译期收集——业务模块实现 `IFeatureDefinitionContributor` + `Define` 声明定义（v4.10.31 A+ 阶段 3 起纯接口判定，不再用 `[FeatureContributor]` 特性）。
 - **用户契约（C2）**：`IFeatureManager` 接收 `IDomainUser`；`FeatureChecker` 解析 ambient 用户（`DomainUserContext.CurrentAopUser as IDomainUser`）。
 - **管理 API（C3）**：`FeatureManagementApiService`（`[GenerateController]`）写路径委托 `IFeatureManager`——缓存失效 + Global 唯一性 + 写时校验在门面处理；DataService 仅内部存储（裸 CRUD 禁直通）。
 
@@ -41,7 +41,7 @@ FeatureManagementApiService（[GenerateController] 管理 API——写路径委�
 ### 定义声明（业务模块）
 
 ```csharp
-[FeatureContributor]
+// v4.10.31 A+ 阶段 3 起纯接口判定（无需 [FeatureContributor] 特性）
 public class OrderFeatureContributor : IFeatureDefinitionContributor
 {
     public void Define(FeatureDefinitionContext context)

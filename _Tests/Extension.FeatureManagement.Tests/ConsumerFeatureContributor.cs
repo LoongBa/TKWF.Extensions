@@ -4,8 +4,8 @@ namespace TKWF.Ext.FeatureManagement.Tests;
 
 /// <summary>
 /// 消费方 Feature 贡献者——模拟真实消费方在业务模块声明自己的功能开关定义。
-/// <para>经 <c>[FeatureContributor]</c> 标记，SG1 编译期扫描消费方程序集生成
-/// <c>GeneratedFeatureContributors</c> → <c>ProjectMetaContextBase.Instance.FeatureContributors</c>，
+/// <para>V4.10.31 (A+ 阶段 3)：删 <c>[FeatureContributor]</c> 特性——实现 <c>IFeatureDefinitionContributor</c>
+/// 即被 SG1 接口判定自动发现（统一贡献者清单 <c>Contributors["Feature"]</c>），
 /// 扩展 <see cref="FeatureManagementExtensionInitializer{TUserInfo}.ConfigureServices"/> 运行时读取并实例化。</para>
 /// <para>声明六种 ValueType 的测试 Feature（覆盖 Boolean/String/Int/Decimal/DateTime/Json——v0.3.0）：
 /// <list type="bullet">
@@ -17,7 +17,6 @@ namespace TKWF.Ext.FeatureManagement.Tests;
 /// <item><c>App.GrayConfig</c>——Json，默认 <c>{"percent":20}</c>（v0.3.0，合法 JSON）</item>
 /// </list></para>
 /// </summary>
-[FeatureContributor]
 public class ConsumerFeatureContributor : IFeatureDefinitionContributor
 {
     /// <summary>Boolean 测试 Feature 名（默认 false）。</summary>

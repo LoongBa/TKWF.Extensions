@@ -42,10 +42,14 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         services.TryAddSingleton<FeatureCacheVersionRegistry>();   // v0.2.0 版本号缓存表（Singleton——跨 scope 共享）
 
         // Feature 贡献者收集（对齐 PermissionExtensionInitializer——ProjectMetaContextBase.Instance 在宿主注册期已设置）
+        // V4.10.31 (A+ 阶段 3)：读新桥 Contributors[Feature]（ContributorDescriptor 统一描述符，接口判定收集）
         var context = new FeatureDefinitionContext();
         var repository = new InMemoryFeatureDefinitionRepository();
-        foreach (var contributorData in (ProjectMetaContextBase.Instance as ProjectMetaContextBase)?.FeatureContributors
-                 ?? Array.Empty<PermissionContributorData>())
+        var ctx3 = ProjectMetaContextBase.Instance as ProjectMetaContextBase;
+        var contributors3 = ctx3 != null && ctx3.Contributors.ContainsKey(ContributorTargetKinds.Feature)
+            ? ctx3.Contributors[ContributorTargetKinds.Feature]
+            : Array.Empty<ContributorDescriptor>();
+        foreach (var contributorData in contributors3)
         {
             if (Activator.CreateInstance(contributorData.ContributorType) is IFeatureDefinitionContributor contributor)
             {

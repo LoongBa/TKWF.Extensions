@@ -26,7 +26,7 @@
 
 ### 1. 结构分层
 
-- **声明级 (`IPermissionDefinitionContributor`)**：业务模块通过 `[PermissionContributor]` 标记贡献者类，`Define()` 方法声明权限定义（名称 + 显示名 + 分组）。SG1 编译期扫描 → 生成 `GeneratedPermissionContributors` → 启动时实例化收集。
+- **声明级 (`IPermissionDefinitionContributor`)**：业务模块实现贡献者接口，`Define()` 方法声明权限定义（名称 + 显示名 + 分组）。SG1 编译期接口判定（v4.10.31 A+ 阶段 3 起不再用 `[PermissionContributor]` 特性）→ 生成 `GeneratedPermissionContributors` → 启动时实例化收集。
 
 - **检查级 (`IPermissionChecker`)**：运行时判断当前用户是否拥有指定权限。默认 `PermissionChecker<TUserInfo>` 经 `DomainUserContext.CurrentAopUser` 解析当前用户，调 `IPermissionStore.GetAsync` 真实判定。fail-closed：未知权限名 → 拒绝。
 
@@ -59,16 +59,15 @@ public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ...
 
 ### 2. 声明权限定义（贡献者）
 
-业务模块用 `[PermissionContributor]` 标记一个实现 `IPermissionDefinitionContributor` 的类：
+业务模块实现 `IPermissionDefinitionContributor` 接口（v4.10.31 A+ 阶段 3 起纯接口判定，无需特性）：
 
 ```csharp
-[PermissionContributor]
 public class OrderPermissions : IPermissionDefinitionContributor
 {
     public void Define(PermissionDefinitionContext context)
     {
         context.Add(new PermissionDefinition
-        {
+{
             Name = "Order.Create",       // 点分层级约定
             DisplayName = "创建订单",
             Group = "Order"
@@ -161,7 +160,7 @@ public class MyService
 
 ### 1. 新增权限定义
 
-在消费方业务模块中创建新的 `[PermissionContributor]` 类：
+在消费方业务模块中创建实现 `IPermissionDefinitionContributor` 的类（v4.10.31 A+ 阶段 3 起无需 `[PermissionContributor]` 特性）：
 
 1. 实现 `IPermissionDefinitionContributor`。
 2. 在 `Define()` 中调用 `context.Add(new PermissionDefinition { ... })`。

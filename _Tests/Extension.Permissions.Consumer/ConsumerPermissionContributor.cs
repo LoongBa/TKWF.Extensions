@@ -4,11 +4,10 @@ namespace TKWF.Ext.Permissions.Consumer.Tests;
 
 /// <summary>
 /// V0.7.0 (W4)：消费方权限贡献者——模拟真实消费方在业务模块声明自己的权限定义。
-/// <para>经 <c>[PermissionContributor]</c> 标记，SG1 编译期扫描消费方程序集生成
-/// <c>GeneratedPermissionContributors</c> → <see cref="TKW.Framework.CodeGeneration.ProjectMetaContextBase.PermissionContributors"/>，
+/// <para>V4.10.31 (A+ 阶段 3)：删 <c>[PermissionContributor]</c> 特性——实现 <c>IPermissionDefinitionContributor</c>
+/// 即被 SG1 接口判定自动发现（统一贡献者清单 <c>Contributors["Permission"]</c>），
 /// 扩展 <see cref="PermissionExtensionInitializer{TUserInfo}.ConfigureServices"/> 运行时读取并实例化。</para>
 /// </summary>
-[PermissionContributor]
 public class ConsumerPermissionContributor : IPermissionDefinitionContributor
 {
     public void Define(PermissionDefinitionContext context)

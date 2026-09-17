@@ -14,11 +14,10 @@ Permissions 扩展的公共契约——**实现项目与 Navigation / Notificati
 | `IPermissionStore` | 权限授予值持久化——`GetAsync(permissionName, providerName, providerKey)` / `SetAsync(...)`；按 provider 批量 `GetGrantedPermissionNamesAsync(...)`（V0.8.1 N+1 优化，内存 fail-closed 判定） |
 | `IRoleProvider<TUserInfo>` | 角色提供者——为检查器解析用户角色列表（`where TUserInfo : class, IUserInfo, new()`；默认 `DefaultRoleProvider{TUserInfo}` 读 `IUserInfo.Roles`，消费方可替换） |
 | `IPermissionDefinitionRepository` | 权限定义仓库——`GetAll()`（只读快照）/ `Contains(name)` / `AddRange(...)`；供检查器校验未知权限名（fail-closed） |
-| `IPermissionDefinitionContributor` | 权限定义贡献者——业务模块实现 `Define(context)` 声明权限，实现类须标 `[PermissionContributor]` 供 SG1 发现 |
+| `IPermissionDefinitionContributor` | 权限定义贡献者——业务模块实现 `Define(context)` 声明权限，SG1 经接口继承发现（v4.10.31 A+ 阶段 3 起，不再用 `[PermissionContributor]` 特性） |
 | `PermissionDefinitionContext` | 权限定义上下文——贡献者 `Add(new PermissionDefinition { ... })` 收集（Name 必填且唯一，空名/重复抛异常） |
 | `PermissionDefinition` | 权限定义模型（Name / DisplayName / Group / Parent / Description；点分层级，如 `"Order.Create"`） |
 | `RequirePermissionAttribute` | 方法/接口级权限声明标记（`DomainFlagAttribute` 基类；`params string[]` + `Logic` All/Any，`AllowMultiple=true`） |
-| `PermissionContributorAttribute` | 贡献者标记（纯标记，无载荷）——SG1 据此识别并生成贡献者注册表 |
 | `PermissionNames` | 内置权限名常量——`AdminAll = "Admin.All"` 系统管理员通配（隐式定义，不依赖贡献者声明，检查器先行放行拥有者） |
 | `PermissionLogic` | 权限判定逻辑枚举——`All` 全部授予（默认）/ `Any` 任一授予 |
 | `PermissionGrantResult` | 授予结果值对象——`Granted` / `Denied` 单例（`IPermissionStore.GetAsync` 返回值） |

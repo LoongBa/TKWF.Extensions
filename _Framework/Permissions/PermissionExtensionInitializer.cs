@@ -42,9 +42,11 @@ namespace TKWF.Ext.Permissions
         public override void ConfigureServices(IServiceCollection services)
         {
             // 1. 收集权限贡献者定义（编译期清单 → 运行时实例化 → Define）
-            var contributors = (ProjectMetaContextBase.Instance as ProjectMetaContextBase)
-                               ?.PermissionContributors
-                               ?? Array.Empty<PermissionContributorData>();
+            // V4.10.31 (A+ 阶段 3)：读新桥 Contributors[Permission]（ContributorDescriptor 统一描述符，接口判定收集）
+            var ctx = ProjectMetaContextBase.Instance as ProjectMetaContextBase;
+            var contributors = ctx != null && ctx.Contributors.ContainsKey(ContributorTargetKinds.Permission)
+                ? ctx.Contributors[ContributorTargetKinds.Permission]
+                : Array.Empty<ContributorDescriptor>();
             var repository = new InMemoryPermissionDefinitionRepository();
             if (contributors.Count > 0)
             {

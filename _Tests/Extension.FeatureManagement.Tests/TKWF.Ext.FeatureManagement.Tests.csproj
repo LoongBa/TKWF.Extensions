@@ -7,6 +7,9 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>TKWF.Ext.FeatureManagement.Tests</RootNamespace>
+    <!-- V4.10.31 (A+ 阶段 3)：显式钉 UseLocalFw=true（DLL 模式）——不设时 NuGet 4.10.27 旧包覆盖部署根 DLL，
+         运行时 TypeLoadException（ContributorDescriptor 不存在）实证 -->
+    <UseLocalFw>true</UseLocalFw>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +27,11 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="FreeSql" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
+    <!-- V4.10.31 (A+ 阶段 3)：DLL 模式补 FreeSql.DbContext——UnitOfWorkManager 所在程序集；
+         NuGet 模式经 FreeSql 包传递提供，DLL 模式（TKWF.Domain.FreeSql Reference 不传递 NuGet）需显式 -->
+    <PackageReference Include="FreeSql.DbContext" />
+    <!-- V4.10.31 (A+ 阶段 3)：DLL 模式补 FreeSql.Extensions.Linq——DAC 查询扩展传递失效（FileNotFound 实证） -->
+    <PackageReference Include="FreeSql.Extensions.Linq" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,11 +50,16 @@
   <ItemGroup>
     <!-- 本仓库扩展（FeatureManagement）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
-    <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 FeatureValueEntityDataService -->
-    <PackageReference Include="TKWF.Domain.FreeSql" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <!-- V4.10.31 (A+ 阶段 3)：DLL 模式（UseLocalFw=true）主框架包走 Directory.Build.props 集中 DLL 块 +
+         显式 Reference CodeGeneration.Abstractions（部署根含 ContributorDescriptor/Contributors 桥）——
+         避免 NuGet 4.10.27 旧包覆盖（TypeLoadException 实证）；NuGet 模式（false）走 CPM 包 -->
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+    <!-- V4.10.31 (A+ 阶段 3)：DLL 模式 Domain.FreeSql 需显式 Reference（Directory.Build.props 集中块不含——L70 注释"Domain.FreeSql 各 csproj 自引"） -->
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>

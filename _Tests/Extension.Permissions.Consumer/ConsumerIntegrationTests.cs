@@ -99,9 +99,11 @@ public class ConsumerIntegrationTests
     // ─── 测试基础设施 ───
 
     /// <summary>
-    /// 测试用 ProjectMetaContext——override PermissionContributors 返回消费方贡献者清单。
+    /// 测试用 ProjectMetaContext——override <c>Contributors["Permission"]</c> 返回消费方贡献者清单。
+    /// <para>V4.10.31 (A+ 阶段 3)：由 override <c>PermissionContributors</c>（旧桥，已 Obsolete）改为 override
+    /// <c>Contributors[ContributorTargetKinds.Permission]</c>（统一描述符字典，对齐 Navigation/FeatureManagement 测试）。
     /// <c>ProjectMetaContextBase.Instance</c> setter 是 protected，经子类公开 Install/Restore。
-    /// 静态隔离约束（镜像 Permissions/Navigation 测试）：进程级单例，try/finally 恢复。
+    /// 静态隔离约束（镜像 Permissions/Navigation 测试）：进程级单例，try/finally 恢复。</para>
     /// </summary>
     private sealed class FakeConsumerMetaContext : ProjectMetaContextBase
     {
@@ -109,13 +111,17 @@ public class ConsumerIntegrationTests
 
         public static void Restore(IProjectMetaContext? original) => Instance = original;
 
-        public override IReadOnlyList<PermissionContributorData> PermissionContributors =>
-            new[]
+        public override IReadOnlyDictionary<string, IReadOnlyList<ContributorDescriptor>> Contributors =>
+            new Dictionary<string, IReadOnlyList<ContributorDescriptor>>
             {
-                new PermissionContributorData(
-                    "TKWF.Ext.Permissions.Consumer.Tests.ConsumerPermissionContributor",
-                    "ConsumerPermissionContributor",
-                    typeof(ConsumerPermissionContributor))
+                [ContributorTargetKinds.Permission] = new[]
+                {
+                    new ContributorDescriptor(
+                        "TKWF.Ext.Permissions.Consumer.Tests.ConsumerPermissionContributor",
+                        "ConsumerPermissionContributor",
+                        typeof(ConsumerPermissionContributor),
+                        ContributorTargetKinds.Permission)
+                }
             };
 
         public override ProjectConfiguration Configuration => null!;

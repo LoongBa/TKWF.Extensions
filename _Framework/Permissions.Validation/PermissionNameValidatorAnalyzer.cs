@@ -13,7 +13,8 @@ namespace TKWF.Ext.Permissions.Validation
     /// <summary>
     /// V0.8.0 (ADR-Permissions-编译期权限名校验)：编译期权限名校验分析器——PERM001。
     /// <para>将"未知权限名"从运行时 fail-closed 提前为编译期 Diagnostic 警告（IDE 即时反馈 + CI 警告）。</para>
-    /// <para>机制：扫描源码 <c>[PermissionContributor]</c> 类的 <c>Define()</c> 方法体，提取
+    /// <para>机制：扫描源码实现 <c>IPermissionDefinitionContributor</c> 接口（v4.10.31 A+ 阶段 3 起接口判定，
+    /// 不再用 <c>[PermissionContributor]</c> 特性）的 <c>Define()</c> 方法体，提取
     /// <c>context.Add(new PermissionDefinition { Name = "..." })</c> 字符串字面量；收集 <c>[RequirePermission]</c>
     /// 参数字符串；交叉比对——未声明的权限名 → PERM001 Warning。</para>
     /// <para>边界（ADR D2）：DLL 贡献者（引用程序集的 Define() 无 SyntaxTree，方法体不可见）→ 跳过整个校验，
@@ -23,8 +24,12 @@ namespace TKWF.Ext.Permissions.Validation
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public sealed class PermissionNameValidatorAnalyzer : DiagnosticAnalyzer
     {
-        /// <summary>权限贡献者标记特性完整类型名（扩展 Abstractions）。</summary>
-        private const string PermissionContributorAttributeFqn = "TKWF.Ext.Permissions.Abstractions.PermissionContributorAttribute";
+        /// <summary>
+        /// 权限定义贡献者接口完整类型名（扩展 Abstractions）。
+        /// V4.10.31 (A+ 阶段 3, P0-1)：由 PermissionContributorAttribute 特性改为 IPermissionDefinitionContributor 接口
+        /// ——贡献者发现改接口判定（实现接口即贡献者），特性已删除（否则 PERM001 静默失效）。
+        /// </summary>
+        private const string PermissionContributorInterfaceFqn = "TKWF.Ext.Permissions.Abstractions.IPermissionDefinitionContributor";
 
         /// <summary>方法级权限声明特性完整类型名（扩展 Abstractions）。</summary>
         private const string RequirePermissionAttributeFqn = "TKWF.Ext.Permissions.Abstractions.RequirePermissionAttribute";
@@ -38,7 +43,7 @@ namespace TKWF.Ext.Permissions.Validation
         private static readonly DiagnosticDescriptor Rule = new(
             DiagnosticId,
             "未知权限名",
-            "权限名 '{0}' 未在任何 [PermissionContributor] 的 Define() 中声明（运行时将 fail-closed）",
+            "权限名 '{0}' 未在任何 IPermissionDefinitionContributor 的 Define() 中声明（运行时将 fail-closed）",
             "Permissions",
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
@@ -56,18 +61,18 @@ namespace TKWF.Ext.Permissions.Validation
             context.RegisterCompilationStartAction(startContext =>
             {
                 var compilation = startContext.Compilation;
-                var contributorAttr = compilation.GetTypeByMetadataName(PermissionContributorAttributeFqn);
+                var contributorInterface = compilation.GetTypeByMetadataName(PermissionContributorInterfaceFqn);
                 var requirePermissionAttr = compilation.GetTypeByMetadataName(RequirePermissionAttributeFqn);
-                if (contributorAttr is null || requirePermissionAttr is null)
+                if (contributorInterface is null || requirePermissionAttr is null)
                     return; // 未引用 Permissions.Abstractions——无契约可校验
 
                 var state = new ValidationState();
 
-                // 1. 符号动作：识别源码 [PermissionContributor] 类型并提取 Define() 中声明的权限名
+                // 1. 符号动作：识别源码实现 IPermissionDefinitionContributor 的类型并提取 Define() 中声明的权限名
                 startContext.RegisterSymbolAction(symbolContext =>
                 {
                     if (symbolContext.Symbol is not INamedTypeSymbol type) return;
-                    if (!HasAttribute(type, contributorAttr)) return;
+                    if (!ImplementsContributorInterface(type, contributorInterface)) return;
                     if (!type.Locations.Any(l => l.IsInSource)) return; // DLL 贡献者——单独显式扫描判定
 
                     // 源码贡献者：提取 Define() 中 Name = "..." 字面量
@@ -92,7 +97,7 @@ namespace TKWF.Ext.Permissions.Validation
                 {
                     // DLL 贡献者存在（引用程序集中 [PermissionContributor]）→ 名字不可见 → 跳过整个校验
                     // （ADR D2：DLL 贡献者 Define() 方法体无 SyntaxTree，避免误报，运行时 fail-closed 兜底）
-                    if (HasReferencedContributor(compilation, contributorAttr)) return;
+                    if (HasReferencedContributor(compilation, contributorInterface)) return;
 
                     foreach (var (location, name) in state.RequireUsages)
                     {
@@ -104,16 +109,16 @@ namespace TKWF.Ext.Permissions.Validation
         }
 
         /// <summary>
-        /// 显式扫描引用程序集：是否存在带 <c>[PermissionContributor]</c> 的类型（DLL 贡献者）。
-        /// <para>仅扫描引用了 Permissions.Abstractions 的程序集（含该特性程序集）以控制开销。</para>
+        /// 显式扫描引用程序集：是否存在实现 <c>IPermissionDefinitionContributor</c> 的类型（DLL 贡献者）。
+        /// <para>仅扫描引用了 Permissions.Abstractions 的程序集（含该接口程序集）以控制开销。</para>
         /// </summary>
-        private static bool HasReferencedContributor(Compilation compilation, INamedTypeSymbol contributorAttr)
+        private static bool HasReferencedContributor(Compilation compilation, INamedTypeSymbol contributorInterface)
         {
             foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
             {
-                // 快速筛选：只有引用 Abstractions（特性所在程序集）的 DLL 才可能含贡献者
+                // 快速筛选：只有引用 Abstractions（接口所在程序集）的 DLL 才可能含贡献者
                 if (!ReferencesAssemblyNamed(assembly, "TKWF.Ext.Permissions.Abstractions")) continue;
-                if (NamespaceHasContributor(assembly.GlobalNamespace, contributorAttr)) return true;
+                if (NamespaceHasContributor(assembly.GlobalNamespace, contributorInterface)) return true;
             }
             return false;
         }
@@ -126,16 +131,25 @@ namespace TKWF.Ext.Permissions.Validation
             return false;
         }
 
-        private static bool NamespaceHasContributor(INamespaceSymbol ns, INamedTypeSymbol contributorAttr)
+        private static bool NamespaceHasContributor(INamespaceSymbol ns, INamedTypeSymbol contributorInterface)
         {
             foreach (var type in ns.GetTypeMembers())
-                if (HasAttribute(type, contributorAttr))
+                if (ImplementsContributorInterface(type, contributorInterface))
                     return true;
 
             foreach (var childNs in ns.GetNamespaceMembers())
-                if (NamespaceHasContributor(childNs, contributorAttr))
+                if (NamespaceHasContributor(childNs, contributorInterface))
                     return true;
 
+            return false;
+        }
+
+        /// <summary>类型是否实现权限定义贡献者接口（含继承链——对齐 SG AllInterfaces 语义）。</summary>
+        private static bool ImplementsContributorInterface(INamedTypeSymbol type, INamedTypeSymbol contributorInterface)
+        {
+            foreach (var iface in type.AllInterfaces)
+                if (SymbolEqualityComparer.Default.Equals(iface, contributorInterface))
+                    return true;
             return false;
         }
 
@@ -149,22 +163,6 @@ namespace TKWF.Ext.Permissions.Validation
 
             /// <summary>[RequirePermission] 使用位置 + 权限名（ConcurrentBag，V0.8.1）。</summary>
             public ConcurrentBag<(Location Location, string Name)> RequireUsages { get; } = new();
-        }
-
-        /// <summary>类型是否携带指定特性（含继承链）。</summary>
-        private static bool HasAttribute(INamedTypeSymbol type, INamedTypeSymbol attributeClass)
-        {
-            foreach (var attr in type.GetAttributes())
-            {
-                var attrType = attr.AttributeClass;
-                while (attrType is not null)
-                {
-                    if (SymbolEqualityComparer.Default.Equals(attrType, attributeClass))
-                        return true;
-                    attrType = attrType.BaseType;
-                }
-            }
-            return false;
         }
 
         /// <summary>特性语法是否为 [RequirePermission]（按语义类型全等判定）。</summary>

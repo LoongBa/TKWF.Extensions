@@ -43,7 +43,7 @@
   </ItemGroup>
 
   <!-- V0.7.0 (W4)：消费方集成验证——激活 SG1 分析器（build/refs 预编译 DLL），
-       验证 [GenerateController] 在真实消费方生成控制器 + [PermissionContributor] 被 SG1 发现 -->
+       验证 [GenerateController] 在真实消费方生成控制器 + 接口实现贡献者被 SG1 发现 -->
   <ItemGroup>
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
   </ItemGroup>

@@ -43,7 +43,7 @@ internal static class FeatureManagementTestSupport
 /// <paramref name="configure"/> 回调在扩展初始化器之后执行——可覆盖 ITransactionManager/FeatureOptions
 /// （如缓存 TTL 缩短测试：<c>services.Configure&lt;FeatureOptions&gt;(o =&gt; o.CacheExpirationSeconds = 1)</c>）。</para>
 /// <para><b>贡献者收集</b>：初始化的 <see cref="FeatureManagementExtensionInitializer{TUserInfo}.ConfigureServices"/>
-/// 从 <c>ProjectMetaContextBase.Instance.FeatureContributors</c> 读取编译期清单——测试经
+    /// 从 <c>ProjectMetaContextBase.Instance.Contributors["Feature"]</c> 读取编译期清单（v4.10.31 A+ 阶段 3 起新桥）——测试经
 /// <see cref="FeatureTestMetaContext"/> 安装（镜像 ConsumerIntegrationTests FakeMetaContext 模式），
 /// 使 DI 中 <c>IFeatureDefinitionRepository</c> 含 <see cref="ConsumerFeatureContributor"/> 声明定义。
 /// 静态单例换装以锁串行化，避免并行用例交叉污染。</para>

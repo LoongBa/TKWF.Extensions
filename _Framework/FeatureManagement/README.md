@@ -9,13 +9,13 @@
 |----|------|
 | 包名 | `TKWF.Ext.FeatureManagement` |
 | 版本 | v0.3.0（增量——复杂 ValueType + 外部总线适配 + Store 可见性修复） |
-| 依赖 | `TKWF.Domain`（含框架 `IFeatureChecker`/`RequireFeature`/`AddFeatureCheck`/`ILocalEventBus`/`IDistributedEventBus` 基座）+ SG1（含 `[FeatureContributor]` 收集，V4.9.114） |
+| 依赖 | `TKWF.Domain`（含框架 `IFeatureChecker`/`RequireFeature`/`AddFeatureCheck`/`ILocalEventBus`/`IDistributedEventBus` 基座）+ SG1（接口判定收集，v4.10.31 A+ 阶段 3） |
 | 数据 | 表 `FeatureValue`（框架 `SyncTables` 统一建表；`Value` 列 v0.3.0 起无界） |
 
 ## 架构分层
 
 ```
-FeatureDefinition / FeatureDefinitionContext / IFeatureDefinitionContributor   # 定义层（[FeatureContributor] 编译期收集）
+FeatureDefinition / FeatureDefinitionContext / IFeatureDefinitionContributor   # 定义层（接口判定编译期收集，v4.10.31 A+ 阶段 3）
 IFeatureDefinitionRepository / InMemoryFeatureDefinitionRepository             # 定义仓库
 FeatureValueEntity（SG1 声明式） → FeatureValueEntityDataService（SG1 骨架）    # 存储层（仅内部，不直通控制器）
 IFeatureValueStore / FeatureValueStore（读静默/写传播）                        # Store（v0.3.0 接口 public）

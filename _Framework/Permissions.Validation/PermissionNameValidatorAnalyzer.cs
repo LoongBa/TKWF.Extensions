@@ -95,7 +95,7 @@ namespace TKWF.Ext.Permissions.Validation
                 // 3. 编译结束：DLL 贡献者显式扫描（引用程序集）+ 交叉校验 → PERM001
                 startContext.RegisterCompilationEndAction(endContext =>
                 {
-                    // DLL 贡献者存在（引用程序集中 [PermissionContributor]）→ 名字不可见 → 跳过整个校验
+                    // DLL 贡献者存在（引用程序集中接口实现 IPermissionDefinitionContributor）→ 名字不可见 → 跳过整个校验
                     // （ADR D2：DLL 贡献者 Define() 方法体无 SyntaxTree，避免误报，运行时 fail-closed 兜底）
                     if (HasReferencedContributor(compilation, contributorInterface)) return;
 

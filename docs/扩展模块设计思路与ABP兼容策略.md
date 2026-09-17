@@ -53,14 +53,14 @@ TKWF 扩展实体体系（SG1 + 自建 UserType + FreeSql [Table] + DataService 
 
 | 扩展 | 版本 | 借鉴点 | TKWF 更优处（发挥框架优势） |
 |------|:---:|------|------|
-| **Permissions** | V0.9.0 | `IPermissionChecker`/`PermissionDefinition`（对齐 ABP Authorization） | **编译期收集权限定义**（SG 扫描 `[PermissionContributor]`，否决 ABP 运行时扫描）；`IPermissionBatchChecker` 批量检查（按 ProviderKey 分组归因）；N+1 优化（常数 2 次查询）；PERM001 编译期权限名校验 |
+| **Permissions** | V0.9.0 | `IPermissionChecker`/`PermissionDefinition`（对齐 ABP Authorization） | **编译期收集权限定义**（SG 接口判定 `IPermissionDefinitionContributor`，v4.10.31 A+ 阶段 3 起否决 ABP 运行时扫描）；`IPermissionBatchChecker` 批量检查（按 ProviderKey 分组归因）；N+1 优化（常数 2 次查询）；PERM001 编译期权限名校验 |
 | **Navigation** | V0.1.0 | `IMenuContributor`/`MenuItemDefinition`（对齐 ABP UI.Navigation） | ConfigureMenu **同步化**（Oracle 裁定，否决 ABP 运行时）；权限过滤经 `IPermissionChecker`；循环检测；依赖 `Permissions.Abstractions`（ADR48 D7） |
 | **Identity** | V0.3.0 | 用户/角色/用户角色（对齐 ASP.NET Core Identity + ABP 定位） | 补齐框架持久化空白；`IdentityPasswordManager` 开箱密码适配器；`IdentityAuthService` 注册/登录 API（`[GenerateController]`）；样板 171→8 行；VEntity 跨表 JOIN；`IdentityRoleProvider` Scoped 缓存 |
 | **Account** | V0.3.0 | 账户锁定/密码重置（ABP Account 定位） | 主框架 V4.9.45 缺口补齐（默认实现）；防用户枚举；`IAccountPasswordManager` 适配器解耦；登录历史/异常检测消费 SecurityLog |
 | **AuditLogging** | V0.4.0 | 审计日志模块定位（ABP AuditLogging） | SG1 声明式实体；**管理 API**（ExcludeMethods 排除含 ArgumentsJson CRUD 防 D5 泄露）；统计聚合 + 保留天数清理；QueryService 单一真相源 |
 | **Settings** | V0.2.0 | 设置管理定位（ABP SettingManagement） | 完整分层读写（User→Tenant→Global）+ IMemoryCache 缓存 + 匿名短路 |
 | **BlobStoring** | V0.2.0 | 对象存储抽象定位（ABP BlobStoring） | `BlobStoring.Abstractions` 依赖倒置（ADR50 L2）；四入口防穿越 fail-closed；FileStream 流式下载；OCE 取消穿透 |
-| **FeatureManagement** | V0.3.0 | `IFeatureValueProvider` Provider 链（对齐 ABP）+ 分层值 | **编译期定义收集**（SG1 `[FeatureContributor]`）；版本号缓存失效（写后全层即时）；`FeatureValueChangedEvent` **分布式广播**（跨实例即时失效）；复杂 ValueType 类型化读写 |
+| **FeatureManagement** | V0.3.0 | `IFeatureValueProvider` Provider 链（对齐 ABP）+ 分层值 | **编译期定义收集**（SG1 接口判定 `IFeatureDefinitionContributor`，v4.10.31 A+ 阶段 3）；版本号缓存失效（写后全层即时）；`FeatureValueChangedEvent` **分布式广播**（跨实例即时失效）；复杂 ValueType 类型化读写 |
 | **SecurityLog** | V0.2.0 | ABP Pro SecurityLog 定位 | 独立安全事件实体（安全语义区别于 AuditLog）；Domain AOP 过滤器采集（opt-in 不改主框架）；异常检测聚合 + 保留天数清理 |
 | **OrganizationUnit** | V0.1.0 | ABP Pro OrganizationUnit 定位 | 物化路径（Level/Path BFS 维护）+ 循环防护 + 删除保护 + 物理删除语义 + junction 唯一约束 + ITransactionManager |
 | **FileManagement** | V0.2.0 | ABP Pro File Management 定位（对标核验） | **超越 ABP Pro**——DB 版本表 + SHA256 完整性（回滚指针复用）+ 硬配额（SQL SUM 下推 + 并发"先到先得"）；上传 10 步安全链 |

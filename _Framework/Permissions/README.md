@@ -141,7 +141,7 @@ public class MyService
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`IPermissionDefinitionContributor`** | 业务模块声明权限定义的接口 | 消费方实现（`[PermissionContributor]` 标记） |
+| **`IPermissionDefinitionContributor`** | 业务模块声明权限定义的接口 | 消费方实现接口（v4.10.31 A+ 阶段 3 起纯接口判定，无特性） |
 | **`IPermissionDefinitionRepository`** | 权限定义仓库（查询/校验） | `InMemoryPermissionDefinitionRepository`（内部） |
 | **`IPermissionChecker`** | 运行时权限检查（fail-closed） | `PermissionChecker<TUserInfo>`（内部，泛型化） |
 | **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ `EntityDACPermissionStore`（扩展自带，ORM 无关） |

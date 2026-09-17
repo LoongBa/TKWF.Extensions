@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.PrintTemplates.DTOs;
-using TKWF.Ext.PrintTemplates.Generated;
 
 namespace TKWF.Ext.PrintTemplates;
 

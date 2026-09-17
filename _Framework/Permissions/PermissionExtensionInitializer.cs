@@ -41,23 +41,20 @@ namespace TKWF.Ext.Permissions
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
-            // 1. 收集权限贡献者定义（编译期清单 → 运行时实例化 → Define）
-            // V4.10.31 (A+ 阶段 3)：读新桥 Contributors[Permission]（ContributorDescriptor 统一描述符，接口判定收集）
+            // 1. 收集权限贡献者定义（编译期清单 → 编译期实例化（V4.10.32 A+ 阶段 4，零反射）→ Define）
+            // V4.10.31 (A+ 阶段 3)：读新桥 Contributors[Permission]（接口判定收集）；V4.10.32 起经 CreateContributorInstances 编译期实例化
             var ctx = ProjectMetaContextBase.Instance as ProjectMetaContextBase;
             var contributors = ctx != null && ctx.Contributors.ContainsKey(ContributorTargetKinds.Permission)
-                ? ctx.Contributors[ContributorTargetKinds.Permission]
-                : Array.Empty<ContributorDescriptor>();
+                ? ctx.CreateContributorInstances(ContributorTargetKinds.Permission)
+                : Array.Empty<object>();
             var repository = new InMemoryPermissionDefinitionRepository();
             if (contributors.Count > 0)
             {
                 var context = new PermissionDefinitionContext();
-                foreach (var contributorData in contributors)
+                foreach (var contributor in contributors)
                 {
-                    if (contributorData.ContributorType == null) continue;
-                    var contributor = (IPermissionDefinitionContributor?)Activator.CreateInstance(contributorData.ContributorType);
-                    if (contributor == null)
-                        throw new InvalidOperationException($"权限贡献者无法实例化: {contributorData.FullName}（需要无参构造器）");
-                    contributor.Define(context);
+                    if (contributor is IPermissionDefinitionContributor permContributor)
+                        permContributor.Define(context);
                 }
                 repository.AddRange(context.Definitions);
             }

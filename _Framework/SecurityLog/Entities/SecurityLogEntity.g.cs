@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.SecurityLog.DTOs;
-using TKWF.Ext.SecurityLog.Generated;
 
 namespace TKWF.Ext.SecurityLog;
 

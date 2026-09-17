@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.Notifications.DTOs;
-using TKWF.Ext.Notifications.Generated;
 
 namespace TKWF.Ext.Notifications;
 

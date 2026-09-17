@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.BlobStoring.DTOs;
-using TKWF.Ext.BlobStoring.Generated;
 
 namespace TKWF.Ext.BlobStoring;
 

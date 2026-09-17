@@ -47,22 +47,19 @@ namespace TKWF.Ext.Navigation
             // 在所有宿主（含非 SG1/测试）可解析（MenuManager 构造注入；对齐 Settings/FeatureManagement AddOptions 先例）
             services.AddOptions<NavigationOptions>();
 
-            // 1. 收集菜单贡献者定义（编译期清单 → 运行时实例化 → 同步 ConfigureMenu）
+            // 1. 收集菜单贡献者定义（编译期清单 → 编译期实例化（V4.10.32 A+ 阶段 4，零反射）→ 同步 ConfigureMenu）
             var ctx = ProjectMetaContextBase.Instance as ProjectMetaContextBase;
             var contributors = ctx != null && ctx.Contributors.ContainsKey(ContributorTargetKinds.Menu)
-                ? ctx.Contributors[ContributorTargetKinds.Menu]
-                : Array.Empty<ContributorDescriptor>();
+                ? ctx.CreateContributorInstances(ContributorTargetKinds.Menu)
+                : Array.Empty<object>();
             var repository = new MenuDefinitionRepository();
             if (contributors.Count > 0)
             {
                 var context = new MenuConfigurationContext();
-                foreach (var descriptor in contributors)
+                foreach (var contributor in contributors)
                 {
-                    if (descriptor.ContributorType == null) continue;
-                    var contributor = (IMenuContributor?)Activator.CreateInstance(descriptor.ContributorType);
-                    if (contributor == null)
-                        throw new InvalidOperationException($"菜单贡献者无法实例化: {descriptor.FullName}（需要无参构造器）");
-                    contributor.ConfigureMenu(context);
+                    if (contributor is IMenuContributor menuContributor)
+                        menuContributor.ConfigureMenu(context);
                 }
                 repository.AddRange(context.MenuItems);
             }

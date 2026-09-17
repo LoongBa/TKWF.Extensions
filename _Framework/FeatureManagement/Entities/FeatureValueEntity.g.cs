@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.FeatureManagement.DTOs;
-using TKWF.Ext.FeatureManagement.Generated;
 
 namespace TKWF.Ext.FeatureManagement;
 

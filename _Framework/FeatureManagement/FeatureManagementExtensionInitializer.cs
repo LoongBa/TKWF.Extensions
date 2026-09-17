@@ -42,27 +42,27 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         services.TryAddSingleton<FeatureCacheVersionRegistry>();   // v0.2.0 版本号缓存表（Singleton——跨 scope 共享）
 
         // Feature 贡献者收集（对齐 PermissionExtensionInitializer——ProjectMetaContextBase.Instance 在宿主注册期已设置）
-        // V4.10.31 (A+ 阶段 3)：读新桥 Contributors[Feature]（ContributorDescriptor 统一描述符，接口判定收集）
+        // V4.10.31 (A+ 阶段 3)：读新桥 Contributors[Feature]（接口判定收集）；V4.10.32 起经 CreateContributorInstances 编译期实例化
         var context = new FeatureDefinitionContext();
         var repository = new InMemoryFeatureDefinitionRepository();
         var ctx3 = ProjectMetaContextBase.Instance as ProjectMetaContextBase;
         var contributors3 = ctx3 != null && ctx3.Contributors.ContainsKey(ContributorTargetKinds.Feature)
-            ? ctx3.Contributors[ContributorTargetKinds.Feature]
-            : Array.Empty<ContributorDescriptor>();
-        foreach (var contributorData in contributors3)
+            ? ctx3.CreateContributorInstances(ContributorTargetKinds.Feature)
+            : Array.Empty<object>();
+        foreach (var contributor in contributors3)
         {
-            if (Activator.CreateInstance(contributorData.ContributorType) is IFeatureDefinitionContributor contributor)
+            if (contributor is IFeatureDefinitionContributor featureContributor)
             {
                 try
                 {
-                    contributor.Define(context);
+                    featureContributor.Define(context);
                 }
                 catch (Exception ex)
                 {
                     // 单个贡献者失败不阻塞整体——记录警告（对齐扩展机制容错语义）
                     Microsoft.Extensions.Logging.LoggerExtensions.LogWarning(
                         services.BuildServiceProvider().GetService<ILoggerFactory>()?.CreateLogger("FeatureManagement") ?? null!,
-                        ex, "Feature 贡献者 {Contributor} Define 失败", contributorData.Name);
+                        ex, "Feature 贡献者 Define 失败");
                 }
             }
         }

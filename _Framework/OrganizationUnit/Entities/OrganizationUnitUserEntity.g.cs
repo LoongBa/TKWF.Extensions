@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.OrganizationUnit.DTOs;
-using TKWF.Ext.OrganizationUnit.Generated;
 
 namespace TKWF.Ext.OrganizationUnit;
 

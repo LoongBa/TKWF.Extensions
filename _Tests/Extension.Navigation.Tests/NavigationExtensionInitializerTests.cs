@@ -124,6 +124,13 @@ public class NavigationExtensionInitializerTests
                     }
                 };
 
+        // V4.10.32 (A+ 阶段 4)：编译期实例化 override——测试桩镜像 Initializer 消费路径（CreateContributorInstances）
+        public override IReadOnlyList<object> CreateContributorInstances(string targetKind)
+        {
+            if (_empty || targetKind != ContributorTargetKinds.Menu) return Array.Empty<object>();
+            return new object[] { new MainMenuContributor() };
+        }
+
         public override ProjectConfiguration Configuration => null!;
         public override MetadataChangeLog ChangeLog => null!;
         public override string MetadataSchemaVersion => "test";

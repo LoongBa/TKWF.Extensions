@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.AuditLogging.DTOs;
-using TKWF.Ext.AuditLogging.Generated;
 
 namespace TKWF.Ext.AuditLogging;
 

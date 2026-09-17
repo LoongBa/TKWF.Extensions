@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.DataPort.DTOs;
-using TKWF.Ext.DataPort.Generated;
 
 namespace TKWF.Ext.DataPort;
 

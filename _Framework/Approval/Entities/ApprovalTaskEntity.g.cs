@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.Approval.DTOs;
-using TKWF.Ext.Approval.Generated;
 
 namespace TKWF.Ext.Approval;
 

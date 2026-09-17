@@ -18,7 +18,6 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.Calendar.DTOs;
-using TKWF.Ext.Calendar.Generated;
 
 namespace TKWF.Ext.Calendar;
 

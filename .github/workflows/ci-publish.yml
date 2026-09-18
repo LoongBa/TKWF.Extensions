@@ -76,7 +76,59 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
+    # 2026-09-19（对齐主框架 V5 前收尾）：显式声明权限——cleanup 步经 API 删除制品需 actions: write，
+    # 指定 permissions 会覆盖默认集，须一并保留 contents: read（checkout）。
+    permissions:
+      contents: read
+      actions: write
     steps:
+      # 2026-09-19（对齐主框架 V5 前收尾）：Actions 制品存储配额守护。
+      # 背景：主框架 2026-09-18 实证 retention-days: 7 未生效——163 个 nupkgs（~2.4GB）顶爆 2GB 配额，
+      # Upload artifacts 被拒阻断 publish（依赖 download-artifact）；本仓库同模式亦会累积。
+      # 处置：每次 build-test 运行时显式删除 7 天前的 nupkgs 制品（与上传 retention-days 对齐；
+      # 制品已推入 nuget.org 或仅供失败调试，删除零风险）。删除失败仅告警不阻断发布。
+      - name: Cleanup stale nupkgs artifacts (quota guard)
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_NAME: nupkgs
+          RETENTION_DAYS: 7
+        with:
+          script: |
+            const name = process.env.ARTIFACT_NAME;
+            const days = parseInt(process.env.RETENTION_DAYS, 10);
+            const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+            let page = 1, seen = 0, deleted = 0, kept = 0;
+            while (true) {
+              const resp = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+                page
+              });
+              const arts = resp.data.artifacts.filter(a => a.name === name);
+              seen += arts.length;
+              for (const a of arts) {
+                if (new Date(a.created_at).getTime() < cutoff) {
+                  try {
+                    await github.rest.actions.deleteArtifact({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      artifact_id: a.id
+                    });
+                    deleted++;
+                    core.info(`Deleted artifact ${a.id} (${a.created_at})`);
+                  } catch (e) {
+                    core.warning(`Delete failed for artifact ${a.id}: ${e.message}`);
+                  }
+                } else {
+                  kept++;
+                }
+              }
+              if (resp.data.artifacts.length < 100) break;
+              page++;
+            }
+            core.info(`Cleanup done: ${deleted} deleted, ${kept} kept (${seen} nupkgs seen)`);
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

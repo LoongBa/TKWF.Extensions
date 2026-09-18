@@ -42,6 +42,10 @@
   <Folder Name="/_Framework/Navigation/">
     <Project Path="_Framework/Navigation/TKWF.Ext.Navigation.csproj" />
   </Folder>
+  <!-- V4.10.32 (A+ 阶段 4)：补 Navigation.Abstractions 注册（阶段 2 拆包遗漏——CI pack 不含该包致未发布） -->
+  <Folder Name="/_Framework/Navigation.Abstractions/">
+    <Project Path="_Framework/Navigation.Abstractions/TKWF.Ext.Navigation.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/DataDictionary/">
     <Project Path="_Framework/DataDictionary/TKWF.Ext.DataDictionary.csproj" />
   </Folder>

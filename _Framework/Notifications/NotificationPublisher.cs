@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.Transactions;
+using TKW.Framework.Localization;
 using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Notifications
@@ -96,7 +97,7 @@ namespace TKWF.Ext.Notifications
                 var notification = new NotificationEntity
                 {
                     Name = definition.Name,
-                    DisplayName = definition.DisplayName,
+                    DisplayName = ResolveLocalizedDisplayName(definition),
                     DataJson = data?.ToJson(),
                     Severity = (int)severity,
                     EntityTypeName = entityTypeName,
@@ -170,6 +171,28 @@ namespace TKWF.Ext.Notifications
 
             var grantMap = await batchChecker.IsGrantedAsync(recipients, permissionName);
             return recipients.Where(id => grantMap.TryGetValue(id, out var granted) && granted).ToList();
+        }
+
+        /// <summary>
+        /// V0.5.0：解析本地化显示名快照——经 <see cref="IFrameworkLocalizer"/>（延迟可空解析，对齐
+        /// <see cref="IPermissionChecker"/> 先例——消费方未启用本地化时构造不失败、行为零变化）。
+        /// <para>解析规则（Oracle C1 修订）：定义设置 <see cref="NotificationDefinition.DisplayNameKey"/> 时，
+        /// localizer 命中返回译文；<c>null</c>（未注册）/未命中（ADR31 契约返回 key 本身）/空串 →
+        /// 回退 <see cref="NotificationDefinition.DisplayName"/> 原文（防 key/空串误落库）。</para>
+        /// </summary>
+        private string ResolveLocalizedDisplayName(NotificationDefinition definition)
+        {
+            if (definition.DisplayNameKey == null)
+                return definition.DisplayName;
+
+            var localizer = _serviceProvider.GetService<IFrameworkLocalizer>();
+            if (localizer == null)
+                return definition.DisplayName;
+
+            var resolved = localizer[definition.DisplayNameKey];
+            return string.IsNullOrWhiteSpace(resolved) || resolved == definition.DisplayNameKey
+                ? definition.DisplayName
+                : resolved;
         }
 
         /// <summary>解析收件人最终通道列表——有偏好用偏好（含空列表 = 不接收，P2-2），无偏好回退定义级。</summary>

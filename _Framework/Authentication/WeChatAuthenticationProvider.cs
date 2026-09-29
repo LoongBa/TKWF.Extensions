@@ -1,0 +1,95 @@
+using System;
+using System.Security.Authentication;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+
+namespace TKWF.Ext.Authentication;
+
+/// <summary>
+/// 微信 OAuth 认证 Provider（内置，认证后就绪便捷路径——公众号网页授权 + 开放平台扫码双形态，方案 §5.5）。
+/// <para>流程：微信授权 code → WeChatApiClient.GetOpenIdAsync → 查账号（按 openid 绑定列）→ 有账号登录 / 无账号建账号并绑定 openid。</para>
+/// <para>scope 判定绑定列：snsapi_base → WechatMpOpenId（网页授权）；snsapi_login → WechatWebOpenId（扫码）；默认扫码。</para>
+/// <para>登录 state/票据 vs 绑定 bind_token/state 隔离不复用（Oracle I6 防绑定劫持——绑定流程归装配层，本 Provider 只做登录）。</para>
+/// </summary>
+internal sealed class WeChatAuthenticationProvider : IAuthenticationProvider
+{
+    private readonly IWeChatApiClient _weChatApi;
+    private readonly AuthAccountEntityDataService _accountDataService;
+    private readonly ILogger<WeChatAuthenticationProvider> _logger;
+
+    public WeChatAuthenticationProvider(
+        IWeChatApiClient weChatApi,
+        AuthAccountEntityDataService accountDataService,
+        ILogger<WeChatAuthenticationProvider> logger)
+    {
+        _weChatApi = weChatApi;
+        _accountDataService = accountDataService;
+        _logger = logger;
+    }
+
+    public string AuthType => AuthTypes.Wechat;
+
+    public async Task<ProviderAuthenticateResult> AuthenticateAsync(ProviderAuthenticateContext context, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(context.WechatCode))
+            return new ProviderAuthenticateResult(false, null, "WECHAT_CODE_REQUIRED");
+
+        string openId;
+        try
+        {
+            // appId 参数预留（多应用场景 Provider 扩展时按 context 扩展定位凭证；当前按 platform 模糊查凭证）
+            openId = await _weChatApi.GetOpenIdAsync("", context.WechatCode, ct);
+        }
+        catch (Exception ex) when (ex is AuthenticationException or InvalidOperationException)
+        {
+            return new ProviderAuthenticateResult(false, null, ex.Message);
+        }
+
+        var isMpScope = string.Equals(context.WechatScope, "snsapi_base", StringComparison.OrdinalIgnoreCase);
+
+        // 查账号：按 openid 绑定列（公众号 vs 网站应用）
+        var account = isMpScope
+            ? await _accountDataService.GetByWechatMpOpenIdAsync(openId, ct)
+            : await _accountDataService.GetByWechatWebOpenIdAsync(openId, ct);
+        if (account == null && !isMpScope)
+        {
+            // 扫码兜底：网页授权列也可能已绑定（双形态归并）
+            account = await _accountDataService.GetByWechatMpOpenIdAsync(openId, ct);
+        }
+
+        if (account != null)
+        {
+            if (!account.IsEnabled) return new ProviderAuthenticateResult(false, null, "ACCOUNT_DISABLED");
+            return new ProviderAuthenticateResult(true, account.UId, null, AuthLevel.Wechat);
+        }
+
+        // 无账号 → 建账号（openid 绑定——UnionId 由装配层经 GetUserInfoAsync 补充；
+        // Phone 为 null——微信便捷登录无手机号账号（唯一索引对 NULL 放行；短信绑定补齐后回填））
+        var created = new AuthAccountEntity
+        {
+            UId = AccountIdGenerator.NewUId(),
+            Phone = null,
+            AuthLevel = (int)AuthLevel.Wechat,
+            TokenVersion = 0
+        };
+        if (isMpScope) created.WechatMpOpenId = openId;
+        else created.WechatWebOpenId = openId;
+        created.Nickname = null;
+
+        try
+        {
+            await _accountDataService.CreateAsync(created, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "微信登录建账号并发冲突——重查（openid 绑定兜底）");
+            var existing = isMpScope
+                ? await _accountDataService.GetByWechatMpOpenIdAsync(openId, ct)
+                : await _accountDataService.GetByWechatWebOpenIdAsync(openId, ct);
+            if (existing != null) return new ProviderAuthenticateResult(true, existing.UId, null, AuthLevel.Wechat);
+            return new ProviderAuthenticateResult(false, null, "ACCOUNT_CREATE_FAILED");
+        }
+        return new ProviderAuthenticateResult(true, created.UId, null, AuthLevel.Wechat);
+    }
+}

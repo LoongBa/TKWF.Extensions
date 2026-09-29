@@ -103,6 +103,9 @@
   <Folder Name="/_Framework/FeatureManagement/">
     <Project Path="_Framework/FeatureManagement/TKWF.Ext.FeatureManagement.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Authentication/">
+    <Project Path="_Framework/Authentication/TKWF.Ext.Authentication.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />
@@ -190,5 +193,8 @@
   </Folder>
   <Folder Name="/_Tests/Extension.FeatureManagement.Tests/">
     <Project Path="_Tests/Extension.FeatureManagement.Tests/TKWF.Ext.FeatureManagement.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Authentication.Tests/">
+    <Project Path="_Tests/Extension.Authentication.Tests/TKWF.Ext.Authentication.Tests.csproj" />
   </Folder>
 </Solution>

@@ -2,7 +2,7 @@ namespace TKWF.Ext.SecurityLog
 {
     /// <summary>
     /// 安全日志事件字符串常量——收敛 7 事件类型 / 2 结果 / 2 事件分类字面量，
-    /// 供采集过滤器（<see cref="SecurityLogFilterAttribute{TUserInfo}"/>）、聚合查询（<c>GetTopFailedByUserAsync</c>/
+    /// 供采集过滤器（<c>SecurityLogFilterAttribute&lt;TUserInfo&gt;</c>）、聚合查询（<c>GetTopFailedByUserAsync</c>/
     /// <c>GetTopFailedByIpAsync</c> 的 <c>Result=="Failed"</c> 过滤）与实体注释引用，避免魔法字符串散落。
     /// </summary>
     public static class SecurityLogEventTypes

@@ -7,7 +7,7 @@ namespace TKWF.Ext.SecurityLog
 {
     /// <summary>
     /// 安全日志分析服务接口（v0.2.0 异常检测聚合 + 保留天数清理）——扩展侧自建，不修改主框架。
-    /// <para><b>数据访问红线合规</b>：本服务只依赖 <see cref="SecurityLogEntityDataService"/>（SG1 DataService）委托——
+    /// <para><b>数据访问红线合规</b>：本服务只依赖 <c>SecurityLogEntityDataService</c>（SG1 DataService）委托——
     /// 绝不注入 IFreeSql / IEntityDAC；异常静默对齐扩展既有模式（失败记 Warning 日志，返回空结果/0，不抛异常）。</para>
     /// <para><b>边界</b>：聚合仅查不改（只读 TopN）；唯一的写路径是保留清理 <see cref="CleanupExpiredAsync"/>
     /// （打破"只增不改"语义的决策已记录——见 DataService <c>DeleteExpiredAsync</c> 注释与 README §七）。</para>

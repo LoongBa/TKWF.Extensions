@@ -36,6 +36,7 @@
 | **HealthCheck**             | V0.2.1 | 系统健康探测（net10 内置 HealthChecks + `/health` 端点 + **内置 DB 探针** `AddDatabaseHealthCheck<T>`（V0.2.0，`IEntityReadOnlyDAC` 红线合规路径））| $(System.Collections.Specialized.OrderedDictionary[HealthCheck]) | [README](./_Framework/HealthCheck/README.md) | [指南](./docs/HealthCheck/健康检查扩展-使用指南.md) |
 | **RateLimiting**            | V0.1.2 | Web 层限流接线（ASP.NET Core AddRateLimiter + IP/用户分区 + 429/Retry-After；与 Domain `[RateLimit]` 双层防护）| $(System.Collections.Specialized.OrderedDictionary[RateLimiting]) | [README](./_Framework/RateLimiting/README.md) | [指南](./docs/RateLimiting/限流扩展-使用指南.md) |
 | **SecurityLog**             | V0.2.1 | 安全日志（登录/登出/改密/重置/锁定/注册/挑战事件 + IP/UA/结果 + **异常检测聚合 + 保留天数清理（V0.2.0）**）| $(System.Collections.Specialized.OrderedDictionary[SecurityLog]) | [README](./_Framework/SecurityLog/README.md) | [指南](./docs/SecurityLog/安全日志扩展-使用指南.md) |
+| **SecurityLog.Abstractions** | V0.1.0 | 安全日志契约抽象（ISecurityLogStore/ISecurityLogQueryService/ISecurityLogAnalyticsService + DTO/Options——ADR48 D7 依赖倒置，Account 消费方复用）| — | —（并入 SecurityLog）|
 | **Approval**                | V0.2.2 | 轻量审批引擎（流程定义/审批实例/审批任务三实体 + 状态机 + 或签/会签 + 委派/加签/抄送/超时自动处理（v0.2.0）+ 完成事件回调；不依赖外部工作流引擎）| $(System.Collections.Specialized.OrderedDictionary[Approval]) | [README](./_Framework/Approval/README.md) | [指南](./docs/Approval/审批流扩展-使用指南.md) |
 | **OrganizationUnit**        | V0.1.2 | 组织单元（树形部门/团队/分组 + 物化路径 Level/Path + 循环防护/删除保护 + 用户关联 + 事务包裹）| $(System.Collections.Specialized.OrderedDictionary[OrganizationUnit]) | [README](./_Framework/OrganizationUnit/README.md) | [指南](./docs/OrganizationUnit/组织单元扩展-使用指南.md) |
 | **Calendar**                | V0.1.2 | 日历/排程（日历+事件 CRUD + 重复规则子集（Utility 收纳：DAILY/WEEKLY/MONTHLY/YEARLY + 月末钳制 + 绝对索引）+ occurrence 查询/合并 + UTC 契约）| $(System.Collections.Specialized.OrderedDictionary[Calendar]) | [README](./_Framework/Calendar/README.md) | [指南](./docs/Calendar/日历排程扩展-使用指南.md) |
@@ -43,7 +44,7 @@
 | **BlobStoring.Abstractions**| V0.1.1 | Blob 存储契约抽取（`IBlobStorageService`/`BlobInfo`/`BlobStoringOptions`——ADR50 L2 依赖倒置，FileManagement 消费）| — | — | —（并入 BlobStoring）|
 | **FeatureManagement**      | V0.3.2 | 功能管理/特性开关（接口判定编译期定义（v4.10.31 A+ 阶段 3）+ Provider 链分层值（v0.2.0 扩展点）+ IFeatureChecker 实现（接入 [RequireFeature]）+ 复杂 ValueType 类型化读写（v0.3.0）+ 变更事件分布式广播（v0.3.0）+ 管理 API）| $(System.Collections.Specialized.OrderedDictionary[FeatureManagement]) | [README](./_Framework/FeatureManagement/README.md) | [指南](./docs/FeatureManagement/功能管理扩展-使用指南.md) |
 
-> 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南。
+> 列说明：**README** = 扩展技术规范（随 NuGet 发布，位于 `_Framework/{扩展名}/`）；**指南** = 使用指南（公开文档，位于 `docs/{扩展名}/`）。Permissions.Abstractions/Validation 无独立文档，详见 Permissions 的 README 与指南；SecurityLog.Abstractions 无独立文档，详见 SecurityLog 的 README 与指南。
 
 > 全量 **1352 测试全绿**（28 测试项目）——`dotnet test` 零失败。（Approval v0.2.0 + FeatureManagement v0.3.0 + FileManagement v0.2.0 + Calendar + OrganizationUnit + 三件套基础设施 + BlobStoring 安全修复 + Tagging v0.4.0 + HealthCheck v0.2.0 + Notifications v0.2.0 多通道路由 + AuditLogging v0.3.0/v0.4.0 统计聚合与管理 API + Permissions v0.9.0 多用户批量权限检查 + Notifications v0.3.0 偏好路由与权限门控 + Notifications v0.4.0 SignalR 通道（12 用例，独立包） + **Metrics v0.2.0 指标结果持久化（15 用例：Mapper 6 + Store 9）** 后）
 

@@ -1,6 +1,6 @@
 # TKWF.Ext.SecurityLog 安全日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (安全事件记录与查询) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0（契约拆包） | **框架**: .NET 10
 
 **核心约束**: 认证/授权安全事件自动记录（AOP 过滤器采集，不改主框架）+ 只增不改（append-only）+ 数据访问红线合规（全走 SG1 DataService）+ 异常静默 + 查询 API（列表 DTO 不含 Detail）
 
@@ -31,6 +31,8 @@
 <!-- 消费方 .csproj -->
 <ProjectReference Include="..\..\_Framework\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
 ```
+
+> **契约拆包（v0.3.0，ADR48 D7）**：查询/分析契约（`ISecurityLogQueryService`/`ISecurityLogAnalyticsService`/`ISecurityLogStore` + DTO/Options）现定义于 `TKWF.Ext.SecurityLog.Abstractions`（命名空间保持 `TKWF.Ext.SecurityLog`）——本体经 ProjectReference 引用 Abstractions；消费方**仅引 Abstractions 即可用查询 API**；启用扩展（初始化器/过滤器）仍需引本体。
 
 ```csharp
 using TKWF.Ext.SecurityLog;
@@ -171,12 +173,16 @@ public class SecurityAuditService(ISecurityLogQueryService queryService)
 |----------|---------|------------|
 | **`SecurityLogEntity`** | 安全日志表实体（SG1 声明式，11 列，只增不改 + CreateTime UTC） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`SecurityLogFilterAttribute<TUserInfo>`** | 安全事件采集过滤器（Domain AOP + CanWeGo 白名单 + Result/Lockout 判定） | 内置（消费方 opt-in：`builder.AddSecurityLog()`） |
-| **`ISecurityLogStore`** | 安全事件写入存储（追加写） | `SecurityLogStore`（internal sealed，委托 DataService） |
-| **`ISecurityLogQueryService`** | 分页/过滤查询 + 详情 + 计数（列表 DTO 不含 Detail） | `SecurityLogQueryService`（internal sealed，委托 DataService） |
-| **`ISecurityLogAnalyticsService`** | v0.2.0 异常检测聚合（失败次数 TopN by 用户名/来源 IP）+ 保留天数清理 | `SecurityLogAnalyticsService`（internal sealed，委托 DataService + IOptions + ILogger，异常静默） |
+| **`ISecurityLogStore`** | 安全事件写入存储（追加写） | `SecurityLogStore`（internal sealed，委托 DataService；契约定义于 SecurityLog.Abstractions） |
+| **`ISecurityLogQueryService`** | 分页/过滤查询 + 详情 + 计数（列表 DTO 不含 Detail） | `SecurityLogQueryService`（internal sealed，委托 DataService；契约定义于 SecurityLog.Abstractions） |
+| **`ISecurityLogAnalyticsService`** | v0.2.0 异常检测聚合（失败次数 TopN by 用户名/来源 IP）+ 保留天数清理 | `SecurityLogAnalyticsService`（internal sealed，委托 DataService + IOptions + ILogger，异常静默；契约定义于 SecurityLog.Abstractions） |
 | **`SecurityLogEntityDataService`** | SG1 DataService——CRUD 转发 + v0.2.0 聚合（GetTopFailedByUserAsync/GetTopFailedByIpAsync）+ 清理（DeleteExpiredAsync） | xCodeGen 生成（.g.cs + 手写分部业务方法） |
-| **`SecurityLogEventTypes`** | v0.2.0 事件类型/结果/分类字符串常量（收敛字面量） | 内置静态类 |
-| **`SecurityLoggingOptions`** | 配置（`TKWF:SecurityLog`）：Enabled / EventTypes / v0.2.0 RetentionDays(90) + CleanupBatchSize(500) | 内置，`[Options]` + SG1 绑定 |
+| **`SecurityLogEventTypes`** | v0.2.0 事件类型/结果/分类字符串常量（收敛字面量） | 内置静态类（契约定义于 SecurityLog.Abstractions） |
+| **`SecurityLoggingOptions`** | 配置（`TKWF:SecurityLog`）：Enabled / EventTypes / v0.2.0 RetentionDays(90) + CleanupBatchSize(500) | 内置，`[Options]` + SG1 绑定（契约定义于 SecurityLog.Abstractions） |
 | **`SecurityLogExtensionInitializer`** | 扩展初始化器（三钩子：注册 Options + DataService + Store + QueryService + AnalyticsService） | 内置，`[TKWFExtension]` SG1 发现 |
+
+## 十、V0.3.0 简述
+
+公开契约拆包至 `TKWF.Ext.SecurityLog.Abstractions`（ADR48 D7），命名空间保持 `TKWF.Ext.SecurityLog`，行为零变化。
 
 <!-- EOF -->

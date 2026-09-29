@@ -85,6 +85,9 @@
   <Folder Name="/_Framework/SecurityLog/">
     <Project Path="_Framework/SecurityLog/TKWF.Ext.SecurityLog.csproj" />
   </Folder>
+  <Folder Name="/_Framework/SecurityLog.Abstractions/">
+    <Project Path="_Framework/SecurityLog.Abstractions/TKWF.Ext.SecurityLog.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Approval/">
     <Project Path="_Framework/Approval/TKWF.Ext.Approval.csproj" />
   </Folder>

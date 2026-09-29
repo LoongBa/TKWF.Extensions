@@ -4,8 +4,8 @@ using System.Threading.Tasks;
 namespace TKWF.Ext.SecurityLog
 {
     /// <summary>
-    /// 安全日志事件模型——由 <see cref="SecurityLogFilterAttribute{TUserInfo}"/> 采集构造，
-    /// 经 <see cref="ISecurityLogStore"/> 落库（映射为 <see cref="SecurityLogEntity"/>）。
+    /// 安全日志事件模型——由 <c>SecurityLogFilterAttribute&lt;TUserInfo&gt;</c> 采集构造，
+    /// 经 <see cref="ISecurityLogStore"/> 落库（映射为 <c>SecurityLogEntity</c>）。
     /// </summary>
     /// <param name="EventType">事件类型：Login / Logout / PasswordChange / PasswordReset / Lockout / Register / Challenge。</param>
     /// <param name="EventCategory">事件分类：Authentication / Authorization（v0.1.0 均为 Authentication）。</param>

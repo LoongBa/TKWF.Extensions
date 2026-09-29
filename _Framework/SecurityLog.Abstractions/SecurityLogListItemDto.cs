@@ -3,7 +3,7 @@ using System;
 namespace TKWF.Ext.SecurityLog
 {
     /// <summary>
-    /// 安全日志列表项 DTO——从 <see cref="SecurityLogEntity"/> 投影，
+    /// 安全日志列表项 DTO——从 <c>SecurityLogEntity</c> 投影，
     /// <b>不含 <c>Detail</c> 全文</b>（安全决策 D5：Detail 含异常消息，列表查询不拉大字段/敏感信息，对齐 AuditLogging 先例）。
     /// 详情经 <see cref="SecurityLogDetailDto"/>（GetDetailAsync）取全量。
     /// </summary>

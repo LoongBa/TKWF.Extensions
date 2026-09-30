@@ -2,6 +2,7 @@ using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
+using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.Authentication.Tests;
 
@@ -34,6 +35,8 @@ public class AuthCenterInitializerTests
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IPlatformAccountMapService)));
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IWeChatApiClient)));
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(ITokenVerifier)));
+        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IAuthAccountQueryService)));
+        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IUserProfileSource)));
         Assert.Equal(2, services.Count(d => d.ServiceType == typeof(IAuthenticationProvider)));
     }
 

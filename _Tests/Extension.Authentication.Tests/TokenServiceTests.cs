@@ -129,7 +129,9 @@ public class TokenServiceTests
             .CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
-        var tampered = result.AccessToken[..^1] + (result.AccessToken[^1] == 'A' ? 'B' : 'A');
+        // ⚠️ 篡改末组第一字符（X 位）而非末位字符——末位是 base64url 对的第二字符（Y 位），其低 4 位被解码丢弃，
+        //    末位 A↔B 翻转可能落入 padding 位（解码逐字节相同 → 验签合法通过 → 测试 ~25% 概率误报失败）。
+        var tampered = result.AccessToken[..^2] + (result.AccessToken[^2] == 'A' ? 'B' : 'A') + result.AccessToken[^1];
 
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateTokenAsync(tampered));
         Assert.Equal("INVALID_SIGNATURE", ex.Message);

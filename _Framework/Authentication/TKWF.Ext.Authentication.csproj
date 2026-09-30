@@ -31,6 +31,11 @@
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- V0.2.0：UserCenter 契约承接——引契约包（Abstractions）非主包（L2 门控合规；ADR48 D7；扩展间依赖走 ProjectReference，打包自动转版本依赖） -->
+  <ItemGroup>
+    <ProjectReference Include="..\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
+  </ItemGroup>
+
   <!-- 实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations）+ TokenService 黑名单 IMemoryCache 缓存（Oracle C3） -->
   <ItemGroup>
     <PackageReference Include="FreeSql" />

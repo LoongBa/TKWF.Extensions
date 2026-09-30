@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.Authentication;
 
@@ -46,6 +47,13 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
         services.TryAddScoped<IPlatformAccountMapService, PlatformAccountMapService>();
         services.TryAddScoped<IWeChatApiClient, WeChatApiClient>();
         services.TryAddScoped<ITokenVerifier, LocalJwtTokenVerifier>();
+
+        // V0.2.0：账号查询契约（对外只读查询——UserCenter 桥接 / 装配实例 / 内部复用；委托 DataService 红线合规）
+        services.TryAddScoped<IAuthAccountQueryService, AuthAccountQueryService>();
+
+        // V0.2.0：UserCenter 公共档案源实现（数据属主承接契约——装配实例零桥接；TryAdd 语义消费方可覆盖）
+        services.TryAddScoped<IUserProfileSource, AuthAccountUserProfileSource>();
+
         // 多 Provider：TryAddEnumerable（按实现类型去重——TryAddScoped 同 ServiceType 第二次会被跳过）
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAuthenticationProvider, SmsAuthenticationProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAuthenticationProvider, WeChatAuthenticationProvider>());

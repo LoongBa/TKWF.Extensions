@@ -14,9 +14,11 @@ namespace TKWF.Ext.Identity;
 /// <see cref="DomainReadOnlyDataServiceBase{TEntity, TDto}"/>（2 参数版，与扩展现有 DataService 一致）。
 /// 注入 <see cref="IEntityReadOnlyDAC{TEntity}"/>（只读契约）——绝不用 IEntityDAC（FreeSqlEntityDAC 静态守卫）。
 /// 不标 <c>[GenerateController(FromDataService = true)]</c>：GetRolesAsync 是 Store 内部能力，
-/// REST 经 IUserManager 门面暴露；GraphQL 经 ExposeGraphqlQuery 由 SG1b 自动生成 resolver。</para>
+/// REST 经 IUserManager 门面 + UserRoleViewQueryService（V0.4.0 直接暴露）消费；
+/// GraphQL 经 ExposeGraphqlQuery 由 SG1b 自动生成 resolver。
+/// V0.4.0：public（UserRoleViewQueryService 公开 ctor 依赖——CS0051 修复 + 消费方可直接注入只读查询面）。</para>
 /// </summary>
-partial class UserRoleViewDataService(IDomainUser user, IEntityReadOnlyDAC<UserRoleView> dac)
+public partial class UserRoleViewDataService(IDomainUser user, IEntityReadOnlyDAC<UserRoleView> dac)
     : DomainReadOnlyDataServiceBase<UserRoleView, UserRoleViewDto>(user, dac, hasSoftDelete: false)
 {
     /// <summary>单查询跨表：按 UserId 返回用户角色（JOIN IdentityUserRole → IdentityRole 下推 DB，替代两步查询）。</summary>

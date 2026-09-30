@@ -3,8 +3,8 @@
 > **系列**：框架实战教学（开篇见 [`01-扩展模块最优解探索-Schema级数据组合-开篇.md`](./01-扩展模块最优解探索-Schema级数据组合-开篇.md)）
 > **案例定位**：倒推路线图（§八）**保守形态 → 直接暴露**升级——Identity/Notifications 现有 VEntity「映射回原实体」策略升级为「VEntity DTO 一等公民」（§8.3 认知修正的落地）
 > **涉及扩展**：`TKWF.Ext.Identity`（当前 V0.3.3）→ 目标 V0.4.0；`TKWF.Ext.Notifications`（当前 V0.4.1）→ 目标 V0.5.0
-> **状态**：📋 待 Oracle 评审
-> **版本**：v0.1.0-draft
+> **状态**：✅ **已实施**（2026-10-01——Identity V0.4.0 + Notifications V0.5.0）
+> **版本**：v0.1.2
 
 ---
 
@@ -192,16 +192,16 @@ public partial class UserNotificationViewQueryService(IDomainUser user, UserNoti
 
 ## 八、验收标准
 
-- [ ] 新 REST 端点返回 VEntity DTO（`UserRoleViewDto`/`UserNotificationViewDto`——含 JOIN 携带列完整面）
-- [ ] `UserRoleViewDataService`/`UserNotificationViewDataService` 标 `[GenerateController(FromDataService=true)]` **无效机制规避**（采用 Service 包装类——C1）
-- [ ] **仅本人防护（C5）**：`GetMyRolesAsync`/`GetMyInboxAsync` 从 `IDomainUser` 取当前用户（无 userId 参数）——越权用例 N5 通过
-- [ ] **name 可空（C7）**：`GetMyInboxAsync` null = 查全部收件箱
-- [ ] **注册机制与先例一致（C6）**：核实 SG1 自动注册边界——TryAddScoped 不默写（对齐 IdentityAuthService）
-- [ ] 门面内部链路零改动（`UserStore.GetRolesAsync`/`NotificationStore.GetListAsync`/`IdentityRoleProvider`/`IdentityUserHelperBase` diff 为空）
-- [ ] GraphQL 零改动（既有 `ExposeGraphqlQuery=true` 保持）
-- [ ] 既有断言全绿 + 新增 N1-N5 用例绿
-- [ ] `lsp_diagnostics` 变更文件干净
-- [ ] 使用指南补 REST 暴露章节
+- [x] 新 REST 端点返回 VEntity DTO（`UserRoleViewDto`/`UserNotificationViewDto`——含 JOIN 携带列完整面）
+- [x] `UserRoleViewDataService`/`UserNotificationViewDataService` 标 `[GenerateController(FromDataService=true)]` **无效机制规避**（采用 Service 包装类——C1）
+- [x] **仅本人防护（C5）**：`GetMyRolesAsync`/`GetMyInboxAsync` 从 `IDomainUser` 取当前用户（无 userId 参数）——越权用例 N5 通过
+- [x] **name 可空（C7）**：`GetMyInboxAsync` null = 查全部收件箱（实现经视图 `GetPagedAsync`——完整字段保留，见 v0.1.2 变更记录）
+- [x] **注册机制与先例一致（C6）**：核实 SG1 自动注册边界——TryAddScoped 不默写（对齐 IdentityAuthService；消费方 SG1b MetaType.Service → AddService）
+- [x] 门面内部链路零改动（`UserStore.GetRolesAsync`/`NotificationStore.GetListAsync`/`IdentityRoleProvider`/`IdentityUserHelperBase` diff 为空）
+- [x] GraphQL 零改动（既有 `ExposeGraphqlQuery=true` 保持）
+- [x] 既有断言全绿 + 新增 N1-N5 用例绿（Identity 4 + Notifications 4 = 8 新增，63/75 全绿）
+- [x] `lsp_diagnostics` 变更文件干净
+- [x] 使用指南补 REST 暴露章节（Identity §3.7 / Notifications 快速开始 §6）
 
 ---
 
@@ -223,6 +223,7 @@ public partial class UserNotificationViewQueryService(IDomainUser user, UserNoti
 |------|------|---------|
 | 2026-09-30 | v0.1.0-draft | 初始草案——基于 bg_1dc747d4（Identity+Notifications VEntity 直接暴露探针）机制事实：VEntity DataService 不支持 REST（isDataService 门控）、GraphQL 独立已就绪、Service 包装类为唯一 REST 路径 |
 | 2026-09-30 | v0.1.1 | **oracle3 评审 PASS WITH CONDITIONS（`bg_a62f3ca0`）7 条件全修订**——C1-high（**IDOR 防护：userId 从 IDomainUser 取当前用户**——方法去参数仅本人，越权用例 N5；对齐开篇 §5.2 P4 判据）+ C2-high（**注册机制核实**——IdentityAuthService 先例无 TryAddScoped，不得默写）+ C3-med（**`[ApiExpose]` 路由显式定案**——`/api/identity/user-roles` + `/api/notifications/inbox`）+ C4-med（**name 可空修复**——null 查全部收件箱，REST 面 ≥ 门面面）+ C5-med（**sealed → partial**——对齐 IdentityAuthService L21）+ C6-med（**N4 降级为 DI 注册可解析**——当前测试宿主不触发 ControllerGenerator）+ C7-low（内存映射接受，远期投影优化）；P1-P5 建议纳入 |
+| 2026-10-01 | v0.1.2 | **实施完成落档**——Identity V0.4.0 `UserRoleViewQueryService`（`GET /api/identity/user-roles` 仅本人）+ Notifications V0.5.0 `UserNotificationViewQueryService`（`GET /api/notifications/inbox` name 可空）+ 两 VEntity DataService 增 `GetPagedAsync`（无 name 分页）/public 化（CS0051 修复——公开 ctor 依赖 + 只读查询面可注入）；注册机制核实定案：**消费方 SG1b 自动注册（MetaType.Service → AddService，经 `User.Use<T>()` AOP 解析）——不补 TryAddScoped**（C2-high/C6 实证闭环：IdentityAuthService V0.3.0 先例 + ControllerGenerator L2640-2643 controller 经 `user.Use<Service>()` 解析服务）；**C7 实现偏差记录**：null name 查全部**改走 VEntity 视图 `GetPagedAsync`（非方案原文"委托 UserNotificationEntityDataService + FromNotification"）**——因 `UserNotificationViewDto.Name` 为 `required` 属性，实体→DTO 映射无法填充 JOIN 列（产生占位空值）；视图路径保留 Name/Severity/DisplayName（目标 1「完整字段不再丢弃」两路径一致落地），REST 面 > 门面面（门面无 name 路径仍丢弃三列）；新增 N1-N5 用例 8 个（Identity 4 + Notifications 4），全量回归 29/30 项目绿（Approval 并行 02 方案在途改动致 1 失败，非本方案） |
 
 ---
 

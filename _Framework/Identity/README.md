@@ -1,6 +1,6 @@
 # TKWF.Ext.Identity 身份管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (用户与角色管理) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露) | **框架**: .NET 10
 
 **核心约束**: 用户/角色持久化、PasswordHasher 凭据验证、FreeSql 存储、异常静默处理、SG1 声明式实体
 
@@ -192,7 +192,14 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 - 拆包 `TKWF.Ext.Account.Abstractions`（`IAccountPasswordManager` 契约，ADR48 D7）；`UserEntity` 加 NormalizedUserName 唯一索引（重名竞态 DB 兜底）
 - **生产部署**：注册端点重名预检 + DB 唯一索引双保险；IdentityUser 表结构变更（唯一索引）需 DBA 迁移
 
-### V0.4.0（规划）
+### V0.4.0（已实施：REST 直接暴露——VEntity DTO 一等公民）
+- **`UserRoleViewQueryService`**（`[GenerateController]` + `DomainServiceBase`，消费方 SG1b 自动注册——无 TryAddScoped）：
+  `GET /api/identity/user-roles` 返回**当前登录用户**角色视图（`UserRoleViewDto`——含 DisplayName/IsSystemRole 完整 JOIN 字段，替代"视图行映射回原实体"保守形态）
+- **仅本人防护（防 IDOR）**：userId 从 `IDomainUser` 解析（服务端上下文），不信任客户端传参；用户上下文无效 → `UnauthorizedAccessException`；管理员全量查询另设 `[RequirePermission]` 守卫端点（留待管理需求）
+- **门面链路零改动**：`IUserManager.GetUserRolesAsync` 仍返回 `RoleEntity`（`IdentityRoleProvider`/`IdentityUserHelperBase` 业务消费不变）；`UserRoleViewDataService` public 化（公开 ctor 依赖 + 只读查询面可注入）
+- **生产部署**：`vw_UserRoleView` 视图 ViewSql 沿用 V0.2.0（生产 DBA 手动建视图）
+
+### V0.5.0（规划）
 - **`IAccountPasswordManager` 适配器对接 Account V0.2.0 通知渠道**（重置码邮件）
 - 与 Permissions 深度集成（逐用户权限门控）
 - 多租户用户隔离

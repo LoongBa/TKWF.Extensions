@@ -1,8 +1,8 @@
 # TKWF.Ext.Notifications 通知中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0 | **框架**: .NET 10
 
-**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SignalR 实时推送通道（v0.4.0 独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）、SG1 声明式实体
+**核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SignalR 实时推送通道（v0.4.0 独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）、REST 直接暴露（v0.5.0 已实施：VEntity DTO 一等公民）、SG1 声明式实体
 
 ---
 
@@ -192,6 +192,15 @@ TKWF.Ext.Notifications.SignalR（v0.4.0 独立包——按需引入，不引则�
 - **测试**：12/12（SignalRNotifier 8 单测 + 3 集成——双通道路由/偏好覆盖×通道联动/SignalR-only + Options/MapHub 默认值）；全量 **1337/1337**（28 项目）回归绿；Oracle 评审 PASS WITH CONDITIONS（6 P2 全部落实）
 - **ADR**：`ADR-Notifications-SignalR通道-拆包与接线设计`（拆包/FrameworkReference/插入式实现/best-effort/用户标识/接线归消费方/端点认证/白名单位置/Options 绑定——Oracle 6 P2 修订纳入）
 
+### V0.5.0（已实施：REST 直接暴露——VEntity DTO 一等公民）
+- **`UserNotificationViewQueryService`**（`[GenerateController]` + `DomainServiceBase`，消费方 SG1b 自动注册——无 TryAddScoped）：
+  `GET /api/notifications/inbox` 返回**当前登录用户**收件箱分页（`UserNotificationViewDto`——含 Name/Severity/DisplayName 完整 JOIN 字段，替代"视图行映射回原实体"保守形态——旧路径丢弃三列）
+- **name 可空（语义对齐）**：null = 查全部收件箱（对齐门面 `INotificationStore.GetListAsync` 无 name 语义，REST 面 ≥ 门面面）；两路径均走 VEntity 视图（`UserNotificationViewDataService` 增 `GetPagedAsync`）——JOIN 携带列不再丢弃（REST 面 > 门面面）
+- **仅本人防护（防 IDOR）**：userId 从 `IDomainUser` 解析（服务端上下文），不信任客户端传参；用户上下文无效 → `UnauthorizedAccessException`；管理员全量查询另设 `[RequirePermission]` 守卫端点（留待管理需求）
+- **门面链路零改动**：`INotificationStore.GetListAsync` 仍返回 `UserNotificationEntity`；`UserNotificationViewDataService` public 化（公开 ctor 依赖 + 只读查询面可注入）
+- **收件箱私密性回溯审查注记**：`ExposeGraphqlQuery` 是否收敛/加 OwnerFilter 归框架候选（F4/F11）触发时统一处理（方案 03 §九）
+- **生产部署**：`vw_UserNotificationView` 视图 ViewSql 沿用 V0.2.0（生产 DBA 手动建视图）
+
 ### 远期 / 评估
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）
 - 通知模板渲染（复用 Emailing V0.2.0 TextTemplates / PrintTemplates）
@@ -199,4 +208,4 @@ TKWF.Ext.Notifications.SignalR（v0.4.0 独立包——按需引入，不引则�
 - 批量派发优化（RecipientBatchSize 落地）
 - 已读状态多端联动广播（`IHubContext<NotificationsHub>` 在已读 API 中复用推送已读事件——扩展点，非 v0.4.0 交付）
 
-**文档信息**: V0.4.0 | 2026-09-13 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md、ADR-Notifications-v0.3.0-用户偏好路由与权限门控.md、v0.4.0-Notifications-SignalR通道-开发方案.md、ADR-Notifications-SignalR通道-拆包与接线设计.md（主框架私有）
+**文档信息**: V0.5.0 | 2026-10-01 | 关联：v0.1.0-Notifications-通知中心-开发方案.md、ADR-Notifications-事件驱动接线模式.md、ADR-Notifications-数据模型三层选型.md、ADR-Notifications-v0.3.0-用户偏好路由与权限门控.md、v0.4.0-Notifications-SignalR通道-开发方案.md、ADR-Notifications-SignalR通道-拆包与接线设计.md（主框架私有）、docs/框架实战教学/03-倒推优化-Identity与Notifications-VEntity直接暴露升级-开发方案.md（公开）

@@ -70,10 +70,20 @@ INNER JOIN ""IdentityRole"" r ON ur.""RoleId"" = r.""Id""");
         var manager = CreateUserManager(fsql);
         return new IdentityAuthService(new StubDomainUser(), manager);
     }
+
+    /// <summary>创建 UserRoleViewQueryService（V0.4.0 REST 直接暴露测试用）——对齐
+    /// <c>UserRoleViewDataService</c> 手动构造先例（L43），依赖经真实 FreeSqlEntityDAC 驱动。</summary>
+    public static UserRoleViewQueryService CreateRoleViewQueryService(IFreeSql fsql, IDomainUser? user = null)
+    {
+        var currentUser = user ?? new StubDomainUser();
+        var userRoleViewDac = new FreeSqlEntityDAC<UserRoleView>(new UnitOfWorkManager(fsql));
+        var viewDataService = new UserRoleViewDataService(currentUser, userRoleViewDac);
+        return new UserRoleViewQueryService(currentUser, viewDataService);
+    }
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
-internal sealed class StubDomainUser : IDomainUser
+internal class StubDomainUser : IDomainUser
 {
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
@@ -81,7 +91,7 @@ internal sealed class StubDomainUser : IDomainUser
     public IUserInfo? UserInfo => null;
     public long? TenantId => null;
     public bool IsNoAuditActive => false;
-    public string? UserId => null;
+    public virtual string? UserId => null;
     public string? UserName => null;
     public bool IsInRole(string role) => false;
 
@@ -93,4 +103,10 @@ internal sealed class StubDomainUser : IDomainUser
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+}
+
+/// <summary>认证用户桩——具 userId 的 IDomainUser（V0.4.0 仅本人测试用）。</summary>
+internal sealed class AuthenticatedStubUser(string userId) : StubDomainUser
+{
+    public override string? UserId => userId;
 }

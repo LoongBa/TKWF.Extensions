@@ -51,6 +51,9 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
         // V0.2.0：账号查询契约（对外只读查询——UserCenter 桥接 / 装配实例 / 内部复用；委托 DataService 红线合规）
         services.TryAddScoped<IAuthAccountQueryService, AuthAccountQueryService>();
 
+        // V0.2.0：账号写契约（DMP 渐进替换影子账号 upsert——ADR-Authentication-账号写契约；委托 DataService 红线合规）
+        services.TryAddScoped<IAuthAccountService, AuthAccountService>();
+
         // V0.2.0：UserCenter 公共档案源实现（数据属主承接契约——装配实例零桥接；TryAdd 语义消费方可覆盖）
         services.TryAddScoped<IUserProfileSource, AuthAccountUserProfileSource>();
 

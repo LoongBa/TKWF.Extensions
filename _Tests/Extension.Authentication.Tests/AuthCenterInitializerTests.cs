@@ -36,6 +36,7 @@ public class AuthCenterInitializerTests
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IWeChatApiClient)));
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(ITokenVerifier)));
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IAuthAccountQueryService)));
+        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IAuthAccountService)));
         Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IUserProfileSource)));
         Assert.Equal(2, services.Count(d => d.ServiceType == typeof(IAuthenticationProvider)));
     }

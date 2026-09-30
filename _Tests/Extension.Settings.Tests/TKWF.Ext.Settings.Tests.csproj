@@ -23,6 +23,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="FreeSql" />
+  <PackageReference Include="FreeSql.Extensions.Linq" />
+  <PackageReference Include="FreeSql.DbContext" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
   </ItemGroup>
 
@@ -41,10 +43,13 @@
     <!-- 本仓库扩展（Settings）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Settings\TKWF.Ext.Settings.csproj" />
     <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 SettingEntityDataService -->
-    <PackageReference Include="TKWF.Domain.FreeSql" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+  <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>
+

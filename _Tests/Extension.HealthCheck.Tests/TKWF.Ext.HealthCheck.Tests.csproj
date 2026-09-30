@@ -18,6 +18,8 @@
     <PackageReference Include="xunit.v3" />
     <!-- V0.2.0 DB 探针测试：SQLite :memory: 建表/删表（对齐其他扩展测试项目模式） -->
     <PackageReference Include="FreeSql" />
+  <PackageReference Include="FreeSql.Extensions.Linq" />
+  <PackageReference Include="FreeSql.DbContext" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
   </ItemGroup>
 
@@ -41,11 +43,14 @@
   <ItemGroup>
     <!-- 本仓库扩展（HealthCheck）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\HealthCheck\TKWF.Ext.HealthCheck.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- V0.2.0 DB 探针测试：FreeSqlEntityDAC 解析路径（UseFreeSqlEntityDAC → IEntityReadOnlyDAC<> Scoped） -->
-    <PackageReference Include="TKWF.Domain.FreeSql" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+  <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>
+

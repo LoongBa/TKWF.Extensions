@@ -1,6 +1,6 @@
 # TKWF.Ext.Tagging 标签存储扩展技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.0（AC 自动机批量匹配 + Options 配置接入） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.3（聚合 SQL 下推） | **框架**: .NET 10
 
 **定位**（ADR52 V0.2.0 瘦身）：标签算法已回归 `TKW.Framework.Utility.Tags`（主框架）；本扩展为**标签存储扩展**——V0.3.0 落地 `ITagRuleStore`/`ITagHitStore`/`ITagAnalysisService` 三接口持久化（SG1 实体 + FreeSql，Store 委托 DataService 红线合规）；V0.4.0 落地匹配器演进（AC 自动机 `DictMatch` 批量匹配）+ `TaggingOptions` 配置接入（`[Options("TKWF:Tagging")]`）。
 
@@ -115,6 +115,14 @@ public class AnalysisService(TagService tagService)
 2. 在宿主程序入口，直接调用泛型方法替换底层引擎：`builder.UseTagService<JiebaTokenizer>()`。
 
 ## 六、 架构演进路线 (Architecture Roadmap)
+
+### V0.4.3 聚合 SQL 下推（已实施，2026-10-01——V4.10.39 分组聚合 API）
+
+- **频次聚合 SQL 下推**：`GetFrequencyAsync` 经框架 `FreeSqlQueryableExtensions.GroupCountAsync(h => new { h.Dimension, h.TagName }, topN)`——SQL `GROUP BY 复合键 + COUNT + ORDER BY COUNT DESC + LIMIT` 全下推（替代 `Take(100_000)` + 内存 GroupBy）；空键语义保持原状（SQL GROUP BY 并 null 分组）
+- **维度分布 SQL 下推**：`GetDimensionDistributionAsync` 经 `GroupByAsync(h => h.Dimension, g => g.Count(), descending: true, topN: null, ...)`——count 降序全分组（勿用全量重载键升序）
+- **趋势聚合保留内存分桶（决策）**：`GetTrendAsync` 维持内存 GroupBy + `Take(100_000)` 上限——Week 周一零时分桶无 SQL 可翻译表达式（`((int)DayOfWeek + 6) % 7` 取模）+ 键序（GROUP BY(TagName, bucket)）与 `OrderBy(TimeBucket)` 语义不一致；命中窗口通常数千行，可控
+- **HitTime UTC 写入约定**：趋势分桶基于列值——须按 UTC 写入（Tier15 UTC 对齐激活时本地时间写入会分桶错位）
+- 对齐框架审核报告 §六（v4.10.39-分组聚合API）；使用指南补依赖条件说明（FreeSql 管线前置 + ORM 边界 ADR15）
 
 ### 0. V0.4.0 匹配器演进 + Options 接入（已实施，2026-09-10）
 

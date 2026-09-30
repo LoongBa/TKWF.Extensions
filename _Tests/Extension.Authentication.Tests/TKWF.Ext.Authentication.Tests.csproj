@@ -21,6 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="FreeSql" />
+  <PackageReference Include="FreeSql.Extensions.Linq" />
+  <PackageReference Include="FreeSql.DbContext" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
     <!-- 中间件测试（路径 B：Bearer JWT → DomainUser 恢复 + HttpAuthenticationMiddleware 标记） -->
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
@@ -44,10 +46,13 @@
     <!-- v0.2.0：UserCenter 契约承接测试（N2-N5——UserCenterQueryService 门面 + IUserProfileSource 契约） -->
     <ProjectReference Include="..\..\_Framework\UserCenter\TKWF.Ext.UserCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
-    <PackageReference Include="TKWF.Domain.FreeSql" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+  <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>
+

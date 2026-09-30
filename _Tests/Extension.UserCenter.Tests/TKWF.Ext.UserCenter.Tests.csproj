@@ -36,9 +36,10 @@
     <!-- 本仓库扩展（UserCenter 主包 + 契约包）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\UserCenter\TKWF.Ext.UserCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>

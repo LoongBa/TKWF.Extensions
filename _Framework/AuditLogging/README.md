@@ -1,6 +1,6 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 (管理 API——REST 端点暴露查询/详情/统计/清理/删除) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.2 (管理 API + 聚合 SQL 下推) | **框架**: .NET 10
 
 **核心约束**: 方法级审计日志持久化、查询 API、统计聚合 + 保留天数清理、**管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD）**、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 
@@ -257,6 +257,10 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 - 保留天数清理（`RetentionDays` 默认 90 + `CleanupBatchSize` 默认 500，分批物理删）
 - `CountAsync` 低效修复（内存计数 → SQL COUNT）
 - 索引补建（ServiceName——聚合查询全表扫描修复）
+
+### V0.4.2（已实施：聚合 SQL 下推——V4.10.39 分组聚合 API）
+- **TopN 聚合 SQL 下推**：`CountByServiceAsync`/`CountByUserAsync` 经框架 `FreeSqlQueryableExtensions.GroupCountAsync(key, topN)`——SQL `GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT` 全下推（替代 `Take(100_000)` + 内存 GroupBy，消除全量拉取）；空白键过滤 `!string.IsNullOrWhiteSpace` 一并下推 SQL（`WHERE trim(ServiceName/UserName) <> ''`）
+- 对齐框架审核报告 §六（v4.10.39-分组聚合API）；使用指南补依赖条件说明（FreeSql 管线前置 + ORM 边界 ADR15）
 
 ### V0.4.0（当前）
 - **管理 API**（`[GenerateController(FromDataService=true)]` + `ExcludeMethods` 排除含 ArgumentsJson 标准 CRUD——防 D5 泄露 + 防伪造审计）+ **SubDomain 路由**（`/AuditLogging`）+ **DataService public**（消费方 SG1 生成控制器）

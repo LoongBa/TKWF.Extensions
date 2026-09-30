@@ -24,8 +24,11 @@ namespace TKWF.Ext.AuditLogging;
 // - 不要手动创建 Controller 类（V3.7 起由 SG 自动生成）
 //
 // 【V0.3.0 统计聚合 + 保留天数清理（对齐 SecurityLog v0.2.0 范式）】
-// - TopN 聚合（CountByServiceAsync/CountByUserAsync）：内存 GroupBy（SQL WHERE 下推 ExecutionTime 范围 +
-//   Take(100_000) 安全上限 + LINQ GroupBy + OrderByDescending + Take(topN)）——IQueryable 桥接不支持 GroupBy 翻译。
+// - TopN 聚合（CountByServiceAsync/CountByUserAsync）：V0.3.0 起内存 GroupBy（SQL WHERE 下推 ExecutionTime 范围 +
+//   Take(100_000) 安全上限 + LINQ GroupBy + OrderByDescending + Take(topN)）。
+//   【V4.10.39 分组聚合 API 适配】改 <see cref="FreeSqlQueryableExtensions.GroupCountAsync{T,TKey}"/>——
+//   SQL GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT 全下推（移除 Take(100_000) 内存拉取；空白键过滤
+//   <c>!= null &amp;&amp; Trim() != ""</c> WHERE 一并下推，对齐原 IsNullOrWhiteSpace 语义），对齐主框架 FreeSqlQueryableExtensionsTests 范式。
 // - GetStatsAsync：SQL 级聚合（Dac.CountAsync SQL COUNT × 分区 + FreeSqlQueryableExtensions.AvgAsync/MaxAsync
 //   SQL AVG/MAX）；每聚合独立 QueryForUser() 起新查询（FreeSql ISelect 原地可变陷阱）。
 // - DeleteExpiredAsync：物理批量删（hasSoftDelete:false——绝不用 EntitySoftDeleteAsync）。
@@ -52,10 +55,6 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
 
     // ── 数据访问红线整改（2026-09-07）：AuditLogStore/AuditLogQueryService 委托路径的业务方法 ──
 
-    /// <summary>聚合拉取安全上限——内存 GroupBy 防全表拉取（对齐 SecurityLog GetTopFailedByUserAsync
-    /// <c>Take(100_000)</c> 先例）。</summary>
-    private const int AggregationFetchLimit = 100_000;
-
     /// <summary>按 predicate 计数（SQL COUNT——V0.3.0 修复：原实现 EntitySelectAsync(0, int.MaxValue) 内存计数全文拉取，
     /// 改为委托基类 SQL COUNT（QueryForUser + Dac.CountAsync 下推）；签名保留避免 QueryService 破坏）。</summary>
     public override Task<long> CountAsync(Expression<Func<AuditLogEntity, bool>>? predicate, CancellationToken ct = default)
@@ -63,9 +62,10 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
 
     /// <summary>
     /// 调用次数 TopN 聚合（按服务名）——<see cref="IAuditLogAnalyticsService.GetTopServicesAsync"/> 委托路径。
-    /// <para>实现说明（对齐 SecurityLog <c>GetTopFailedByUserAsync</c> 范式）：IQueryable 桥接不支持 GroupBy 翻译 →
-    /// TopN 分组用<b>内存 GroupBy</b>——SQL WHERE 下推 ExecutionTime 范围 + <c>Dac.ToListAsync(query.Take(100_000))</c>
-    /// 安全上限 + LINQ GroupBy + OrderByDescending(Count) + Take(topN)。空白 ServiceName 记录跳过（不构成审计维度）。</para>
+    /// <para>V4.10.39 分组聚合下推：<see cref="FreeSqlQueryableExtensions.GroupCountAsync{T,TKey}(IQueryable{T},Expression{Func{T,TKey}},int,CancellationToken)"/>
+    /// ——SQL GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT 全下推（替代既有"内存 GroupBy +
+    /// Take(100_000) 安全上限"范式，消除全量拉取）。空白 ServiceName 记录跳过（不构成审计维度——
+    /// WHERE 谓词下推 <c>Trim() != ""</c>，对齐 IsNullOrWhiteSpace 语义）。</para>
     /// </summary>
     /// <param name="fromUtc">起始时间（ExecutionTime &gt;=，闭区间下界；null = 不限）。</param>
     /// <param name="toUtc">结束时间（ExecutionTime &lt;=，闭区间上界；null = 不限）。</param>
@@ -75,33 +75,25 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
         DateTime? fromUtc, DateTime? toUtc, int topN, CancellationToken ct = default)
     {
         var query = BuildWindowQuery(fromUtc, toUtc);
-        var rows = await Dac.ToListAsync(query.Take(AggregationFetchLimit), ct);
-        return rows
-            .Where(e => !string.IsNullOrWhiteSpace(e.ServiceName))
-            .GroupBy(e => e.ServiceName!)
-            .Select(g => new AuditLogDimensionCount(g.Key, g.LongCount()))
-            .OrderByDescending(s => s.Count)
-            .Take(topN)
-            .ToList();
+        var groups = await query
+            .Where(e => e.ServiceName != null && e.ServiceName!.Trim() != "")
+            .GroupCountAsync(e => e.ServiceName!, topN, ct);
+        return groups.Select(kv => new AuditLogDimensionCount(kv.Key, kv.Value)).ToList();
     }
 
     /// <summary>
     /// 调用次数 TopN 聚合（按用户名）——<see cref="IAuditLogAnalyticsService.GetTopUsersAsync"/> 委托路径。
-    /// <para>实现同 <see cref="CountByServiceAsync"/>（内存 GroupBy 范式）；<b>UserName 为 null/空白的记录跳过</b>
+    /// <para>实现同 <see cref="CountByServiceAsync"/>（V4.10.39 SQL 分组下推）；<b>UserName 为 null/空白的记录跳过</b>
     /// （匿名调用无用户名，不构成可审计维度，避免空桶污染 TopN）。</para>
     /// </summary>
     public async Task<List<AuditLogDimensionCount>> CountByUserAsync(
         DateTime? fromUtc, DateTime? toUtc, int topN, CancellationToken ct = default)
     {
         var query = BuildWindowQuery(fromUtc, toUtc);
-        var rows = await Dac.ToListAsync(query.Take(AggregationFetchLimit), ct);
-        return rows
-            .Where(e => !string.IsNullOrWhiteSpace(e.UserName))
-            .GroupBy(e => e.UserName!)
-            .Select(g => new AuditLogDimensionCount(g.Key, g.LongCount()))
-            .OrderByDescending(s => s.Count)
-            .Take(topN)
-            .ToList();
+        var groups = await query
+            .Where(e => e.UserName != null && e.UserName!.Trim() != "")
+            .GroupCountAsync(e => e.UserName!, topN, ct);
+        return groups.Select(kv => new AuditLogDimensionCount(kv.Key, kv.Value)).ToList();
     }
 
     /// <summary>

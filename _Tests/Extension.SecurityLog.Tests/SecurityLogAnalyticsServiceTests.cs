@@ -91,6 +91,29 @@ public class SecurityLogAnalyticsServiceTests
     }
 
     [Fact]
+    public async Task GetTopFailedUsersAsync_ExcludesNullEmptyUserName()
+    {
+        using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
+        var store = SecurityLogTestHost.CreateStore(fsql);
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null));    // alice: 2 次
+        await store.SaveAsync(Login("alice", 2, "10.0.0.2", "Failed", null));
+        await store.SaveAsync(Login("bob", 3, "10.0.0.3", "Failed", null));     // bob: 1 次
+        await store.SaveAsync(Login("", 4, "10.0.0.4", "Failed", null));        // UserName 空串: 不应计入
+        await store.SaveAsync(Login(" ", 5, "10.0.0.5", "Failed", null));       // UserName 空白: 不应计入
+
+        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var result = await analytics.GetTopFailedUsersAsync(topN: 10);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("alice", result[0].Dimension);
+        Assert.Equal(2, result[0].Count);
+        Assert.Equal("bob", result[1].Dimension);
+        Assert.Equal(1, result[1].Count);
+        Assert.All(result, s => Assert.False(string.IsNullOrWhiteSpace(s.Dimension)));
+        Assert.Equal(3, result.Sum(s => s.Count));   // 空/空白 UserName 的 2 条被跳过（SQL 下推 WHERE 生效）
+    }
+
+    [Fact]
     public async Task GetTopFailedIpsAsync_ExcludesNullEmptyIp()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();

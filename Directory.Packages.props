@@ -60,22 +60,26 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         版本对齐主框架已发布稳定版 4.10.37（ADR82 Core 解耦 Localization 编译期强依赖
-         + G11–G14 收尾——扩展侧实证零影响零调整，见主框架 v4.10.37-扩展模块组通知与自查说明）；
+         版本对齐主框架已发布稳定版 4.10.39（分组聚合 API——FreeSqlQueryableExtensions
+         GroupByAsync/GroupCountAsync/GroupSumAsync，扩展侧试点替换 AuditLogging/SecurityLog/
+         Tagging 已完成，见主框架 v4.10.39-分组聚合API-审核报告 §六）；
          主框架发新版后同步提升。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.37" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.37" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.37" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.37" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.37" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.37" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.37" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.37" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.37" />
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.37" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.37" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.39" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.39" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.39" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.39" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.39" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.39" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.39" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.39" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.39" />
+    <!-- ✅ 桥接解除（2026-10-01）：框架 4.10.39 NuGet 已发布（tag v4.10.39 触发 CI 全链路，含
+         TKWF.CodeGeneration 纯 Analyzer 包——analyzers/dotnet/cs 布局），CPM 全量 lockstep 4.10.39，
+         原 4.10.38 桥接（2026-10-01 框架未打 tag 时暂锁）已解除。 -->
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.39" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.39" />
   </ItemGroup>
 </Project>

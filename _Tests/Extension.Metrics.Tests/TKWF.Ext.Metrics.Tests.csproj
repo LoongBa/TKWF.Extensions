@@ -21,6 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <!-- T0（v0.2.0）：测试宿主内定义 [DomainGenerateCode] 实体（模拟消费方）——FreeSql 包接线 -->
     <PackageReference Include="FreeSql" />
+  <PackageReference Include="FreeSql.Extensions.Linq" />
+  <PackageReference Include="FreeSql.DbContext" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
   </ItemGroup>
 
@@ -40,12 +42,14 @@
   <ItemGroup>
     <!-- 本仓库扩展（Metrics）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Metrics\TKWF.Ext.Metrics.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- T0（v0.2.0）：FreeSql DAC 接线（消费方模拟——测试内定义实体 + 真实 FreeSqlEntityDAC 驱动） -->
-    <PackageReference Include="TKWF.Domain.FreeSql" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+  <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- T0（v0.2.0）：SG1 化——框架抽象引用（[DomainGenerateCode] 属性所在程序集，保留既有） -->
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
 
     <!-- T0（v0.2.0）：SG1 分析器（build/refs 预编译 DLL，测试宿主首次定义 [DomainGenerateCode] 实体——
          若生成器不识别测试项目，按方案 §四 T0 替代路径改手写 DataService 分部子类，详见 TestMetricResultEntity 注释） -->
@@ -64,3 +68,4 @@
   </ItemGroup>
 
 </Project>
+

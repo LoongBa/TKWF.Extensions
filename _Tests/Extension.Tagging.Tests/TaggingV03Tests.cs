@@ -213,6 +213,40 @@ public class TaggingV03Tests
         Assert.Contains(dist, d => d.Dimension == "Brand" && d.Count == 1);
     }
 
+    // ── V0.4.3：聚合 SQL 下推验证（F7 分组聚合 API）──
+
+    /// <summary>验证 GetFrequencyAsync/GetDimensionDistributionAsync 走 SQL GROUP BY 下推（非内存 GroupBy）。
+    /// 用 Aop.CommandBefore 捕获 SQL——出现 GROUP BY + COUNT + (LIMIT) 证明分组聚合全下推。
+    /// 框架实证对齐：strftime 时间分桶（Year/复合键）可翻译；Week 语义不可翻译故 GetTrendAsync 保内存路径。</summary>
+    [Fact]
+    public async Task AnalysisService_SqlAggregation_PushedDownToSql()
+    {
+        var (fsql, _, hitDs) = CreateHost();
+        var hitStore = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
+        var analysis = new FreeSqlTagAnalysisService(hitDs, NullLogger<FreeSqlTagAnalysisService>.Instance);
+        var t = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        await hitStore.RecordHitsAsync(new[]
+        {
+            new TagHit("Category", "电子", "手机", 0, 2, 1, null),
+            new TagHit("Category", "电子", "手机", 5, 2, 1, null),
+            new TagHit("Brand", "苹果", "Apple", 0, 5, 1, null),
+        }, hitTime: t);
+
+        var sqlLog = new List<string>();
+        fsql.Aop.CommandBefore += (_, e) => sqlLog.Add(e.Command.CommandText);
+
+        // 频次 TopN（跨复合键(Dimension,TagName)）+ 维度分布（GROUP BY Dimension）
+        await analysis.GetFrequencyAsync(null, null, null, 10);
+        await analysis.GetDimensionDistributionAsync(null, null);
+
+        var sql = string.Join(" ", sqlLog);
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COUNT", sql, StringComparison.OrdinalIgnoreCase);
+        // 频次 TopN 带 LIMIT（仅一个查询有 Limit——维度分布全量无 LIMIT）
+        Assert.Contains("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── Oracle P1-1：GetTrendAsync + BucketKey 测试（CONDITION 1）──
 
     [Fact]

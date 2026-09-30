@@ -122,6 +122,43 @@ public class AuditLogAnalyticsServiceTests
         Assert.Equal(3, result.Sum(s => s.Count));   // 匿名 2 条被跳过
     }
 
+[Fact]
+    public async Task GetTopServicesAsync_SqlPushDown_GroupByWithoutFullTableFetch()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        var ds = AuditLoggingTestHost.CreateDataService(fsql);
+        // OrderService ×3、PaymentService ×2（计数互不相同——SQL ORDER BY COUNT DESC + LIMIT 平局次序不保证，
+        // 用不同计数确保 TopN 结果确定性）；ServiceName=null / 全空白 ×各1 应被 WHERE 过滤跳过
+        await InsertAtAsync(ds, "alice", "OrderService", DateTime.UtcNow.AddMinutes(-10));
+        await InsertAtAsync(ds, "bob", "OrderService", DateTime.UtcNow.AddMinutes(-10));
+        await InsertAtAsync(ds, "carol", "OrderService", DateTime.UtcNow.AddMinutes(-10));
+        await InsertAtAsync(ds, "alice", "PaymentService", DateTime.UtcNow.AddMinutes(-10));
+        await InsertAtAsync(ds, "bob", "PaymentService", DateTime.UtcNow.AddMinutes(-10));
+        await InsertAtAsync(ds, null!, null!, DateTime.UtcNow.AddMinutes(-10));          // ServiceName=null 应跳过
+        await InsertAtAsync(ds, "dave", "   ", DateTime.UtcNow.AddMinutes(-10));         // ServiceName=全空白 应跳过
+
+        // 仅捕获聚合查询 SQL（插入在前、Aop 注册在后——对齐主框架 FreeSqlQueryableExtensionsTests 范式）
+        var sqlLog = new List<string>();
+        fsql.Aop.CommandBefore += (_, e) => sqlLog.Add(e.Command.CommandText);
+
+        var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
+        var top = await analytics.GetTopServicesAsync(topN: 10);   // topN 超分组数 → 全量：仅 2 组证明空白键被 WHERE 过滤（否则 null/全空白各成 1 条组）
+
+        // 语义保持：TopN 降序 + 空白键跳过（SQL 下推后 WHERE 过滤生效——topN=10 全量返回仍仅 2 组）
+        Assert.Equal(2, top.Count);
+        Assert.Equal("OrderService", top[0].Dimension);
+        Assert.Equal(3, top[0].Count);
+        Assert.Equal("PaymentService", top[1].Dimension);
+        Assert.Equal(2, top[1].Count);
+
+        // SQL 全下推断言：GROUP BY + ORDER BY + LIMIT 出现；无 Take(100_000) 全量拉取标记
+        var sql = string.Join(" ", sqlLog);
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("100000", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task GetTopServicesAsync_NoData_ReturnsEmpty()
     {

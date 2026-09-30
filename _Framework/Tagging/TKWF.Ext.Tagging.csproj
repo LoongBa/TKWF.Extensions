@@ -22,6 +22,10 @@
   <ItemGroup>
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props 含 Utility）；false→PackageReference -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- SQL 级分组聚合扩展（FreeSqlQueryableExtensions——V4.10.39 F7 分组聚合 API：
+         GetFrequency/GetDimensionDistribution SQL 下推用，V0.4.3）——双模式条件化 -->
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
     <!-- ADR52：标签算法引擎在运行时工具库 TKWF.Utility（TKW.Framework.Utility.Tags） -->
     <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
 

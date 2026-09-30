@@ -20,6 +20,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="FreeSql" />
+  <PackageReference Include="FreeSql.Extensions.Linq" />
+  <PackageReference Include="FreeSql.DbContext" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
   </ItemGroup>
 
@@ -39,10 +41,12 @@
     <ProjectReference Include="..\..\_Framework\Account\TKWF.Ext.Account.csproj" />
     <!-- V0.3.0 登录历史：SecurityLog 是登录历史唯一数据源——测试宿主建 SecurityLogEntity 表 + 真实契约服务 -->
     <ProjectReference Include="..\..\_Framework\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
-    <PackageReference Include="TKWF.Domain.FreeSql" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+  <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>

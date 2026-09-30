@@ -1,6 +1,6 @@
 # TKWF.Ext.SecurityLog 安全日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0（契约拆包） | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.1（契约拆包 + 聚合 SQL 下推） | **框架**: .NET 10
 
 **核心约束**: 认证/授权安全事件自动记录（AOP 过滤器采集，不改主框架）+ 只增不改（append-only）+ 数据访问红线合规（全走 SG1 DataService）+ 异常静默 + 查询 API（列表 DTO 不含 Detail）
 
@@ -181,7 +181,12 @@ public class SecurityAuditService(ISecurityLogQueryService queryService)
 | **`SecurityLoggingOptions`** | 配置（`TKWF:SecurityLog`）：Enabled / EventTypes / v0.2.0 RetentionDays(90) + CleanupBatchSize(500) | 内置，`[Options]` + SG1 绑定（契约定义于 SecurityLog.Abstractions） |
 | **`SecurityLogExtensionInitializer`** | 扩展初始化器（三钩子：注册 Options + DataService + Store + QueryService + AnalyticsService） | 内置，`[TKWFExtension]` SG1 发现 |
 
-## 十、V0.3.0 简述
+## 十、V0.3.1 简述（聚合 SQL 下推——V4.10.39 分组聚合 API）
+
+- **异常检测聚合 SQL 下推**：`GetTopFailedByUserAsync`/`GetTopFailedByIpAsync` 经框架 `FreeSqlQueryableExtensions.GroupCountAsync(key, topN)`——SQL `GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT` 全下推（替代 `Take(100_000)` + 内存 GroupBy，消除全量拉取）；空白键过滤 `!string.IsNullOrWhiteSpace` 一并下推 SQL（`WHERE trim(UserName/IpAddress) <> ''`）
+- 对齐框架审核报告 §六（v4.10.39-分组聚合API）；使用指南补依赖条件说明（FreeSql 管线前置 + ORM 边界 ADR15）
+
+## 十一、V0.3.0 简述
 
 公开契约拆包至 `TKWF.Ext.SecurityLog.Abstractions`（ADR48 D7），命名空间保持 `TKWF.Ext.SecurityLog`，行为零变化。
 

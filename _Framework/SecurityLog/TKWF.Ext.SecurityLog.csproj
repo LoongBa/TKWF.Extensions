@@ -23,6 +23,12 @@
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
 
+    <!-- V0.3.0+ SQL 级聚合扩展（FreeSqlQueryableExtensions.GroupCountAsync——V4.10.39 分组聚合 API：
+         GetTopFailedByUserAsync/GetTopFailedByIpAsync 内存 GroupBy → SQL GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT 全下推）
+         双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→DLL 引用（集中块不承载 Domain.FreeSql，按需条件化声明）；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+
     <!-- V0.3.0 提取（ADR48 D7 依赖倒置）：公开契约（ISecurityLogStore/ISecurityLogQueryService/ISecurityLogAnalyticsService + DTO/Options）→ Abstractions 项目 -->
     <ProjectReference Include="..\SecurityLog.Abstractions\TKWF.Ext.SecurityLog.Abstractions.csproj" />
 

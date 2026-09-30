@@ -37,9 +37,11 @@
     <!-- 本仓库扩展（Dashboard + Metrics——Metrics 用于验证 metricRef 接线）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\Dashboard\TKWF.Ext.Dashboard.csproj" />
     <ProjectReference Include="..\..\_Framework\Metrics\TKWF.Ext.Metrics.csproj" />
-    <PackageReference Include="TKWF.Core" />
-    <PackageReference Include="TKWF.Domain" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>
+

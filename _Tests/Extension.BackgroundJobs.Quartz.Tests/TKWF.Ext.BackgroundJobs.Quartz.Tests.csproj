@@ -33,8 +33,9 @@
   <ItemGroup>
     <!-- 本仓库扩展（BackgroundJobs.Quartz）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\BackgroundJobs.Quartz\TKWF.Ext.BackgroundJobs.Quartz.csproj" />
-    <PackageReference Include="TKWF.BackgroundJobs.Quartz" />
-    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.BackgroundJobs.Quartz" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>
+

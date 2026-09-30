@@ -28,7 +28,7 @@
          + 主框架 Domain（RequirePermissionAttribute 基类 DomainFlagAttribute + IUserInfo） -->
     <ProjectReference Include="..\..\_Framework\Permissions.Validation\TKWF.Ext.Permissions.Validation.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
-    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
 </Project>

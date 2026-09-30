@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.SecurityLog;
 using TKWF.Ext.SecurityLog.DTOs;
@@ -32,16 +33,14 @@ namespace TKWF.Ext.SecurityLog;
 partial class SecurityLogEntityDataService(IDomainUser user, IEntityDAC<SecurityLogEntity> dac)
         : DomainDataServiceBase<SecurityLogEntity, SecurityLogEntityDto>(user, dac, hasSoftDelete:false)
 {
-    /// <summary>聚合拉取安全上限——内存 GroupBy 防全表拉取（对齐 Tagging GetFrequencyAsync Take(100_000) 先例）。</summary>
-    private const int AggregationFetchLimit = 100_000;
-
     /// <summary>
     /// 失败次数 TopN 聚合（按用户名）——<see cref="ISecurityLogAnalyticsService.GetTopFailedUsersAsync"/> 委托路径。
-    /// <para>实现说明（对齐 Tagging <c>GetFrequencyAsync</c> 范式，Oracle P1-3）：BackgroundJobs 已确认
-    /// IQueryable 桥接不支持 GroupBy 翻译 → TopN 分组只能用<b>内存 GroupBy</b>——SQL WHERE 下推
-    /// （Result==Failed + CreateTime 范围）+ <c>Dac.ToListAsync(Take(100_000))</c> 安全上限 + LINQ GroupBy +
-    /// OrderByDescending(Count) + Take(topN)。</para>
-    /// <para>空白 UserName 记录跳过（对齐 IP 聚合语义——空用户名不构成可审计维度，避免 "" 桶污染 TopN）。</para>
+    /// <para>实现说明（V4.10.39 聚合 SQL 下推，框架 <c>GroupCountAsync</c>）：FreeSql LINQ 桥接不支持
+    /// GroupBy 翻译（背景同 Tagging <c>GetFrequencyAsync</c> 分析），V4.10.39 起经 <c>RestoreToSelect()</c>
+    /// 还原 ISelect 走原生分组聚合——SQL <c>GROUP BY UserName + COUNT(*) + ORDER BY COUNT(*) DESC + LIMIT n</c>
+    /// 全下推，取代原"内存 GroupBy + Take(100_000) 安全上限"范式（不再拉全量）。</para>
+    /// <para>Result==Failed + CreateTime 范围（<see cref="BuildFailedWindowQuery"/>）+ 空白 UserName 跳过
+    /// （<c>!string.IsNullOrWhiteSpace</c>——空用户名不构成可审计维度，避免 "" 桶污染 TopN）全部下推 SQL。</para>
     /// </summary>
     /// <param name="fromUtc">起始时间（CreateTime &gt;=，闭区间下界；null = 不限）。</param>
     /// <param name="toUtc">结束时间（CreateTime &lt;=，闭区间上界；null = 不限）。</param>
@@ -50,34 +49,27 @@ partial class SecurityLogEntityDataService(IDomainUser user, IEntityDAC<Security
     public async Task<List<SecurityLogFailureStat>> GetTopFailedByUserAsync(
         DateTime? fromUtc, DateTime? toUtc, int topN, CancellationToken ct = default)
     {
-        var query = BuildFailedWindowQuery(fromUtc, toUtc);
-        var rows = await Dac.ToListAsync(query.Take(AggregationFetchLimit), ct);
-        return rows
-            .Where(e => !string.IsNullOrWhiteSpace(e.UserName))
-            .GroupBy(e => e.UserName)
-            .Select(g => new SecurityLogFailureStat(g.Key, g.LongCount()))
-            .OrderByDescending(s => s.Count)
-            .Take(topN)
-            .ToList();
+        // 空白键过滤下推 SQL（原内存 Where 后 GroupBy → SQL WHERE trim(UserName) <> ''，避免 "" 桶污染分组结果）
+        var query = BuildFailedWindowQuery(fromUtc, toUtc)
+            .Where(e => !string.IsNullOrWhiteSpace(e.UserName));
+        var pairs = await query.GroupCountAsync(e => e.UserName, topN, ct);   // SQL GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT 全下推
+        return pairs.Select(p => new SecurityLogFailureStat(p.Key, p.Value)).ToList();
     }
 
     /// <summary>
     /// 失败次数 TopN 聚合（按来源 IP）——<see cref="ISecurityLogAnalyticsService.GetTopFailedIpsAsync"/> 委托路径。
-    /// <para>实现同 <see cref="GetTopFailedByUserAsync"/>（内存 GroupBy 范式）；<b>IpAddress 为 null/空白的记录跳过</b>
-    /// （无来源 IP 的失败记录不构成 IP 维度，避免空桶污染 TopN）。</para>
+    /// <para>实现同 <see cref="GetTopFailedByUserAsync"/>（<c>GroupCountAsync</c> SQL 全下推范式）；
+    /// <b>IpAddress 为 null/空白的记录跳过</b>（无来源 IP 的失败记录不构成 IP 维度，避免空桶污染 TopN，
+    /// 过滤同样下推 SQL——<c>WHERE trim(IpAddress) &lt;&gt; ''</c>）。</para>
     /// </summary>
     public async Task<List<SecurityLogFailureStat>> GetTopFailedByIpAsync(
         DateTime? fromUtc, DateTime? toUtc, int topN, CancellationToken ct = default)
     {
-        var query = BuildFailedWindowQuery(fromUtc, toUtc);
-        var rows = await Dac.ToListAsync(query.Take(AggregationFetchLimit), ct);
-        return rows
-            .Where(e => !string.IsNullOrWhiteSpace(e.IpAddress))
-            .GroupBy(e => e.IpAddress!)
-            .Select(g => new SecurityLogFailureStat(g.Key, g.LongCount()))
-            .OrderByDescending(s => s.Count)
-            .Take(topN)
-            .ToList();
+        // IpAddress 可空——空白键过滤下推 SQL，keySelector 用 ! 收窄为 string
+        var query = BuildFailedWindowQuery(fromUtc, toUtc)
+            .Where(e => !string.IsNullOrWhiteSpace(e.IpAddress));
+        var pairs = await query.GroupCountAsync(e => e.IpAddress!, topN, ct);
+        return pairs.Select(p => new SecurityLogFailureStat(p.Key, p.Value)).ToList();
     }
 
     /// <summary>

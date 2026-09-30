@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.UserCenter.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <!-- DI/Options 已由 Directory.Build.props 全局注入（避免 NU1504 重复） -->
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+    <Using Include="TKW.Framework.Enumerations" />
+    <Using Include="TKW.Framework.CodeGeneration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 本仓库扩展（UserCenter 主包 + 契约包）+ 主框架 -->
+    <ProjectReference Include="..\..\_Framework\UserCenter\TKWF.Ext.UserCenter.csproj" />
+    <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
+    <PackageReference Include="TKWF.Core" />
+    <PackageReference Include="TKWF.Domain" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
+  </ItemGroup>
+
+</Project>

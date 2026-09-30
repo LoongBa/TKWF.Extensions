@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.UserCenter</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>UserCenter.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.UserCenter.Abstractions</PackageId>
+    <Description>TKWF 用户中心契约抽象（IUserProfileSource / IRedemptionHistorySource / IUserAppsSource / IUserCenterQueryService + DTO）——依赖倒置（ADR48 D7）：数据属主扩展（认证中心/授权面）实现契约，用户中心主包组合消费</Description>
+  </PropertyGroup>
+
+  <!-- 纯契约项目：三 Source 接口 + 门面接口 + 三 DTO 仅用 BCL（string/DateTime/CancellationToken/Task）——零框架引用（对齐 Emailing.Abstractions / Account.Abstractions 先例） -->
+
+</Project>

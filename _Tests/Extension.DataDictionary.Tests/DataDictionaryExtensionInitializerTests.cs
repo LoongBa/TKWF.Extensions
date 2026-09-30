@@ -114,6 +114,8 @@ public class DataDictionaryExtensionInitializerTests
             => Task.FromResult<IReadOnlyList<DictionaryDefinitionEntity>>(Array.Empty<DictionaryDefinitionEntity>());
         public Task<IReadOnlyList<DictionaryItemEntity>> GetItemsAsync(long definitionId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<DictionaryItemEntity>>(Array.Empty<DictionaryItemEntity>());
+        public Task<List<DictionaryItemView>> GetItemsByDefinitionCodeAsync(string code, CancellationToken ct = default)
+            => Task.FromResult(new List<DictionaryItemView>());
         public Task UpsertDefinitionAsync(DictionaryDefinitionEntity definition, CancellationToken ct = default) => Task.CompletedTask;
         public Task UpsertItemAsync(DictionaryItemEntity item, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteDefinitionAsync(long id, CancellationToken ct = default) => Task.CompletedTask;

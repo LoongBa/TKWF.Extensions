@@ -184,6 +184,8 @@ namespace TKWF.Ext.DataDictionary
         /// <summary>
         /// 从缓存或 Store 加载聚合（定义 + 项）。
         /// <para>缓存 key = <c>DD:{Code}</c>，存储 <see cref="DictionaryDefinitionWithItems"/>。</para>
+        /// <para>V0.2.0 VEntity 下推（oracle3 C-1/H1 方案 b）：未命中路径 = 先单查定义（不存在 → null）+ 定义存在走
+        /// <c>vw_DictionaryItemView</c> 单查询查项（零行 = 空项列表，非"定义不存在"——"空字典"语义保留）。</para>
         /// </summary>
         private async Task<DictionaryDefinitionWithItems?> GetOrLoadAggregateAsync(string code, CancellationToken ct)
         {
@@ -195,7 +197,9 @@ namespace TKWF.Ext.DataDictionary
             var definition = await _store.GetDefinitionByCodeAsync(code, ct);
             if (definition == null) return null;
 
-            var items = await _store.GetItemsAsync(definition.Id, ct);
+            // 定义存在 → 视图单查询查项（INNER JOIN 零行 = 空项列表，定义存在无项返回非 null 空聚合）
+            var viewItems = await _store.GetItemsByDefinitionCodeAsync(code, ct);
+            var items = MapToEntities(viewItems);
             var aggregate = new DictionaryDefinitionWithItems(definition, items);
 
             if (_options.EnableCache)
@@ -208,6 +212,35 @@ namespace TKWF.Ext.DataDictionary
             }
 
             return aggregate;
+        }
+
+        /// <summary>
+        /// 视图行 → 字典项实体（V0.2.0 聚合面映射）。
+        /// <para>CreateTime/UpdateTime 非视图投影列，聚合面不消费（既有断言不涉及时戳）——保留实体默认值。</para>
+        /// </summary>
+        private static IReadOnlyList<DictionaryItemEntity> MapToEntities(IReadOnlyList<DictionaryItemView> views)
+        {
+            if (views.Count == 0)
+                return Array.Empty<DictionaryItemEntity>();
+
+            var list = new List<DictionaryItemEntity>(views.Count);
+            foreach (var v in views)
+            {
+                list.Add(new DictionaryItemEntity
+                {
+                    Id = v.Id,
+                    DefinitionId = v.DefinitionId,
+                    Code = v.Code,
+                    DisplayName = v.DisplayName,
+                    Value = v.Value,
+                    Order = v.Order,
+                    IsEnabled = v.IsEnabled,
+                    ParentCode = v.ParentCode,
+                    Level = v.Level,
+                    Path = v.Path
+                });
+            }
+            return list;
         }
 
         /// <summary>按 Code 失效缓存（写入后调用）。</summary>

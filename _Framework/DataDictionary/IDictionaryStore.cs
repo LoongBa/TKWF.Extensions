@@ -25,6 +25,12 @@ namespace TKWF.Ext.DataDictionary
         /// <summary>读取指定字典定义的所有项（按 Order 排序，不含已禁用项）。</summary>
         Task<IReadOnlyList<DictionaryItemEntity>> GetItemsAsync(long definitionId, CancellationToken ct = default);
 
+        /// <summary>
+        /// 按定义编码读取项（VEntity JOIN 下推——单查询携带定义列；按 Order 排序，仅启用项）。
+        /// <para>零行 = 空项列表（非"定义不存在"——oracle3 C-1/H1 方案 b）；定义存在但无项返回空列表。</para>
+        /// </summary>
+        Task<List<DictionaryItemView>> GetItemsByDefinitionCodeAsync(string code, CancellationToken ct = default);
+
         /// <summary>新增或更新字典定义（按 Code 定位）。</summary>
         Task UpsertDefinitionAsync(DictionaryDefinitionEntity definition, CancellationToken ct = default);
 

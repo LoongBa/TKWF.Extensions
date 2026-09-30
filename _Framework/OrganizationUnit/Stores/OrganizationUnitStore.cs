@@ -16,13 +16,16 @@ namespace TKWF.Ext.OrganizationUnit
     {
         private readonly OrganizationUnitEntityDataService _ouDataService;
         private readonly OrganizationUnitUserEntityDataService _userDataService;
+        private readonly UserOrganizationUnitViewDataService _userViewDataService;
 
         public OrganizationUnitStore(
             OrganizationUnitEntityDataService ouDataService,
-            OrganizationUnitUserEntityDataService userDataService)
+            OrganizationUnitUserEntityDataService userDataService,
+            UserOrganizationUnitViewDataService userViewDataService)
         {
             _ouDataService = ouDataService ?? throw new ArgumentNullException(nameof(ouDataService));
             _userDataService = userDataService ?? throw new ArgumentNullException(nameof(userDataService));
+            _userViewDataService = userViewDataService ?? throw new ArgumentNullException(nameof(userViewDataService));
         }
 
         public Task<OrganizationUnitEntity?> GetByIdAsync(long id, CancellationToken ct = default)
@@ -33,6 +36,18 @@ namespace TKWF.Ext.OrganizationUnit
 
         public Task<IReadOnlyList<OrganizationUnitEntity>> GetAllAsync(CancellationToken ct = default)
             => _ouDataService.GetAllAsync(ct);
+
+        public Task<IReadOnlyList<OrganizationUnitEntity>> GetByPathPrefixAsync(string pathPrefix, CancellationToken ct = default)
+            => _ouDataService.GetByPathPrefixAsync(pathPrefix, ct);
+
+        public Task<IReadOnlyList<OrganizationUnitEntity>> GetByCodesAsync(IReadOnlyList<string> codes, CancellationToken ct = default)
+            => _ouDataService.GetByCodesAsync(codes, ct);
+
+        public async Task<IReadOnlyList<string>> GetUserIdsByOuPathPrefixAsync(string ouPathPrefix, CancellationToken ct = default)
+        {
+            var rows = await _userViewDataService.GetByOuPathPrefixAsync(ouPathPrefix, ct);
+            return rows.Select(r => r.UserId).Distinct().ToList();
+        }
 
         public async Task<long> CreateAsync(OrganizationUnitEntity entity, CancellationToken ct = default)
         {

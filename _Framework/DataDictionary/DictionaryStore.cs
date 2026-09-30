@@ -16,15 +16,18 @@ namespace TKWF.Ext.DataDictionary
     {
         private readonly DictionaryDefinitionEntityDataService _definitionDataService;
         private readonly DictionaryItemEntityDataService _itemDataService;
+        private readonly DictionaryItemViewDataService _itemViewDataService;
         private readonly ILogger<DictionaryStore> _logger;
 
         public DictionaryStore(
             DictionaryDefinitionEntityDataService definitionDataService,
             DictionaryItemEntityDataService itemDataService,
+            DictionaryItemViewDataService itemViewDataService,
             ILogger<DictionaryStore> logger)
         {
             _definitionDataService = definitionDataService ?? throw new ArgumentNullException(nameof(definitionDataService));
             _itemDataService = itemDataService ?? throw new ArgumentNullException(nameof(itemDataService));
+            _itemViewDataService = itemViewDataService ?? throw new ArgumentNullException(nameof(itemViewDataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -90,6 +93,19 @@ namespace TKWF.Ext.DataDictionary
             {
                 _logger.LogWarning(ex, "字典项列表读取失败: DefinitionId={DefinitionId}", definitionId);
 return Array.Empty<DictionaryItemEntity>();
+            }
+        }
+
+        public async Task<List<DictionaryItemView>> GetItemsByDefinitionCodeAsync(string code, CancellationToken ct = default)
+        {
+            try
+            {
+                return await _itemViewDataService.GetByDefinitionCodeAsync(code, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "字典项视图按编码读取失败: Code={Code}", code);
+                return new List<DictionaryItemView>();
             }
         }
 

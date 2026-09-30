@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.OrganizationUnit` |
-| 版本 | v0.1.0（独立起点） |
+| 版本 | v0.2.0（VEntity 下推） |
 | 依赖 | `TKWF.Domain` + SG1（框架既有） |
 | 数据 | 表 `OrganizationUnit` + `OrganizationUnitUser`（框架 `SyncTables` 统一建表） |
 
@@ -37,8 +37,8 @@ OrganizationUnitEntity / OrganizationUnitUserEntity     # SG1 声明式实体（
 | `DeleteAsync(id)` | **删除保护**：有子节点或有关联用户 → 拒绝（`InvalidOperationException`）；空 OU 事务内清 junction + 物理删除 |
 | `MoveAsync(id, newParentId?)` | 移动（null=设为根）；**循环防护**（移入自身/后代拒绝）；BFS 重算整棵子树 Level/Path；移动节点追加新父末尾 |
 | `GetTreeAsync()` | 全树组装（内存，SortOrder 升序）；孤儿节点（父不存在）抛异常 |
-| `GetSubTreeAsync(id)` | 子树（**含自身**，Path 前缀匹配） |
-| `GetAncestorsAsync(id)` | 祖先链（根→直接父，不含自身；面包屑） |
+| `GetSubTreeAsync(id)` | 子树（**含自身**，物化路径精确前缀匹配——V0.2.0 SQL 下推，非全量拉取内存过滤） |
+| `GetAncestorsAsync(id)` | 祖先链（根→直接父，不含自身；面包屑——V0.2.0 Code IN 单查询下推，缺失段抛异常） |
 
 ### 用户关联
 
@@ -46,7 +46,7 @@ OrganizationUnitEntity / OrganizationUnitUserEntity     # SG1 声明式实体（
 |-----|------|
 | `AssignUserAsync(ouId, userId)` | 分配用户；重复分配 → 业务异常"该用户已在此组织单元"（唯一约束转换） |
 | `UnassignUserAsync(ouId, userId)` | 解除（幂等，不存在静默成功） |
-| `GetUserIdsInOrganizationUnitAsync(ouId, includeDescendants)` | 双向查询①：OU（含/不含子孙）下用户 Id 列表（两步：子树 → junction，去重） |
+| `GetUserIdsInOrganizationUnitAsync(ouId, includeDescendants)` | 双向查询①：OU（含/不含子孙）下用户 Id 列表——**V0.2.0 双模式**：`includeDescendants=true` 走 `vw_UserOrganizationUnitView` 视图单查询（JOIN OU→OUUser + OUPath 精确前缀，替代两步）；`false` 保留 junction 单查 |
 | `GetOrganizationUnitIdsForUserAsync(userId)` | 双向查询②：用户所属 OU Id 列表 |
 
 ## 约束与语义
@@ -84,8 +84,10 @@ OrganizationUnitUser(id BIGINT PK, organization_unit_id BIGINT, user_id VARCHAR(
 - `parent_id` 自引用（null=根）；`level`/`path` 为物化路径冗余（写入维护，读取零写）。
 - `UserId` 为 **string**（对齐 `IUserInfo.UserIdString`，跨 Identity 兼容）。
 - 唯一约束：`UX_OrganizationUnit_Code`（Code）+ `UX_OrganizationUnitUser_User_OU`（防重复关联）。
-- 生产建表：框架 `SyncTables` 统一托管（V4.9.92 ADR49），**无 VEntity/无 DBA 手工 DDL 前置**。
+- 生产建表：两业务表框架 `SyncTables` 统一托管（V4.9.92 ADR49），**无手工 DDL 前置**；`vw_UserOrganizationUnitView` 视图（V0.2.0）框架 `SyncViewsAsync` **仅开发环境自动建**——**生产需 DBA 手动执行 ViewSql**（见 `UserOrganizationUnitView.ViewSql` / `ViewSqlSQLite`）。
 
-## 后续演进（v0.2.0+ 候选）
+## 后续演进（v0.3.0+ 候选）
 
-VEntity `vw_UserOrganizationUnitView`（大数据量 JOIN 分页）；OU 软删除 + 回收站；多租户隔离；岗位/职级语义。
+OU 软删除 + 回收站；多租户隔离；岗位/职级语义；`DeleteAsync` 子节点计数改 `CountByParentIdAsync` 下推（语义确认后）。
+
+> **v0.2.0 已实施**：`vw_UserOrganizationUnitView` VEntity（JOIN OU→OUUser，7 投影列，`ExposeGraphqlQuery=false` 敏感视图经门面）+ `GetSubTreeAsync`/`GetAncestorsAsync` 单表 SQL 下推（物化路径精确前缀/Code IN——P3 实证：FreeSql `StartsWith` SQLite 走 `instr` 无通配符歧义、PG 翻译未实证可能走 LIKE，故统一改 `substr`/`substring` 精确比较保证双方言安全）+ `GetUserIdsInOrganizationUnitAsync` 双模式（oracle3 C-5/M2）。**生产部署**：框架 SyncViewsAsync 仅开发环境建视图；**生产需 DBA 手动执行 ViewSql**（见 `UserOrganizationUnitView.ViewSql` / `ViewSqlSQLite`）。

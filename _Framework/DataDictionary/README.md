@@ -1,8 +1,8 @@
 # TKWF.Ext.DataDictionary 数据字典扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (缓存与树形分组) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (缓存与树形分组 + VEntity JOIN 下推) | **框架**: .NET 10
 
-**核心约束**: 字典定义+字典项双实体、按编码查询、FreeSql 持久化、异常静默处理、SG1 声明式实体、按 Code 内存缓存、树形分组
+**核心约束**: 字典定义+字典项双实体、按编码查询、FreeSql 持久化、异常静默处理、SG1 声明式实体、按 Code 内存缓存、树形分组、**VEntity 读模型联邦（JOIN 下推单查询）**
 
 ---
 
@@ -160,6 +160,8 @@ TryAdd 语义确保消费方实现优先；自定义实现同理。
 | **`DictionaryItemEntity`** | 字典项实体（SG1 声明式，V0.2.0 含树形字段 ParentCode/Level/Path） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`DictionaryDefinitionWithItems`** | 定义+项聚合返回（record） | 内置 |
 | **`DictionaryTreeNode`** | 树形节点（V0.2.0，record：Code/DisplayName/Value/Order/IsEnabled/Children） | 内置 |
+| **`DictionaryItemView`** | 字典项-定义 JOIN 视图实体（V0.2.0 VEntity，12 投影列——`ExposeGraphqlQuery=false` 树语义保护，经门面） | 内置，`partial class` + `[DomainGenerateCode(IsView=true)]` |
+| **`DictionaryItemViewDataService`** | 视图只读 DataService（V0.2.0，`IEntityReadOnlyDAC` 红线合规——`GetByDefinitionCodeAsync` 单查询下推） | 内置，手写只读 DataService |
 | **`DataDictionaryUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
 | **`DataDictionaryOptions`** | 配置选项（`TKWF:DataDictionary` 节，V0.2.0 含 EnableCache/CacheExpirationSeconds/EnableTreeMode） | 内置 |
 | **`DataDictionaryExtensionInitializer`** | 扩展初始化器（三钩子，V0.2.0 含 IMemoryCache + Options 绑定） | 内置，`[TKWFExtension]` SG1 发现 |
@@ -211,6 +213,8 @@ TryAdd 语义确保消费方实现优先；自定义实现同理。
 - 树形分组（`GetItemsTreeAsync` 递归组装嵌套树，`EnableTreeMode` 控制）
 - `DictionaryItemEntity` 新增 ParentCode/Level/Path 三列（Position 10/11/12）
 - `DataDictionaryOptions` 新增 EnableCache/CacheExpirationSeconds/EnableTreeMode
+- **VEntity 化（JOIN 下推）**：新增 `vw_DictionaryItemView`（`DictionaryItem` INNER JOIN `DictionaryDefinition`，12 投影列含 `DefinitionCode`/`DefinitionDisplayName`）——`GetOrLoadAggregateAsync` 未命中路径两步骤一（定义单查 + 视图单查询项替代按 DefinitionId 查项）；**"定义存在但无项"语义保留**（先单查定义不存在→null；定义存在视图零行=空项列表，返回非 null 空聚合——oracle3 C-1/H1 方案 b）；BuildTree 留内存；缓存 key/写路径零触碰
+- **⚠️ 生产部署**：`SyncViewsAsync` 仅开发环境建视图（`DisableSyncStructure=true`）——**生产需 DBA 手动执行 ViewSql**（见 `docs/DataDictionary/数据字典扩展-使用指南.md` § VEntity 化/下推）
 
 ### V0.3.0（规划）
 - 管理 UI

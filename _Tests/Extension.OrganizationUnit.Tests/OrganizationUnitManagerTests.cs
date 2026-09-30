@@ -489,4 +489,88 @@ public class OrganizationUnitManagerTests
         await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => host.Manager.GetAncestorsAsync(b.Id, CancellationToken.None));
     }
+
+    // ── V0.2.0 下推 N1：GetSubTreeAsync 单表 SQL 精确前缀下推（无全量拉取） ──
+    // P3 LIKE 转义实证（oracle3 C-4/M1）：OU Code 白名单含 '_'——SQLite 探针实证 StartsWith 走 instr（字面
+    // 匹配无歧义），但 PG 翻译未实证（生产为 PG，可能走 LIKE 致 '_' 单字符通配符失配）；故精确前缀比较
+    // （substr/substring）为双方言无条件安全选型。
+
+    [Fact]
+    public async Task GetSubTree_Pushdown_ExactPrefixPredicate_NotFullFetch()
+    {
+        using var host = NewHost();
+        var root = await host.Manager.CreateAsync("R", "根", null, ct: CancellationToken.None);
+        var child = await host.Manager.CreateAsync("C", "子", root.Id, ct: CancellationToken.None);
+        await host.Manager.CreateAsync("G", "孙", child.Id, ct: CancellationToken.None);
+
+        var sqlLog = new List<string>();
+        host.Fsql.Aop.CommandBefore += (_, e) => sqlLog.Add(e.Command.CommandText);
+
+        var subTree = await host.Manager.GetSubTreeAsync(root.Id, CancellationToken.None);
+        AssertCodes(subTree, "R", "C", "G");
+
+        // 下推断言：GetByIdAsync 守卫（WHERE Id =）+ 子树查询（WHERE 精确前缀）——每条 SELECT 都带
+        // WHERE；若退回 GetAllAsync 全量拉取（无 WHERE 的裸 SELECT FROM "OrganizationUnit"）即断言失败
+        var selectSqls = sqlLog.Where(s => s.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.NotEmpty(selectSqls);
+        Assert.All(selectSqls, sql =>
+            Assert.Contains("WHERE", sql, StringComparison.OrdinalIgnoreCase));
+
+        // 子树查询 = 最后一条（await 顺序保证）；谓词为精确前缀比较（substr/substring/LEFT），绝无 LIKE
+        var pushdownSql = selectSqls[^1];
+        Assert.True(
+            pushdownSql.Contains("substr(", StringComparison.OrdinalIgnoreCase)
+            || pushdownSql.Contains("substring(", StringComparison.OrdinalIgnoreCase)
+            || pushdownSql.Contains("LEFT(", StringComparison.OrdinalIgnoreCase),
+            $"子树查询缺精确前缀谓词（P3 实证结论：LIKE 通配符风险）：{pushdownSql}");
+        Assert.DoesNotContain("LIKE", string.Join(" ", selectSqls), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>P3 行为实证：'_' Code 精确前缀不误中 LIKE 通配符形态（"A_B" 子树不含 "/AXB/..."）。</summary>
+    [Fact]
+    public async Task GetSubTree_Pushdown_NoWildcardMismatch_WithUnderscoreCodes()
+    {
+        using var host = NewHost();
+        var ouA_B = await host.Manager.CreateAsync("A_B", "下划线OU", null, ct: CancellationToken.None);
+        await host.Manager.CreateAsync("CHILD", "子", ouA_B.Id, ct: CancellationToken.None);
+        await host.Manager.CreateAsync("AXB", "AXB OU", null, ct: CancellationToken.None); // LIKE 误中候选
+
+        var subTree = await host.Manager.GetSubTreeAsync(ouA_B.Id, CancellationToken.None);
+
+        // 仅 A_B 自身 + 子孙；AXB（/AXB/）绝不命中——若回归 StartsWith 且 PG 走 LIKE（'_' 单字符通配符），
+        // '/A_B/%' 会匹配 '/AXB/'；精确前缀比较（substr/substring 字面函数）无失配
+        AssertCodes(subTree, "A_B", "CHILD");
+    }
+
+    // ── V0.2.0 下推 N2：GetByCodesAsync + GetAncestorsAsync 缺失段异常路径 ──
+
+    [Fact]
+    public async Task GetByCodes_Pushdown_ReturnsSegmentsInLevelOrder()
+    {
+        using var host = NewHost();
+        var a = await host.Manager.CreateAsync("A", "A", null, ct: CancellationToken.None);
+        var b = await host.Manager.CreateAsync("B", "B", a.Id, ct: CancellationToken.None);
+        await host.Manager.CreateAsync("C", "C", b.Id, ct: CancellationToken.None);
+
+        // 入参顺序无关；Code IN 下推返回按 Level 升序 = [A, B, C]（祖先链顺序）
+        var rows = await host.Store.GetByCodesAsync(new[] { "A", "C", "B" }, CancellationToken.None);
+
+        Assert.Equal(new[] { "A", "B", "C" }, rows.Select(r => r.Code).ToArray());
+    }
+
+    /// <summary>GetAncestorsAsync 缺失段异常路径（oracle3 C-6/M3）——返回后校验数量，缺失段抛异常
+    /// （D17 GetAncestors_MissingAncestor_Throws 语义保持：数据异常不静默）。</summary>
+    [Fact]
+    public async Task GetAncestors_MissingSegmentCode_Throws()
+    {
+        using var host = NewHost();
+        var a = await host.Manager.CreateAsync("A", "A", null, ct: CancellationToken.None);
+        var b = await host.Manager.CreateAsync("B", "B", a.Id, ct: CancellationToken.None);
+
+        // 数据异常：直接物理删掉祖先 A 行（绕过 Manager 删除保护）→ B 的 Path="/A/B/" 段 A 缺失
+        await host.Store.DeleteAsync(a.Id, CancellationToken.None);
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(
+            () => host.Manager.GetAncestorsAsync(b.Id, CancellationToken.None));
+    }
 }

@@ -207,4 +207,70 @@ public class DictionaryManagerCacheTests
         Assert.Single(first);
         Assert.Single(second);
     }
+
+    /// <summary>
+    /// N5：缓存路径回归（V0.2.0 VEntity）——未命中走视图单查询 → 实体映射聚合 → BuildTree → 写缓存 → 二次命中。
+    /// </summary>
+    [Fact]
+    public async Task GetOrLoadAggregate_ViewPath_BuildTreeThenCache_SecondCallReturnsCached()
+    {
+        var fsql = CreateFreeSql();
+        var store = DataDictionaryTestHost.CreateStore(fsql);
+
+        var def = new DictionaryDefinitionEntity { Code = "Region", DisplayName = "地区" };
+        await store.UpsertDefinitionAsync(def, CancellationToken.None);
+        await store.UpsertItemAsync(new DictionaryItemEntity
+        {
+            DefinitionId = def.Id, Code = "Guangdong", DisplayName = "广东", Order = 1,
+            Level = 0, Path = "/Guangdong"
+        }, CancellationToken.None);
+        await store.UpsertItemAsync(new DictionaryItemEntity
+        {
+            DefinitionId = def.Id, Code = "Shenzhen", DisplayName = "深圳", Order = 1,
+            ParentCode = "Guangdong", Level = 1, Path = "/Guangdong/Shenzhen"
+        }, CancellationToken.None);
+
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var options = Options.Create(new DataDictionaryOptions { EnableTreeMode = true, EnableCache = true });
+        var mgr = new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
+
+        // 第一次：视图单查询 → 实体映射 → 聚合 → 写缓存
+        var first = await mgr.GetDefinitionWithItemsAsync("Region", CancellationToken.None);
+        Assert.NotNull(first);
+        Assert.Equal(2, first!.Items.Count);
+
+        // BuildTree 在视图来源聚合上正确组装
+        var tree = await mgr.GetItemsTreeAsync("Region", CancellationToken.None);
+        Assert.Single(tree);
+        Assert.Equal("Guangdong", tree[0].Code);
+        Assert.Single(tree[0].Children);
+        Assert.Equal("Shenzhen", tree[0].Children[0].Code);
+
+        // 第二次：缓存命中（同一对象引用——缓存的是聚合非查询）
+        var second = await mgr.GetDefinitionWithItemsAsync("Region", CancellationToken.None);
+        Assert.Same(first, second);
+    }
+
+    /// <summary>
+    /// N6：写路径回归（V0.2.0 VEntity）——DeleteItem 后缓存失效正确（D6：反查 DefinitionId → Code → 失效）。
+    /// </summary>
+    [Fact]
+    public async Task DeleteItem_InvalidatesCache()
+    {
+        var (manager, fsql) = CreateManagerWithCache();
+        await SeedGender(fsql);
+
+        // 预热缓存（视图路径加载）
+        var before = await manager.GetItemsAsync("Gender", CancellationToken.None);
+        Assert.Equal(2, before.Count);
+
+        // 删除项 → 反查所属定义并失效缓存
+        var male = before.First(i => i.Code == "Male");
+        await manager.DeleteItemAsync(male.Id, CancellationToken.None);
+
+        // 重新读取 → 缓存已失效，从库（视图路径）重新加载，不含已删项
+        var after = await manager.GetItemsAsync("Gender", CancellationToken.None);
+        Assert.Single(after);
+        Assert.DoesNotContain(after, i => i.Code == "Male");
+    }
 }

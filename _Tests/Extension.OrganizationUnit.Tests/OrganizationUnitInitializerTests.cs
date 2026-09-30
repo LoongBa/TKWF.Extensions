@@ -130,6 +130,9 @@ public class OrganizationUnitInitializerTests
         public Task<OrganizationUnitEntity?> GetByIdAsync(long id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<OrganizationUnitEntity?> GetByCodeAsync(string code, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<OrganizationUnitEntity>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<OrganizationUnitEntity>> GetByPathPrefixAsync(string pathPrefix, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<OrganizationUnitEntity>> GetByCodesAsync(IReadOnlyList<string> codes, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<string>> GetUserIdsByOuPathPrefixAsync(string ouPathPrefix, CancellationToken ct = default) => throw new NotImplementedException();
         public Task AddUserAsync(OrganizationUnitUserEntity entity, CancellationToken ct = default) => throw new NotImplementedException();
         public Task RemoveUserAsync(long organizationUnitId, string userId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<string>> GetUserIdsByOrganizationUnitIdsAsync(IReadOnlyList<long> organizationUnitIds, CancellationToken ct = default) => throw new NotImplementedException();

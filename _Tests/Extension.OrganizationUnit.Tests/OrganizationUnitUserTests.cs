@@ -202,4 +202,72 @@ public class OrganizationUnitUserTests
         }
         return null;
     }
+
+    // ── V0.2.0 下推 N3：GetUserIdsInOrganizationUnitAsync(includeDescendants: true) 视图 JOIN 单查询 ──
+    // vw_UserOrganizationUnitView（OUPath 精确前缀）——含 '_' Code 通配符失配实证（P3 结论应用）。
+
+    [Fact]
+    public async Task GetUserIds_IncludeDescendants_ViewJoin_NoWildcardMismatch()
+    {
+        using var host = NewHost();
+        // '_' LIKE 单字符通配符实证（P3）：若 StartsWith→LIKE 未转义，查 "A_B" 子树会误中 "/AXB/..."；
+        // 精确前缀比较（substr/substring）无失配
+        var ouA_B = await host.Manager.CreateAsync("A_B", "下划线OU", null, ct: CancellationToken.None);
+        var childA_B = await host.Manager.CreateAsync("CHILD", "子", ouA_B.Id, ct: CancellationToken.None);
+        var ouAXB = await host.Manager.CreateAsync("AXB", "AXB OU", null, ct: CancellationToken.None);
+        await host.Manager.AssignUserAsync(childA_B.Id, "u_desc", CancellationToken.None);
+        await host.Manager.AssignUserAsync(ouAXB.Id, "u_axb", CancellationToken.None);
+
+        var ids = await host.Manager.GetUserIdsInOrganizationUnitAsync(ouA_B.Id, includeDescendants: true, ct: CancellationToken.None);
+
+        // 仅 A_B 子树用户（含子孙 CHILD 的 u_desc）——绝不包含 AXB 的用户 u_axb（LIKE 失配场景）
+        AssertUserIds(ids, "u_desc");
+    }
+
+    [Fact]
+    public async Task GetUserIds_IncludeDescendants_UsesViewSingleQuery()
+    {
+        using var host = NewHost();
+        var root = await host.Manager.CreateAsync("R", "根", null, ct: CancellationToken.None);
+        var child = await host.Manager.CreateAsync("C", "子", root.Id, ct: CancellationToken.None);
+        await host.Manager.AssignUserAsync(root.Id, "u_root", CancellationToken.None);
+        await host.Manager.AssignUserAsync(child.Id, "u_child", CancellationToken.None);
+
+        var viewSqlLog = new List<string>();
+        host.Fsql.Aop.CommandBefore += (_, e) =>
+        {
+            if (e.Command.CommandText.Contains("vw_UserOrganizationUnitView", StringComparison.OrdinalIgnoreCase))
+                viewSqlLog.Add(e.Command.CommandText);
+        };
+
+        var ids = await host.Manager.GetUserIdsInOrganizationUnitAsync(root.Id, includeDescendants: true, ct: CancellationToken.None);
+
+        // 含自身 + 子孙用户（视图 JOIN 单查询下推）
+        AssertUserIds(ids, "u_root", "u_child");
+        // 恰一条 vw_UserOrganizationUnitView 查询且带 WHERE 前缀谓词（非子树 Ids → junction 两步）
+        var viewSql = Assert.Single(viewSqlLog);
+        Assert.Contains("WHERE", viewSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LIKE", viewSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>双模式（oracle3 C-5/M2）补充：includeDescendants=false 不走视图（junction 单查），视图零查询。</summary>
+    [Fact]
+    public async Task GetUserIds_ExcludeDescendants_DoesNotTouchView()
+    {
+        using var host = NewHost();
+        var root = await host.Manager.CreateAsync("R", "根", null, ct: CancellationToken.None);
+        await host.Manager.AssignUserAsync(root.Id, "u_root", CancellationToken.None);
+
+        var viewSqlLog = new List<string>();
+        host.Fsql.Aop.CommandBefore += (_, e) =>
+        {
+            if (e.Command.CommandText.Contains("vw_UserOrganizationUnitView", StringComparison.OrdinalIgnoreCase))
+                viewSqlLog.Add(e.Command.CommandText);
+        };
+
+        var ids = await host.Manager.GetUserIdsInOrganizationUnitAsync(root.Id, includeDescendants: false, ct: CancellationToken.None);
+
+        AssertUserIds(ids, "u_root");
+        Assert.Empty(viewSqlLog); // 保留 junction 单查（仅本 OU），不触碰视图
+    }
 }

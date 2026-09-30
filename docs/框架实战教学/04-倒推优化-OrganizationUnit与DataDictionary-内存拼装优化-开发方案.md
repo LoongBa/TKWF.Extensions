@@ -3,8 +3,8 @@
 > **系列**：框架实战教学（开篇见 [`01-扩展模块最优解探索-Schema级数据组合-开篇.md`](./01-扩展模块最优解探索-Schema级数据组合-开篇.md)）
 > **案例定位**：倒推路线图（§八）**内存拼装/两步查询优化**——物化路径下推 + JOIN 读模型联邦（F2 措辞澄清：纯投影聚合优先 VEntity）
 > **涉及扩展**：`TKWF.Ext.OrganizationUnit`（当前 V0.1.2）→ 目标 V0.2.0；`TKWF.Ext.DataDictionary`（当前 V0.1.2）→ 目标 V0.2.0
-> **状态**：📋 已评审（**oracle3 PASS WITH CONDITIONS**——C-1~C-10 已修订，P1-P10 已纳入；H1/H2/H3/M1 实施前修正）
-> **版本**：v0.1.1
+> **状态**：✅ **已实施**（2026-10-01——OU v0.2.0 / DataDict v0.2.0 落地，见变更记录 v0.1.2；原 oracle3 PASS WITH CONDITIONS 10 条件全修订）
+> **版本**：v0.1.2
 
 ---
 
@@ -245,6 +245,7 @@ partial class UserOrganizationUnitViewDataService(IDomainUser user, IEntityReadO
 |------|------|---------|
 | 2026-09-30 | v0.1.0-draft | 初始草案——基于 bg_2927440c（OU+DataDict+File 内存拼装探针）精确结论：OU 3 处可下推/1 处留内存、DataDict 1 处可下推/1 处留内存、FileManagement 排除 |
 | 2026-09-30 | v0.1.1 | **oracle3 评审 PASS WITH CONDITIONS（`bg_1570736f`）10 条件全修订**——C-1/H1（DataDict INNER JOIN 破坏"定义存在无项"语义 → 方案 b 先单查定义 + 视图查项零行=空项）、C-2/H2（§二 L83 标签更正——实为内存 LINQ 非 SQL）、C-3/H3（L137 Path LIKE → CountByParentIdAsync 且本期不改）、C-4/M1（LIKE `_` 通配符转义实证 + LEFT/SUBSTRING 备选）、C-5/M2（includeDescendants 双模式）、C-6/M3（GetAncestors 返回后校验）、C-7/L1（F7→F12 更正 + 回收注记）、C-8/L2（REST 无暴露显式说明）、C-9/L3（纪律偏离声明）、C-10/L4（L137 范围归属统一） |
+| 2026-10-01 | v0.1.2 | **实施完成**——OU v0.2.0：`vw_UserOrganizationUnitView`（JOIN OU→OUUser，7 投影列，`ExposeGraphqlQuery=false` C-4）+ `GetSubTreeAsync`/`GetAncestorsAsync` 单表 SQL 下推（**精确前缀比较**——P3 实证 FreeSql StartsWith→LIKE 不对 `_` 自动 ESCAPE，改 Length>=len && Substring==prefix → SQLite substr/PG substring）+ `GetUserIdsInOrganizationUnitAsync` 双模式（C-5/M2）+ `GetAncestorsAsync` 返回后校验缺失段抛异常（C-6/M3）；DataDict v0.2.0：`vw_DictionaryItemView`（JOIN Definition→Item，12 投影列，`ExposeGraphqlQuery=false` C-4）+ `GetOrLoadAggregateAsync` 未命中路径两步骤一（先单查定义 + 视图查项零行=空项列表，**空项语义保留** C-1/H1 方案 b，视图行映射回实体接口不变）；写路径零触碰；L137 本期不改（C-3/H3）；测试 N1-N6 + 既有断言全绿（OU 63→69、DataDict 47→50）；ADR-OrganizationUnit/DataDictionary-敏感视图经门面暴露策略 落档（含 F12 回收注记 C-7/L1）；§八 路线图状态更新 |
 
 ---
 

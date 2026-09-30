@@ -20,6 +20,15 @@ namespace TKWF.Ext.OrganizationUnit
         /// <summary>全量读取（按 Level/SortOrder/Id 排序）。</summary>
         Task<IReadOnlyList<OrganizationUnitEntity>> GetAllAsync(CancellationToken ct = default);
 
+        /// <summary>按物化路径前缀读取（V0.2.0 SQL 下推——精确前缀比较，非 LIKE；按 Level/SortOrder/Id 排序）。</summary>
+        Task<IReadOnlyList<OrganizationUnitEntity>> GetByPathPrefixAsync(string pathPrefix, CancellationToken ct = default);
+
+        /// <summary>按 Code 集合读取（V0.2.0 SQL 下推——Code IN；按 Level/SortOrder/Id 排序；调用方校验数量防缺失）。</summary>
+        Task<IReadOnlyList<OrganizationUnitEntity>> GetByCodesAsync(IReadOnlyList<string> codes, CancellationToken ct = default);
+
+        /// <summary>按 OU 物化路径前缀查关联用户 Id（V0.2.0 视图单查询下推——JOIN 携带 OU 列，去重）。</summary>
+        Task<IReadOnlyList<string>> GetUserIdsByOuPathPrefixAsync(string ouPathPrefix, CancellationToken ct = default);
+
         /// <summary>新增组织单元（回写自增 Id，返回 Id）。</summary>
         Task<long> CreateAsync(OrganizationUnitEntity entity, CancellationToken ct = default);
 

@@ -26,11 +26,19 @@ internal static class OrganizationUnitTestSupport
             .UseAutoSyncStructure(true)
             .Build();
 
-    /// <summary>同步两张表结构（OrganizationUnit + OrganizationUnitUser）。</summary>
+    /// <summary>同步两张表结构 + VEntity 真实视图（OrganizationUnit + OrganizationUnitUser + vw_UserOrganizationUnitView）。</summary>
     public static void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<OrganizationUnitEntity>();
         fsql.CodeFirst.SyncStructure<OrganizationUnitUserEntity>();
+        // V0.2.0 VEntity：建真实视图（SQLite 方言，同 UserOrganizationUnitView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync。
+        // 注：视图只投影 OU/OUUser 业务列（无 DateTimeOffset），SQLite 直接引用真实列，无需 NULL 占位
+        fsql.Ado.ExecuteNonQuery(
+            @"CREATE VIEW IF NOT EXISTS ""vw_UserOrganizationUnitView"" AS
+SELECT ouu.""Id"", ouu.""OrganizationUnitId"", ouu.""UserId"", ou.""Path"" AS ""OUPath"", ou.""Code"" AS ""OUCode"",
+       ou.""Level"" AS ""OULevel"", ou.""Name"" AS ""OUName""
+FROM ""OrganizationUnitUser"" ouu
+INNER JOIN ""OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""");
     }
 }
 
@@ -53,6 +61,8 @@ internal sealed class OrganizationUnitTestHost : IDisposable
     public OrganizationUnitEntityDataService OuDataService => _serviceProvider.GetRequiredService<OrganizationUnitEntityDataService>();
 
     public OrganizationUnitUserEntityDataService UserDataService => _serviceProvider.GetRequiredService<OrganizationUnitUserEntityDataService>();
+
+    public UserOrganizationUnitViewDataService ViewDataService => _serviceProvider.GetRequiredService<UserOrganizationUnitViewDataService>();
 
     private OrganizationUnitTestHost(ServiceProvider serviceProvider, IFreeSql fsql)
     {
@@ -79,8 +89,13 @@ internal sealed class OrganizationUnitTestHost : IDisposable
         services.AddScoped<UnitOfWorkManager>();
         services.AddScoped<IEntityDAC<OrganizationUnitEntity>>(sp => new FreeSqlEntityDAC<OrganizationUnitEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<OrganizationUnitUserEntity>>(sp => new FreeSqlEntityDAC<OrganizationUnitUserEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        // V0.2.0 VEntity：UserOrganizationUnitViewDataService（ADR61 自动注册镜像——只读 DAC 驱动；
+        // 显式注册 IEntityReadOnlyDAC 接口（DI 严格按请求类型匹配，IEntityDAC 子接口不自动匹配父接口——
+        // 02-plan ApprovalExtensionInitializerTests 先例）
+        services.AddScoped<IEntityReadOnlyDAC<UserOrganizationUnitView>>(sp => new FreeSqlEntityDAC<UserOrganizationUnitView>(sp.GetRequiredService<UnitOfWorkManager>()));
         AddTestConstructibleDataService<OrganizationUnitEntityDataService>(services);
         AddTestConstructibleDataService<OrganizationUnitUserEntityDataService>(services);
+        AddTestConstructibleDataService<UserOrganizationUnitViewDataService>(services);
 
         // ITransactionManager（Move/Delete/Create 写路径事务包裹依赖——Noop Begin/Commit 空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；对齐 Approval 测试宿主共识）

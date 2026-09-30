@@ -13,17 +13,33 @@ namespace TKWF.Ext.DataDictionary.Tests;
 /// 测试公共设施——StubDomainUser + 基于 FreeSqlEntityDAC 的 DictionaryStore 工厂。
 /// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
 /// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 Settings/BlobStoring 测试同模式）。</para>
+/// <para>V0.2.0 VEntity：CreateStore 同步建真实视图 <c>vw_DictionaryItemView</c>（SQLite 方言）并接线
+/// <see cref="DictionaryItemViewDataService"/>——与 ApprovalTestSupport.SyncStructure 同模式（不跑宿主 SyncViewsAsync）。</para>
 /// </summary>
 internal static class DataDictionaryTestHost
 {
     /// <summary>创建基于 SQLite 内存库的 DictionaryStore（DataService 委托）。</summary>
     public static DictionaryStore CreateStore(IFreeSql fsql)
     {
+        CreateView(fsql);
         var defDac = new FreeSqlEntityDAC<DictionaryDefinitionEntity>(new UnitOfWorkManager(fsql));
         var itemDac = new FreeSqlEntityDAC<DictionaryItemEntity>(new UnitOfWorkManager(fsql));
+        var viewDac = new FreeSqlEntityDAC<DictionaryItemView>(new UnitOfWorkManager(fsql));
         var defDataService = new DictionaryDefinitionEntityDataService(new StubDomainUser(), defDac);
         var itemDataService = new DictionaryItemEntityDataService(new StubDomainUser(), itemDac);
-        return new DictionaryStore(defDataService, itemDataService, NullLogger<DictionaryStore>.Instance);
+        var viewDataService = new DictionaryItemViewDataService(new StubDomainUser(), viewDac);
+        return new DictionaryStore(defDataService, itemDataService, viewDataService, NullLogger<DictionaryStore>.Instance);
+    }
+
+    /// <summary>创建真实视图 vw_DictionaryItemView（SQLite 方言，来自 DictionaryItemView.ViewSqlSQLite）。</summary>
+    public static void CreateView(IFreeSql fsql)
+    {
+        fsql.Ado.ExecuteNonQuery(
+            @"CREATE VIEW IF NOT EXISTS ""vw_DictionaryItemView"" AS
+SELECT i.""Id"", i.""DefinitionId"", d.""Code"" AS ""DefinitionCode"", i.""Code"", i.""DisplayName"", i.""Value"",
+       i.""Order"", i.""IsEnabled"", i.""ParentCode"", i.""Level"", i.""Path"", d.""DisplayName"" AS ""DefinitionDisplayName""
+FROM ""DictionaryItem"" i
+INNER JOIN ""DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""");
     }
 }
 

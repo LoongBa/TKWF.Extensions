@@ -290,12 +290,9 @@ namespace TKWF.Ext.OrganizationUnit
             var ou = await _store.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"组织单元 {id} 不存在");
 
-            // P3：含自身（Path 相等）+ 全部子孙（Path 前缀——ou.Path 已含尾斜杠，StartsWith 即子树）
-            var all = await _store.GetAllAsync(ct);
-            return all
-                .Where(o => o.Path == ou.Path || o.Path.StartsWith(ou.Path))
-                .OrderBy(o => o.Level).ThenBy(o => o.SortOrder).ThenBy(o => o.Id)
-                .ToList();
+            // V0.2.0 SQL 下推：ou.Path 已含尾斜杠 → 前缀匹配 = 自身 + 全部子孙（单表精确前缀比较，
+            // 非全量 GetAllAsync 内存过滤；LIKE 转义风险见 OrganizationUnitEntityDataService.GetByPathPrefixAsync 注记）
+            return await _store.GetByPathPrefixAsync(ou.Path, ct);
         }
 
         /// <inheritdoc />
@@ -309,16 +306,17 @@ namespace TKWF.Ext.OrganizationUnit
             if (segments.Length <= 1)
                 return Array.Empty<OrganizationUnitEntity>();
 
-            var all = await _store.GetAllAsync(ct);
-            var ancestors = new List<OrganizationUnitEntity>(segments.Length - 1);
-            var prefix = "/";
-            for (int i = 0; i < segments.Length - 1; i++)
+            // V0.2.0 SQL 下推：Code IN (A,B,...) 单查询（Code 全局唯一，数据一致时 IN 结果 = 祖先链；
+            // 排除自身段（segments 含自身 Code——ancestors = 根→直接父，面包屑语义不含自身，对齐旧实现
+            // "for i < segments.Length-1" 逐段 Path==prefix 匹配）；
+            // 返回后校验数量——缺失段抛异常，保持 GetAncestors_MissingAncestor_Throws 语义，oracle3 C-6/M3）
+            var ancestorCodes = segments.Take(segments.Length - 1).ToList();
+            var ancestors = await _store.GetByCodesAsync(ancestorCodes, ct);
+            if (ancestors.Count != ancestorCodes.Count)
             {
-                prefix += segments[i] + "/";
-                var ancestor = all.FirstOrDefault(o => o.Path == prefix)
-                    ?? throw new InvalidOperationException(
-                        $"组织单元 {ou.Code} 的祖先 {segments[i]}（Path={prefix}）不存在（数据异常，请检查）");
-                ancestors.Add(ancestor);
+                var missing = ancestorCodes.Except(ancestors.Select(a => a.Code), StringComparer.Ordinal);
+                throw new InvalidOperationException(
+                    $"组织单元 {ou.Code} 的祖先 {string.Join("/", missing)} 不存在（数据异常，请检查）");
             }
             return ancestors;
         }
@@ -355,11 +353,19 @@ namespace TKWF.Ext.OrganizationUnit
         public async Task<IReadOnlyList<string>> GetUserIdsInOrganizationUnitAsync(
             long ouId, bool includeDescendants, CancellationToken ct = default)
         {
-            // 两步（F14/P3）：OU 子树 Id 集合 → junction 查 UserIds 去重
-            var ouIds = includeDescendants
-                ? (await GetSubTreeAsync(ouId, ct)).Select(o => o.Id).ToList()
-                : new List<long> { ouId };
-            return await _store.GetUserIdsByOrganizationUnitIdsAsync(ouIds, ct);
+            // V0.2.0 双模式（oracle3 C-5/M2）：
+            //   includeDescendants=true  → 视图单查询（vw_UserOrganizationUnitView JOIN + OUPath 前缀下推，
+            //                               替代"子树 Id 集合 → junction"两步；引用守卫 = GetByIdAsync 抛异常，
+            //                               语义同旧 GetSubTreeAsync 路径）
+            //   includeDescendants=false → 保留 junction 单查（仅本 OU——不存在静默返回空，D18 已删 OU 语义保持）
+            if (includeDescendants)
+            {
+                var ou = await _store.GetByIdAsync(ouId, ct)
+                    ?? throw new InvalidOperationException($"组织单元 {ouId} 不存在");
+                return await _store.GetUserIdsByOuPathPrefixAsync(ou.Path, ct);
+            }
+
+            return await _store.GetUserIdsByOrganizationUnitIdsAsync(new List<long> { ouId }, ct);
         }
 
         /// <inheritdoc />

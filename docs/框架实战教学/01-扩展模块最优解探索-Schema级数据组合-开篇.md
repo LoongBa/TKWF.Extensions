@@ -195,17 +195,19 @@ TKWF：**数据属主扩展在自身 Initializer 内实现他扩展契约**—�
 | 🔴 | **FileManagement** | 全量内存建树 | **无需 VEntity 化**：`GetFolderTreeAsync` 全树递归必须留内存；`GetSubFoldersAsync`/`SortOrder max+1` 已 SQL 下推 | — | ⚪ 排除（04 方案 C5 裁定确认） |
 | 🟢 | **Identity** | 映射回原实体（保守） | **直接暴露升级**——GraphQL 已就绪（`ExposeGraphqlQuery=true`）；REST 需 **Service 包装类**（非 DataService 命名，`[GenerateController]`）；**仅本人防护**（userId 从 IDomainUser 取——防 IDOR） | 低 | ✅ **方案已评审**（03 案例，oracle3 PASS WITH CONDITIONS） |
 | 🟢 | **Notifications** | 映射回原实体（保守） | 同上——`UserNotificationView` 收件箱敏感面，**ExposeGraphqlQuery 回溯审查**（§九 F4/F11）+ REST Service 包装类（name 可空查全部） | 低 | ✅ **方案已评审**（03 案例，同上） |
+| 🟢 | **认证中心（Authentication）** | v0.1.0 实施后能力补强 | **查询契约缺口**（无 `IAuthAccountQueryService`——UserCenter 方案 P2 注记）+ **UserCenter 终态承接**（认证中心实现 `IUserProfileSource`——§5.9 终态演进落地，装配实例删过渡桥接类零代码变更） | 低 | 📋 方案待评审（05 案例） |
 
 > **迁移策略（2026-09-30 用户裁定）**：当前内部测试、无历史负担——倒推**直接采用最优形态**（VEntity 直接暴露），不留兼容双轨；迁移成本仅含"改实现 + 同步测试宿主"，不含"保留旧 API"。
 > **节奏调整（2026-09-30 用户指示）**：教学系列**不做完整案例文档**（如 02 仅方案+评审记录），**每完成一个扩展的实际升级 → 补产出一篇教学案例**（§一阅读地图）；当前以 UserCenter 范本为重心。
 > **REST 直接暴露机制事实（bg_1dc747d4 探针确认）**：VEntity 手写只读 DataService **不支持 `[GenerateController(FromDataService=true)]`**——`ControllerGenerator.cs` L629-642 `isDataService`（命名约定 `EndsWith("DataService")`）门控 early-return，标了也不生成 REST；**REST 暴露唯一路径 = Service 包装类**（非 DataService 命名，继承 `DomainServiceBase`/`DomainReadOnlyDataServiceBase`，标 `[GenerateController]`，public async 方法自动纳入契约）。GraphQL 独立于 REST 门控（`ExposeGraphqlQuery` 直扫，已自动就位）。
+> **Calendar 确认排除（2026-09-30 核查）**：`GetAllAsync` 单表动态过滤（启用日历判定）+ 事件查询已 C1 分路 SQL 下推——不适用 VEntity，§8.2 未列入为正确（非遗漏）。
 
 ### 8.3 认知修正（倒推时的纪律）
 
 - **Identity/Notifications "映射回原实体" 是保守形态**（2026-09-30 用户裁定：内部测试、无历史负担）——倒推时**直接升级为"直接暴露"**：GraphQL 已就绪（VEntity DTO + `ExposeGraphqlQuery`）；**REST 经 Service 包装类暴露**（非 `FromDataService`——机制不支持，§8.2 注记）；VEntity DTO 一等公民（可直接作为返回类型）。"破坏既有 API"当前不是障碍（唯一消费方是随仓库同步升级的测试宿主）
 - 树形组装/重复展开/单表动态过滤**不适用 VEntity**（递归需内存 / 非跨表）
 - 契约化已全量落地——无"该契约化却手写桥接"场景
-- **聚合统计**（GroupBy/Count）不在 VEntity 能力内——4 扩展 6 处内存 GroupBy 走框架 F7 候选（`GroupCountAsync`/`GroupByAsync` 聚合 API 下推），非 VEntity 化
+- **聚合统计**（GroupBy/Count）不在 VEntity 能力内——4 扩展 6 处内存 GroupBy 走框架 **F7 候选**（`GroupCountAsync`/`GroupByAsync` 聚合 API 下推）。**F7 需主框架侧开发方案**（`FreeSqlQueryableExtensions` 增 API，`_TKWF/docs/02-迭代开发/` 流程），**扩展侧不需独立方案**——框架落地后各扩展替换调用（轻量改造随扩展常规迭代）
 
 ---
 

@@ -190,11 +190,11 @@ TKWF：**数据属主扩展在自身 Initializer 内实现他扩展契约**—�
 |:---:|------|------------|-----------|:---:|:---:|
 | 🟢 | **Approval** | 两步查询（实例→任务链） | `vw_ApprovalTaskView`（JOIN 基表，21 投影列；实例查询保留取 BusinessDataJson） | 低 | ✅ **方案已评审**（02 案例，oracle3 PASS WITH CONDITIONS） |
 | 🟢 | **PrintTemplates** | 两步查询（模板→版本） | `vw_PrintTemplateVersionView`（JOIN 基表，12 投影列含 Key/TemplateName；**真消除往返 2→1**） | 低 | ✅ **方案已评审**（同上） |
-| 🟡 | **DataDictionary** | 两步查询 + 内存树形 | `vw_DictionaryItemView`（JOIN Definition→Item；BuildTree 递归留内存；缓存仍有效） | 中 | ⚪ 待评估（探针已确认可下推点） |
-| 🟡 | **OrganizationUnit** | 6 处全量内存拼装 | 可下推 3 处：`GetSubTreeAsync`（Path LIKE 前缀）/`GetUserIdsInOrganizationUnitAsync`（JOIN OU→OUUser）/`GetAncestorsAsync`（Code IN 分段）；`GetTreeAsync` 递归留内存 | 中 | ⚪ 待评估（README 已规划 `vw_UserOrganizationUnitView`） |
-| 🔴 | **FileManagement** | 全量内存建树 | **无需 VEntity 化**：`GetFolderTreeAsync` 全树递归必须留内存；`GetSubFoldersAsync`/`SortOrder max+1` 已 SQL 下推 | — | ⚪ 排除（探针确认非对象） |
-| 🟢 | **Identity** | 映射回原实体（保守） | **直接暴露升级**——GraphQL 已就绪（`ExposeGraphqlQuery=true`）；REST 需 **Service 包装类**（非 DataService 命名，`[GenerateController]`） | 低 | ⚪ 待立项（探针已确认升级路径） |
-| 🟢 | **Notifications** | 映射回原实体（保守） | 同上——`UserNotificationView` 收件箱敏感面，**ExposeGraphqlQuery 回溯审查**（§九 F4/F11）+ REST Service 包装类 | 低 | ⚪ 待立项（同上） |
+| 🟡 | **DataDictionary** | 两步查询 + 内存树形 | `vw_DictionaryItemView`（JOIN Definition→Item；BuildTree 递归留内存；缓存仍有效；**"定义存在无项"语义保留**——先单查定义 + 视图查项零行=空项） | 中 | ✅ **方案已评审**（04 案例，oracle3 PASS WITH CONDITIONS） |
+| 🟡 | **OrganizationUnit** | 6 处全量内存拼装 | 可下推 3 处：`GetSubTreeAsync`（Path 前缀）/`GetUserIdsInOrganizationUnitAsync`（JOIN OU→OUUser）/`GetAncestorsAsync`（Code IN 分段）；`GetTreeAsync` 递归留内存；**L137 计数本期不改**（CountByParentIdAsync 语义确认后） | 中 | ✅ **方案已评审**（04 案例，同上） |
+| 🔴 | **FileManagement** | 全量内存建树 | **无需 VEntity 化**：`GetFolderTreeAsync` 全树递归必须留内存；`GetSubFoldersAsync`/`SortOrder max+1` 已 SQL 下推 | — | ⚪ 排除（04 方案 C5 裁定确认） |
+| 🟢 | **Identity** | 映射回原实体（保守） | **直接暴露升级**——GraphQL 已就绪（`ExposeGraphqlQuery=true`）；REST 需 **Service 包装类**（非 DataService 命名，`[GenerateController]`）；**仅本人防护**（userId 从 IDomainUser 取——防 IDOR） | 低 | ✅ **方案已评审**（03 案例，oracle3 PASS WITH CONDITIONS） |
+| 🟢 | **Notifications** | 映射回原实体（保守） | 同上——`UserNotificationView` 收件箱敏感面，**ExposeGraphqlQuery 回溯审查**（§九 F4/F11）+ REST Service 包装类（name 可空查全部） | 低 | ✅ **方案已评审**（03 案例，同上） |
 
 > **迁移策略（2026-09-30 用户裁定）**：当前内部测试、无历史负担——倒推**直接采用最优形态**（VEntity 直接暴露），不留兼容双轨；迁移成本仅含"改实现 + 同步测试宿主"，不含"保留旧 API"。
 > **节奏调整（2026-09-30 用户指示）**：教学系列**不做完整案例文档**（如 02 仅方案+评审记录），**每完成一个扩展的实际升级 → 补产出一篇教学案例**（§一阅读地图）；当前以 UserCenter 范本为重心。
@@ -269,4 +269,5 @@ TKWF：**数据属主扩展在自身 Initializer 内实现他扩展契约**—�
 | 2026-09-30 | v0.1.2 | Oracle3 评审（`bg_d2bc9fc2`）P4 采纳——§4.3 选型树 + §5.2 分层脱敏表澄清**脱敏归属**：SQL 可表达的**确定性**规则（固定掩码）→ 投影下推；**动态/角色级**规则（依赖调用时上下文）→ 门面软脱敏。判据 = 规则是否依赖调用时上下文。同时 §5.2 注明"SQL 视图无法感知'仅本人'（当前用户过滤是查询参数/全局过滤，非视图投影）" |
 | 2026-09-30 | v0.1.3 | §九 框架演进候选扩充 **F6-F18**（两路机制探针合并去重）：bg_a7da85a5（VEntity 机制深挖 8 维 27 候选）+ bg_6dbfbdb2（扩展实践摩擦 5 候选）；综合 RLS 业界调研（bg_8aaba03b）——F6 仅本人过滤（OwnerFilter，含 DB RLS 纵深——PG owner 豁免陷阱/sql_invoker 四件套/SQL Server 天然继承，慎用 DB 级）、F7 GroupByAsync 聚合下推、F8 VEntity 指南+脚手架、F9-F18 中低优先级登记 |
 | 2026-09-30 | v0.1.4 | §八 路线图探针细化（bg_2927440c OU+DataDict+File / bg_1dc747d4 Identity+Notifications）：Approval+PrintTemplates ✅ 方案已评审（02 案例 oracle3 PASS WITH CONDITIONS）；DataDictionary/OU 可下推点确认、FileManagement 排除（全树递归留内存）；**REST 直接暴露机制事实登记**（VEntity DataService 不支持 `[GenerateController(FromDataService=true)]`——isDataService 门控 early-return，REST 需 Service 包装类；GraphQL 独立已就绪）；§8.3 认知修正补"聚合统计走 F7 非 VEntity"。**节奏调整注记（用户指示）**：教学系列不做完整案例文档，每完成实际升级 → 补案例篇；当前以 UserCenter 范本为重心 |
+| 2026-09-30 | v0.1.5 | §八 路线图状态更新——**03/04 方案 oracle3 评审 PASS WITH CONDITIONS 全修订**：Identity/Notifications ✅ 方案已评审（03 案例——REST Service 包装类 + 仅本人防护 C1-high IDOR + name 可空 + 注册机制核实）；OrganizationUnit/DataDictionary ✅ 方案已评审（04 案例——H1 空项语义 + H2 L83 标签更正 + H3 L137 CountByParentId + F12 更正 + LIKE 转义 + 双模式）；FileManagement ⚪ 排除（C5 裁定确认） |
 | — | — | （后续：每优化一个扩展模块 → 产出教学案例篇 + 修订 §八 路线图；机制缺口 → 修订 §九） |

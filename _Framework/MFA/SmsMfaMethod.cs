@@ -73,8 +73,8 @@ internal sealed class SmsMfaMethod : IMfaMethod
         };
         await _secrets.CreateAsync(entity, ct);
 
-        // 确认绑定码：生成 6 位码 → 落挑战行 → 经 IMfaSmsSender 发送（发送失败异常自然传播——pending 行滞留，
-        // 消费方可 Disable 后重绑；频控计数已含本次发送）
+        // 确认绑定码：生成 6 位码 → 落挑战行 → 经 IMfaSmsSender 发送（发送失败清理挑战行 + 异常自然传播——
+        // pending 行滞留，消费方可 Disable 后重绑；频控计数已含本次发送）
         await SendCodeAsync(user.UserId, phone, ct);
 
         return new MfaEnrollRequest(enrollToken);
@@ -161,7 +161,8 @@ internal sealed class SmsMfaMethod : IMfaMethod
 
     /// <summary>生成 6 位码 → 落挑战行（SHA256 明文不落库）→ 经 <see cref="IMfaSmsSender"/> 发送；返回创建的挑战（challengeId 句柄）。
     /// <para>发送侧双频控：①TTL 内重发拒绝（活动挑战未过期）②per-user 小时窗口（SmsMaxPerHour，Oracle C8 单实例语义）；
-    /// 渠道未装配 → <see cref="MfaMockForbiddenException"/>（503 语义 fail-fast）。</para></summary>
+    /// 渠道未装配 → <see cref="MfaMockForbiddenException"/>（503 语义 fail-fast）；发送失败 → 清理孤儿挑战行
+    /// （码未发出挑战无意义——防阻塞重发至 TTL，Oracle7 C1）并异常自然传播。</para></summary>
     private async Task<MfaChallengeEntity> SendCodeAsync(string userId, string phone, CancellationToken ct)
     {
         var opt = _options.Value;
@@ -193,14 +194,22 @@ internal sealed class SmsMfaMethod : IMfaMethod
         };
         var created = await _challenges.CreateAsync(challenge, ct);
 
-        // 经 IMfaSmsSender 发送——未装配抛 503 语义异常（生产 fail-fast；防 dev_code 语义泄露）
-        var sender = _serviceProvider.GetService<IMfaSmsSender>();
-        if (sender is null)
-            throw new MfaMockForbiddenException("IMfaSmsSender 未装配——MFA SMS 方法必须由消费方实现短信发送渠道（生产 503 语义 fail-fast）");
-        await sender.SendAsync(
-            new MfaSmsMessage(phone, $"您的 MFA 验证码是 {code}，{opt.ChallengeTtlSeconds / 60} 分钟内有效（请勿转发他人）"),
-            ct);
-
+        // 经 IMfaSmsSender 发送——发送失败清理孤儿挑战行（码未发出，挑战无意义；阻塞重发至 TTL 属体验缺陷，Oracle7 C1）
+        try
+        {
+            var sender = _serviceProvider.GetService<IMfaSmsSender>();
+            if (sender is null)
+                throw new MfaMockForbiddenException("IMfaSmsSender 未装配——MFA SMS 方法必须由消费方实现短信发送渠道（生产 503 语义 fail-fast）");
+            await sender.SendAsync(
+                new MfaSmsMessage(phone, $"您的 MFA 验证码是 {code}，{opt.ChallengeTtlSeconds / 60} 分钟内有效（请勿转发他人）"),
+                ct);
+        }
+        catch
+        {
+            // 发送失败——清理孤儿挑战行（码未发出，挑战无意义；阻塞重发至 TTL 属体验缺陷，Oracle7 C1）
+            await _challenges.DeleteAsync(created.Id, ct);
+            throw; // 异常自然传播（消费方可感知失败并重试）
+        }
         return created;
     }
 

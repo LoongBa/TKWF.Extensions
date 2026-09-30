@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
+using TKW.Framework;
 using TKW.Framework.CodeGeneration;
 
 namespace TKWF.Ext.MFA;
@@ -28,9 +30,12 @@ public partial class MfaRecoveryCodeEntity
     [MaxLength(128)]
     public string UserId { get; set; } = "";
 
-    /// <summary>恢复码 SHA256（十六进制小写——明文不落库；写入后不可变）。</summary>
+    /// <summary>恢复码 SHA256（十六进制小写——明文不落库；写入后不可变）。
+    /// 敏感字段：Dto 忽略 + Json 忽略（tkwf-entity 规则 4——哈希泄露允许离线字典攻击）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 3, CanUpdate = false)]
     [MaxLength(64)]
+    [DtoFieldIgnore]
+    [JsonIgnore]
     public string CodeHash { get; set; } = "";
 
     /// <summary>是否已消费（使用后翻转 true——单次消费，Oracle C1）。</summary>

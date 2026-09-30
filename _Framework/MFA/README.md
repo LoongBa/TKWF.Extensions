@@ -77,8 +77,8 @@ MfaSecretKeyStore / MfaRateLimiter            # internal 设施（AES-GCM 密钥
 - **挑战票据模型（ADR-MFA-挑战票据与验证模型）**：`MfaChallengeEntity` 一次性 TTL + `IsConsumed` 原子翻转单次消费（防重放）；TOTP 无码落库（票据仅句柄 + 频控挂点）；不设 Attempts 列（频控归内存窗口）。
 - **防枚举（Oracle Q6）**：验证失败统一 `false`；未启用挑战返回统一"已发起"；已启用重复绑定返回统一形态。
 - **恒定时间比较**：SMS 码/恢复码/TOTP 比对经 `CryptographicOperations.FixedTimeEquals`。
-- **secret 加密（ADR-MFA-TOTP自研与密钥存储）**：TOTP 自研 RFC 6238（HMAC-SHA1 + 30s + 6 位 + Base32 + ±1 窗口，附录 B 向量锚定）；secret AES-GCM 密文落库（`SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）。
-- **频控单实例（Oracle Q3/C8）**：v0.1.0 内存滑动窗口仅本实例生效——TOTP/SMS 验证暴力多实例可忽略（6 位码 + 单次消费）；**SMS 发码多实例 = 短信计费滥用 → 外部限流器/单实例前置**；DB 化跨实例频控 v0.2.0 候选。
+- **secret 加密（ADR-MFA-TOTP自研与密钥存储）**：TOTP 自研 RFC 6238（HMAC-SHA1 + 30s + 6 位 + Base32 + ±1 窗口，附录 B 向量锚定）；secret AES-GCM 密文落库（`SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）；解密异常语义：**格式非法（非三段结构）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`**。
+- **频控单实例（Oracle Q3/C8）**：v0.1.0 内存滑动窗口仅本实例生效——TOTP/SMS 验证暴力多实例可忽略（6 位码 + 单次消费）；**SMS 发码多实例 = 短信计费滥用 → 外部限流器/单实例前置**；DB 化跨实例频控 v0.2.0 候选。⚠️ **TTL 内重发拒绝在单实例极端并发下存在理论 TOCTOU 窗口**（两并发请求可同时过活动挑战检查 → 同时创建挑战双发 SMS）——`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
 - **恢复码**：SHA256 落库（明文不落库）、单次消费、验证纳入频控、再生成全量替换；丢失恢复码 + 设备丢失 = 锁死（防锁死是恢复码的意义）。
 - **零扩展间依赖**：`SmsMfaMethod` 与 Authentication `SmsVerificationService` 逻辑重叠但语义不同（第二因素 per-user×method vs 首因素 per-phone×scene + IP）——独立实现正确（Oracle Q1 裁决）；收敛出口 = 后续评估 `Authentication.Abstractions` 拆包（独立迭代）。
 

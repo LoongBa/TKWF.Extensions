@@ -151,8 +151,9 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 ## 6. 生产注意事项
 
 - **多实例部署 ⚠️（Oracle C8）**：v0.1.0 频控为**内存单实例**（验证尝试 + 短信发码）——SMS MFA 多实例 = 5×N 条/小时/用户（短信计费滥用），**须外部限流器（Redis 等）或单实例部署**；TOTP MFA 无此限制（不发码）。
+- **TTL 内重发拒绝（理论 TOCTOU）⚠️**：活动挑战检查与建行非原子——单实例**极端并发**下两请求可同时通过检查、同时创建挑战双发 SMS（理论窗口）；`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
 - **密钥 fail-fast**：`SecretEncryptionKeyPath` 生产缺失 → 拒启动（对齐 Authentication 密钥策略）；密钥文件前 32 字节为 AES-GCM 密钥，**不进代码库**。
-- **加密边界（实施注记）**：TOTP secret 的 AES-GCM 加解密在**方法实现层**（`TotpMfaMethod` 经 `MfaSecretKeyStore`——DataService 分部构造器固定 (IDomainUser, IEntityDAC) 无法注入密钥）；密文落库、DB 无明文、生产缺密钥 fail-fast，与方案"DataService 边界"（Oracle C6 意图）安全语义等价。
+- **加密边界（实施注记）**：TOTP secret 的 AES-GCM 加解密在**方法实现层**（`TotpMfaMethod` 经 `MfaSecretKeyStore`——DataService 分部构造器固定 (IDomainUser, IEntityDAC) 无法注入密钥）；密文落库、DB 无明文、生产缺密钥 fail-fast，与方案"DataService 边界"（Oracle C6 意图）安全语义等价。**解密异常语义**：格式非法（非三段结构）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`。
 - **防枚举**：`VerifyChallengeAsync` 失败统一 `false`（不区分原因）；`RequestChallengeAsync` 对未启用用户返回统一"已发起"——日志层自行区分。
 - **恢复码保存**：激活/再生成时一次性明文返回——消费方提示用户保存；丢失后凭已保存恢复码解绑重绑（无恢复码 + 设备丢失 = 锁死，防锁死是恢复码的意义）。
 - **UTC 时间**：挑战 TTL/过期经 `DateTime.UtcNow` 判定；消费方时区无关。
@@ -169,6 +170,7 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 | 验证尝试超限 | `InvalidOperationException`（含剩余等待；5 次/5min 滑动窗口按用户×方法） |
 | SMS 发码超限 | `InvalidOperationException`（5 条/小时/用户；TTL 内重发拒绝） |
 | 短信渠道未装配 | `MfaMockForbiddenException`（503 语义 fail-fast） |
+| 短信发送失败（渠道异常） | 孤儿挑战行清理 + 异常自然传播（消费方可感知失败立即重试——无 TTL 阻塞；Oracle7 C1） |
 | TOTP secret 密钥缺失（生产） | fail-fast 拒启动 |
 | 恢复码 | 8 位字母数字 × 8 枚，SHA256 落库，单次消费，验证纳入频控，再生成全量替换 |
 | 解绑 | 级联删绑定 + 未消费挑战 + 恢复码 |
@@ -179,3 +181,4 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 | 日期 | 版本 | 变更内容 |
 |------|------|---------|
 | 2026-10-01 | v0.1.0 | 首版——TOTP（RFC 6238 自研）+ 短信验证码双方法：绑定/解绑 + 挑战-验证流 + 尝试频控 + 恢复码；独立扩展零依赖（消费方编排）；Oracle 评审 PASS WITH CONDITIONS 11 条件全吸收（方案 `docs/MFA/MFA多因素认证-开发方案.md`） |
+| 2026-10-01 | —（v0.1.0 后置补丁） | Oracle7 审核 C1 修复 + C2/C3 文档对齐——SMS 发送失败清理孤儿挑战行（`SendCodeAsync` 发送 try/catch → 物理删除挑战 + 再抛，防 TTL 内孤儿阻塞重发）；新增 2 测试用例（失败清理无残留 + 渠道恢复立即重发）；文档修正解密异常语义（`CryptographicException`/`FormatException`）并补充 TTL 重发 TOCTOU 边界 |

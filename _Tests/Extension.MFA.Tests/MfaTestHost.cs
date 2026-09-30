@@ -99,6 +99,21 @@ internal sealed class MfaTestHost : IDisposable
     }
 
     /// <summary>
+    /// 自定义 SMS 渠道宿主——以指定 <see cref="IMfaSmsSender"/> 替换记录型 Recording Fake
+    /// （发送失败清理孤儿挑战行用例注入抛异常/可切换 Fake——Oracle7 C1 缺陷复现与验收）。
+    /// <paramref name="sender"/> 经 Scoped 工厂注册，每次解析返回同一实例（测试持有引用切换行为）。
+    /// </summary>
+    public static MfaTestHost CreateWithSmsSender(
+        IMfaSmsSender sender,
+        MfaOptions? options = null,
+        Action<IServiceCollection>? configure = null)
+    {
+        if (sender is null) throw new ArgumentNullException(nameof(sender));
+        var fsql = MfaTestSupport.CreateInMemoryFreeSql();
+        return BuildHost(fsql, dbPath: null, options, configure, smsSender: sender);
+    }
+
+    /// <summary>
     /// 文件模式 SQLite 宿主场（供并发测试用）——与 <see cref="Create"/> 相同注册，
     /// 但用文件模式库（多连接共享，FreeSql ObjectPool 正常出借，避免 :memory: 单连接池
     /// 在 CI 高负载并发下 ObjectPool.Get() 超时 10s——FreeSql discussions/1081）。
@@ -118,7 +133,8 @@ internal sealed class MfaTestHost : IDisposable
         IFreeSql fsql,
         string? dbPath,
         MfaOptions? options,
-        Action<IServiceCollection>? configure)
+        Action<IServiceCollection>? configure,
+        IMfaSmsSender? smsSender = null)
     {
         MfaTestSupport.SyncStructure(fsql);
 
@@ -153,7 +169,11 @@ internal sealed class MfaTestHost : IDisposable
 
         // 记录型 SMS 发送 Fake（TryAddScoped——SMS 方法经 IServiceProvider 惰性解析 IMfaSmsSender，
         // 未装配会抛 MfaMockForbiddenException 503；必须真实注册进容器）
-        services.TryAddScoped<IMfaSmsSender, RecordingMfaSmsSender>();
+        // 自定义渠道（CreateWithSmsSender）显式注册注入 sender——发送失败清理孤儿挑战行用例（Oracle7 C1）
+        if (smsSender is not null)
+            services.AddScoped(_ => smsSender);
+        else
+            services.TryAddScoped<IMfaSmsSender, RecordingMfaSmsSender>();
 
         configure?.Invoke(services);
 

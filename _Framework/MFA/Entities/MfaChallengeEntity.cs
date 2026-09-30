@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
+using TKW.Framework;
 using TKW.Framework.CodeGeneration;
 
 namespace TKWF.Ext.MFA;
@@ -35,9 +37,12 @@ public partial class MfaChallengeEntity
     [MaxLength(20)]
     public string Method { get; set; } = "";
 
-    /// <summary>SMS 码 SHA256（仅 SMS 场景；TOTP 场景 null——无码落库；写入后不可变）。</summary>
+    /// <summary>SMS 码 SHA256（仅 SMS 场景；TOTP 场景 null——无码落库；写入后不可变）。
+    /// 敏感字段：Dto 忽略 + Json 忽略（tkwf-entity 规则 4——哈希泄露允许离线字典/挑战状态探测）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 4, IsNullable = true, CanUpdate = false)]
     [MaxLength(64)]
+    [DtoFieldIgnore]
+    [JsonIgnore]
     public string? CodeHash { get; set; }
 
     /// <summary>挑战过期时间（TTL 5min——过期后验证拒绝）。</summary>

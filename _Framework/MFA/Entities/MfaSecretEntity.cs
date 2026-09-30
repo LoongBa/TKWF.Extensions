@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
+using TKW.Framework;
 using TKW.Framework.CodeGeneration;
 
 namespace TKWF.Ext.MFA;
@@ -37,9 +39,12 @@ public partial class MfaSecretEntity
     public string Method { get; set; } = "";
 
     /// <summary>TOTP secret AES-GCM 密文（"base64(iv).base64(tag).base64(cipher)"——明文不落库；
-    /// 仅 TOTP 场景；写入后不可变 CanUpdate=false——重新绑定走 Disable+Enroll）。</summary>
+    /// 仅 TOTP 场景；写入后不可变 CanUpdate=false——重新绑定走 Disable+Enroll）。
+    /// 敏感字段：Dto 忽略 + Json 忽略（tkwf-entity 规则 4——对齐 PlatformCredentialEntity.AppSecretEncrypted 先例）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 4, IsNullable = true, CanUpdate = false)]
     [MaxLength(512)]
+    [DtoFieldIgnore]
+    [JsonIgnore]
     public string? SecretEncrypted { get; set; }
 
     /// <summary>SMS 绑手机号（仅 SMS 场景；写入后不可变 CanUpdate=false——解绑重绑走 Disable+Enroll）。</summary>
@@ -51,9 +56,12 @@ public partial class MfaSecretEntity
     [FreeSql.DataAnnotations.Column(Position = 6)]
     public bool IsConfirmed { get; set; }
 
-    /// <summary>绑定待激活令牌 SHA256（Oracle C3——EnrollToken 单次消费 + TTL；激活后清空）。</summary>
+    /// <summary>绑定待激活令牌 SHA256（Oracle C3——EnrollToken 单次消费 + TTL；激活后清空）。
+    /// 敏感字段：Dto 忽略 + Json 忽略（tkwf-entity 规则 4——哈希泄露允许离线字典/绑定状态探测）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 7, IsNullable = true)]
     [MaxLength(64)]
+    [DtoFieldIgnore]
+    [JsonIgnore]
     public string? EnrollTokenHash { get; set; }
 
     /// <summary>绑定待激活令牌过期时间（Oracle C3——TTL 5min 对齐 ChallengeTtl）。</summary>

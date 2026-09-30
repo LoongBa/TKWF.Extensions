@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -160,5 +161,108 @@ public class SmsMfaMethodTests
             mfa2.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code, CancellationToken.None));
 
         Assert.Equal(1, results.Count(r => r));   // 恰一成功一失败
+    }
+
+    // ── 发送失败清理孤儿挑战行（Oracle7 C1——防阻塞重发至 TTL） ──
+
+    [Fact]
+    public async Task SendSmsFailure_CleansOrphanChallenge_AllowsImmediateResend()
+    {
+        // Oracle7 C1：发送抛异常 → 孤儿挑战行清理（码未发出挑战无意义）→ 渠道恢复后立即重发成功
+        //（修复前孤儿挑战阻塞重发至 TTL 5min——体验缺陷）
+        var sender = new SwitchableMfaSmsSender();
+        using var host = MfaTestHost.CreateWithSmsSender(sender);
+        var userId = NewUserId();
+        const string phone = "13900000009";
+
+        // 绑定发送成功（渠道初始正常）→ 确认激活
+        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone));
+        Assert.Equal(1, sender.SendCount);
+        var enrollCode = ExtractSmsCode(sender.Messages[0].Content);
+        await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, enrollCode);
+
+        // 模拟渠道故障——挑战发码抛异常 → 孤儿挑战行被清理（无活动挑战阻塞重发）
+        sender.SetThrowOnSend(true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Mfa.RequestChallengeAsync(userId, "sms"));
+        Assert.Empty(await host.Challenges.GetActiveByUserMethodAsync(userId, "sms"));
+
+        // 渠道恢复 → 立即重发成功（未被孤儿挑战阻塞至 TTL）→ 正确码可验证
+        sender.SetThrowOnSend(false);
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        Assert.Equal(2, sender.SendCount);
+        var code = ExtractSmsCode(sender.Messages[^1].Content);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code));
+    }
+
+    [Fact]
+    public async Task SmsSendFailure_CleansChallenge_NoOrphanBlocksResend()
+    {
+        // Oracle7 C1 简化验收：恒抛异常渠道 + 直接建激活绑定 → 挑战发码失败 → 无活动挑战残留
+        using var host = MfaTestHost.CreateWithSmsSender(new ThrowingMfaSmsSender());
+        var userId = NewUserId();
+
+        // 直接建已激活绑定（跳过绑定时发送——渠道恒抛异常无法走 Enroll 流程）
+        await host.Secrets.CreateAsync(new MfaSecretEntity
+        {
+            UserId = userId,
+            Method = "sms",
+            Phone = "13900000008",
+            IsConfirmed = true,
+            CreateTime = DateTime.UtcNow,
+            UpdateTime = DateTime.UtcNow,
+        });
+
+        // 挑战发码 → 发送失败抛异常（异常自然传播不吞）→ 孤儿挑战行已清理
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Mfa.RequestChallengeAsync(userId, "sms"));
+        Assert.Empty(await host.Challenges.GetActiveByUserMethodAsync(userId, "sms"));
+    }
+}
+
+/// <summary>
+/// 发送恒抛异常的 SMS Fake——模拟渠道故障（Oracle7 C1 发送失败清理孤儿挑战行用例）。
+/// </summary>
+internal sealed class ThrowingMfaSmsSender : IMfaSmsSender
+{
+    public Task SendAsync(MfaSmsMessage message, CancellationToken ct = default)
+        => throw new InvalidOperationException("SMS 渠道模拟故障——发送失败");
+}
+
+/// <summary>
+/// 可切换行为的 SMS Fake——测试经 <see cref="SetThrowOnSend"/> 模拟渠道故障/恢复
+/// （Oracle7 C1 验证失败清理孤儿挑战 + 渠道恢复后立即重发成功）。
+/// <para>仅成功发送计入 <see cref="Messages"/>（对齐 RecordingMfaSmsSender 语义）；行为切换线程安全。</para>
+/// </summary>
+internal sealed class SwitchableMfaSmsSender : IMfaSmsSender
+{
+    private readonly object _gate = new();
+    private readonly List<MfaSmsMessage> _messages = new();
+    private bool _throwOnSend;
+
+    /// <summary>切换发送行为（true = 发送抛 <see cref="InvalidOperationException"/> 模拟渠道故障）。</summary>
+    public void SetThrowOnSend(bool throwOnSend)
+    {
+        lock (_gate) _throwOnSend = throwOnSend;
+    }
+
+    /// <summary>已发送消息（按发送顺序；仅成功发送捕获）。</summary>
+    public IReadOnlyList<MfaSmsMessage> Messages
+    {
+        get { lock (_gate) return _messages.ToArray(); }
+    }
+
+    /// <summary>发送总次数（成功发送才计数）。</summary>
+    public int SendCount
+    {
+        get { lock (_gate) return _messages.Count; }
+    }
+
+    public Task SendAsync(MfaSmsMessage message, CancellationToken ct = default)
+    {
+        bool shouldThrow;
+        lock (_gate) shouldThrow = _throwOnSend;
+        if (shouldThrow)
+            throw new InvalidOperationException("SMS 渠道模拟故障——发送失败");
+        lock (_gate) _messages.Add(message);
+        return Task.CompletedTask;
     }
 }

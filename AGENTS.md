@@ -251,6 +251,7 @@ _Tests/Extension.{扩展名}.Tests/
 | 7 | 生成骨架 `.biz.cs` 编译通过 | `.biz.cs` 含 `using System.Collections.Generic;`（EntityEmpty 模板缺陷 2026-09-14 已修源码+部署副本） | 模板回归致 `List<ValidationResult>` 无法解析（CS0246/CS0759） |
 
 **已知缺陷修复记录**（2026-09-14）：permissions.xCodeGen.json 绝对式路径 bug；Approval 缺配置（4-5 天陈旧 + 缺 Conditions）；EntityEmpty.cshtml 模板缺 `using System.Collections.Generic`（源码 `_TKWF/_xCodeGen/xCodeGen.Cli/Templates/` + 部署 `%TKWFDeployPath%/xCodeGen/Templates/` 双修）。
+> **DtoEmpty 模板缺陷（2026-10-01 MFA 引导发现）**：DTO 骨架 `.g.cs` 生成侧同样缺 `using System.Collections.Generic;`（`List<ValidationResult>` 解析失败 CS0246）——MFA 3 个 DTO `.cs` 骨架已手工补 using；模板源（`DtoEmpty.cshtml`）待框架组随 xCodeGen 迭代修复（记录待报，勿重复手工补丁）。
 
 ### 构建/编译操作纪律
 

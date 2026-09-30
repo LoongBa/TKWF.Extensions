@@ -100,6 +100,12 @@
   <Folder Name="/_Framework/FileManagement/">
     <Project Path="_Framework/FileManagement/TKWF.Ext.FileManagement.csproj" />
   </Folder>
+  <Folder Name="/_Framework/MFA/">
+    <Project Path="_Framework/MFA/TKWF.Ext.MFA.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.MFA.Tests/">
+    <Project Path="_Tests/Extension.MFA.Tests/TKWF.Ext.MFA.Tests.csproj" />
+  </Folder>
   <Folder Name="/_Framework/FeatureManagement/">
     <Project Path="_Framework/FeatureManagement/TKWF.Ext.FeatureManagement.csproj" />
   </Folder>
@@ -207,3 +213,4 @@
     <Project Path="_Tests/Extension.UserCenter.Tests/TKWF.Ext.UserCenter.Tests.csproj" />
   </Folder>
 </Solution>
+

@@ -108,3 +108,4 @@
 | 日期 | 状态 | 说明 |
 |------|------|------|
 | 2026-10-01 | 📋 提议 | 初稿——随 v0.1.0 开发方案 Oracle 评审（bg_025c18fc）定案：票据实体模型 + 不设 Attempts 列（C4）+ TOTP 无码票据（Q5 裁决） |
+| 2026-10-01 | 🔧 实现修订 | 单次消费**原子化实现路径**定案（Oracle 复核 bg_d97a816a）——`IsConsumed` 原子翻转经 DataService 分部注入 `IFreeSql` 单语句条件 UPDATE（`WHERE IsConsumed=false` + 影响行数判定，引擎级原子，红线逃生口）；详见 [ADR-MFA-原子消费与数据访问红线例外](./ADR-MFA-原子消费与数据访问红线例外.md)；v0.2.0 待主框架 `UpdateWhereAsync` 原语替换 |

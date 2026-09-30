@@ -46,11 +46,15 @@ public class ApprovalExtensionInitializerTests
         services.AddScoped<IEntityDAC<ApprovalTaskEntity>>(sp => new FreeSqlEntityDAC<ApprovalTaskEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<ApprovalAppendEntity>>(sp => new FreeSqlEntityDAC<ApprovalAppendEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<ApprovalCCEntity>>(sp => new FreeSqlEntityDAC<ApprovalCCEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        // V0.3.0 VEntity：ApprovalTaskViewDataService（ADR61 自动注册镜像——只读 DAC 驱动；
+        // 显式注册 IEntityReadOnlyDAC 接口（DI 严格按请求类型匹配，IEntityDAC 子接口不自动匹配父接口））
+        services.AddScoped<IEntityReadOnlyDAC<ApprovalTaskView>>(sp => new FreeSqlEntityDAC<ApprovalTaskView>(sp.GetRequiredService<UnitOfWorkManager>()));
         AddTestConstructibleDataService<ApprovalFlowEntityDataService>(services);
         AddTestConstructibleDataService<ApprovalInstanceEntityDataService>(services);
         AddTestConstructibleDataService<ApprovalTaskEntityDataService>(services);
         AddTestConstructibleDataService<ApprovalAppendEntityDataService>(services);
         AddTestConstructibleDataService<ApprovalCCEntityDataService>(services);
+        AddTestConstructibleDataService<ApprovalTaskViewDataService>(services);
         services.AddSingleton<TKW.Framework.Domain.Transactions.ITransactionManager>(
             new NoopTransactionManager());
         services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus>(

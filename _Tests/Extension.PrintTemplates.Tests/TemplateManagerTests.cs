@@ -10,13 +10,9 @@ namespace TKWF.Ext.PrintTemplates.Tests;
 /// </summary>
 public class TemplateManagerTests
 {
-    /// <summary>创建 Manager（真实 Store + 真实 Renderer，默认 Options）。</summary>
+    /// <summary>创建 Manager（真实 Store + 真实 Renderer + VEntity 只读 DataService，默认 Options）。</summary>
     private static TemplateManager CreateManager(IFreeSql fsql)
-    {
-        var store = TemplateTestSupport.CreateStore(fsql);
-        var renderer = new ScribanTemplateRenderer(new PrintTemplatesOptions());
-        return new TemplateManager(store, renderer);
-    }
+        => TemplateTestSupport.CreateManager(fsql);
 
     private static Dictionary<string, object?> RenderModel(string name = "Alice")
         => new()
@@ -179,6 +175,97 @@ public class TemplateManagerTests
         var result = await manager.RenderAsync("k", RenderModel("Alice"), "1.0.0");
 
         Assert.Equal("v1-Alice", result);
+    }
+
+    // ── V0.2.0 VEntity 化（N3/N4/N5）：读路径单查询 JOIN 下推 DB（2 往返 → 1 往返）──
+
+    /// <summary>
+    /// N3：GetVersionAsync(key, version) 单查询返回视图实体（含 Key/TemplateName——当前返回面缺失的核心收益）。
+    /// <para>预建模板（自定义 Name）→ 证明视图 JOIN 从 PrintTemplate 表取 Key/TemplateName，而非自动建模板的 Name=Key。</para>
+    /// </summary>
+    [Fact]
+    public async Task GetVersionAsync_SingleQuery_ReturnsViewWithKeyAndTemplateName()
+    {
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var manager = CreateManager(fsql);
+
+        var store = TemplateTestSupport.CreateStore(fsql);
+        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "tpl desc" });
+        var tpl = await store.GetByKeyAsync("Invoice.Standard");
+        await store.UpsertVersionAsync(new PrintTemplateVersionEntity
+        {
+            TemplateId = tpl!.Id,
+            Version = "1.0.0",
+            Content = "Hello {{ model.Name }}",
+            Status = PrintTemplateVersionStatus.Active,
+            Description = "ver desc"
+        });
+
+        var ver = await manager.GetVersionAsync("Invoice.Standard", "1.0.0");
+
+        Assert.NotNull(ver);
+        Assert.Equal("Invoice.Standard", ver!.Key);          // 核心收益：模板键（视图外层过滤键）
+        Assert.Equal("标准发票", ver.TemplateName);           // 核心收益：模板名（旧实体返回面缺失）
+        Assert.Equal("1.0.0", ver.Version);
+        Assert.Equal(PrintTemplateVersionStatus.Active, ver.Status);
+        Assert.Equal("Hello {{ model.Name }}", ver.Content);
+        Assert.Equal("ver desc", ver.Description);
+        Assert.Equal("tpl desc", ver.TemplateDescription);
+    }
+
+    /// <summary>
+    /// N4：GetActiveVersionAsync(key) 返回 Active 版本（状态过滤下推 DB）。
+    /// <para>同模板下 Archived + Active 并存 → 视图谓词 v.Status == Active 下推，仅返回 Active 行。</para>
+    /// </summary>
+    [Fact]
+    public async Task GetActiveVersionAsync_SingleQuery_ReturnsActive()
+    {
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+        var manager = CreateManager(fsql);
+
+        await manager.PublishAsync("k", "v1");
+        await manager.PublishAsync("k", "v2"); // 1.0.0 → Archived，1.1.0 → Active
+
+        var active = await manager.GetActiveVersionAsync("k");
+
+        Assert.NotNull(active);
+        Assert.Equal("1.1.0", active!.Version);
+        Assert.Equal(PrintTemplateVersionStatus.Active, active.Status);
+        Assert.Equal("k", active.Key);
+    }
+
+    /// <summary>
+    /// N5：RenderAsync 渲染路径单查询（内部 GetActiveVersionAsync 走 vw_PrintTemplateVersionView，读取视图行 Content）。
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_VEntityPath_RendersContentFromView()
+    {
+        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
+        TemplateTestSupport.SyncStructure(fsql);
+
+        var store = TemplateTestSupport.CreateStore(fsql);
+        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k", Name = "自定义模板名" });
+        var tpl = await store.GetByKeyAsync("k");
+        await store.UpsertVersionAsync(new PrintTemplateVersionEntity
+        {
+            TemplateId = tpl!.Id,
+            Version = "1.0.0",
+            Content = "{{ model.Name }} 你好",
+            Status = PrintTemplateVersionStatus.Active
+        });
+
+        var manager = CreateManager(fsql);
+
+        // JOIN 核心收益再确认（渲染取数同源：vw_PrintTemplateVersionView）
+        var active = await manager.GetActiveVersionAsync("k");
+        Assert.NotNull(active);
+        Assert.Equal("自定义模板名", active!.TemplateName);
+
+        var result = await manager.RenderAsync("k", RenderModel("Alice"));
+
+        Assert.Equal("Alice 你好", result);
     }
 }
 

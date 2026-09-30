@@ -3,8 +3,8 @@
 > **系列**：框架实战教学（开篇见 [`01-扩展模块最优解探索-Schema级数据组合-开篇.md`](./01-扩展模块最优解探索-Schema级数据组合-开篇.md)）
 > **案例定位**：倒推路线图（§八）首个 🟢 优先落地案例——**纯投影聚合优先 VEntity**（F2 措辞澄清的实证）
 > **涉及扩展**：`TKWF.Ext.Approval`（当前 V0.2.2）→ 目标 V0.3.0；`TKWF.Ext.PrintTemplates`（当前 V0.1.2）→ 目标 V0.2.0
-> **状态**：📋 已评审（**oracle3 PASS WITH CONDITIONS**——C1-C4 裁定通过；评审修订 C-high-1/2 + C-med-3/4 已采纳，C-low-5/6 实施时补全，P1-P5 已纳入）
-> **版本**：v0.1.1
+> **状态**：✅ 已实施（oracle3 PASS WITH CONDITIONS——C1-C4 裁定通过；评审修订 C-high-1/2 + C-med-3/4 已采纳，C-low-5/6 实施时补全，P1-P5 已纳入；2026-10-01 实施完成）
+> **版本**：v0.1.2
 
 ---
 
@@ -248,6 +248,7 @@ partial class ApprovalTaskViewDataService(IDomainUser user, IEntityReadOnlyDAC<A
 |------|------|---------|
 | 2026-09-30 | v0.1.0-draft | 初始草案——基于 bg_c3d6fa47（Approval+PrintTemplates 细节探针）精确代码引用 + bg_6dbfbdb2（扩展实践摩擦）写路径划界确认 |
 | 2026-09-30 | v0.1.1 | **oracle3 评审 PASS WITH CONDITIONS（`bg_59cc1308`）6 条件 + 5 建议全采纳**——修订 C-high-1（§一目标拆分：PrintTemplates 真消除往返 / Approval 任务链下推+投影下沉，实例查询保留净 2 次）+ C-high-2（§五/§六/§七 Store 实体读方法"保留不动"统一——写路径强依赖实体回写，改视图不可行）+ C-med-3（§2.1/§五/§八 ApprovalManager 6 处→5 处任务链聚合 + 1 处 CC 事件查询 L856）+ C-med-4（§四 C4 理由补 Notifications 先例回溯审查清单）；C-low-5/6（实施前补全项入 §九）+ P1-P5（§九 实施前补全项：SQLite ViewSql 全文/视图实体显式属性/投影排除 Content/类型一致/SelectAsync 签名核对/项目宿主 ProjectMetaContext/ADR 落档） |
+| 2026-10-01 | v0.1.2 | **实施完成**——Approval v0.3.0 + PrintTemplates v0.2.0 全部落地：`vw_ApprovalTaskView`（21 列，JOIN 任务→实例）+ `vw_PrintTemplateVersionView`（12 列含 Key/TemplateName，JOIN 版本→模板）+ 两手写只读 DataService（`IEntityReadOnlyDAC` 红线合规）+ QueryService/ITemplateManager 改造（C3 返回类型变更）+ 测试宿主建 SQLite 真实视图 + N1-N5 用例；写路径零触碰（ApprovalManager 5 处任务链聚合 + 1 处 CC 事件查询 + TemplateManager 3 写方法 diff 为空）；ADR-Approval/PrintTemplates-敏感视图经门面暴露策略 落档；使用指南补 VEntity 章节 + 生产 DBA 要求；测试 Approval 72→74 / PrintTemplates 29→33 + 全量回归零失败；注：xCodeGen DtoEmpty 模板缺陷（骨架缺 `using System.Collections.Generic`）实施时手动修复，模板源待主框架双修（同 EntityEmpty 2026-09-14 先例） |
 
 ---
 

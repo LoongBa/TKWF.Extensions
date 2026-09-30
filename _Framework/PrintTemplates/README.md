@@ -1,8 +1,8 @@
 # TKWF.Ext.PrintTemplates 打印模板引擎与版本化扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (Scriban 沙箱渲染 + 模板版本化) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (Scriban 沙箱渲染 + 模板版本化 + VEntity 读模型) | **框架**: .NET 10
 
-**核心约束**: Scriban 沙箱契约（操作者可编辑安全）、Draft/Active/Archived 版本生命周期、`{Key}@{Version}` 审计固定渲染、存储异常传播不静默（审计关键）、SG1 声明式实体
+**核心约束**: Scriban 沙箱契约（操作者可编辑安全）、Draft/Active/Archived 版本生命周期、`{Key}@{Version}` 审计固定渲染、存储异常传播不静默（审计关键）、SG1 声明式实体、**V0.2.0 读路径 VEntity 化（`vw_PrintTemplateVersionView` JOIN 单查询 + 敏感视图经门面）**
 
 ---
 
@@ -105,19 +105,18 @@ Draft（草稿）──── Publish ────→ Active（唯一）──�
 
 ## 七、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
-- 双实体（`PrintTemplate` + `PrintTemplateVersion`）SG1 声明式 + FreeSql 持久化，slnx/CPM 接线完成
-- **Scriban 7.0.0** 唯一内置引擎（BSD-2-Clause，首个非存储类第三方运行时依赖，ADR 已裁定）
-- 沙箱渲染：MemberFilter 白名单 + 无 TemplateLoader + 递归转换 + 解析缓存 + 执行限制
-- 版本化门面：自动 minor 递增 + Draft/Active/Archived + 唯一约束 + 审计固定渲染
-- 消费方一包可用：ProjectReference + `[TKWFEnabledExtension]` 白名单声明即接线（TryAdd 三件套）
-- 测试/文档/审核：`Extension.PrintTemplates.Tests` 项目 + `ConsumerHostInitializer` 样板就绪（对齐 V4.9.85 消费方启用模型）；按开发方案 **29 用例**规划（Renderer 沙箱 8 / Store 7 / Manager 10 / Initializer 4）与 README/使用指南（本文）同步进行
+### V0.2.0（当前，VEntity 化）
+- **读路径 VEntity 化（02 倒推优化方案）**：`GetVersionAsync`/`GetActiveVersionAsync`/`ListVersionsAsync`/`RenderAsync` 经 `vw_PrintTemplateVersionView`（JOIN 版本→模板，12 投影列含 **Key/TemplateName 核心收益**）单查询下推 DB——**2 次往返 → 1 次**（真消除往返）；返回类型 `PrintTemplateVersionEntity` → `PrintTemplateVersionView`（C3 签名变更，用户裁定内部测试无历史负担接受）
+- **敏感视图经门面**：`ExposeGraphqlQuery = false`（含模板正文 Content 商业资产；ADR-PrintTemplates-敏感视图经门面暴露策略）；数据访问统一经 `ITemplateManager`
+- **写路径零触碰**：`PublishAsync`/`DraftAsync`/`ArchiveAsync` 仍经 Store 实体读方法（VEntity 只读禁写——Status/Content 回写需实体，oracle3 C-high-2）
+- **生产部署**：`SyncViewsAsync` 仅开发自动建视图；生产需 DBA 手动执行 ViewSql（PG 方言 + SQLite 开发变体）
+- 测试：33/33（原 29 + N3/N4/N5）
 
-### V0.2.0（候选，能力完善）
-- 显式 SemVer 版本号指定（v0.1.0 仅自动 minor 递增；手动版本号允许并发小版本/补丁发布）
+### V0.3.0（候选，能力完善）
+- 显式 SemVer 版本号指定（当前仅自动 minor 递增；手动版本号允许并发小版本/补丁发布）
 - 设计期 git-tracked 模板文件（embedded/VFS，对齐 ABP `VirtualFileTemplateContentContributor`）+ DB 覆盖模型（租户覆盖默认模板 + 权限门控）
-- 模板启用/禁用管理（`IsEnabled` schema 列 + 管理 API，v0.1.0 schema 不含该列）
-- 管理 UI（模板编辑界面——v0.1.0 提供 Manager API 供 UI 调用）
+- 模板启用/禁用管理（`IsEnabled` schema 列 + 管理 API，当前 schema 不含该列）
+- 管理 UI（模板编辑界面——当前提供 Manager API 供 UI 调用）
 - 发布审计完善：`PublishedBy` 链路写入（接消费方当前用户上下文）
 - 模板本地化（多语言模板正文）+ 模板导出/导入
 
@@ -141,4 +140,4 @@ Draft（草稿）──── Publish ────→ Active（唯一）──�
 
 ---
 
-**文档信息**: V0.1.0 | 2026-09-06 | 关联：ADR-PrintTemplates-模板引擎选型与版本化.md、v0.1.0-PrintTemplates-打印模板引擎与版本化-开发方案.md（主框架私有）、[打印模板扩展-使用指南](../../docs/PrintTemplates/打印模板扩展-使用指南.md)
+**文档信息**: V0.2.0 | 2026-10-01 | 关联：ADR-PrintTemplates-模板引擎选型与版本化.md、ADR-PrintTemplates-敏感视图经门面暴露策略.md（v0.2.0）、02-倒推优化方案（docs/框架实战教学/）、v0.1.0-PrintTemplates-打印模板引擎与版本化-开发方案.md（主框架私有）、[打印模板扩展-使用指南](../../docs/PrintTemplates/打印模板扩展-使用指南.md)

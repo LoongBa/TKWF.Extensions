@@ -14,11 +14,13 @@ namespace TKWF.Ext.PrintTemplates
     {
         private readonly ITemplateStore _store;
         private readonly ITemplateRenderer _renderer;
+        private readonly PrintTemplateVersionViewDataService _viewDataService;
 
-        public TemplateManager(ITemplateStore store, ITemplateRenderer renderer)
+        public TemplateManager(ITemplateStore store, ITemplateRenderer renderer, PrintTemplateVersionViewDataService viewDataService)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+            _viewDataService = viewDataService ?? throw new ArgumentNullException(nameof(viewDataService));
         }
 
         /// <inheritdoc />
@@ -28,33 +30,21 @@ namespace TKWF.Ext.PrintTemplates
         }
 
         /// <inheritdoc />
-        public async Task<PrintTemplateVersionEntity?> GetVersionAsync(string key, string version, CancellationToken ct = default)
-        {
-            var template = await _store.GetByKeyAsync(key, ct);
-            if (template == null) return null;
-            return await _store.GetVersionAsync(template.Id, version, ct);
-        }
+        public async Task<PrintTemplateVersionView?> GetVersionAsync(string key, string version, CancellationToken ct = default)
+            => await _viewDataService.GetVersionByKeyAsync(key, version, ct);
 
         /// <inheritdoc />
-        public async Task<PrintTemplateVersionEntity?> GetActiveVersionAsync(string key, CancellationToken ct = default)
-        {
-            var template = await _store.GetByKeyAsync(key, ct);
-            if (template == null) return null;
-            return await _store.GetActiveVersionAsync(template.Id, ct);
-        }
+        public async Task<PrintTemplateVersionView?> GetActiveVersionAsync(string key, CancellationToken ct = default)
+            => await _viewDataService.GetActiveVersionByKeyAsync(key, ct);
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<PrintTemplateVersionEntity>> ListVersionsAsync(string key, CancellationToken ct = default)
-        {
-            var template = await _store.GetByKeyAsync(key, ct);
-            if (template == null) return Array.Empty<PrintTemplateVersionEntity>();
-            return await _store.ListVersionsAsync(template.Id, ct);
-        }
+        public async Task<IReadOnlyList<PrintTemplateVersionView>> ListVersionsAsync(string key, CancellationToken ct = default)
+            => await _viewDataService.ListVersionsByKeyAsync(key, ct);
 
         /// <inheritdoc />
         public async Task<string> RenderAsync(string key, IReadOnlyDictionary<string, object?> model, string? version = null, CancellationToken ct = default)
         {
-            PrintTemplateVersionEntity? ver;
+            PrintTemplateVersionView? ver;
             if (version == null)
             {
                 ver = await GetActiveVersionAsync(key, ct);

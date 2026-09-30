@@ -14,7 +14,8 @@ namespace TKWF.Ext.Approval;
 /// </summary>
 internal sealed class ApprovalQueryService(
     ApprovalInstanceEntityDataService instanceDataService,
-    ApprovalTaskEntityDataService taskDataService) : IApprovalQueryService
+    ApprovalTaskEntityDataService taskDataService,
+    ApprovalTaskViewDataService taskViewDataService) : IApprovalQueryService
 {
     /// <inheritdoc />
     public async Task<ApprovalInstancePagedResult> GetInstancesAsync(ApprovalInstanceQueryInput input, CancellationToken ct = default)
@@ -66,10 +67,8 @@ internal sealed class ApprovalQueryService(
         var instance = await instanceDataService.EntityGetAsync(i => i.Id == instanceId, ct);
         if (instance == null) return null;
 
-        // 查询任务链
-        var tasks = await taskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId,
-            0, 10000, q => q.OrderBy(t => t.StepIndex).ThenBy(t => t.Id), ct);
+        // 查询任务链（V0.3.0 VEntity：vw_ApprovalTaskView JOIN 下推 DB，携带 Instance 列，替代任务链两步查询）
+        var tasks = await taskViewDataService.GetTasksByInstanceIdAsync(instanceId, ct);
 
         return new ApprovalInstanceDetailDto
         {
@@ -129,5 +128,24 @@ internal sealed class ApprovalQueryService(
         Comment = t.Comment,
         TransferredTo = t.TransferredTo,
         CreateTime = t.CreateTime
+    };
+
+    // V0.3.0 VEntity 视图行映射（视图列名 TaskCreateTime → DTO CreateTime；13 字段 DTO 面保持不变，
+    // View→DTO 映射在 QueryService 内——方案 §五）。实体重载保留给 GetPendingTasksAsync（DB 级分页不动）。
+    private static ApprovalTaskListItemDto MapToTaskListItemDto(ApprovalTaskView t) => new()
+    {
+        Id = t.Id,
+        InstanceId = t.InstanceId,
+        StepIndex = t.StepIndex,
+        StepName = t.StepName,
+        ApproverType = t.ApproverType,
+        ApproverValue = t.ApproverValue,
+        ApproverUserId = t.ApproverUserId,
+        Status = t.Status,
+        ApprovedAt = t.ApprovedAt,
+        ApprovedBy = t.ApprovedBy,
+        Comment = t.Comment,
+        TransferredTo = t.TransferredTo,
+        CreateTime = t.TaskCreateTime
     };
 }

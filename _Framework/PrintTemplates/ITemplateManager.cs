@@ -13,14 +13,24 @@ namespace TKWF.Ext.PrintTemplates
         /// <summary>按模板键查询模板。</summary>
         Task<PrintTemplateEntity?> GetTemplateAsync(string key, CancellationToken ct = default);
 
-        /// <summary>按模板键 + 版本号查询版本（精确版本，审计用）。</summary>
-        Task<PrintTemplateVersionEntity?> GetVersionAsync(string key, string version, CancellationToken ct = default);
+        /// <summary>
+        /// 按模板键 + 版本号查询版本（精确版本，审计用）。
+        /// <para>V0.2.0（VEntity 化，C3）：返回 <see cref="PrintTemplateVersionView"/> 视图实体——携带模板
+        /// <c>Key</c>/<c>TemplateName</c>（旧实体返回面缺失），单查询 JOIN 下推 DB。</para>
+        /// </summary>
+        Task<PrintTemplateVersionView?> GetVersionAsync(string key, string version, CancellationToken ct = default);
 
-        /// <summary>按模板键查询当前 Active 版本（最新激活）。</summary>
-        Task<PrintTemplateVersionEntity?> GetActiveVersionAsync(string key, CancellationToken ct = default);
+        /// <summary>
+        /// 按模板键查询当前 Active 版本（最新激活）。
+        /// <para>V0.2.0（VEntity 化，C3）：返回 <see cref="PrintTemplateVersionView"/> 视图实体，状态过滤下推 DB。</para>
+        /// </summary>
+        Task<PrintTemplateVersionView?> GetActiveVersionAsync(string key, CancellationToken ct = default);
 
-        /// <summary>按模板键列出所有版本（按版本号倒序）。</summary>
-        Task<IReadOnlyList<PrintTemplateVersionEntity>> ListVersionsAsync(string key, CancellationToken ct = default);
+        /// <summary>
+        /// 按模板键列出所有版本（按版本号倒序）。
+        /// <para>V0.2.0（VEntity 化，C3）：返回 <see cref="PrintTemplateVersionView"/> 视图实体列表；Key 不存在返回空列表。</para>
+        /// </summary>
+        Task<IReadOnlyList<PrintTemplateVersionView>> ListVersionsAsync(string key, CancellationToken ct = default);
 
         /// <summary>
         /// 渲染：version=null → 最新 Active；version 非空 → 精确固定（审计用）。

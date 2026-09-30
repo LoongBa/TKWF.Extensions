@@ -29,7 +29,7 @@ internal static class ApprovalTestSupport
             .Build();
     }
 
-    /// <summary>同步五张表结构（Flow + Instance + Task + Append + CC）。</summary>
+    /// <summary>同步五张表结构 + VEntity 真实视图（Flow + Instance + Task + Append + CC + vw_ApprovalTaskView）。</summary>
     public static void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<ApprovalFlowEntity>();
@@ -37,6 +37,16 @@ internal static class ApprovalTestSupport
         fsql.CodeFirst.SyncStructure<ApprovalTaskEntity>();
         fsql.CodeFirst.SyncStructure<ApprovalAppendEntity>();
         fsql.CodeFirst.SyncStructure<ApprovalCCEntity>();
+        // V0.3.0 VEntity：建真实视图（SQLite 方言，来自 ApprovalTaskView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync。
+        // 注意：Approval 全部 DateTime 列（非 DateTimeOffset），SQLite 直接引用真实列，无需 NULL 占位
+        fsql.Ado.ExecuteNonQuery(
+            @"CREATE VIEW IF NOT EXISTS ""vw_ApprovalTaskView"" AS
+SELECT t.""Id"", t.""InstanceId"", t.""StepIndex"", t.""StepName"", t.""ApproverType"", t.""ApproverValue"",
+       t.""ApproverUserId"", t.""Status"", t.""ApprovedAt"", t.""ApprovedBy"", t.""Comment"", t.""TransferredTo"",
+       t.""CreateTime"" AS ""TaskCreateTime"", i.""BusinessType"", i.""BusinessId"", i.""Status"" AS ""InstanceStatus"",
+       i.""IsActive"", i.""CurrentStepIndex"", i.""Submitter"", i.""FlowCode"", i.""CreateTime"" AS ""InstanceCreateTime""
+FROM ""ApprovalTask"" t
+INNER JOIN ""ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""");
     }
 
     /// <summary>构造 ApprovalTestHost（完整 DI 容器 + 真实 DataService + NoopTransactionManager + 事件收集）。</summary>
@@ -60,6 +70,7 @@ internal sealed class ApprovalTestHost : IDisposable
     public ApprovalTaskEntityDataService TaskDataService => _serviceProvider.GetRequiredService<ApprovalTaskEntityDataService>();
     public ApprovalAppendEntityDataService AppendDataService => _serviceProvider.GetRequiredService<ApprovalAppendEntityDataService>();
     public ApprovalCCEntityDataService CcDataService => _serviceProvider.GetRequiredService<ApprovalCCEntityDataService>();
+    public ApprovalTaskViewDataService TaskViewDataService => _serviceProvider.GetRequiredService<ApprovalTaskViewDataService>();
     public IApprovalTimeoutService TimeoutService => _serviceProvider.GetRequiredService<IApprovalTimeoutService>();
     public EventCollector Events => _serviceProvider.GetRequiredService<EventCollector>();
 
@@ -99,6 +110,10 @@ internal sealed class ApprovalTestHost : IDisposable
         services.AddSingleton(sp =>
             new ApprovalCCEntityDataService(
                 stubUser, new FreeSqlEntityDAC<ApprovalCCEntity>(new UnitOfWorkManager(fsql))));
+        // V0.3.0 VEntity：只读 DataService（IEntityReadOnlyDAC 驱动，红线合规）
+        services.AddSingleton(sp =>
+            new ApprovalTaskViewDataService(
+                stubUser, new FreeSqlEntityDAC<ApprovalTaskView>(new UnitOfWorkManager(fsql))));
 
         // 默认审批人解析器
         services.TryAddScoped<IApprovalAssigneeResolver, DefaultApprovalAssigneeResolver>();

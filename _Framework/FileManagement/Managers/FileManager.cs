@@ -323,6 +323,8 @@ namespace TKWF.Ext.FileManagement
             if (blob == null)
                 throw new InvalidOperationException("Blob 存储不可用（上传失败）");
 
+            long fileSize = blob.Size > 0 ? blob.Size : copy.Length;   // 主表 Size 基准（catch 分支亦引用——作用域提到 try 外）
+
             // 元数据落库（事务包裹）——任何失败 best-effort 清理 Blob + rethrow
             try
             {
@@ -341,7 +343,6 @@ namespace TKWF.Ext.FileManagement
                     //   已有文件 + 内容变化 → UpdateAsync 主表指针 + 新版本 max+1
                     //   Sha256 相同（Deduplicate=false 路径）→ 幂等返回既有（不产生冗余版本行）
                     var existing = await _fileStore.GetByFolderAndNameAsync(folderId, fileName, ct);
-                    long fileSize = blob.Size > 0 ? blob.Size : copy.Length;
 
                     if (existing == null)
                     {
@@ -368,15 +369,8 @@ namespace TKWF.Ext.FileManagement
 
                     if (existing.Sha256 != sha256)
                     {
-                        // 新版本：主表指针更新 + 版本行 max+1
-                        existing.StoredPath = blob.Path;
-                        existing.Sha256 = sha256;
-                        existing.Size = fileSize;
-                        existing.UpdateTime = DateTime.UtcNow;
-                        await _fileStore.UpdateAsync(existing, ct);
-
-                        int nextVersion = await _versionStore.GetMaxVersionAsync(existing.Id, ct) + 1;
-                        await CreateVersionRowAsync(existing.Id, nextVersion, blob.Path, extension, resolvedContentType, fileSize, sha256, ct);
+                        // 新版本：主表指针更新 + 版本行 max+1（V0.3.0 抽取 ApplyNewVersionAsync——并发约束败者重试复用同一分支）
+                        await ApplyNewVersionAsync(existing, blob, extension, resolvedContentType, fileSize, sha256, ct);
                         await scope.CommitAsync(ct);
                         return existing;
                     }
@@ -396,13 +390,19 @@ namespace TKWF.Ext.FileManagement
             }
             catch (Exception ex) when (IsUniqueConstraintViolation(ex))
             {
-                // 并发同目录同名上传 / 并发版本号冲突（D17/P2-5）：唯一约束败者——补偿删除 Blob + 转业务异常
-                // Oracle P2-3：区分两种约束冲突消息——版本表 UX_mfv_file_version（并发版本号）vs
-                // 主表 UX_ManagedFile_Folder_Name（目录内同名）；异常消息含表名可判别
-                await TryCleanupBlobAsync(blob.Path, ct);
-                var isVersionConflict = ex.Message.Contains("ManagedFileVersion", StringComparison.OrdinalIgnoreCase);
-                throw new InvalidOperationException(
-                    isVersionConflict ? "并发版本号冲突，请重试" : "该目录下已存在同名文件", ex);
+                // 并发同目录同名上传 / 并发版本号冲突（D17/P2-5）——唯一约束败者，V0.3.0 加固：
+                // 版本表 UX_mfv_file_version 冲突（并发版本号）→ 补偿删 Blob + 业务异常（重试语义，行为不变）；
+                // 主表 UX_ManagedFile_Folder_Name 冲突（并发首插——预查读到旧快照）→ 重查既有行按内容决策：
+                //   同 SHA256 → 幂等返回既有（同内容并发不再抛"已存在同名文件"，竞态加固核心）；
+                //   不同内容 → 复用已写 Blob 追加新版本（对齐版本化 Upsert 语义，不再误报"同名文件"）
+                if (IsVersionConstraintViolation(ex))
+                {
+                    await TryCleanupBlobAsync(blob.Path, ct);
+                    throw new InvalidOperationException("并发版本号冲突，请重试", ex);
+                }
+
+                return await ResolveConcurrentCreateConflictAsync(
+                    folderId, fileName, sha256, blob, extension, resolvedContentType, fileSize, ct);
             }
             catch
             {
@@ -431,6 +431,87 @@ namespace TKWF.Ext.FileManagement
             };
             await _versionStore.CreateAsync(versionEntity, ct);
         }
+
+        /// <summary>
+        /// 上传 Upsert"已有文件 + 内容变化"分支核心（V0.3.0 抽取）——主表指针切新 Blob + 版本行 max+1。
+        /// <para>不触碰事务：调用方（主流程既有 scope / 并发冲突重试新 scope）负责 Commit/Rollback。</para>
+        /// </summary>
+        private async Task ApplyNewVersionAsync(
+            ManagedFileEntity existing, BlobInfo blob, string extension, string resolvedContentType,
+            long fileSize, string sha256, CancellationToken ct)
+        {
+            existing.StoredPath = blob.Path;
+            existing.Sha256 = sha256;
+            existing.Size = fileSize;
+            existing.UpdateTime = DateTime.UtcNow;
+            await _fileStore.UpdateAsync(existing, ct);
+
+            int nextVersion = await _versionStore.GetMaxVersionAsync(existing.Id, ct) + 1;
+            await CreateVersionRowAsync(existing.Id, nextVersion, blob.Path, extension, resolvedContentType, fileSize, sha256, ct);
+        }
+
+        /// <summary>
+        /// V0.3.0 并发加固：主表 UX_ManagedFile_Folder_Name 唯一约束败者（并发首插——预查读到旧快照）——
+        /// 重查既有行按内容决策：同 SHA256 → 幂等返回既有（补偿删自 Blob，不产生冗余版本行）；
+        /// 不同内容 → 复用已写 Blob 走"已有文件 + 内容变化"新版本分支（原事务已回滚，新起事务；对齐上传事务包裹语义）。
+        /// <para>重试分支若撞版本表 UX_mfv_file_version（三方并发同文件加版本）→ 补偿删 Blob + "并发版本号冲突"业务异常；
+        /// 其他失败（D16 补偿语义）→ 补偿删 Blob + rethrow。</para>
+        /// </summary>
+        private async Task<ManagedFileEntity> ResolveConcurrentCreateConflictAsync(
+            long? folderId, string fileName, string sha256, BlobInfo blob,
+            string extension, string resolvedContentType, long fileSize, CancellationToken ct)
+        {
+            var existing = await _fileStore.GetByFolderAndNameAsync(folderId, fileName, ct);
+            if (existing == null)
+            {
+                // 防御（约束冲突必有行——理论不可达，仅并发删除竞态下可能出现）：补偿删 Blob + 业务异常
+                await TryCleanupBlobAsync(blob.Path, ct);
+                throw new InvalidOperationException("并发上传冲突，请重试");
+            }
+
+            if (existing.Sha256 == sha256)
+            {
+                // 同内容并发——幂等返回既有（补偿删自 Blob，不产生冗余版本行，语义对齐去重分支）
+                await TryCleanupBlobAsync(blob.Path, ct);
+                _logger.LogInformation("并发上传同内容命中既有（唯一约束败者）：文件 {Id} 幂等返回", existing.Id);
+                return existing;
+            }
+
+            // 不同内容并发——复用已写 Blob 追加新版本（对齐版本化语义；原"该目录下已存在同名文件"误报路径消除）
+            _logger.LogInformation("并发上传不同内容（唯一约束败者）：文件 {Id} 追加新版本", existing.Id);
+            try
+            {
+                using var scope = await _transactionManager.BeginAsync(ct: ct);
+                try
+                {
+                    await ApplyNewVersionAsync(existing, blob, extension, resolvedContentType, fileSize, sha256, ct);
+                    await scope.CommitAsync(ct);
+                    return existing;
+                }
+                catch
+                {
+                    await scope.RollbackAsync(ct);
+                    throw;
+                }
+            }
+            catch (Exception retryEx) when (IsVersionConstraintViolation(retryEx))
+            {
+                // 重试分支撞版本号冲突（三方并发）→ 补偿删 Blob + 业务异常（重试语义）
+                await TryCleanupBlobAsync(blob.Path, ct);
+                throw new InvalidOperationException("并发版本号冲突，请重试", retryEx);
+            }
+            catch
+            {
+                // 重试分支其他失败（D16 补偿语义）→ 补偿删 Blob + rethrow
+                await TryCleanupBlobAsync(blob.Path, ct);
+                throw;
+            }
+        }
+
+        /// <summary>判定唯一约束冲突是否来自版本表（UX_mfv_file_version——异常消息含表名判别，Oracle P2-3）。</summary>
+        private static bool IsVersionConstraintViolation(Exception ex)
+            => IsUniqueConstraintViolation(ex)
+               && ex.Message.Contains("ManagedFileVersion", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>V0.2.0 配额检查（上传步骤 7.5——Blob 落盘前，预检前移避免浪费 IO）+ V0.3.0 用户级配额：
         /// 目录文件数 / 目录容量 / 全局容量（V0.2.0）+ 用户文件数 / 用户容量（V0.3.0）——键可空（null 不限制）；超限 → InvalidOperationException（含配额信息）。

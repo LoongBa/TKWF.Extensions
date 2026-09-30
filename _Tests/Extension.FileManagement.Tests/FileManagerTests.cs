@@ -362,7 +362,11 @@ public class FileManagerTests
     {
         // V0.2.0：同内容并发（Deduplicate=false）——后完成者读到先行者已提交（同 SHA256）→ 幂等返回既有；
         // 不再撞 UX 约束抛异常（v0.1.0 旧行为——版本化后同名同内容幂等）
-        using var host = FileManagementTestHost.Create(options: new FileManagementOptions { Deduplicate = false });
+        // V0.3.0 加固：主表 UX 约束败者重查按内容决策——同内容幂等返回（原"已存在同名文件"误报路径消除）
+        // 文件模式 SQLite（多连接共享，FreeSql ObjectPool 正常出借——:memory: 单连接池并发争用
+        // ObjectPool.Get() 可能超时 10s，对齐 FileVersionManager 并发版本上传测试先例）
+        using var host = FileManagementTestHost.CreateFile(out _,
+            options: new FileManagementOptions { Deduplicate = false });
         var folder = await host.CreateFolderAsync("docs", "文档");
 
         var results = await Task.WhenAll(new[]
@@ -378,6 +382,34 @@ public class FileManagerTests
         Assert.Equal(2, success.Count);
         Assert.Single(success.Select(r => r.File!.Id).Distinct());   // 同一文件
         Assert.Equal(1, host.BlobCount());    // 仅 1 个 Blob（内容相同不重复写）
+    }
+
+    [Fact]
+    public async Task ConcurrentUpload_SameFolderSameName_DifferentContent_BothSucceed_TwoVersions()
+    {
+        // V0.3.0 竞态加固：同目录同名不同内容并发（Deduplicate=false）——主表 UX 约束败者不再抛"已存在同名文件"，
+        // 重查既有行按内容决策 → 复用已写 Blob 追加新版本（对齐版本化 Upsert 语义）；
+        // 两种交错时序（败者预查读到旧快照 / 读到胜者已提交）均收敛到同 Id + 双版本 + 双 Blob
+        // 文件模式 SQLite（同上一用例——:memory: 单连接池并发争用超时先例）
+        using var host = FileManagementTestHost.CreateFile(out _,
+            options: new FileManagementOptions { Deduplicate = false });
+        var folder = await host.CreateFolderAsync("docs", "文档");
+
+        var results = await Task.WhenAll(new[]
+        {
+            UploadCapture(host, folder.Id, HelloBytes),
+            UploadCapture(host, folder.Id, OtherBytes),
+        });
+
+        var success = results.Where(r => r.File is not null).ToList();
+        var failures = results.Where(r => r.Error is not null).ToList();
+
+        Assert.Empty(failures);               // 双成功（败者版本化而非异常）
+        Assert.Equal(2, success.Count);
+        Assert.Single(success.Select(r => r.File!.Id).Distinct());   // 同一文件
+        var versions = await host.Manager.GetFileVersionsAsync(success[0].File!.Id);
+        Assert.Equal(2, versions.Count);      // v1 + v2（败者追加新版本）
+        Assert.Equal(2, host.BlobCount());    // 两内容两个 Blob（胜者 v1 + 败者新版本 v2）
     }
 
     // ── Helpers ──

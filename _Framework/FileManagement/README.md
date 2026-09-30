@@ -1,6 +1,6 @@
 # TKWF.Ext.FileManagement
 
-> TKWF 扩展：**文件管理**——目录树（FileFolder 物化路径）+ 文件元数据（ManagedFile SHA256/去重）+ **文件版本化 + 配额（V0.2.0）** + 上传/下载/删除/重命名/移动门面。
+> TKWF 扩展：**文件管理**——目录树（FileFolder 物化路径）+ 文件元数据（ManagedFile SHA256/去重）+ **文件版本化 + 配额（V0.2.0）** + **用户级配额（V0.3.0，OwnerId 归属维度）** + 上传/下载/删除/重命名/移动门面。
 > 安全校验链：防穿越 + 扩展名白名单 + 大小限制 + SHA256 去重 + ContentType 服务端推导；物理存储委托 `IBlobStorageService`（BlobStoring.Abstractions 契约，不引实现）。
 
 ## 定位
@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.FileManagement` |
-| 版本 | v0.2.0（版本化 + 配额；v0.1.0 零迁移） |
+| 版本 | v0.3.0（用户级配额 + 并发上传竞态加固；v0.2.0 零迁移） |
 | 依赖 | `TKWF.Domain` + `TKWF.Domain.FreeSql`（V0.2.0 配额 SQL 聚合）+ `TKWF.Ext.BlobStoring.Abstractions`（契约，ADR50 L2）+ SG1（框架既有） |
 | 数据 | 表 `FileFolder` + `ManagedFile` + `ManagedFileVersion`（V0.2.0；框架 `SyncTables` 统一建表） |
 
@@ -98,6 +98,8 @@ TKWF.Ext.BlobStoring.IBlobStorageService                 # Abstractions 契约�
 | `MaxFilesPerFolder` | `null`（不限制） | **V0.2.0** 目录文件数上限 |
 | `MaxFolderSizeBytes` | `null`（不限制） | **V0.2.0** 目录容量上限（字节） |
 | `MaxTotalSizeBytes` | `null`（不限制） | **V0.2.0** 全局总容量上限（字节） |
+| `MaxUserFilesCount` | `null`（不限制） | **V0.3.0** 用户文件数上限（OwnerId 归属计数；仅数值型 UserId） |
+| `MaxUserSizeBytes` | `null`（不限制） | **V0.3.0** 用户容量上限（字节；OwnerId 归属求和；仅数值型 UserId） |
 
 ```jsonc
 // appsettings.json
@@ -108,7 +110,9 @@ TKWF.Ext.BlobStoring.IBlobStorageService                 # Abstractions 契约�
       "AllowedExtensions": [".pdf", ".png", ".jpg", ".jpeg", ".docx", ".xlsx" ],
       "MaxFilesPerFolder": 100,            // V0.2.0：目录最多 100 个文件
       "MaxFolderSizeBytes": 1073741824,    // V0.2.0：目录容量 1GB
-      "MaxTotalSizeBytes": 10737418240     // V0.2.0：全局容量 10GB
+      "MaxTotalSizeBytes": 10737418240,    // V0.2.0：全局容量 10GB
+      "MaxUserFilesCount": 1000,           // V0.3.0：用户最多 1000 个文件（仅数值型 UserId）
+      "MaxUserSizeBytes": 10737418240      // V0.3.0：用户容量 10GB（仅数值型 UserId）
     }
   }
 }
@@ -118,12 +122,13 @@ TKWF.Ext.BlobStoring.IBlobStorageService                 # Abstractions 契约�
 
 - **Code 不可变（C3）**：目录 `Path` 由 `Code` 构建（根=`/code/`，子=父 Path+Code+`/`）；重命名只改 `Name`，子树 Path 不重算（O(1)），文件按 `FolderId` 引用不受影响。
 - **可空 FolderId/父目录**：根级文件 = `FolderId` null；DataService 谓词双分支（`HasValue ? 等值 : IS NULL`）——FreeSql 对 null 参数不自动生成 IS NULL，SQL 下推显式处理。
-- **唯一约束即并发边界（P3/P5）**：目录 Code（`UX_FileFolder_Code`）与目录内文件名（`UX_ManagedFile_Folder_Name`）的唯一性由数据库约束兜底；预查仅优化，冲突统一转业务异常（败者补偿清理 Blob）。目录树低频写（百级）——并发 Create 基于过期父快照可能产生 Level/Path 偏差，依赖 `UX_FileFolder_Code` + 最后写入者生效（文档化，对齐 OU）。
+- **唯一约束即并发边界（P3/P5）**：目录 Code（`UX_FileFolder_Code`）与目录内文件名（`UX_ManagedFile_Folder_Name`）的唯一性由数据库约束兜底；预查仅优化，冲突统一转业务异常（败者补偿清理 Blob）。目录树低频写（百级）——并发 Create 基于过期父快照可能产生 Level/Path 偏差，依赖 `UX_FileFolder_Code` + 最后写入者生效（文档化，对齐 OU）。**V0.3.0 并发上传加固**：上传同名并发撞 `UX_ManagedFile_Folder_Name` 的败者**不再一律抛"该目录下已存在同名文件"**——重查既有行按内容决策：同 SHA256 → 幂等返回既有（补偿删自 Blob）；不同内容 → 复用已写 Blob 追加新版本（对齐版本化 Upsert 语义）。版本号并发冲突（`UX_mfv_file_version`）仍转"并发版本号冲突，请重试"业务异常。
 - **SQLite 时间语义**：`DateTime`（UTC）显式声明；FreeSql SQLite 存本地墙钟、读出 `Unspecified`——本扩展文件元数据时间仅记录用途（无范围计算），消费方如需严格 UTC 请自行归一（P4）。
 - **MIME 字典演进（P6）**：`FileManagementMimeMap` 为内部静态字典，新增扩展名在字典 + 白名单各追加一项即可。
 - **BlobStoring 静默模式限制（P7）**：`UploadAsync` 返回 null 表示存储可用性失败 → 本扩展 fail-fast（`InvalidOperationException`），不做静默重试；消费方如启用了 BlobStoring 的静默降级需自行权衡（v0.1.0 无感知）。
 - **版本化语义（V0.2.0）**：上传同名不同内容 → 新版本（`ManagedFileVersionEntity` 版本行，`UX_mfv_file_version` FileId+Version 唯一）；版本行存 `StoredPath` 指针不复制字节（BlobStoring 每次新 guid 路径——旧版本 Blob 天然保留）；回滚 = 主表指针切目标版本 + 新版本行（指针复用，回滚可追溯）；**删除文件清理全部版本行 + Distinct 去重删全部版本 Blob**（回滚共享 StoredPath 不重复删）。**v0.1.0 存量文件在首次 v0.2.0 上传前无版本历史**——回滚仅适用于 v0.2.0 后创建的版本。
 - **配额语义（V0.2.0）**：三配额键可空默认不限制；检查在上传链 Blob 落盘前（预检前移——超限不产生 Blob/补偿）；**并发竞态"先到先得"**（读-比-写非原子，超限最终一致可接受——对齐 ABP 同级缺陷显式声明）。
+- **用户级配额语义（V0.3.0）**：`OwnerId` 归属维度（`IX_ManagedFile_Owner`）——检查顺序契约：用户计数 → 用户容量 → 目录计数 → 目录容量 → 全局容量（最具体 → 最兜底）；**所有权保留**（ADR-FileManagement-用户级配额所有权语义）：`OwnerId` 仅新建分支写入、一经写入不可变（`CanUpdate=false`）——版本化新版本/回滚不动归属（谁首传谁拥有，新版本字节计入原 owner 配额，按主表 Size 单指针求和）；**仅支持数值型 UserId**（非数值静默降级到全局配额兜底 + Warning）；匿名/系统账号跳过用户配额。
 - **去重与版本交互**：SHA256 去重是内容级（同目录同名同内容幂等返回，Deduplicate=false 亦幂等——P1-3 分支 C），版本是文件级（不同内容才新版本）——语义不冲突，去重命中不产生版本。
 
 ## 启用方式（v4.9.85+）
@@ -154,11 +159,13 @@ FileFolder(id BIGINT PK, code VARCHAR(128) UNIQUE, name VARCHAR(128), parent_id 
            level INT, path VARCHAR(1024), sort_order INT, create_time TIMESTAMP, update_time TIMESTAMP)
 ManagedFile(id BIGINT PK, folder_id BIGINT NULL, name VARCHAR(128), stored_path VARCHAR(1024),
             extension VARCHAR(32), content_type VARCHAR(128) NULL, size BIGINT, sha256 VARCHAR(64),
-            uploader_name VARCHAR(128) NULL, create_time TIMESTAMP, update_time TIMESTAMP)
+            uploader_name VARCHAR(128) NULL, owner_id BIGINT NULL,                        -- V0.3.0 用户配额归属（CanUpdate=false）
+            create_time TIMESTAMP, update_time TIMESTAMP)
 ManagedFileVersion(id BIGINT PK, file_id BIGINT, version INT, stored_path VARCHAR(1024),   -- V0.2.0
             extension VARCHAR(32), content_type VARCHAR(128) NULL, size BIGINT, sha256 VARCHAR(64),
             uploader_name VARCHAR(128) NULL, create_time TIMESTAMP)                          -- append-only 不可变
 -- 索引：UX_FileFolder_Code / UX_ManagedFile_Folder_Name（folder_id,name 联合唯一）/ IX_ManagedFile_Sha256
+--      IX_ManagedFile_Owner（owner_id，V0.3.0 用户配额聚合）
 --      UX_mfv_file_version（file_id,version 联合唯一）/ IX_mfv_file（file_id）
 ```
 
@@ -167,6 +174,6 @@ ManagedFileVersion(id BIGINT PK, file_id BIGINT, version INT, stored_path VARCHA
 - 版本表 `CreateTime` `CanUpdate=false`（append-only 不可变记录）；版本行 `StoredPath` 可被多行共享（回滚指针复用）——删除时 Distinct 去重。
 - 生产建表：框架 `SyncTables` 统一托管（ADR49），**无 VEntity/无 DBA 手工 DDL 前置**。
 
-## 后续演进（v0.3.0+ 候选）
+## 后续演进（v0.4.0+ 候选）
 
-用户级配额（`OwnerId` 列 + `IDomainUser` 注入）；权限/ACL（Permissions.Abstractions D7 接线）；目录移动（改挂——子树 Path 重算方案）；版本保留策略（保留 N 版/定期清理旧 Blob——GC）；版本差异（diff）查看；分片/断点续传（BlobStoring 协同）；缩略图/病毒扫描（管道扩展点）；管理 UI。
+权限/ACL（Permissions.Abstractions D7 接线）；目录移动（改挂——子树 Path 重算方案）；版本保留策略（保留 N 版/定期清理旧 Blob——GC）；版本差异（diff）查看；分片/断点续传（BlobStoring 协同）；缩略图/病毒扫描（管道扩展点）；管理 UI。

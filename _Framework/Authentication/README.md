@@ -126,11 +126,14 @@ app.UseHttpAuthentication<MyUserInfo>();
 | **`IWeChatApiClient`** | 微信 API（access_token 缓存 + 并发锁 + 凭证解析） | `WeChatApiClient`（本扩展） |
 | **8 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential | SG1 + xCodeGen（.g.cs 入库） |
 | **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone/ByWechatMpOpenId/ByWechatWebOpenId——返回完整 `AuthAccountEntity`） | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
+| **`IAuthAccountService`（V0.2.0）** | 对外写契约（Create/Update/IncrementTokenVersion/GetByUId——DMP 渐进替换影子账号 upsert，ADR-Authentication-账号写契约） | `AuthAccountService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
 | **`IUserProfileSource`（V0.2.0）** | UserCenter 档案读取契约（AuthAccount 属主终态承接——`GetProfileAsync` 返回 `UserProfileDto`） | `AuthAccountUserProfileSource`（public sealed，本扩展） |
 
 ## 四之二、V0.2.0 查询契约与 UserCenter 承接
 
 **`IAuthAccountQueryService`（查询契约）**——对外只读查询 4 方法（`GetByUIdAsync`/`GetByPhoneAsync`/`GetByWechatMpOpenIdAsync`/`GetByWechatWebOpenIdAsync`），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService`——**红线合规**（零 IFreeSql/IEntityDAC 直注入）。
+
+**`IAuthAccountService`（写契约）**——对外写契约（`CreateAsync`/`UpdateAsync`/`IncrementTokenVersionAsync`/`GetByUIdAsync`——upsert 流单注入便利），实现 `AuthAccountService`（internal sealed）委托 `AuthAccountEntityDataService`；**DMP 渐进替换路径**（ADR-Authentication-账号写契约）：平台管理员影子 AuthAccount（`UId=PlatformAdmin.UId`，`IsEnabled=true`，Phone 可空）由消费端创建/更新/失效——扩展 `TokenService.RefreshTokenAsync`（L196-200）强依赖 AuthAccount 记录。**`AdminDeleteAsync` 不暴露**（破坏性，管理 API 迭代）。
 
 **`AuthAccountUserProfileSource`（UserCenter 终态承接）**——public sealed，实现 `IUserProfileSource`：
 - **映射矩阵**：UserId←UId / Phone←Phone（**原始值**——UserCenter 门面强制脱敏，实现方不得自行 Mask）/ Nickname / AvatarUrl←Avatar / IsTeacherVerified←TeacherVerified / AuthLevel←AuthLevel

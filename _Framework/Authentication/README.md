@@ -1,6 +1,6 @@
 # TKWF.Ext.Authentication 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (认证中心通用内核) | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (查询契约 + UserCenter 承接) | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -20,8 +20,10 @@
 | 跨系统映射 | `PlatformAccountMapEntity`（平台内部 id ↔ 业务 app + 业务本地 id + UnionId——统一 DMP 双机制） |
 | 平台凭证 | `PlatformCredentialEntity`（AppSecret **AES-GCM 加密**在 DataService 边界）+ `WeChatApiClient`（access_token 缓存 + 并发锁） |
 | 平台账号 | `AuthAccountEntity`（手机号主键 + 微信绑定 + 认证声明 teacher_verified/auth_level，**不含业务角色**） |
+| 账号查询契约（V0.2.0） | `IAuthAccountQueryService`——对外只读查询（4 方法），委托 DataService（红线合规） |
+| **UserCenter 终态承接（V0.2.0）** | 实现 `IUserProfileSource`（`AuthAccountUserProfileSource`）——数据属主扩展实现他扩展读取契约，装配实例零桥接 |
 
-**用户中心（档案面）独立立项**（用户裁定 2026-09-30）——`TKWF.Ext.UserCenter` 另行立项，非本扩展 v0.2.0。
+**用户中心（档案面）独立立项**（用户裁定 2026-09-30）——`TKWF.Ext.UserCenter` 另行立项（档案项目独立）；认证中心 **v0.2.0 实现其 `IUserProfileSource` 读取契约（终态承接）**。
 
 ## 二、令牌契约（冻结）
 
@@ -123,6 +125,19 @@ app.UseHttpAuthentication<MyUserInfo>();
 | **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 在 DataService 边界） | `PlatformCredentialService`（本扩展） |
 | **`IWeChatApiClient`** | 微信 API（access_token 缓存 + 并发锁 + 凭证解析） | `WeChatApiClient`（本扩展） |
 | **8 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential | SG1 + xCodeGen（.g.cs 入库） |
+| **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone/ByWechatMpOpenId/ByWechatWebOpenId——返回完整 `AuthAccountEntity`） | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
+| **`IUserProfileSource`（V0.2.0）** | UserCenter 档案读取契约（AuthAccount 属主终态承接——`GetProfileAsync` 返回 `UserProfileDto`） | `AuthAccountUserProfileSource`（public sealed，本扩展） |
+
+## 四之二、V0.2.0 查询契约与 UserCenter 承接
+
+**`IAuthAccountQueryService`（查询契约）**——对外只读查询 4 方法（`GetByUIdAsync`/`GetByPhoneAsync`/`GetByWechatMpOpenIdAsync`/`GetByWechatWebOpenIdAsync`），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService`——**红线合规**（零 IFreeSql/IEntityDAC 直注入）。
+
+**`AuthAccountUserProfileSource`（UserCenter 终态承接）**——public sealed，实现 `IUserProfileSource`：
+- **映射矩阵**：UserId←UId / Phone←Phone（**原始值**——UserCenter 门面强制脱敏，实现方不得自行 Mask）/ Nickname / AvatarUrl←Avatar / IsTeacherVerified←TeacherVerified / AuthLevel←AuthLevel
+- **微信绑定推导**：`WechatMpOpenId ?? WechatWebOpenId ?? UnionId` **任一非空 = 已绑定**（AuthAccount 无显式 IsWechatBound 字段）
+- **注册**：`AuthCenterExtensionInitializer.ConfigureServices` **TryAddScoped 双注册**（`IAuthAccountQueryService` + `IUserProfileSource`）——消费方白名单声明认证中心 + UserCenter 后 `IUserCenterQueryService.GetProfileAsync` 自动获得真实档案；新装配实例**无需写桥接类**
+- **依赖**：引 `TKWF.Ext.UserCenter.Abstractions`（**契约包非主包**——L2 门控合规）
+- **边界**：两契约**不可合并**——查询服务返回完整 `AuthAccountEntity`（含 TokenVersion/IsEnabled，供 TokenService/装配桥接），档案源返回 `UserProfileDto`（公共档案子集，无敏感字段，Phone 门面脱敏）
 
 ## 五、实体表结构（8 张）
 
@@ -156,9 +171,9 @@ app.UseHttpAuthentication<MyUserInfo>();
 
 ## 八、架构演进路线
 
-- **V0.1.0（当前）**：令牌体系 / 认证矩阵（短信 + 微信）/ 登录保护 / 票据换令牌（PKCE）/ 身份适配层 / 跨系统映射 / 平台凭证——通用内核 8 组件 + 41 测试全绿。
-- **V0.2.0（规划）**：管理端 API（账号/凭证管理端点）；按 UserId 批量黑名单撤销；黑名单过期清理任务（对齐 BackgroundJobs 清理范式）；高流量 Redis 分布式黑名单缓存。
-- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。
+- **V0.1.0（已实施）**：令牌体系 / 认证矩阵（短信 + 微信）/ 登录保护 / 票据换令牌（PKCE）/ 身份适配层 / 跨系统映射 / 平台凭证——通用内核 8 组件 + 41 测试全绿。
+- **V0.2.0（已实施：查询契约 + UserCenter 承接）**：`IAuthAccountQueryService` 查询契约（只读 4 方法委托 DataService）+ `AuthAccountUserProfileSource` 实现 `IUserProfileSource`（UserCenter 终态落地，装配实例零桥接）；N1-N5 用例全绿。**其余规划项待后续迭代**：管理端 API（账号/凭证管理端点）；按 UserId 批量黑名单撤销；黑名单过期清理任务（对齐 BackgroundJobs 清理范式）；高流量 Redis 分布式黑名单缓存。
+- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册，装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 
 <!-- EOF -->

@@ -3,8 +3,8 @@
 > **系列**：框架实战教学（开篇见 [`01-扩展模块最优解探索-Schema级数据组合-开篇.md`](./01-扩展模块最优解探索-Schema级数据组合-开篇.md)）
 > **案例定位**：认证中心（Authentication）v0.1.0 实施后**首个能力补强**——补对外查询契约缺口 + 承接 UserCenter 终态路径（实现 `IUserProfileSource`）
 > **涉及扩展**：`TKWF.Ext.Authentication`（当前 v0.1.0）→ 目标 v0.2.0；消费 `TKWF.Ext.UserCenter.Abstractions`（契约）
-> **状态**：📋 待 Oracle 评审
-> **版本**：v0.1.0-draft
+> **状态**：✅ 方案已评审 → **已实施**（v0.2.0 落地，2026-09-30——Oracle 评审 PASS WITH CONDITIONS 后全量实施）
+> **版本**：v0.1.1-draft
 
 ---
 
@@ -235,6 +235,7 @@ public sealed class AuthAccountUserProfileSource(IAuthAccountQueryService accoun
 |------|------|---------|
 | 2026-09-30 | v0.1.0-draft | 初始草案——认证中心 v0.1.0 查询缺口（无 IAuthAccountQueryService，UserCenter P2 注记）+ UserCenter 终态承接（认证中心实现 IUserProfileSource——§5.9 终态演进落地） |
 | 2026-09-30 | v0.1.1 | **oracle3 评审 PASS WITH CONDITIONS（`bg_6682dabd`）6 条件全修订**——C1（过渡桥接类为文档示例非存量代码——"零代码变更"措辞精确化，§3.2/§3.3/§五/§八）+ C2（命名碰撞——实现类改 `AuthAccountUserProfileSource`，§3.2/§四/§七/§八/§九）+ C3（原子条件 UPDATE 严重度分层 safety/capability + P6 安全迭代待办，§四 C5）+ C4（微信推导理由措辞精确化——UnionId 可选非必然，§四 C3）+ C5（先例显式引用 `IdentityPasswordManager`——public sealed + TryAddScoped 最直接先例，§3.1/§3.2/§四）+ C6（两契约边界显式陈述——消费者/数据形态/合并代价，§3.1）；P1-P4 建议纳入（N3 微信矩阵补仅手机号边界 / ADR 新形态 / UId 数据源为准注释 / 不拆 Abstractions YAGNI） |
+| 2026-09-30 | v0.1.2 | **实施完成（v0.2.0 落地）**——认证中心新增 `IAuthAccountQueryService`（接口）+ `AuthAccountQueryService`（internal sealed 委托 DataService）+ `AuthAccountUserProfileSource`（public sealed 实现 `IUserProfileSource`）+ `AuthCenterExtensionInitializer` 双 `TryAddScoped` 注册 + csproj 引 `UserCenter.Abstractions`（L2 门控合规）；N1-N5 用例新增全绿 + 既有断言回归全绿（TokenService/AuthLoginAttempt/OAuthTicket/SmsVerification/PlatformAccountMap/PlatformCredential）；ADR 落档（`docs/Authentication/ADR/ADR-Authentication-UserCenter契约承接.md`——ADR48 D7 主扩展实现他扩展读取契约新形态首例）；认证中心 README/使用指南 + UserCenter 使用指南§二 同步更新 |
 
 ---
 

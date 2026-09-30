@@ -195,7 +195,7 @@ TKWF：**数据属主扩展在自身 Initializer 内实现他扩展契约**—�
 | 🔴 | **FileManagement** | 全量内存建树 | **无需 VEntity 化**：`GetFolderTreeAsync` 全树递归必须留内存；`GetSubFoldersAsync`/`SortOrder max+1` 已 SQL 下推 | — | ⚪ 排除（04 方案 C5 裁定确认） |
 | 🟢 | **Identity** | 映射回原实体（保守） | **直接暴露升级**——GraphQL 已就绪（`ExposeGraphqlQuery=true`）；REST 需 **Service 包装类**（非 DataService 命名，`[GenerateController]`）；**仅本人防护**（userId 从 IDomainUser 取——防 IDOR） | 低 | ✅ **方案已评审**（03 案例，oracle3 PASS WITH CONDITIONS） |
 | 🟢 | **Notifications** | 映射回原实体（保守） | 同上——`UserNotificationView` 收件箱敏感面，**ExposeGraphqlQuery 回溯审查**（§九 F4/F11）+ REST Service 包装类（name 可空查全部） | 低 | ✅ **方案已评审**（03 案例，同上） |
-| 🟢 | **认证中心（Authentication）** | v0.1.0 实施后能力补强 | **查询契约缺口**（无 `IAuthAccountQueryService`——UserCenter 方案 P2 注记）+ **UserCenter 终态承接**（认证中心实现 `IUserProfileSource`——§5.9 终态演进落地，装配实例零桥接） | 低 | ✅ **方案已评审**（05 案例，oracle3 PASS WITH CONDITIONS） |
+| 🟢 | **认证中心（Authentication）** | v0.1.0 实施后能力补强 | **查询契约缺口**（无 `IAuthAccountQueryService`——UserCenter 方案 P2 注记）+ **UserCenter 终态承接**（认证中心实现 `IUserProfileSource`——§5.9 终态演进落地，装配实例零桥接） | 低 | ✅ **已实施**（05 案例——v0.2.0 查询契约 + UserCenter 终态承接，oracle3 PASS WITH CONDITIONS 后落地） |
 
 > **迁移策略（2026-09-30 用户裁定）**：当前内部测试、无历史负担——倒推**直接采用最优形态**（VEntity 直接暴露），不留兼容双轨；迁移成本仅含"改实现 + 同步测试宿主"，不含"保留旧 API"。
 > **节奏调整（2026-09-30 用户指示）**：教学系列**不做完整案例文档**（如 02 仅方案+评审记录），**每完成一个扩展的实际升级 → 补产出一篇教学案例**（§一阅读地图）；当前以 UserCenter 范本为重心。
@@ -273,4 +273,5 @@ TKWF：**数据属主扩展在自身 Initializer 内实现他扩展契约**—�
 | 2026-09-30 | v0.1.4 | §八 路线图探针细化（bg_2927440c OU+DataDict+File / bg_1dc747d4 Identity+Notifications）：Approval+PrintTemplates ✅ 方案已评审（02 案例 oracle3 PASS WITH CONDITIONS）；DataDictionary/OU 可下推点确认、FileManagement 排除（全树递归留内存）；**REST 直接暴露机制事实登记**（VEntity DataService 不支持 `[GenerateController(FromDataService=true)]`——isDataService 门控 early-return，REST 需 Service 包装类；GraphQL 独立已就绪）；§8.3 认知修正补"聚合统计走 F7 非 VEntity"。**节奏调整注记（用户指示）**：教学系列不做完整案例文档，每完成实际升级 → 补案例篇；当前以 UserCenter 范本为重心 |
 | 2026-09-30 | v0.1.5 | §八 路线图状态更新——**03/04 方案 oracle3 评审 PASS WITH CONDITIONS 全修订**：Identity/Notifications ✅ 方案已评审（03 案例——REST Service 包装类 + 仅本人防护 C1-high IDOR + name 可空 + 注册机制核实）；OrganizationUnit/DataDictionary ✅ 方案已评审（04 案例——H1 空项语义 + H2 L83 标签更正 + H3 L137 CountByParentId + F12 更正 + LIKE 转义 + 双模式）；FileManagement ⚪ 排除（C5 裁定确认） |
 | 2026-09-30 | v0.1.6 | **05 方案 oracle3 评审 PASS WITH CONDITIONS 全修订**（认证中心 v0.2.0 查询契约 + UserCenter 承接）：C1 过渡桥接类文档示例澄清 / C2 命名碰撞（AuthAccountUserProfileSource）/ C3 原子条件 UPDATE 严重度分层（safety 待办）/ C4 微信推导措辞 / C5 IdentityPasswordManager 先例精确化 / C6 两契约边界显式陈述；§8.2 认证中心 ✅ 方案已评审；§8.3 补 F7 主框架侧归属注记（扩展侧不需独立方案）+ Calendar 确认排除 |
+| 2026-09-30 | v0.1.7 | **05 方案实施完成——认证中心 v0.2.0 落地**（`IAuthAccountQueryService` 查询契约 4 只读方法 + `AuthAccountUserProfileSource` 承接 `IUserProfileSource`，装配实例零桥接；ADR-Authentication-UserCenter契约承接 落档——ADR48 D7「主扩展实现他扩展读取契约」新形态首例）；§8.2 认证中心状态 → ✅ 已实施 |
 | — | — | （后续：每优化一个扩展模块 → 产出教学案例篇 + 修订 §八 路线图；机制缺口 → 修订 §九） |

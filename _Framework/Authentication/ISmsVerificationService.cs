@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
 
@@ -42,9 +43,11 @@ public static class SmsScenes
 public interface ISmsVerificationService
 {
     /// <summary>发送验证码（频控命中抛 AuthenticationException；生产未接 ISmsSender 抛 SmsMockForbiddenException）。</summary>
+    [AllowAnonymousFlag]
     Task SendCodeAsync(string phone, string scene, CancellationToken ct = default);
 
     /// <summary>校验验证码（成功单次消费；过期/不匹配/频控 → false 或抛 AuthenticationException）。</summary>
+    [AllowAnonymousFlag]
     Task<bool> VerifyCodeAsync(string phone, string code, string scene, CancellationToken ct = default);
 }
 

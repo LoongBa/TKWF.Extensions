@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
 
@@ -57,8 +58,12 @@ public static class OAuthTicketErrorCodes
 public interface IOAuthTicketService
 {
     /// <summary>签发一次性票据——高熵 ticket + TTL 5min + state +（可选）PKCE code_verifier hash 落库。</summary>
+    /// <remarks>匿名面声明：票据签发为无会话入口（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task<string> IssueAsync(OAuthTicketIssueRequest request, CancellationToken ct = default);
 
     /// <summary>换取——校验 TTL/单次/state/verifier/app_id/redirect_uri → 签发 JWT 对；失败抛 AuthenticationException（错误码见 OAuthTicketErrorCodes）。</summary>
+    /// <remarks>匿名面声明：票换令牌为无会话入口（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task<OAuthTicketExchangeResult> ExchangeAsync(OAuthTicketExchangeRequest request, CancellationToken ct = default);
 }

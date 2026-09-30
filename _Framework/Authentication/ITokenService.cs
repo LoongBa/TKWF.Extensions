@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
 
@@ -51,14 +52,20 @@ public sealed record TokenValidationResult(
 public interface ITokenService
 {
     /// <summary>签发 access + refresh 令牌对（RSA RS256 + kid + jti + exp/iat）。</summary>
+    /// <remarks>匿名面声明：登录签发为无会话入口（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task<TokenIssueResult> IssueTokenAsync(TokenIssueRequest request, CancellationToken ct = default);
 
     /// <summary>验证 access token——验签（alg 强制 RS256 + FixedTimeEquals）+ kid 白名单 + exp/iat + iss + 黑名单 → 载荷。</summary>
     Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default);
 
     /// <summary>刷新令牌 rotation——SHA256 查旧 → TokenVersion 校验 → 置 revoked → 签发新对；重用已撤销 → 全撤销 + Warning。</summary>
+    /// <remarks>匿名面声明：Refresh 自携带凭据（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default);
 
     /// <summary>撤销 access token——按 jti 落黑名单（ExpiresAt = 该 token 自然过期时间）。</summary>
+    /// <remarks>匿名面声明：登出按 jti 自携带凭据自校验（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default);
 }

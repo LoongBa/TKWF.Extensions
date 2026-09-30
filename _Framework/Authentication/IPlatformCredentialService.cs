@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
 
@@ -26,6 +27,8 @@ public interface IPlatformCredentialService
     Task<PlatformCredentialSecret?> GetSecretAsync(string platform, string appType, CancellationToken ct = default);
 
     /// <summary>按平台 + 应用 AppId 获取明文密钥（Oracle M3——微信授权 code 绑定发起 AppId，须按 AppId 精确定位凭证，防多应用误配）。</summary>
+    /// <remarks>匿名面声明：微信 authorize URL 构建为无会话入口（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default);
 
     /// <summary>创建凭证（明文 secret 在 DataService 边界加密落库）。</summary>

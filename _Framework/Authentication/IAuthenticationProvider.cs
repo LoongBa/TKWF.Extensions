@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
 
@@ -40,5 +41,7 @@ public interface IAuthenticationProvider
     string AuthType { get; }
 
     /// <summary>执行认证——成功返回平台内部 id；失败返回 FailReason。</summary>
+    /// <remarks>匿名面声明：短信/微信登录与 OAuth 回调为无会话入口（EduPlatform 转达 E1）。</remarks>
+    [AllowAnonymousFlag]
     Task<ProviderAuthenticateResult> AuthenticateAsync(ProviderAuthenticateContext context, CancellationToken ct = default);
 }

@@ -25,6 +25,9 @@ public interface IPlatformCredentialService
     /// <summary>按平台 + 应用类型获取明文密钥（读路径解密——WeChatApiClient 等消费）。</summary>
     Task<PlatformCredentialSecret?> GetSecretAsync(string platform, string appType, CancellationToken ct = default);
 
+    /// <summary>按平台 + 应用 AppId 获取明文密钥（Oracle M3——微信授权 code 绑定发起 AppId，须按 AppId 精确定位凭证，防多应用误配）。</summary>
+    Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default);
+
     /// <summary>创建凭证（明文 secret 在 DataService 边界加密落库）。</summary>
     Task CreateAsync(PlatformCredentialEntity credential, string plainSecret, CancellationToken ct = default);
 

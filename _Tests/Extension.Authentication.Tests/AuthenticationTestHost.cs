@@ -95,8 +95,9 @@ internal static class AuthenticationTestHost
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户；对齐既有扩展测试 StubDomainUser）。
-/// <para>支持 <see cref="IOptions{AuthCenterOptions}"/> 解析（PlatformCredentialEntityDataService 经
-/// <c>user.GetOptionalService&lt;IOptions&lt;AuthCenterOptions&gt;&gt;()</c> 加载 AES-GCM 密钥路径——测试须注入真实 Options）。</para></summary>
+/// <para>可注入 <see cref="IOptions{AuthCenterOptions}"/>（GetOptionalService 解析）——早期 PlatformCredentialEntityDataService
+/// 经 GetOptionalService 加载密钥路径所需；Oracle M4 合并后 DataService 改经 PlatformCredentialKeyStore（Service 构造初始化），
+/// 此注入仅为兼容保留（PlatformCredentialServiceTests 仍传 Options——无副作用）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
     private readonly IOptions<AuthCenterOptions>? _options;

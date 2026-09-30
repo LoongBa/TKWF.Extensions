@@ -136,8 +136,11 @@ internal sealed class OAuthTicketService : IOAuthTicketService
             throw new AuthenticationException("TICKET_NOT_BOUND");
         }
 
-        // (h) 标记已消费（单次消费防重放）。
-        await _dataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct);
+        // (h) 条件标记已消费（单次消费防重放——Oracle M2：输者抛 TICKET_CONSUMED）
+        if (!await _dataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct))
+        {
+            throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
+        }
 
         // (i) 签发 JWT 对。
         // 说明：票据换取是认证完成路径，调用方在签发时已绑定用户；此处认证方式取默认登录方式 sms，

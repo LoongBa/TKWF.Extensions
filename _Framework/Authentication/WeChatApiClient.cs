@@ -70,10 +70,10 @@ internal sealed class WeChatApiClient : IWeChatApiClient
 
     public async Task<string> GetOpenIdAsync(string appId, string code, CancellationToken ct = default)
     {
-        var secret = await _credentials.GetSecretAsync(AuthTypes.Wechat, "*", ct)
-                     ?? await _credentials.GetSecretAsync(AuthTypes.Wechat, "mp", ct)
-                     ?? await _credentials.GetSecretAsync(AuthTypes.Wechat, "web", ct);
-        if (secret == null) throw new InvalidOperationException($"微信凭证未配置：platform=wechat appId={appId}");
+        // Oracle M3：按发起授权绑定的 AppId 精确定位凭证（微信 code 与 AppId 绑定——通配/顺序 fallback 在多应用/双形态
+        // （公众号 mp + 扫码 web）并存时会用错凭证致 40029；appId 参数必须参与解析）。
+        var secret = await _credentials.GetSecretByAppIdAsync(AuthTypes.Wechat, appId, ct)
+            ?? throw new InvalidOperationException($"微信凭证未配置：platform=wechat appId={appId}");
 
         // sns/oauth2/access_token?appid=&secret=&code=&grant_type=authorization_code（网页授权 code 换 openid——结果不缓存）
         using var client = CreateClient();

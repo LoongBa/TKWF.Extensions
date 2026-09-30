@@ -27,14 +27,19 @@ partial class AuthRefreshTokenEntityDataService(IDomainUser user, IEntityDAC<Aut
         await EntityCreateAsync(entity, ct);
     }
 
-    /// <summary>标记撤销（rotation 消费旧 token 后置 true）。</summary>
-    public async Task MarkRevokedAsync(long id, DateTime revokedAt, CancellationToken ct = default)
+    /// <summary>
+    /// 条件标记撤销（Oracle M1 修复——防 TOCTOU 竞态）：条件 select <c>Id == id && !IsRevoked</c>，
+    /// 并发刷新同 token 时输者返回 false（未找到/已被撤销）→ 调用方（TokenService.RefreshTokenAsync）将其视为
+    /// 重用检测触发（RevokeAllByUserIdAsync + REFRESH_REUSED）——恢复"新旧不可复用"保障的重用检测兜底。
+    /// </summary>
+    public async Task<bool> TryMarkRevokedAsync(long id, DateTime revokedAt, CancellationToken ct = default)
     {
-        var row = await EntityGetAsync(r => r.Id == id, ct);
-        if (row == null) return;
+        var row = await EntityGetAsync(r => r.Id == id && !r.IsRevoked, ct);
+        if (row == null) return false; // 已撤销/不存在——输了竞态
         row.IsRevoked = true;
         row.RevokedAt = revokedAt;
         await EntityUpdateAsync(row, ct);
+        return true;
     }
 
     /// <summary>撤销某用户全部 refresh（重用检测——判定泄露后清场）。</summary>

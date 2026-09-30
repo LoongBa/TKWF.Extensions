@@ -1,13 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Authentication;
@@ -40,97 +34,17 @@ namespace TKWF.Ext.Authentication;
     /// <summary>密文字段分隔符（base64(iv).base64(tag).base64(cipher)）。</summary>
     private const char CipherFieldSeparator = '.';
 
-    private byte[]? _aesKey;
-    private readonly object _aesKeyGate = new();
-    private static int _keyGenerationWarningLogged;
+    /// <summary>Oracle M4：AES-GCM 密钥单一来源 = <see cref="PlatformCredentialKeyStore"/>
+    /// （PlatformCredentialService 构造时 Initialize——启动 fail-fast / 开发自动生成；本分部不再自带 LoadAesKey 双实现防漂移）。</summary>
+    private static byte[] GetKey() => PlatformCredentialKeyStore.GetKey();
 
-    /// <summary>懒加载 AES-GCM 密钥（每 DataService 实例一次，线程安全）——解密/加密共用同一密钥。</summary>
-    private byte[] GetAesKey()
-    {
-        lock (_aesKeyGate)
-        {
-            _aesKey ??= LoadAesKey();
-            return _aesKey;
-        }
-    }
-
-    /// <summary>
-    /// 从 <see cref="AuthCenterOptions.SecretEncryptionKeyPath"/> 加载 AES-GCM 密钥（前 32 字节）。
-    /// <para>决策记录：密钥 = 密钥文件前 32 字节（AES-256-GCM），不做 SHA-256 派生——文件即密钥，简单直接，
-    /// 且与签名密钥文件（SigningKeyPath）同构（生产预置文件、开发自动生成）。</para>
-    /// <para>策略（对齐签名密钥）：① 路径未配置 → 恒 InvalidOperationException（无法可靠派生密钥，不可静默降级）；
-    /// ② 文件存在但 &lt; 32 字节 → InvalidOperationException（密钥文件损坏）；③ 文件缺失 + 生产（IsProduction）→
-    /// InvalidOperationException fail-fast；④ 文件缺失 + 开发 → 生成 32 随机字节 + 写入路径 + ILogger Warning 一次。</para>
-    /// </summary>
-    private byte[] LoadAesKey()
-    {
-        var options = user.GetOptionalService<IOptions<AuthCenterOptions>>()?.Value;
-        var keyPath = options?.SecretEncryptionKeyPath;
-
-        if (string.IsNullOrWhiteSpace(keyPath))
-            throw new InvalidOperationException(
-                "AuthCenterOptions.SecretEncryptionKeyPath 未配置——无法派生平台凭证 AES-GCM 密钥，拒绝使用（生产/开发均须配置）。");
-
-        if (File.Exists(keyPath))
-        {
-            var fileBytes = File.ReadAllBytes(keyPath);
-            if (fileBytes.Length < AesKeySizeBytes)
-                throw new InvalidOperationException(
-                    $"平台凭证密钥文件 {keyPath} 长度 {fileBytes.Length} < {AesKeySizeBytes} 字节——密钥文件损坏，拒绝使用。");
-            return fileBytes.AsSpan(0, AesKeySizeBytes).ToArray();
-        }
-
-        if (options?.IsProduction == true)
-            throw new InvalidOperationException(
-                $"生产环境平台凭证密钥文件缺失（IsProduction=true 拒绝自动生成）——请预置 {AesKeySizeBytes} 字节密钥文件: {keyPath}");
-
-        // 开发环境：生成 32 随机字节 + 落盘 + Warning 一次（对齐签名密钥策略）
-        var generated = RandomNumberGenerator.GetBytes(AesKeySizeBytes);
-        var fullPath = Path.GetFullPath(keyPath);
-        var dir = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-        File.WriteAllBytes(fullPath, generated);
-
-        if (Interlocked.Exchange(ref _keyGenerationWarningLogged, 1) == 0)
-        {
-            user.GetOptionalService<ILogger<PlatformCredentialEntityDataService>>()?
-                .LogWarning("平台凭证密钥文件不存在，已自动生成 {AesKeySizeBytes} 字节密钥并写入: {KeyPath}", AesKeySizeBytes, keyPath);
-        }
-        return generated;
-    }
-
-    /// <summary>AES-GCM 加密：明文 → "base64(iv).base64(tag).base64(cipher)"（12 字节随机 nonce + 16 字节 tag）。</summary>
+    /// <summary>AES-GCM 加密（Oracle M4——委托 PlatformCredentialKeyStore 单一实现）：明文 → "base64(iv).base64(tag).base64(cipher)"。</summary>
     private string Encrypt(string plaintext)
-    {
-        var key = GetAesKey();
-        var nonce = new byte[AesNonceSizeBytes];
-        RandomNumberGenerator.Fill(nonce);
-        var plainBytes = Encoding.UTF8.GetBytes(plaintext);
-        var cipherBytes = new byte[plainBytes.Length];
-        var tag = new byte[AesTagSizeBytes];
-        using var aes = new AesGcm(key, AesTagSizeBytes);
-        aes.Encrypt(nonce, plainBytes, cipherBytes, tag);
-        return Convert.ToBase64String(nonce) + CipherFieldSeparator
-            + Convert.ToBase64String(tag) + CipherFieldSeparator
-            + Convert.ToBase64String(cipherBytes);
-    }
+        => PlatformCredentialKeyStore.Encrypt(plaintext, GetKey());
 
-    /// <summary>AES-GCM 解密："base64(iv).base64(tag).base64(cipher)" → 明文；格式非法/认证失败抛 CryptographicException。</summary>
+    /// <summary>AES-GCM 解密（Oracle M4——委托 PlatformCredentialKeyStore 单一实现）："base64(iv).base64(tag).base64(cipher)" → 明文；认证失败抛 CryptographicException。</summary>
     private string Decrypt(string ciphertext)
-    {
-        var key = GetAesKey();
-        var parts = ciphertext.Split(CipherFieldSeparator);
-        if (parts.Length != 3)
-            throw new CryptographicException("平台凭证密文格式非法——期望 base64(iv).base64(tag).base64(cipher)。");
-        var nonce = Convert.FromBase64String(parts[0]);
-        var tag = Convert.FromBase64String(parts[1]);
-        var cipherBytes = Convert.FromBase64String(parts[2]);
-        var plainBytes = new byte[cipherBytes.Length];
-        using var aes = new AesGcm(key, AesTagSizeBytes);
-        aes.Decrypt(nonce, cipherBytes, tag, plainBytes);
-        return Encoding.UTF8.GetString(plainBytes);
-    }
+        => PlatformCredentialKeyStore.Decrypt(ciphertext, GetKey());
 
     /// <summary>按平台查询全部启用凭证（密文列原样返回——AppSecretEncrypted 已 DtoFieldIgnore，不外泄）。</summary>
     public async Task<IReadOnlyList<PlatformCredentialEntity>> GetEnabledByPlatformAsync(string platform, CancellationToken ct = default)
@@ -146,6 +60,16 @@ namespace TKWF.Ext.Authentication;
         var entity = await GetByAppAsync(platform, appType, ct);
         if (entity == null || !entity.IsEnabled || string.IsNullOrEmpty(entity.AppSecretEncrypted))
             return null; // 禁用凭证不发放明文密钥（方案 §5.10 启停管控语义）
+        var plainSecret = Decrypt(entity.AppSecretEncrypted);
+        return new PlatformCredentialSecret(entity.AppId, plainSecret);
+    }
+
+    /// <summary>读路径解密：按平台 + 应用 AppId 返回明文密钥（Oracle M3——微信授权 code 绑定发起 AppId，按 AppId 精确定位凭证）。</summary>
+    public async Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default)
+    {
+        var entity = await EntityGetAsync(c => c.Platform == platform && c.AppId == appId && c.IsEnabled, ct);
+        if (entity == null || string.IsNullOrEmpty(entity.AppSecretEncrypted))
+            return null;
         var plainSecret = Decrypt(entity.AppSecretEncrypted);
         return new PlatformCredentialSecret(entity.AppId, plainSecret);
     }

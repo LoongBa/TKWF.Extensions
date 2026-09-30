@@ -69,7 +69,7 @@ internal static class PlatformCredentialKeyStore
         return Convert.ToBase64String(iv) + "." + Convert.ToBase64String(tag) + "." + Convert.ToBase64String(cipher);
     }
 
-    /// <summary>AES-GCM 解密：解析 "base64(iv).base64(tag).base64(cipher)"；格式非法/解密失败抛 CryptographicException。r</summary>
+    /// <summary>AES-GCM 解密：解析 "base64(iv).base64(tag).base64(cipher)"；格式非法/解密失败抛 CryptographicException。</summary>
     public static string Decrypt(string value, byte[] key)
     {
         var parts = value.Split('.');

@@ -115,7 +115,8 @@ internal sealed class TokenService : ITokenService
         if (string.IsNullOrEmpty(kid) || !keys.VerifyKeys.TryGetValue(kid, out var verifyKey))
             throw new AuthenticationException("KID_UNKNOWN");
 
-        // C1-b：签名比对 FixedTimeEquals（防时序攻击）+ C1-g：签名范围 base64url(header).base64url(payload)
+        // C1-b：签名验证经 RSA.VerifyData（.NET BCL——RS256 验签标准路径；FixedTimeEquals 语义适用于对称 MAC 比对，非 RSA 验签）
+        // C1-g：签名范围 base64url(header).base64url(payload)
         var signatureBytes = Base64UrlDecode(signature);
         var expectedSignature = verifyKey.VerifyData(
             Encoding.UTF8.GetBytes(signingInput), signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -198,7 +199,14 @@ internal sealed class TokenService : ITokenService
         // TokenVersion 闭环：刷新时校验（不匹配 → 拒绝——密码/绑定变更后旧 refresh 失效）
         if (row.TokenVersion != account.TokenVersion) throw new AuthenticationException("REFRESH_STALE");
 
-        await _refreshTokenDataService.MarkRevokedAsync(row.Id, DateTime.UtcNow, ct);
+        // Oracle M1：条件撤销（TryMarkRevokedAsync 防 TOCTOU）——输者触发重用检测
+        //（并发同 token 刷新：谁先 TryMarkRevoked 赢；输者 false → 判定泄露 → 撤销该用户全部 refresh）
+        if (!await _refreshTokenDataService.TryMarkRevokedAsync(row.Id, DateTime.UtcNow, ct))
+        {
+            _logger.LogWarning("Refresh token race detected for user {UserId} — revoking all refresh tokens", row.UserId);
+            await _refreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
+            throw new AuthenticationException("REFRESH_REUSED");
+        }
 
         var result = await IssueTokenAsync(new TokenIssueRequest(
             row.UserId, row.AuthType, account.AuthLevel, account.TeacherVerified, row.DeviceInfo), ct);

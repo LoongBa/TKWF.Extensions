@@ -34,17 +34,19 @@ namespace TKWF.Ext.Authentication;
          return await EntityGetAsync(e => e.Ticket == ticket, ct);
      }
 
-     /// <summary>标记已消费（单次消费防重放——IsConsumed=true + ConsumedAt）。</summary>
-     public async Task MarkConsumedAsync(long id, DateTime consumedAt, CancellationToken ct = default)
+     /// <summary>条件标记已消费（Oracle M2 修复——防 TOCTOU 竞态）：条件 select <c>Id == id && !IsConsumed</c>，
+     /// 并发换取同票据时输者返回 false → 调用方（OAuthTicketService.ExchangeAsync）抛 TICKET_CONSUMED——恢复"单次消费"保障。</summary>
+     public async Task<bool> MarkConsumedAsync(long id, DateTime consumedAt, CancellationToken ct = default)
      {
-         var entity = await EntityGetAsync(e => e.Id == id, ct);
+         var entity = await EntityGetAsync(e => e.Id == id && !e.IsConsumed, ct);
          if (entity is null)
          {
-             return;
+             return false; // 已消费/不存在——输了竞态
          }
          entity.IsConsumed = true;
          entity.ConsumedAt = consumedAt;
          await EntityUpdateAsync(entity, ct);
+         return true;
      }
 
      /// <summary>更新票据（签发方绑定用户 UserId 后写入——票据签发时用户未定，绑定后回填）。</summary>

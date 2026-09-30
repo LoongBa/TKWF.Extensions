@@ -93,6 +93,38 @@ public class OAuthTicketServiceTests
     }
 
     [Fact]
+    public async Task Exchange_PkceMatrix_ServerTrust_NullNull_Allowed()
+    {
+        // C4 第一行：hash null（服务端/trust 签发）+ verifier null（换取）→ 放行（信任服务端路径——依赖 AppId 白名单 + 内网信任）
+        var (service, ds, tokenService) = CreateService(AuthenticationTestHost.CreateOptions());
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri));
+        var entity = await ds.GetByTicketAsync(ticket);
+        entity!.UserId = "u-123";
+        await ds.UpdateAsync(entity);
+
+        var result = await service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, null, "app-1", null));
+        Assert.NotNull(result.AccessToken);
+        Assert.NotNull(result.RefreshToken);
+    }
+
+    [Fact]
+    public async Task Exchange_PkceMatrix_VerifierMismatch_Rejected()
+    {
+        // C4 第三行：hash 非 null + verifier 非 null 但 SHA256 不匹配 → 拒绝
+        var (service, ds, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        var codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz";
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, CodeVerifier: codeVerifier));
+        var entity = await ds.GetByTicketAsync(ticket);
+        entity!.UserId = "u-123";
+        await ds.UpdateAsync(entity);
+
+        var wrongVerifier = codeVerifier[..^1] + "A"; // 末位改 A（仍在 unreserved 集合）
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
+            service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, wrongVerifier, "app-1", null)));
+        Assert.Equal(OAuthTicketErrorCodes.TicketStateMismatch, ex.Message);
+    }
+
+    [Fact]
     public async Task Exchange_ExpiredTicket_Rejected()
     {
         var (service, ds, _) = CreateService(AuthenticationTestHost.CreateOptions());

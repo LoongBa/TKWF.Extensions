@@ -54,6 +54,10 @@ internal sealed class PlatformCredentialService : IPlatformCredentialService
         => _dataService.GetSecretByAppAsync(platform, appType, ct);
 
     /// <inheritdoc />
+    public Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default)
+        => _dataService.GetSecretByAppIdAsync(platform, appId, ct);
+
+    /// <inheritdoc />
     public Task CreateAsync(PlatformCredentialEntity credential, string plainSecret, CancellationToken ct = default)
         => _dataService.CreateEncryptedAsync(credential, plainSecret, ct);
 

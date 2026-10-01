@@ -17,7 +17,10 @@ namespace TKWF.Ext.MFA;
 /// <c>MarkConsumedIfActiveAsync</c> 原子条件消费（WHERE IsConsumed=false 守卫——并发验证恰一成功）——
 /// <b>数据访问红线逃生口</b>（Oracle 裁决路径 B）：引擎级单语句 UPDATE 保证并发原子性，IEntityDAC 无法表达条件更新，
 /// 经构造注入 IFreeSql 直执行（DataPort raw SQL 先例）；尝试频控归内存窗口（Oracle C4，无 Attempts 列）。</para>
+/// <para>⚠️ <c>[DiContractIgnore]</c>（V4.10.21 ADR71）：构造参数 <see cref="IFreeSql"/> 为逃生口（非领域服务
+/// 接口、框架内置白名单外）——SG1a DI001 校验豁免标注（纯警告豁免，不改注册语义；逃生口裁决记录见 README/开发方案）。</para>
 /// </summary>
+[TKW.Framework.CodeGeneration.DiContractIgnore]
 partial class MfaChallengeEntityDataService(IDomainUser user, IEntityDAC<MfaChallengeEntity> dac, IFreeSql fsql)
     : DomainDataServiceBase<MfaChallengeEntity, MfaChallengeEntityDto>(user, dac, hasSoftDelete: false)
 {

@@ -16,7 +16,10 @@ namespace TKWF.Ext.MFA;
 /// <para>恢复码 SHA256 落库（明文不落库）+ 单次消费（<c>MarkConsumedAsync</c>——非并发路径）——
 /// <c>MarkConsumedIfActiveAsync</c> 原子条件消费（WHERE IsConsumed=false 守卫，Oracle C1）——
 /// <b>数据访问红线逃生口</b>（Oracle 裁决路径 B，DataPort raw SQL 先例）；验证纳入 per-user 频控（Oracle C4）。</para>
+/// <para>⚠️ <c>[DiContractIgnore]</c>（V4.10.21 ADR71）：构造参数 <see cref="IFreeSql"/> 为逃生口（非领域服务
+/// 接口、框架内置白名单外）——SG1a DI001 校验豁免标注（纯警告豁免，不改注册语义；逃生口裁决记录见 README/开发方案）。</para>
 /// </summary>
+[TKW.Framework.CodeGeneration.DiContractIgnore]
 partial class MfaRecoveryCodeEntityDataService(IDomainUser user, IEntityDAC<MfaRecoveryCodeEntity> dac, IFreeSql fsql)
     : DomainDataServiceBase<MfaRecoveryCodeEntity, MfaRecoveryCodeEntityDto>(user, dac, hasSoftDelete: false)
 {

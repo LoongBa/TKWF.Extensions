@@ -74,6 +74,53 @@
 | **视图链禁令** | ViewSql 只允许引用基表，禁止引用其它 `vw_` 视图（编译期 VIEW002）——脱敏视图不能嵌套 |
 | **生产 DBA** | SyncViewsAsync 仅开发环境自动建；生产需 DBA 手动执行 ViewSql（写入指南） |
 
+### 3.5 消费方剪裁的哲学——读模型属于消费方
+
+> 关联：`TKW-ThinkingWare-设计哲学基础.md` §三·补（扩展机制的哲学——Schema 级组合与消费方剪裁）。
+> 核心一句话：**扩展定 Schema，消费方定读模型**。剪裁是思考，不是配置。
+
+#### 3.5.1 扩展定 Schema，消费方定读模型
+
+| 模式 | 谁来定读模型 | 裁剪发生在哪 |
+|:--|:--|:--|
+| 传统组件库 | 组件作者预制接口/视图 | 组件外（要么全用、要么不用） |
+| **TKWF 扩展** | **消费方用自有 VEntity 的 `ViewSql` 剪裁** | **Schema 之上、消费方之手** |
+
+扩展只定基础 Schema（属主实体 + 契约），**不替消费方决定读模型**。消费方按自己的业务需求，写自己的 VEntity——选择 JOIN 哪些表、SELECT 哪些列。
+
+#### 3.5.2 Schema 的两种落法（扩展侧决策）
+
+| 方案 | 说明 | 场景 |
+|:--|:--|:--|
+| **A 宽表** | 在属主实体加字段（如社媒绑定加列） | 维度少、全局共享 |
+| **B 拆表** | 按维度拆多张表（每类社媒一张） | 维度多、可独立扩展 |
+
+无论 A/B，**扩展只定 Schema，不替消费方决定读模型**——Schema 的形态决策归属主扩展，读模型的形态决策归消费方。
+
+#### 3.5.3 消费方剪裁（VEntity ViewSql）
+
+```
+扩展：AuthAccount（中心账号） + 社媒绑定表（wechat / youtube / x / ...）
+消费方：vm_MyUserProfile = AuthAccount JOIN 需要的绑定表
+                            SELECT 需要的列   ← 按需剪裁（国内项目不 join youtube/x）
+```
+
+- **JOIN 哪些表、SELECT 哪些列，消费方自己定**——扩展 Schema 变（新增社媒）→ 消费方 VEntity 按需调整，互不阻塞
+- **列级剪裁下沉 SQL**（投影 + `?fields` / GraphQL selection / `DynamicSelector`）——少扫列、少回传
+- 这正是「Schema 级 Open-Closed」的消费方视角：扩展点 = 表 + 视图声明，读模型按需构建（§3.2 范式转移的落地形态）
+
+#### 3.5.4 护栏：剪裁自由，约束不缺席
+
+| 约束 | 内容 | 哲学对应 |
+|:--|:--|:--|
+| **VIEW002 视图链禁令** | 组合视图只 JOIN 属主**基表**（如 `AuthAccount`），不 JOIN 属主 VEntity（`vw_` 嵌套编译期 + 运行时双门控硬禁） | 护栏让剪裁不跑偏 |
+| **同库前提（D17A 裁定 3）** | 跨扩展 JOIN 仅同库可行——业务扩展 FK 表必须与中心账号同库 | 约束界定边界 |
+| **脱敏重做** | 组合视图不继承属主 VEntity 的 SQL 硬脱敏，须在组合视图层重定义（§5.2 分层脱敏） | 安全不因剪裁而降级 |
+
+#### 3.5.5 哲学收束
+
+> 读模型属于消费方，正如思考属于人。框架不替你想"要什么数据"——它给你 Schema 和护栏，让你（和 AI）可靠地把自己的读模型画出来。这是"思想件"在数据层的延伸：框架是"件"（定 Schema、给护栏），开发者是"思想"（定义读模型），AI 是工具（写 `ViewSql` 实现）。
+
 ---
 
 ## 四、VEntity 读模型联邦
@@ -277,4 +324,5 @@ TKWF：**数据属主扩展在自身 Initializer 内实现他扩展契约**—�
 | 2026-10-01 | v0.1.8 | **03 方案实施完成——Identity/Notifications VEntity 直接暴露升级**（方案 03 案例）：Identity v0.4.0 `UserRoleViewQueryService`（`GET /api/identity/user-roles` 仅本人——userId 从 IDomainUser 解析防 IDOR）+ Notifications v0.5.0 `UserNotificationViewQueryService`（`GET /api/notifications/inbox` name 可空查全部）——VEntity DTO 一等公民（JOIN 携带列不再丢弃）、Service 包装类规避 isDataService 门控、消费方 SG1b 自动注册（无 TryAddScoped）、门面链路零改动；两 VEntity DataService public 化（公开 ctor 依赖 CS0051 修复 + 只读查询面可注入）；§8.2 Identity/Notifications 状态 → ✅ 已实施；收件箱敏感面回溯审查注记入 Notifications 指南（§九 F4/F11 触发时统一处理） |
 | 2026-10-01 | v0.1.9 | **02 方案实施完成——Approval/PrintTemplates VEntity 化**（方案 02 案例，oracle3 bg_59cc1308 6 条件 + 5 建议全采纳）：Approval v0.3.0 `vw_ApprovalTaskView`（JOIN 任务→实例，21 投影列，`GetInstanceDetailAsync` 任务链查询下推——实例查询保留取 BusinessDataJson 大字段 C2）+ PrintTemplates v0.2.0 `vw_PrintTemplateVersionView`（JOIN 版本→模板，12 投影列含 Key/TemplateName 核心收益——**真消除往返 2→1**，返回类型变更视图实体 C3）；**敏感视图经门面暴露**（C4 `ExposeGraphqlQuery=false`——含审批人明细/模板正文，区别于 Identity/Notifications 直接暴露；ADR-Approval/PrintTemplates-敏感视图经门面暴露策略 落档）；写路径零触碰（ApprovalManager 5 处任务链聚合 + 1 处 CC 事件查询 + TemplateManager 3 写方法，oracle3 C-high-2/C-med-3）；测试 N1-N5 + 既有断言全绿（Approval 72→74、PrintTemplates 29→33）+ 全量回归零失败；§8.2 Approval/PrintTemplates 状态 → ✅ 已实施；注：xCodeGen DtoEmpty 模板缺陷（骨架缺 `using System.Collections.Generic`，CS0246/CS0759——同 EntityEmpty 2026-09-14 先例）实施时手动修复生成骨架，模板源待主框架侧双修 |
 | 2026-10-01 | v0.1.10 | **04 方案实施完成——OrganizationUnit/DataDictionary 内存拼装优化**（方案 04 案例，oracle3 bg_1570736f 10 条件全修订）：OrganizationUnit v0.2.0 `vw_UserOrganizationUnitView`（JOIN OU→OUUser，7 投影列，`GetUserIdsInOrganizationUnitAsync` 双模式——true 视图 OUPath 精确前缀 / false junction 单查，C-5/M2）+ `GetSubTreeAsync`/`GetAncestorsAsync` 单表 SQL 下推（物化路径**精确前缀比较**——P3 实证 FreeSql `StartsWith`→LIKE 不对 `_` 自动 ESCAPE，Code 白名单含 `_` 会误配 `/AXB/`，改 `Length>=len && Substring==prefix` → SQLite `substr`/PG `substring` 双方言一致；`GetAncestorsAsync` Code IN + 返回后校验缺失段抛异常，C-6/M3）；DataDictionary v0.2.0 `vw_DictionaryItemView`（JOIN Definition→Item，12 投影列，`GetOrLoadAggregateAsync` 未命中路径两步骤一——先单查定义 + 视图查项零行=空项列表，**"定义存在无项"语义保留** C-1/H1 方案 b，视图行映射回实体接口不变）；两视图 `ExposeGraphqlQuery=false`（敏感视图经门面 + 树语义保护，C-4；ADR-OrganizationUnit/DataDictionary-敏感视图经门面暴露策略 落档，含 F12 回收注记 C-7/L1）；写路径零触碰（OU Create/Move/Delete + DataDict Upsert/Delete 缓存失效）；L137 子节点计数本期不改（C-3/H3）；测试 N1-N6 + 既有断言全绿（OU 63→69、DataDict 47→50）+ 单项目回归零失败；§8.2 DataDictionary/OrganizationUnit 状态 → ✅ 已实施 |
+| 2026-10-01 | v0.1.11 | **§3.5 新增「消费方剪裁的哲学——读模型属于消费方」**（DMP-Lite 用户提议，2026-10-01）：扩展定 Schema（宽表/拆表两种落法）、消费方用自有 VEntity ViewSql 剪裁（JOIN 哪些表/SELECT 哪些列，如国内项目不 join youtube/x）、护栏三件套（VIEW002 视图链禁令/同库前提 D17A/脱敏重做）；哲学收束"读模型属于消费方，正如思考属于人"；关联 `TKW-ThinkingWare-设计哲学基础.md` §三·补（同内容哲学段落档主框架侧） |
 | — | — | （后续：每优化一个扩展模块 → 产出教学案例篇 + 修订 §八 路线图；机制缺口 → 修订 §九） |

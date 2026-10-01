@@ -158,6 +158,8 @@ _TKWF.Extensions/
 └── 测试类（Store CRUD + Manager 聚合 + Initializer DI + 异常静默）
 ```
 
+> 测试事务约定：SQLite 物理事务边界 + Noop 事务限制 + PG 测试容器评估见 [`docs/测试约定-SQLite物理事务与Noop限制.md`](./docs/测试约定-SQLite物理事务与Noop限制.md)（2026-10-02，转达登记落地）。
+
 ### 扩展启用（v4.9.85+ 必需）
 
 扩展不再"发现即启用"——消费方须在领域初始化器上显式声明白名单：

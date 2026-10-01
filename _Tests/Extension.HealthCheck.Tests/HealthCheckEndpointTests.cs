@@ -4,27 +4,32 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using TKWF.Ext.HealthCheck;
 
 namespace TKWF.Ext.HealthCheck.Tests;
 
 /// <summary>
 /// HealthCheck 端点集成测试——最小 host（WebApplication + Kestrel loopback 临时端口）验证
-/// MapTkfwHealthChecks：聚合状态 / Detailed 组件级输出 / 探针异常静默 / 路径可配 / Enabled=false 不映射。
+/// HealthCheckWebExtension.ConfigureEndpoints（v4.10.45 收敛迁移——旧 MapTkfwHealthChecks 静态方法已删除）：
+/// 聚合状态 / Detailed 组件级输出 / 探针异常静默 / 路径可配 / Enabled=false 不映射。
 /// </summary>
 public class HealthCheckEndpointTests
 {
-    private static async Task<WebApplication> StartHostAsync(Action<IServiceCollection> configureServices)
+    private static async Task<WebApplication> StartHostAsync(
+        Action<HealthCheckWebExtension>? configureExtension = null,
+        Action<IHealthChecksBuilder>? configureChecks = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0"); // 临时端口，并行测试互不冲突
-        configureServices(builder.Services);
+        var extension = new HealthCheckWebExtension();
+        configureExtension?.Invoke(extension);
+        extension.ConfigureServices(builder.Services);
+        configureChecks?.Invoke(builder.Services.AddHealthChecks());
 
         var app = builder.Build();
-        app.MapTkfwHealthChecks();
+        extension.ConfigureEndpoints(app, new DomainWebOptions());
         await app.StartAsync();
         return app;
     }
@@ -50,13 +55,10 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_Healthy_Returns_200_And_StatusOnly()
+    public async Task ConfigureEndpoints_Healthy_Returns_200_And_StatusOnly()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks();
-            services.AddHealthChecks().AddCheck("ok", () => HealthCheckResult.Healthy());
-        });
+        await using var app = await StartHostAsync(
+            configureChecks: b => b.AddCheck("ok", () => HealthCheckResult.Healthy()));
         using var client = CreateClient(app);
 
         var body = await GetBodyAsync(client, "/health");
@@ -69,15 +71,12 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_Unhealthy_Aggregates_OverallStatus()
+    public async Task ConfigureEndpoints_Unhealthy_Aggregates_OverallStatus()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks();
-            services.AddHealthChecks()
+        await using var app = await StartHostAsync(
+            configureChecks: b => b
                 .AddCheck("ok", () => HealthCheckResult.Healthy())
-                .AddCheck("bad", () => HealthCheckResult.Unhealthy("db down"));
-        });
+                .AddCheck("bad", () => HealthCheckResult.Unhealthy("db down")));
         using var client = CreateClient(app);
 
         // 非 Healthy → 503（探针语义）+ 响应体标注最差状态
@@ -86,15 +85,12 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_Degraded_WorstWins()
+    public async Task ConfigureEndpoints_Degraded_WorstWins()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks();
-            services.AddHealthChecks()
+        await using var app = await StartHostAsync(
+            configureChecks: b => b
                 .AddCheck("ok", () => HealthCheckResult.Healthy())
-                .AddCheck("slow", () => HealthCheckResult.Degraded("slow response"));
-        });
+                .AddCheck("slow", () => HealthCheckResult.Degraded("slow response")));
         using var client = CreateClient(app);
 
         // Healthy + Degraded → Degraded（默认 ResultStatusCodes：Degraded → 200，仅 Unhealthy → 503）
@@ -103,15 +99,13 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_Detailed_Outputs_ComponentLevelJson()
+    public async Task ConfigureEndpoints_Detailed_Outputs_ComponentLevelJson()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks(o => o.Detailed = true);
-            services.AddHealthChecks()
+        await using var app = await StartHostAsync(
+            configureExtension: x => x.ConfigureOptions = o => o.Detailed = true,
+            configureChecks: b => b
                 .AddCheck("db", () => HealthCheckResult.Healthy())
-                .AddCheck("redis", () => HealthCheckResult.Unhealthy("redis down"));
-        });
+                .AddCheck("redis", () => HealthCheckResult.Unhealthy("redis down")));
         using var client = CreateClient(app);
 
         var body = await GetBodyAsync(client, "/health", HttpStatusCode.ServiceUnavailable);
@@ -125,14 +119,11 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_ProbeException_Returns_Unhealthy_NoThrow()
+    public async Task ConfigureEndpoints_ProbeException_Returns_Unhealthy_NoThrow()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks();
-            services.AddHealthChecks()
-                .AddCheck("boom", () => throw new InvalidOperationException("probe crashed"));
-        });
+        await using var app = await StartHostAsync(
+            configureChecks: b => b
+                .AddCheck("boom", () => throw new InvalidOperationException("probe crashed")));
         using var client = CreateClient(app);
 
         // 探针异常 → 该项 Unhealthy（HealthCheckService 捕获）→ 503 不抛 500、不崩溃
@@ -141,13 +132,11 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_CustomPath_Is_Respected()
+    public async Task ConfigureEndpoints_CustomPath_Is_Respected()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks(o => o.Path = "/hc");
-            services.AddHealthChecks().AddCheck("ok", () => HealthCheckResult.Healthy());
-        });
+        await using var app = await StartHostAsync(
+            configureExtension: x => x.ConfigureOptions = o => o.Path = "/hc",
+            configureChecks: b => b.AddCheck("ok", () => HealthCheckResult.Healthy()));
         using var client = CreateClient(app);
 
         var body = await GetBodyAsync(client, "/hc");
@@ -159,13 +148,11 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task MapTkfwHealthChecks_Disabled_DoesNotMapEndpoint()
+    public async Task ConfigureEndpoints_Disabled_DoesNotMapEndpoint()
     {
-        await using var app = await StartHostAsync(services =>
-        {
-            services.AddTkfwHealthChecks(o => o.Enabled = false);
-            services.AddHealthChecks().AddCheck("ok", () => HealthCheckResult.Healthy());
-        });
+        await using var app = await StartHostAsync(
+            configureExtension: x => x.ConfigureOptions = o => o.Enabled = false,
+            configureChecks: b => b.AddCheck("ok", () => HealthCheckResult.Healthy()));
         using var client = CreateClient(app);
 
         var response = await client.GetAsync("/health", TestContext.Current.CancellationToken);

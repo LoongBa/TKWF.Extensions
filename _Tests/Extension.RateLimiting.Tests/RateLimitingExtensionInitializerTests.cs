@@ -28,13 +28,14 @@ public class RateLimitingExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_IsIdempotentWithAddTkfwRateLimiting()
+    public void ConfigureServices_IsIdempotentWithRateLimitingWebExtension()
     {
-        // Initializer Options 绑定 + AddTkfwRateLimiting 内部绑定重复调用——幂等无害（PostConfigure 单实例）
+        // Initializer Options 绑定 + RateLimitingWebExtension 内部绑定重复调用——幂等无害（PostConfigure 单实例）
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         new RateLimitingExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-        services.AddTkfwRateLimiting(o => o.RejectionStatusCode = 400);
+        new RateLimitingWebExtension { ConfigureOptions = o => o.RejectionStatusCode = 400 }
+            .ConfigureServices(services);
 
         var options = services.BuildServiceProvider()
             .GetRequiredService<IOptions<RateLimitingOptions>>().Value;
@@ -54,16 +55,19 @@ public class RateLimitingExtensionInitializerTests
     }
 
     [Fact]
-    public void AddTkfwRateLimiting_RegistersRateLimiterOptions()
+    public void RateLimitingWebExtension_RegistersRateLimiterOptions()
     {
         // AddRateLimiter 展开：RateLimiterOptions 可解析且 RejectionStatusCode 编程式覆盖生效
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddTkfwRateLimiting(o =>
+        new RateLimitingWebExtension
         {
-            o.RejectionStatusCode = 423;
-            o.RetryAfter = false;
-        });
+            ConfigureOptions = o =>
+            {
+                o.RejectionStatusCode = 423;
+                o.RetryAfter = false;
+            }
+        }.ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
         var rateLimiterOptions = sp

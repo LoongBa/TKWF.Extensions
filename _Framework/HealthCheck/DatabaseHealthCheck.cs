@@ -24,7 +24,7 @@ namespace TKWF.Ext.HealthCheck
         /// </summary>
         /// <typeparam name="TEntity">消费方任一 SG1 声明实体（<c>[DomainGenerateCode]</c> 自动实现
         /// <see cref="IDomainEntity"/>；编译期门禁——手动 POCO 不满足约束编译失败）。</typeparam>
-        /// <param name="builder">健康检查构建器（<c>AddTkfwHealthChecks</c> 返回）。</param>
+        /// <param name="builder">健康检查构建器（<c>AddHealthChecks()</c> 返回；或经 <c>HealthCheckWebExtension.AddDatabaseHealthCheck&lt;T&gt;</c> fluent 收集——v4.10.45 收敛迁移后推荐）。</param>
         /// <param name="name">探针名称（出现在 Detailed 响应 entries 中）。</param>
         /// <param name="failureStatus">探针异常时的报告状态（默认 null → Unhealthy）。</param>
         /// <param name="timeout">探针超时（默认 5 秒——防 DB 连接 hang 致 /health 无限等待）。</param>

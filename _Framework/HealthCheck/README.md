@@ -15,18 +15,18 @@
 
 ## 二、设计原理 (Design Principles)
 
-### 1. 接线型三件套
+### 1. Web 装配扩展（v4.10.45 收敛迁移——旧 `AddTkfwHealthChecks` / `MapTkfwHealthChecks` 静态方法**已删除**，破坏性变更）
 
-- **`AddTkfwHealthChecks(IServiceCollection, Action<HealthCheckEndpointOptions>? = null)`**：展开 `services.AddHealthChecks()`（net10 内置）+ `AddOptions<HealthCheckEndpointOptions>().BindConfiguration("TKWF:HealthCheck")` + configure 委托应用（代码覆盖配置）。**V0.2.0 返回 `IHealthChecksBuilder`**（源兼容——v0.1.0 丢弃返回值零破坏；支持链式 `AddDatabaseHealthCheck<T>`）。
-- **`AddDatabaseHealthCheck<TEntity>(builder, name, failureStatus?, timeout?)`**（V0.2.0）：内置 DB 连通性探针——经 `IEntityReadOnlyDAC<TEntity>` 表级探测（`SELECT COUNT(*)`），默认超时 5 秒防 hang；`TEntity` 为消费方任一 SG1 声明实体（编译期 `IDomainEntity` 约束门禁）。
-- **`MapTkfwHealthChecks(IEndpointRouteBuilder)`**：按 Options 映射 `endpoints.MapHealthChecks(path, HealthCheckOptions)`——`Enabled=false` 不映射；`Detailed=true` 走自定义 ResponseWriter 输出组件级状态 JSON；`AllowAnonymous=true`（默认）端点追加 AllowAnonymous 元数据（与 D04 豁免一致）。
-- **`HealthCheckExtensionInitializer<TUserInfo>`**（`[TKWFExtension("HealthCheck")]`）：ConfigureServices 仅注册 Options 绑定——探针由消费方经 `AddTkfwHealthChecks().AddDatabaseHealthCheck<T>()` / `AddCheck<T>` 注册。
+- **`HealthCheckWebExtension`**（`IWebExtension`，无中间件）：消费方 `UseWebExtensions(e => e.Add<HealthCheckWebExtension>(...))` 一次声明——`ConfigureServices` 内展开 `services.AddHealthChecks()`（net10 内置）+ `AddOptions<HealthCheckEndpointOptions>().BindConfiguration("TKWF:HealthCheck")` + `ConfigureOptions` 委托（代码覆盖配置）+ 逐项执行 fluent 收集的探针；`ConfigureEndpoints` 内按 Options 映射 `MapHealthChecks`。
+- **fluent 收集（G18 §3）**：`AddDatabaseHealthCheck<TEntity>(name, failureStatus?, timeout?)` / `AddCheck<THealthCheck>(name, ...)` 收集委托到 `ConfigureServices` 执行（configure 先时序兼容——旧 `AddTkfwHealthChecks().AddCheck<T>("name")` 链式能力保留）。
+- **`AddDatabaseHealthCheck<TEntity>(builder, name, failureStatus?, timeout?)`**（V0.2.0，`HealthCheckBuilderExtensions`）：内置 DB 连通性探针——经 `IEntityReadOnlyDAC<TEntity>` 表级探测（`SELECT COUNT(*)`），默认超时 5 秒防 hang；`TEntity` 为消费方任一 SG1 声明实体（编译期 `IDomainEntity` 约束门禁）。
+- **`HealthCheckExtensionInitializer<TUserInfo>`**（`[TKWFExtension("HealthCheck")]`）：ConfigureServices 仅注册 Options 绑定——探针与端点由消费方经 `HealthCheckWebExtension` 装配。
 
 ### 2. 关键设计
 
 - **命名避让（Oracle P1-1）**：扩展 Options 命名 `HealthCheckEndpointOptions`（非 HealthCheckOptions）——避开 ASP.NET Core 内置 `Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions` 类型名冲突；端点映射内部用内置 `HealthCheckOptions`（全限定）。
 - **Detailed 响应控制**：`Detailed=false`（默认）自定义 ResponseWriter 输出仅 `{"status":"..."}`——不泄露组件细节（内置默认 writer 会输出 entries）；`Detailed=true` 输出组件级 JSON（名称/状态/耗时/异常）。
-- **Options 可靠解析**：`MapTkfwHealthChecks` 优先 `IOptions<HealthCheckEndpointOptions>`（消费方经 AddTkfwHealthChecks / SG1 [Options] 绑定 / AddOptions 任一注册路径），未注册时兜底 `IConfiguration` 直读 `TKWF:HealthCheck` 节，再兜底默认值。
+- **Options 可靠解析**：`HealthCheckWebExtension.ConfigureEndpoints` 优先 `IOptions<HealthCheckEndpointOptions>`（消费方经 ConfigureServices / SG1 [Options] 绑定 / AddOptions 任一注册路径），未注册时兜底 `IConfiguration` 直读 `TKWF:HealthCheck` 节，再兜底默认值。
 - **聚合语义**：消费方注册多个 `IHealthCheck` 后，扩展聚合全部检查项返回 OverallStatus（最差状态胜出：Unhealthy > Degraded > Healthy）；探针异常 → 该项 Unhealthy（不抛 500、不崩溃）；**多探针并行执行，各探针独立 scope 解析 DAC——并发安全**（P2-5）。
 - **`AllowCachingResponses = false`**：健康探测结果实时，不参与 HTTP 缓存。
 - **DB 探针红线合规（V0.2.0）**：探针经 `IEntityReadOnlyDAC<T>`（只读接口）表级探测——红线规则 2 仅禁 `IEntityDAC<T>` 读写接口，未禁只读接口；接线型扩展无持久化适用红线不适用边界。**边界声明**：此合规路径仅限基础设施连通性探测，不作为业务扩展数据访问的先例——业务扩展仍须走 SG1 DataService。
@@ -36,10 +36,9 @@
 | **组件** | **职责** | **默认** |
 |----------|---------|---------|
 | **`HealthCheckEndpointOptions`** | 端点配置（`TKWF:HealthCheck` 节：Path/Enabled/Detailed/AllowAnonymous） | 本扩展 |
-| **`HealthCheckServiceCollectionExtensions`** | `AddTkfwHealthChecks`——AddHealthChecks + Options 绑定 + configure（V0.2.0 返回 `IHealthChecksBuilder`） | 本扩展 |
+| **`HealthCheckWebExtension`** | Web 装配扩展（v4.10.45）——`ConfigureServices`（AddHealthChecks + Options + fluent 探针收集）+ `ConfigureEndpoints`（MapHealthChecks + Detailed/AllowAnonymous 控制） | 本扩展 |
 | **`HealthCheckBuilderExtensions`** | `AddDatabaseHealthCheck<TEntity>`（V0.2.0）——内置 DB 连通性探针注册 | 本扩展 |
 | **`DatabaseHealthCheck<TEntity>`** | DB 探针实现（V0.2.0，internal sealed）——`IEntityReadOnlyDAC<TEntity>` 表级探测 + 默认超时 | 本扩展 |
-| **`HealthCheckEndpointExtensions`** | `MapTkfwHealthChecks`——端点映射 + Detailed/AllowAnonymous 控制 | 本扩展 |
 | **`HealthCheckExtensionInitializer<TUserInfo>`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + Options 接线） | 本扩展 |
 | **`IHealthCheck`**（net10 内置） | 组件探针契约——**消费方实现并注册**（扩展不内置） | 消费方 |
 
@@ -58,39 +57,44 @@
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-### 3. Program.cs——注册 + 映射 + 探针
+### 3. Program.cs——Web 装配钩子一次声明（注册 + 探针 + 映射）
 
 ```csharp
-// ① 注册（Options 默认：/health，Enabled=true，Detailed=false，AllowAnonymous=true）
-//    V0.2.0：AddTkfwHealthChecks 返回 IHealthChecksBuilder——支持链式内置 DB 探针
-services.AddTkfwHealthChecks(o => o.Detailed = false)
-    .AddDatabaseHealthCheck<UserEntity>("db");   // ② V0.2.0 内置 DB 连通性探针（IEntityReadOnlyDAC 表级探测）
-
-// ②b 或消费方注册自定义组件探针（ASP.NET Core 标准路径）
-// services.AddHealthChecks()
-//     .AddCheck("redis", () => redis.IsConnected() ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("redis down"));
-
-// ③ 映射端点（D04 已豁免 /health 认证）
-app.MapTkfwHealthChecks();   // GET /health → {"status":"Healthy"}
+// ① Web 装配钩子（v4.10.45 收敛迁移）：注册 + 探针 + 端点映射全部内聚进 HealthCheckWebExtension
+builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(...)
+    .UseWebSession()
+    .UseWebExtensions(e => e.Add<HealthCheckWebExtension>(x =>
+    {
+        // ② 内置 DB 连通性探针（IEntityReadOnlyDAC 表级探测；Options 默认：/health，Enabled=true，Detailed=false，AllowAnonymous=true）
+        x.AddDatabaseHealthCheck<UserEntity>("db");
+        // ②b 或消费方注册自定义组件探针（ASP.NET Core 标准路径）
+        // x.AddCheck("redis", () => redis.IsConnected() ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("redis down"));
+    }))
+    .BeforeRouting(...)
+    .AfterRouting(...)
+    .Build(...);
+// ③ 端点映射由 ConfigureEndpoints 完成（D04 已豁免 /health 认证）：GET /health → {"status":"Healthy"}
 ```
 
 **内置 DB 探针**（V0.2.0，推荐——免手写探针 + 红线合规路径）：
 
 ```csharp
 // TEntity = 消费方任一 SG1 声明实体（[DomainGenerateCode] 自动实现 IDomainEntity；编译期门禁）
-services.AddTkfwHealthChecks()
-    .AddDatabaseHealthCheck<OrderEntity>("db")                    // 默认超时 5s
-    .AddDatabaseHealthCheck<ProductEntity>("db-products", timeout: TimeSpan.FromSeconds(10));
+e.Add<HealthCheckWebExtension>(x =>
+{
+    x.AddDatabaseHealthCheck<OrderEntity>("db")                    // 默认超时 5s
+     .AddDatabaseHealthCheck<ProductEntity>("db-products", timeout: TimeSpan.FromSeconds(10));
+});
 
 // 语义：SELECT COUNT(*) FROM {Entity 表}——连接串有效 + DB 可达 + 表存在 + 查询可执行
 // 异常 → Unhealthy（503）；OCE 取消穿透（不误报）；多探针并行执行（独立 scope 并发安全）
 ```
 
-> **自定义探针**仍可用（消费方实现 `IHealthCheck`）：`services.AddHealthChecks().AddCheck<MyDbHealthCheck>("db")`。
+> **自定义探针**仍可用（消费方实现 `IHealthCheck`）：`x.AddCheck<MyDbHealthCheck>("db")` 或 `services.AddHealthChecks().AddCheck<MyDbHealthCheck>("db")`。
 
 ## 五、配置 (Configuration)
 
-`HealthCheckEndpointOptions` 绑定 `TKWF:HealthCheck` 配置节（SG1 `[Options]` 自动绑定 + AddTkfwHealthChecks/Initializer 兜底）：
+`HealthCheckEndpointOptions` 绑定 `TKWF:HealthCheck` 配置节（SG1 `[Options]` 自动绑定 + HealthCheckWebExtension/Initializer 兜底）：
 
 ```json
 {

@@ -12,7 +12,7 @@ public sealed class NotificationsSignalROptions
     /// <summary>客户端订阅的 Hub 方法名（客户端 <c>connection.on(methodName, ...)</c>）。</summary>
     public string MethodName { get; set; } = "notificationReceived";
 
-    /// <summary>推荐端点路径（<see cref="SignalREndpointExtensions.MapTkfwNotificationsHub"/> 默认值）。</summary>
+    /// <summary>推荐端点路径（<see cref="NotificationsHubWebExtension.ConfigureEndpoints"/> 默认值；v4.10.45 收敛迁移——旧 SignalREndpointExtensions.MapTkfwNotificationsHub 已删除）。</summary>
     public string Path { get; set; } = "/hubs/notifications";
 
     /// <summary>端点认证豁免（默认 false——通知负载敏感须登录；true 时追加 AllowAnonymous 元数据）。</summary>

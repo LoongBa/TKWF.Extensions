@@ -23,6 +23,9 @@
     <!-- 主框架引用（跨仓库，TKWFSourceRoot 定义于 ../Directory.Build.props，对齐 DMP-Lite 模式） -->
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- v4.10.45（Web 装配钩子）：IWebExtension 契约所在程序集——RateLimitingWebExtension 实现 -->
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
   </ItemGroup>
 
   <ItemGroup>

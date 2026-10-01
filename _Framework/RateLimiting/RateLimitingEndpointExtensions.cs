@@ -6,7 +6,7 @@ namespace TKWF.Ext.RateLimiting;
 /// 端点限流辅助——为端点应用命名限流策略（可选；消费方也可标准 <c>RequireRateLimiting</c>）。
 /// <para><b>端点策略的两条生效路径</b>（Oracle P2-2 精确路径匹配）：</para>
 /// <list type="number">
-/// <item><b>自动</b>：<c>AddTkfwRateLimiting</c> 注册的全局分区器按 <c>Request.Path</c> 精确命中
+/// <item><b>自动</b>：<c>RateLimitingWebExtension</c> 注册的全局分区器按 <c>Request.Path</c> 精确命中
 ///   <see cref="RateLimitingOptions.EndpointPolicies"/> 自动应用端点策略（独立配额）——无需标注端点。</item>
 /// <item><b>标注式</b>：端点定义时经 <see cref="MapTkfwRateLimiter(IEndpointConventionBuilder, string)"/>
 ///   （policyName = EndpointPolicies 路径键）或标准 <c>RequireRateLimiting</c> 显式挂策略。</item>

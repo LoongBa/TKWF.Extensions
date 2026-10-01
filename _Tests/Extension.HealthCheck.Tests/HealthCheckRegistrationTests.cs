@@ -8,7 +8,7 @@ namespace TKWF.Ext.HealthCheck.Tests;
 
 /// <summary>
 /// HealthCheck 扩展接线测试——[TKWFExtension] 声明 / ConfigureServices Options 注册 /
-/// AddTkfwHealthChecks 服务注册 / TKWF:HealthCheck 配置节绑定 / configure 委托覆盖。
+/// HealthCheckWebExtension（v4.10.45 收敛迁移——旧 AddTkfwHealthChecks 静态方法已删除）服务注册 / TKWF:HealthCheck 配置节绑定 / configure 委托覆盖。
 /// </summary>
 public class HealthCheckRegistrationTests
 {
@@ -44,13 +44,14 @@ public class HealthCheckRegistrationTests
     }
 
     [Fact]
-    public void AddTkfwHealthChecks_Registers_HealthCheckService_And_Options()
+    public void HealthCheckWebExtension_Registers_HealthCheckService_And_Options()
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(EmptyConfiguration());
         // 裸 ServiceCollection 需显式日志基础设施（DefaultHealthCheckService 依赖 ILogger<>；真实 host 默认已注册）
         services.AddLogging();
-        services.AddTkfwHealthChecks();
+        // v4.10.45 收敛迁移：静态方法 AddTkfwHealthChecks 已删除——Web 装配收敛为 HealthCheckWebExtension
+        new HealthCheckWebExtension().ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
 
@@ -66,7 +67,7 @@ public class HealthCheckRegistrationTests
     }
 
     [Fact]
-    public void AddTkfwHealthChecks_Configure_Overrides_ConfigSection()
+    public void HealthCheckWebExtension_Configure_Overrides_ConfigSection()
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
@@ -77,10 +78,8 @@ public class HealthCheckRegistrationTests
                 ["TKWF:HealthCheck:AllowAnonymous"] = "false"
             })
             .Build());
-        services.AddTkfwHealthChecks(o =>
-        {
-            o.Detailed = false; // configure 委托后于配置节绑定应用——代码覆盖配置
-        });
+        new HealthCheckWebExtension { ConfigureOptions = o => o.Detailed = false } // configure 委托后于配置节绑定应用——代码覆盖配置
+            .ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<IOptions<HealthCheckEndpointOptions>>().Value;
@@ -103,7 +102,7 @@ public class HealthCheckRegistrationTests
                 ["TKWF:HealthCheck:AllowAnonymous"] = "false"
             })
             .Build());
-        services.AddTkfwHealthChecks();
+        new HealthCheckWebExtension().ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<IOptions<HealthCheckEndpointOptions>>().Value;

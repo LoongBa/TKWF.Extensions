@@ -49,7 +49,8 @@ public class DatabaseHealthCheckTests
             new FreeSqlEntityDAC<TestProbeEntity>(new UnitOfWorkManager(fsql)));
 
         var app = builder.Build();
-        app.MapTkfwHealthChecks();
+        // v4.10.45 收敛迁移：旧 MapTkfwHealthChecks 静态方法已删除——端点映射收敛为 HealthCheckWebExtension.ConfigureEndpoints
+        new HealthCheckWebExtension().ConfigureEndpoints(app, new DomainWebOptions());
         await app.StartAsync();
         return app;
     }
@@ -76,8 +77,10 @@ public class DatabaseHealthCheckTests
     {
         await using var app = await StartHostAsync(services =>
         {
-            services.AddTkfwHealthChecks()
-                .AddDatabaseHealthCheck<TestProbeEntity>("db");
+            // v4.10.45 收敛迁移：旧 AddTkfwHealthChecks 静态方法已删除——fluent 收集收敛为 HealthCheckWebExtension
+            new HealthCheckWebExtension()
+                .AddDatabaseHealthCheck<TestProbeEntity>("db")
+                .ConfigureServices(services);
         });
         SyncProbeTable(app);
         using var client = CreateClient(app);
@@ -93,8 +96,10 @@ public class DatabaseHealthCheckTests
     {
         await using var app = await StartHostAsync(services =>
         {
-            services.AddTkfwHealthChecks()
-                .AddDatabaseHealthCheck<TestProbeEntity>("db");
+            // v4.10.45 收敛迁移：旧 AddTkfwHealthChecks 静态方法已删除——fluent 收集收敛为 HealthCheckWebExtension
+            new HealthCheckWebExtension()
+                .AddDatabaseHealthCheck<TestProbeEntity>("db")
+                .ConfigureServices(services);
         });
         SyncProbeTable(app);
 
@@ -117,8 +122,9 @@ public class DatabaseHealthCheckTests
     {
         await using var app = await StartHostAsync(services =>
         {
-            services.AddTkfwHealthChecks(o => o.Detailed = true)
-                .AddDatabaseHealthCheck<TestProbeEntity>("db");
+            new HealthCheckWebExtension { ConfigureOptions = o => o.Detailed = true }
+                .AddDatabaseHealthCheck<TestProbeEntity>("db")
+                .ConfigureServices(services);
         });
         SyncProbeTable(app);
         using var client = CreateClient(app);
@@ -137,8 +143,9 @@ public class DatabaseHealthCheckTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddTkfwHealthChecks()
-            .AddDatabaseHealthCheck<TestProbeEntity>("db");
+        new HealthCheckWebExtension()
+            .AddDatabaseHealthCheck<TestProbeEntity>("db")
+            .ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
@@ -154,8 +161,9 @@ public class DatabaseHealthCheckTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddTkfwHealthChecks()
-            .AddDatabaseHealthCheck<TestProbeEntity>("db", timeout: TimeSpan.FromSeconds(30));
+        new HealthCheckWebExtension()
+            .AddDatabaseHealthCheck<TestProbeEntity>("db", timeout: TimeSpan.FromSeconds(30))
+            .ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;

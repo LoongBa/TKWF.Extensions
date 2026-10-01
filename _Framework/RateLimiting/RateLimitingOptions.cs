@@ -20,7 +20,7 @@ public enum RateLimitPartition
 /// <summary>
 /// Web 层限流配置（<c>TKWF:RateLimiting</c> 配置节）。
 /// <para>SG1 <see cref="OptionsAttribute"/> 声明 + 本扩展 <c>AddOptions().BindConfiguration</c> 双通道绑定；
-/// 编程式 <c>AddTkfwRateLimiting(configure)</c> 回调覆盖配置节。</para>
+/// 编程式 <c>RateLimitingWebExtension.ConfigureOptions</c> 回调覆盖配置节（v4.10.45 收敛迁移——旧 AddTkfwRateLimiting(configure) 已删除）。</para>
 /// </summary>
 [Options("TKWF:RateLimiting")]
 public sealed class RateLimitingOptions

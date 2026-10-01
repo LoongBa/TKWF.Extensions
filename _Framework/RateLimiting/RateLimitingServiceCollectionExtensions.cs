@@ -1,7 +1,6 @@
 using System;
 using System.Threading.RateLimiting;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,45 +9,16 @@ using Microsoft.Extensions.Options;
 namespace TKWF.Ext.RateLimiting;
 
 /// <summary>
-/// 接线入口——一键展开 ASP.NET Core 内置 <c>AddRateLimiter</c> 中间件
-/// （net10 内置 System.Threading.RateLimiting，零第三方依赖）：
-/// <list type="bullet">
-/// <item><b>全局策略</b>：Options.Global 兜底所有端点；<b>端点级覆盖</b>：EndpointPolicies
-///   按<b>精确路径</b>匹配（Oracle P2-2）自动生效（未命中回退全局；命中独立配额）</item>
-/// <item><b>分区器</b>：Ip（RemoteIpAddress）/ User（HttpContext.User ClaimsPrincipal，匿名 fallback IP，Oracle C1）</item>
-/// <item><b>响应语义</b>：RejectionStatusCode（默认 429，对齐 Domain RateLimitException）+ Retry-After 头（可配）</item>
-/// <item><b>Options 绑定</b>：TKWF:RateLimiting 配置节（AddOptions().BindConfiguration——与 Initializer 幂等）；
-///   编程式 configure 回调优先覆盖配置节</item>
-/// </list>
+/// 限流展开内部助手（v4.10.45 收敛迁移后为 internal）——<see cref="TkfwRateLimiterOptionsSetup"/>
+/// 与 <see cref="RateLimitingWebExtension"/> 共用：将 <see cref="RateLimitingOptions"/> 展开到
+/// ASP.NET Core <c>RateLimiterOptions</c>（全局/端点级策略 + 分区器 + 429/Retry-After）。
+/// <para>旧 <c>AddTkfwRateLimiting</c> 静态入口已删除（CHANGELOG 破坏性变更）——Web 装配收敛为
+/// <see cref="RateLimitingWebExtension"/>（消费方 <c>UseWebExtensions</c> 一次声明，锚点 BeforeAuthentication）。</para>
 /// <para>与 Domain 层 <c>FilterBuilder.AddRateLimit()</c> + <c>[RateLimit]</c> AOP 双层互补：
 /// Web 层管 HTTP 入口 IP/端点粗粒度兜底，Domain 层管领域方法用户级细粒度——两者不替代（Oracle C2）。</para>
 /// </summary>
-public static class RateLimitingServiceCollectionExtensions
+internal static class RateLimitingServiceCollectionExtensions
 {
-    /// <summary>
-    /// 注册 Web 层限流（AddRateLimiter 展开 + Options 绑定 + 分区器 + 429/Retry-After）。
-    /// </summary>
-    /// <param name="services">服务集合。</param>
-    /// <param name="configure">编程式配置（可选）——覆盖 <c>TKWF:RateLimiting</c> 配置节后应用（编程优先）。</param>
-    public static IServiceCollection AddTkfwRateLimiting(
-        this IServiceCollection services,
-        Action<RateLimitingOptions>? configure = null)
-    {
-        // ① Options 绑定：配置节 TKWF:RateLimiting（与 Initializer 重复调用幂等无害）
-        services.AddOptions<RateLimitingOptions>().BindConfiguration(RateLimitingOptions.SectionName);
-
-        // ② 编程式覆盖（PostConfigure：配置节之后应用 → 编程优先）
-        if (configure != null)
-            services.PostConfigure<RateLimitingOptions>(configure);
-
-        // ③ 展开 ASP.NET Core AddRateLimiter：延迟经 IConfigureOptions 从最终 RateLimitingOptions
-        //    （默认值 → 配置节 → 编程式）构建 RateLimiterOptions——避免调用时快照丢失配置节绑定。
-        services.AddRateLimiter();
-        services.ConfigureOptions<TkfwRateLimiterOptionsSetup>();
-
-        return services;
-    }
-
     /// <summary>
     /// 将 <see cref="RateLimitingOptions"/> 展开到 ASP.NET Core <see cref="RateLimiterOptions"/>
     /// （供 ConfigureOptions Setup 与测试直接复用）。
@@ -110,7 +80,7 @@ public static class RateLimitingServiceCollectionExtensions
 
 /// <summary>
 /// 延迟配置 Setup——在 RateLimiterOptions 首次解析时注入最终 <see cref="RateLimitingOptions"/>
-/// （默认值 → TKWF:RateLimiting 配置节 → AddTkfwRateLimiting(configure) 编程式，优先级递增）。
+    /// （默认值 → TKWF:RateLimiting 配置节 → RateLimitingWebExtension.ConfigureOptions 编程式，优先级递增）。
 /// </summary>
 internal sealed class TkfwRateLimiterOptionsSetup : IConfigureOptions<RateLimiterOptions>
 {

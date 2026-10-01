@@ -9,12 +9,13 @@ namespace TKWF.Ext.RateLimiting
     /// <list type="bullet">
     /// <item><see cref="ConfigureServices"/>——注册 <see cref="RateLimitingOptions"/> Options 绑定
     ///       （AddOptions&lt;RateLimitingOptions&gt;().BindConfiguration("TKWF:RateLimiting")，与
-    ///       <c>AddTkfwRateLimiting</c> 幂等）</item>
+    ///       <c>RateLimitingWebExtension.ConfigureServices</c> 幂等）</item>
     /// <item>ConfigureFilters——不调用（限流在 Web 层中间件接线，Domain 层 [RateLimit] 属主框架既有能力）</item>
     /// <item>InitializeAsync——不调用（无种子/无持久化；本扩展纯 Web 层接线，无 SG1 实体）</item>
     /// </list>
-    /// <para><b>注意</b>：启用本扩展仅完成 Options 绑定；<b>限流中间件接线须消费方显式调用
-    /// <c>services.AddTkfwRateLimiting(...)</c></b>（Web 层接线点由消费方决定，扩展不自动注册中间件）。</para>
+    /// <para><b>注意</b>：启用本扩展仅完成 Options 绑定；<b>限流中间件接线须消费方显式
+    /// <c>UseWebExtensions(e =&gt; e.Add&lt;RateLimitingWebExtension&gt;(...))</c></b>（v4.10.45 收敛迁移——
+    /// 旧 <c>services.AddTkfwRateLimiting(...)</c> + <c>app.UseRateLimiter()</c> 静态接线已删除）。</para>
     /// <para>与 Domain 层关系（Oracle C2）：Domain 层 <c>FilterBuilder.AddRateLimit()</c> + <c>[RateLimit]</c>
     /// AOP 为主框架既有能力（V4.9.49 ADR19），本扩展<b>不重建</b>——两条路径双层互补：
     /// Web 层粗粒度 IP/端点兜底 + Domain 层用户级细粒度策略。</para>

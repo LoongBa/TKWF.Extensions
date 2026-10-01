@@ -13,7 +13,8 @@ namespace TKWF.Ext.RateLimiting.Tests;
 
 /// <summary>
 /// V4.9.85 (B2)：消费方宿主初始化器——模拟真实消费方启用 RateLimiting 扩展。
-/// <para>限流中间件接线点由消费方决定（AddTkfwRateLimiting 显式调用）；本消费方仅验证
+/// <para>限流中间件接线由 Web 装配钩子完成（v4.10.45 收敛迁移：消费方 <c>UseWebExtensions</c> 装配
+/// <c>RateLimitingWebExtension</c>——旧 AddTkfwRateLimiting 显式调用已删除）；本消费方仅验证
 /// 扩展发现 + Options 绑定（TKWF:RateLimiting 节）三钩子接线。</para>
 /// </summary>
 [TKWFEnabledExtension(typeof(RateLimitingExtensionInitializer<>))]

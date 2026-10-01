@@ -22,9 +22,9 @@ internal static class RateLimitingTestInfra
     public const string TestUserHeader = "X-Test-User";
 
     /// <summary>
-    /// 构建 TestServer 宿主：测试头模拟中间件 + AddTkfwRateLimiting + 端点 + UseRateLimiter。
+    /// 构建 TestServer 宿主：测试头模拟中间件 + RateLimitingWebExtension（ConfigureServices/ConfigureMiddleware）+ 端点。
     /// </summary>
-    /// <param name="configure">AddTkfwRateLimiting 编程式配置。</param>
+    /// <param name="configure">RateLimitingWebExtension.ConfigureOptions 编程式配置。</param>
     /// <param name="configuration">附加 IConfiguration（Options 绑定测试用；合并进 WebApplication 配置源）。</param>
     /// <param name="mapEndpoints">自定义端点映射（默认 /api/test GET + /api/auth/login POST + /api/public GET）。</param>
     public static TestHostSuite BuildHost(
@@ -39,7 +39,11 @@ internal static class RateLimitingTestInfra
 
         builder.WebHost.UseTestServer();
         builder.Services.AddRouting();
-        builder.Services.AddTkfwRateLimiting(configure);
+
+        // v4.10.45 收敛迁移：静态方法 AddTkfwRateLimiting 已删除——Web 装配收敛为 RateLimitingWebExtension
+        // （消费方 UseWebExtensions 一次声明）；测试按 WebExtension 实例化驱动。
+        var extension = new RateLimitingWebExtension { ConfigureOptions = configure };
+        extension.ConfigureServices(builder.Services);
 
         var app = builder.Build();
 
@@ -61,7 +65,7 @@ internal static class RateLimitingTestInfra
             await next(ctx);
         });
 
-        app.UseRateLimiter();
+        extension.ConfigureMiddleware(app, new DomainWebOptions());
 
         if (mapEndpoints != null)
         {

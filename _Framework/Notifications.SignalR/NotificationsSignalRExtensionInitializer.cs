@@ -19,9 +19,9 @@ namespace TKWF.Ext.Notifications.SignalR;
 /// <item>ConfigureFilters——不调用（无过滤器）</item>
 /// <item>InitializeAsync——不调用（无种子/无持久化）</item>
 /// </list>
-/// <para><b>不调 <c>AddSignalR()</c></b>（接线型边界 D6）：SignalR 基础设施（IHubContext 注册）归消费方
-/// <c>services.AddSignalR()</c>；<see cref="SignalRNotifier"/> 延迟可空解析 <see cref="IHubContext{NotificationsHub}"/>
-/// ——未 AddSignalR 时构造不失败、投递 LogWarning 跳过。</para>
+/// <para><b>不调 <c>AddSignalR()</c></b>（v4.10.45 起 D6 边界内聚至 <see cref="NotificationsHubWebExtension.ConfigureServices"/>——
+/// 2026-10-01 语义推移：消费方 → 扩展；<c>AddSignalR</c> 幂等，既有消费方自调无碍）；<see cref="SignalRNotifier"/>
+/// 延迟可空解析 <see cref="IHubContext{NotificationsHub}"/>——未 AddSignalR 时构造不失败、投递 LogWarning 跳过。</para>
 /// </summary>
 [TKWFExtension("Notifications.SignalR")]
 public class NotificationsSignalRExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
@@ -31,7 +31,7 @@ public class NotificationsSignalRExtensionInitializer<TUserInfo> : ExtensionInit
     public override string Name => "Notifications.SignalR";
 
     /// <summary>扩展描述。</summary>
-    public override string Description => "通知中心 SignalR 实时推送通道（服务端——Hub 类型锚 + SignalRNotifier best-effort 推送 + 端点映射；消费方 AddSignalR + MapTkfwNotificationsHub 接线）";
+    public override string Description => "通知中心 SignalR 实时推送通道（服务端——Hub 类型锚 + SignalRNotifier best-effort 推送 + 端点映射；消费方 UseWebExtensions 装配 NotificationsHubWebExtension——AddSignalR D6 内聚 + MapHub）";
 
     /// <summary>
     /// 注册 SignalR 通道服务。

@@ -14,7 +14,8 @@ namespace TKWF.Ext.HealthCheck
     /// </list>
     /// <para><b>无内置探针</b>（Oracle P2-2 裁定）：v0.1.0 不注册任何 <c>IHealthCheck</c>——消费方经
     /// <c>services.AddHealthChecks().AddCheck&lt;T&gt;("name")</c> 注册（数据访问红线规避，见开发方案 §二不包含）；
-    /// 端点映射由消费方在 Program.cs 调 <c>app.MapTkfwHealthChecks()</c> 完成。</para>
+    /// 端点映射由 <b>Web 装配钩子</b>完成（v4.10.45 收敛迁移：消费方 <c>UseWebExtensions(e =&gt; e.Add&lt;HealthCheckWebExtension&gt;(...))</c>，
+    /// 旧 <c>app.MapTkfwHealthChecks()</c> 静态方法已删除）。</para>
     /// </summary>
     [TKWFExtension("HealthCheck")]
     public class HealthCheckExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>

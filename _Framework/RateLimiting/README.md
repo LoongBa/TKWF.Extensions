@@ -8,12 +8,12 @@
 
 ## 一、定位（与 Domain 层双层防护，Oracle C2）
 
-| 维度 | Web 层（本扩展 `AddTkfwRateLimiting`） | Domain 层（主框架 `[RateLimit]` AOP） |
+| 维度 | Web 层（本扩展 `RateLimitingWebExtension`，v4.10.45 收敛迁移） | Domain 层（主框架 `[RateLimit]` AOP） |
 |------|----------------------------------------|---------------------------------------|
 | 管辖 | HTTP 入口（端点/路径/IP/用户分区） | 领域服务方法（`FilterBuilder.AddRateLimit()` + `[RateLimit("policy")]`） |
 | 粒度 | 粗粒度兜底（IP 防破解、端点级、全局限流） | 细粒度用户级频控（服务方法级） |
 | 分区 | `HttpContext.Connection.RemoteIpAddress` / `HttpContext.User`（匿名 fallback IP） | `IRateLimitPolicyRegistry`（用户键，Domain 层上下文） |
-| 接线 | `services.AddTkfwRateLimiting(...)` + `app.UseRateLimiter()` | `services.AddRateLimitPolicy(name, opts => ...)` + 服务方法标注 |
+| 接线 | 消费方 `UseWebExtensions(e => e.Add<RateLimitingWebExtension>(...))`（锚点 BeforeAuthentication——Route 前） | `services.AddRateLimitPolicy(name, opts => ...)` + 服务方法标注 |
 | 拒绝语义 | `RejectionStatusCode`（默认 429）+ `Retry-After` 头 | `EnforceAsync` 抛 `AuthenticationException`（429 语义） |
 
 **组合用法**（登录接口示例）：Web 层 IP 限流（`/api/auth/login` 每分钟 N 次/IP——Domain 层 `RateLimitPartitionBy.Ip` 明确留白抛异常）+ Domain 层 `[RateLimit]` 用户级频控——双层互补不替代。
@@ -30,17 +30,28 @@
 [TKWFEnabledExtension(typeof(RateLimitingExtensionInitializer<>))]
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 
-// 2. 注册 Web 层限流（接线点由消费方决定——不自动）
-builder.Services.AddTkfwRateLimiting(o =>
-{
-    o.Global = new() { Algorithm = RateLimitAlgorithm.FixedWindow, PermitLimit = 100, WindowSeconds = 60 };
-    o.Partition = RateLimitPartition.Ip;
-    o.EndpointPolicies["/api/auth/login"] = new() { Algorithm = RateLimitAlgorithm.FixedWindow, PermitLimit = 5, WindowSeconds = 60 };
-});
-// 3. 启用中间件（Route 之前）
-var app = builder.Build();
-app.UseRateLimiter();
+// 2. Web 装配钩子一次声明（v4.10.45 收敛迁移——旧 AddTkfwRateLimiting + app.UseRateLimiter() 静态接线已删除，
+//    CHANGELOG 破坏性变更；AddRateLimiter 展开 + Options 绑定 + 中间件挂载全部内聚进扩展）
+builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(...)
+    .UseWebSession()
+    .UseWebExtensions(e => e.Add<RateLimitingWebExtension>(x =>
+    {
+        x.ConfigureOptions = o =>
+        {
+            o.Global = new() { Algorithm = RateLimitAlgorithm.FixedWindow, PermitLimit = 100, WindowSeconds = 60 };
+            o.Partition = RateLimitPartition.Ip;
+            o.EndpointPolicies["/api/auth/login"] = new() { Algorithm = RateLimitAlgorithm.FixedWindow, PermitLimit = 5, WindowSeconds = 60 };
+        };
+    }))
+    .BeforeRouting(...)
+    .AfterRouting(...)
+    .Build(...);
 ```
+
+> **标注式限流（v4.10.45 现状）**：本扩展默认锚点 `BeforeAuthentication`（Route 之前）——自动路径感知模式
+> （全局分区器按 `Request.Path` 精确命中 `EndpointPolicies`）无碍；**标注式 `RequireRateLimiting` 需端点
+> metadata（UseRouting 后）**——当前仍需消费方在 `BeforeRouting` 显式 `app.UseRateLimiter()`（AfterRouting
+> 锚点为框架机制预留，见 G18 §5 说明；待扩展提供 AfterRouting 锚点变体后收敛）。
 
 ## 三、Options（`TKWF:RateLimiting` 节）
 
@@ -63,13 +74,13 @@ app.UseRateLimiter();
 - **算法**：`RateLimitAlgorithm.FixedWindow | SlidingWindow | TokenBucket`
 - **令牌桶语义**（Oracle P2-1）：`PermitLimit` = `TokenLimit` 最大容量（突发许可上限）；补充走 `ReplenishmentTokensPerSecond`（每秒 TokensPerPeriod，`ReplenishmentPeriod`=1s）
 - **默认值对齐**主框架 Domain 层 `RateLimitPolicyOptions`（PermitLimit=5 / Window=1min / SegmentsPerWindow=6 / QueueLimit=0）
-- **优先级**：默认值 < 配置节绑定 < `AddTkfwRateLimiting(configure)` 编程式覆盖
-- 配置绑定通道：SG1 `[Options("TKWF:RateLimiting")]`（消费方自动）+ `AddTkfwRateLimiting` 内部 `AddOptions().BindConfiguration`（幂等）
+- **优先级**：默认值 < 配置节绑定 < `RateLimitingWebExtension.ConfigureOptions` 编程式覆盖
+- 配置绑定通道：SG1 `[Options("TKWF:RateLimiting")]`（消费方自动）+ `RateLimitingWebExtension.ConfigureServices` 内部 `AddOptions().BindConfiguration`（幂等）
 
 ## 四、端点级策略（Oracle P2-2 精确匹配）
 
 **两条生效路径**（互补不叠加）：
-1. **自动**：`AddTkfwRateLimiting` 注册的全局分区器按 `Request.Path` 精确命中 `EndpointPolicies` 自动换用端点策略（key 带 `ep:{path}:` 前缀独立配额）；未命中回退 `Global`。v0.1.0 **不支持通配符前缀**（v0.2.0 评估）。
+1. **自动**：`RateLimitingWebExtension` 注册的全局分区器按 `Request.Path` 精确命中 `EndpointPolicies` 自动换用端点策略（key 带 `ep:{path}:` 前缀独立配额）；未命中回退 `Global`。v0.1.0 **不支持通配符前缀**（v0.2.0 评估）。
 2. **标注式**：端点定义时 `.MapTkfwRateLimiter("/api/auth/login")`（等价 `RequireRateLimiting`）——显式挂命名策略；命中时中间件只执行端点策略不执行全局策略。
 
 ## 五、分区器（Oracle C1）

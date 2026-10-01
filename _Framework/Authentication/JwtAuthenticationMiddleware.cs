@@ -20,8 +20,9 @@ namespace TKWF.Ext.Authentication;
 /// HttpAuthenticationMiddleware 之前</b>——SessionKey 恢复先到（Items 已有值 → 短路跳过，浏览器场景优先），
 /// 无 SessionKey 时走 Bearer JWT（API 场景）——两路径互斥不叠加、零覆盖竞态（方案"先到先得"语义落地）。</para>
 /// <para>恢复委托由消费方提供（UserHelper 子类内经 CreateUserInstance() 构建——需 Host 上下文，中间件不触碰 internal Host）。</para>
-/// <para>⚡ 零跨程序集依赖：DomainUserKey 字面量与主框架 <c>ContextExtractionMiddleware.DomainUserKey</c> 常量值
-/// （"DomainUser"）对齐——TKWF.Domain.Web 无独立 NuGet 包，扩展不引用该程序集（NuGet 模式可构建）。</para>
+/// <para>⚡ DomainUserKey 字面量与主框架 <c>ContextExtractionMiddleware.DomainUserKey</c> 常量值
+/// （"DomainUser"）对齐（字面量保留——防跨程序集常量内联漂移）。v4.10.45 起扩展经
+/// <c>JwtAuthenticationWebExtension&lt;TUserInfo&gt;</c>（TKWF.Domain.Web 包）装配，无需零跨程序集约束。</para>
 /// </summary>
 /// <typeparam name="TUserInfo">消费方用户类型。</typeparam>
 public class JwtAuthenticationMiddleware<TUserInfo>(
@@ -38,8 +39,11 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // 互斥不叠加：Items 已有 DomainUser（SessionKey 会话恢复先到）→ 跳过（防双向覆盖竞态）
-        if (context.Items[DomainUserKey] is DomainUser<TUserInfo>)
+        // 互斥不叠加：Items 已有【已认证】DomainUser（SessionKey 会话恢复先到）→ 跳过（防双向覆盖竞态）。
+        // ⚠️ v4.10.45 收敛迁移修正：匿名游客（未认证）不短路——ContextExtraction 阶段 2 恒写游客 DomainUser，
+        //    原 `is DomainUser<TUserInfo>` 判定在 UseWebSession 全链下恒真 → JWT 验签永不执行（API 场景失效）；
+        //    现按 IsAuthenticated 门控——认证会话先到短路（浏览器场景），游客 + Bearer 走 JWT 验签（API 场景）。
+        if (context.Items[DomainUserKey] is DomainUser<TUserInfo> { IsAuthenticated: true })
         {
             await next(context);
             return;

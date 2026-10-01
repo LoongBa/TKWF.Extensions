@@ -24,10 +24,22 @@ public class JwtAuthenticationMiddlewareTests
 
     private static TestServer CreateServer(Func<HttpContext, TokenValidationResult, Task<DomainUser<TestUserInfo>>>? restoreUser = null, bool invalidToken = false)
     {
+        var helper = new TestAuthUserHelper();
+        // v4.10.45 收敛迁移：静态方法 AddJwtAuthentication/UseTkfwJwtAuthentication 已删除——
+        // Web 装配收敛为 JwtAuthenticationWebExtension（消费方 UseWebExtensions 一次声明），
+        // 测试按 WebExtension 实例化驱动（ConfigureServices + ConfigureMiddleware 手动调用）。
+        var extension = new JwtAuthenticationWebExtension<TestUserInfo>
+        {
+            RestoreUser = (ctx, token) =>
+                restoreUser != null
+                    ? restoreUser(ctx, token)
+                    : Task.FromResult(helper.CreateUserInstanceForTest())
+        };
+
         var builder = new WebHostBuilder()
             .ConfigureServices(services =>
             {
-                services.AddJwtAuthentication<TestUserInfo>();
+                extension.ConfigureServices(services);
                 // 替换验证器：中间件行为测试用假验证器（真实验签 TokenServiceTests 已覆盖）
                 if (invalidToken)
                     services.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new ThrowingTokenVerifier()));
@@ -36,12 +48,8 @@ public class JwtAuthenticationMiddlewareTests
             })
             .Configure(app =>
             {
-                var helper = new TestAuthUserHelper();
-                // JwtAuthenticationMiddleware（Bearer JWT → 恢复委托 → Items[DomainUserKey]）
-                app.UseTkfwJwtAuthentication<TestUserInfo>((ctx, token) =>
-                    restoreUser != null
-                        ? restoreUser(ctx, token)
-                        : Task.FromResult(helper.CreateUserInstanceForTest()));
+                // JwtAuthenticationMiddleware（Bearer JWT → 恢复委托 → Items[DomainUserKey]）——BeforeAuthentication 锚点语义
+                extension.ConfigureMiddleware(app, new TKW.Framework.Domain.Hosting.DomainWebOptions());
                 // 断言中间件：读 Items[DomainUserKey] → 响应头（验证恢复接线；UserInfo 填充经 LoginAsUserAsync 归消费方 Host 全链路）
                 app.Use((ctx, next) =>
                 {

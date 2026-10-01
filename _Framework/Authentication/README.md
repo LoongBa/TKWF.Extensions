@@ -79,15 +79,30 @@ public class MyUserHelper : AuthenticationUserHelperBase<MyUserInfo>
 
 ### 3. Bearer JWT API 消费（路径 B——主框架缺口补齐）
 
+> **v4.10.45 收敛迁移（破坏性变更）**：旧静态方法 `AddJwtAuthentication` + `UseTkfwJwtAuthentication` **已删除**——
+> Web 装配收敛为 `JwtAuthenticationWebExtension<TUserInfo>`（Web 装配钩子 ADR87/D22/G18，锚点默认
+> `BeforeAuthentication`——ContextExtraction 之后 / HttpAuthentication 之前，验签恢复 DomainUser 供框架认证判定）。
+
 ```csharp
-// Program.cs——注册验证器 + 中间件（接线位置：UseWebSession 之后 / UseHttpAuthentication 之前）
-builder.Services.AddJwtAuthentication<MyUserInfo>();
-var app = builder.Build();
-app.UseWebSession<MyUserInfo>();
-app.UseTkfwJwtAuthentication<MyUserInfo>((httpContext, tokenResult) =>
-    Task.FromResult(/* 消费方 UserHelper 内经 CreateUserInstance() 构建已认证 DomainUser<MyUserInfo> */));
-app.UseHttpAuthentication<MyUserInfo>();
+// Program.cs——Web 装配钩子一次声明（UseWebExtensions；RestoreUser 委托直传，不经 Options）
+builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(...)
+    .UseWebSession()
+    .UseWebExtensions(e => e.Add<JwtAuthenticationWebExtension<MyUserInfo>>(x =>
+    {
+        x.RestoreUser = (httpContext, tokenResult) =>
+            Task.FromResult(/* 消费方 UserHelper 内经 CreateUserInstance() 构建已认证 DomainUser<MyUserInfo> */);
+    }))
+    .BeforeRouting(...)
+    .AfterRouting(...)
+    .Build(...);
+// ITokenVerifier 等业务服务由 Domain 钩子 AuthCenterExtensionInitializer 注册（领域自治，非 Web 钩子职责）
 ```
+
+> **⚠️ 短路语义修正（v4.10.45 随收敛迁移）**：`JwtAuthenticationMiddleware` 短路判定由"Items 已有
+> `DomainUser<TUserInfo>` 即跳过"修正为"**已认证**（`IsAuthenticated`）才跳过"——ContextExtraction 阶段 2
+> 恒写匿名游客 DomainUser，原判定在 UseWebSession 全链下恒真 → JWT 验签永不执行（API 场景失效）；修正后
+> 认证会话先到短路（浏览器场景），游客 + Bearer 走 JWT 验签（API 场景）。由 `JwtAuthenticationWebHookIntegrationTests`
+> 黑盒哨兵冒烟锁定（顺序串 ContextExtraction → JwtAuth 验签 → HttpAuthentication）。
 
 ### 4. 配置选项（`TKWF:AuthCenter` 节）
 

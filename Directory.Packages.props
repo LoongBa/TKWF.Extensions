@@ -70,23 +70,23 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.50" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.50" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.50" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.50" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.50" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.50" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.50" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.50" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.52" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.52" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.52" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.50" />
-    <!-- ✅ 4.10.50 lockstep（2026-10-02，解除 4.10.50-local 临锁）：主框架 4.10.50 已发布（EduPlatform 转达·
-         扩展 DataService 聚合缺陷根治 + BUG007 WASM 兼容）——SG1 生成器 GetOrCreateInstance 按类型隔离
-         （_instance 静态槽，多程序集扩展聚合不再共享基类 Instance）；重建扩展生成物 → 扩展 ProjectMetaContext
-         GetOrCreateInstance 变 _instance → 消费方聚合正常；nuget.org 4.10.50 全量已发布，本地 feed 锁源移除。 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.50" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.52" />
+    <!-- ✅ 4.10.52 lockstep（2026-10-03）：主框架 4.10.52 已发布（ADR89 IEntityDAC 条件原子更新原语
+         UpdateWhereAsync——响应扩展组转达 docs/转达-MFA原子条件更新能力缺口-请框架组裁定.md，方案 A 落地；
+         MFA B 批 IFreeSql 逃生口移除 + Outbox InboxDbVersionStore 非原子 RMW 根治 + xCodeGen 模板增
+         EntityUpdateWhereAsync 转发器；另含 v4.10.51 ADR88 构造注入门控 DI004/DI005 诊断） -->
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.52" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.52" />
   </ItemGroup>
 </Project>

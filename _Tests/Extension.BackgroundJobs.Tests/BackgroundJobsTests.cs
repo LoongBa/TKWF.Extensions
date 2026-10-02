@@ -631,6 +631,7 @@ internal sealed class NullEntityDac<TEntity> : IEntityDAC<TEntity>
     public Task UpdateAsync(TEntity entity, CancellationToken ct = default) => throw new NotSupportedException();
     public Task UpdateBatchAsync(IEnumerable<TEntity> entities, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> UpdateColumnsBatchAsync<TColumns>(IEnumerable<TEntity> entities, System.Linq.Expressions.Expression<Func<TEntity, TColumns>> columns, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<int> UpdateWhereAsync<TColumns>(System.Linq.Expressions.Expression<Func<TEntity, bool>> where, System.Linq.Expressions.Expression<Func<TEntity, TColumns>> setColumns, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约。</summary>

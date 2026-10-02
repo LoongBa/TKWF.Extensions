@@ -231,5 +231,11 @@ public class EntityDACPermissionStoreTests
             UpdateCallCount += count;
             return Task.FromResult(count);
         }
+
+        public Task<int> UpdateWhereAsync<TColumns>(
+            Expression<Func<PermissionGrantEntity, bool>> where,
+            Expression<Func<PermissionGrantEntity, TColumns>> setColumns,
+            CancellationToken ct = default)
+            => throw new NotSupportedException("InMemoryEntityDac 不实现 UpdateWhereAsync（测试集未使用，ADR89 契约测试另设 fixture）。");
     }
 }

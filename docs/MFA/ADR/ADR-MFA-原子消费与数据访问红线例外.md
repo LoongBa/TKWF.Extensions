@@ -1,9 +1,10 @@
 # ADR-MFA-原子消费与数据访问红线例外
 
-> **版本**：V0.1.0（目标）
-> **状态**：📋 提议（随 v0.1.0 实施，Oracle 复核 bg_d97a816a 定案）
-> **关联**：`docs/MFA/MFA多因素认证-开发方案.md`（Oracle PASS WITH CONDITIONS，C1）、`ADR-MFA-挑战票据与验证模型.md`（单次消费）、`ADR-扩展数据访问红线.md`（红线），DataPort raw SQL 逃生口先例
+> **版本**：V0.1.0（目标）→ **superseded by ADR89（v4.10.52，2026-10-03）**
+> **状态**：📋 提议（随 v0.1.0 实施，Oracle 复核 bg_d97a816a 定案）→ **✅ 已废弃（标注 superseded）**
+> **关联**：`docs/MFA/MFA多因素认证-开发方案.md`（Oracle PASS WITH CONDITIONS，C1）、`ADR-MFA-挑战票据与验证模型.md`（单次消费）、`ADR-扩展数据访问红线.md`（红线），DataPort raw SQL 逃生口先例；**superseded by** 主框架 `ADR89-IEntityDAC条件原子更新原语.md`（v4.10.52）
 > **关键字**：MFA、单次消费、原子 CAS、IFreeSql、红线逃生口、并发防重放、UpdateWhere
+> **生命周期注记（ADR 纪律）**：本 ADR 为永久记录，不可删除；决策已被 ADR89 取代（`UpdateWhereAsync` 原语提供合规路径），正文保留原始决策供追溯。
 
 ---
 

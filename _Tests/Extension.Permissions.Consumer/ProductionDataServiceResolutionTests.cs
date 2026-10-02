@@ -220,5 +220,11 @@ public class ProductionDataServiceResolutionTests
             foreach (var entity in entities) UpdateAsync(entity, ct);
             return Task.FromResult(entities.Count());
         }
+
+        public Task<int> UpdateWhereAsync<TColumns>(
+            Expression<Func<PermissionGrantEntity, bool>> where,
+            Expression<Func<PermissionGrantEntity, TColumns>> setColumns,
+            CancellationToken ct = default)
+            => throw new NotSupportedException("InMemoryEntityDac 不实现 UpdateWhereAsync（测试集未使用，ADR89 契约测试另设 fixture）。");
     }
 }

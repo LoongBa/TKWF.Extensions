@@ -63,29 +63,30 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         版本对齐主框架已发布稳定版 4.10.46（BUG005 纯修复——内置控制器 GraphQL 契约字段名对齐
-         HC 运行时 Async 裁剪，SG2/SG3 零破坏性变更；上一版 4.10.45 Web 装配钩子——IWebExtension/ADR87，
-         TKWF.Domain.Web 新包；扩展侧 4 先例收敛迁移 + JwtAuthentication 冒烟测试，见 AGENTS §6 注记）；
+         版本对齐主框架已发布稳定版 4.10.50（EduPlatform 转达·扩展 DataService 聚合缺陷根治——SG1 生成器
+         GetOrCreateInstance 按类型隔离 _instance 静态槽，扩展不再共享基类 Instance；BUG007 WASM 兼容——
+         AUTH_REQUIRED 改 DomainException{ErrorCode=AUTH_REQUIRED}；上一版 4.10.46 BUG005 纯修复），见 AGENTS §6 注记）；
          主框架发新版后同步提升。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.46" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.46" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.46" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.46" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.46" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.46" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.46" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.46" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.46" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.50" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.50" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.50" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.50" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.46" />
-    <!-- ✅ 4.10.45 本地锁已解除（2026-10-02）：nuget.org 4.10.45 全量已发布（含 TKWF.CodeGeneration 纯 Analyzer 包）
-         ——CPM 切正式号（原 4.10.45-local 本地 feed 锁源已移除，用户级 NuGet.config 本地源已删）；
-         ✅ 4.10.46 lockstep（2026-10-02）：BUG005 纯修复（GraphQL 契约 Async 裁剪对齐），零破坏性 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.46" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.46" />
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.50" />
+    <!-- ✅ 4.10.50 lockstep（2026-10-02，解除 4.10.50-local 临锁）：主框架 4.10.50 已发布（EduPlatform 转达·
+         扩展 DataService 聚合缺陷根治 + BUG007 WASM 兼容）——SG1 生成器 GetOrCreateInstance 按类型隔离
+         （_instance 静态槽，多程序集扩展聚合不再共享基类 Instance）；重建扩展生成物 → 扩展 ProjectMetaContext
+         GetOrCreateInstance 变 _instance → 消费方聚合正常；nuget.org 4.10.50 全量已发布，本地 feed 锁源移除。 -->
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.50" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.50" />
   </ItemGroup>
 </Project>

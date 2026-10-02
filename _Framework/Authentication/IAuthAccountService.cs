@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -7,7 +8,7 @@ namespace TKWF.Ext.Authentication;
 /// <para>写路径暴露裁定（ADR-Authentication-账号写契约）：v0.2.0 方案 C1「写路径不暴露」因 DMP P1 令牌替换
 /// 真实消费需求反转——平台管理员影子 AuthAccount 必须可由消费端创建/更新/失效（TokenService.RefreshTokenAsync
 /// 强依赖 AuthAccount 存在 + IsEnabled + TokenVersion，L196-200）。</para></summary>
-public interface IAuthAccountService
+public interface IAuthAccountService : IDomainService
 {
     /// <summary>按平台内部 id 查询账号（upsert 流 read 前置；与 <see cref="IAuthAccountQueryService"/> 重复委托同一 DataService——单注入便利）。</summary>
     Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default);

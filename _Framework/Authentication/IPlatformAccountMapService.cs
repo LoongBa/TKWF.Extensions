@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Authentication;
 /// 跨系统映射服务契约——平台内部 id ↔ 业务 app + 业务本地 id + UnionId（统一 DMP 双机制：映射表/外键）。
 /// <para>方案 §5.9——DMP V4.0 管理员走映射表、会员走外键；Ext 以本表统一承载「平台内部 id ↔ 业务 app + 业务本地 id」。</para>
 /// </summary>
-public interface IPlatformAccountMapService
+public interface IPlatformAccountMapService : IDomainService
 {
     /// <summary>按平台内部 id + 业务 app 查询映射（平台侧 → 业务侧）。</summary>
     Task<PlatformAccountMapEntity?> GetByPlatformAsync(string platformAccountId, string businessAppId, CancellationToken ct = default);

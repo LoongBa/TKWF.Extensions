@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Permissions.Abstractions
 {
@@ -11,7 +12,7 @@ namespace TKWF.Ext.Permissions.Abstractions
     /// 权限检查热点路径（PermissionChecker）按 provider 一次加载全部已授予权限名，内存判定替代逐名逐键单条查询，
     /// 消除"循环角色逐次查库"的 N×M 放大（每个角色 × 每个权限名各一次 DB 往返）。</para>
     /// </summary>
-    public interface IPermissionStore
+    public interface IPermissionStore : IDomainService
     {
         /// <summary>读取权限授予结果（按提供者：角色/用户等）。</summary>
         Task<PermissionGrantResult> GetAsync(string permissionName, string providerName, string providerKey);

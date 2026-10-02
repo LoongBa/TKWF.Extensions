@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Identity
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Identity
     /// 用户存储抽象——用户实体的 CRUD 与查询、以及用户-角色分配。
     /// <para>由扩展默认 FreeSql 实现（<see cref="FreeSqlUserStore"/>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
-    public interface IUserStore
+    public interface IUserStore : IDomainService
     {
         /// <summary>按 ID 读取用户（不存在返回 null）。</summary>
         Task<UserEntity?> GetByIdAsync(long id, CancellationToken ct = default);

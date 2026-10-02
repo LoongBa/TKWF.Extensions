@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuditLogging
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.AuditLogging
     /// <para>V0.2.0 新增。查询接口由扩展侧定义（不修改主框架 <see cref="TKW.Framework.Domain.Interception.Auditing.IAuditLogStore"/>），
     /// 返回 DTO 列表（不暴露实体）。</para>
     /// </summary>
-    public interface IAuditLogQueryService
+    public interface IAuditLogQueryService : IDomainService
     {
         /// <summary>
         /// 按条件分页查询审计日志列表。

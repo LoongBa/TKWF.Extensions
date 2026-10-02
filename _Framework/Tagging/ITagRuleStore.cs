@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.Tags;
 
 namespace TKWF.Ext.Tagging;
@@ -12,7 +13,7 @@ namespace TKWF.Ext.Tagging;
 /// <para>V0.2.0 为占位契约（ADR52：Tag 算法回归 TKWF.Utility + Ext 瘦身为存储扩展）；V0.3.0 补全实现。</para>
 /// <para>红线合规：实现委托 <see cref="TagRuleEntityDataService"/>（SG1 DataService），禁裸 ORM。</para>
 /// </summary>
-public interface ITagRuleStore
+public interface ITagRuleStore : IDomainService
 {
     /// <summary>全量规则（按 Dimension + Priority 排序）——供 <c>ITagService.LoadRules</c>。</summary>
     Task<List<TagRule>> GetAllAsync(CancellationToken ct = default);

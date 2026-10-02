@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.SecurityLog
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.SecurityLog
     /// <para>安全决策：列表 DTO（<see cref="SecurityLogListItemDto"/>）不含 <c>Detail</c> 全文（对齐 AuditLogging
     /// 不含 ArgumentsJson 先例——Detail 含异常消息，列表不拉大字段/敏感信息）；详情经 <see cref="GetDetailAsync"/> 取全量。</para>
     /// </summary>
-    public interface ISecurityLogQueryService
+    public interface ISecurityLogQueryService : IDomainService
     {
         /// <summary>按条件分页查询安全事件列表（Take 默认 50 上限 200；列表 DTO 不含 Detail）。</summary>
         /// <param name="input">查询条件（所有过滤字段可选，空条件 = 全量分页）。</param>

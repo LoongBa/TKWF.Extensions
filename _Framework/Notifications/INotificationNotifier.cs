@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
@@ -21,7 +22,7 @@ public sealed record NotificationDeliveryRequest(
 /// <para>异常语义（M1 修订）：<b>Inbox 通道</b>参与发布事务（C4）——写入失败必须传播异常触发回滚；
 /// <b>外部通道</b>（v0.2.0 Email/SignalR）best-effort——投递失败自行处理不重抛阻塞发布流程。</para>
 /// </summary>
-public interface INotificationNotifier
+public interface INotificationNotifier : IDomainService
 {
     /// <summary>通道名（"Inbox"/"Email"/"SignalR"）。</summary>
     string Name { get; }

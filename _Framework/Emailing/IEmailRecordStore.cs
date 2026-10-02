@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Emailing
     /// 邮件记录存储抽象——定义邮件记录的 CRUD 操作。
     /// <para>V0.1.0 FreeSql 默认实现；后续可扩展 EF Core 等。</para>
     /// </summary>
-    public interface IEmailRecordStore
+    public interface IEmailRecordStore : IDomainService
     {
         /// <summary>按 ID 读取单条邮件记录。</summary>
         Task<EmailRecordEntity?> GetAsync(long id, CancellationToken ct = default);

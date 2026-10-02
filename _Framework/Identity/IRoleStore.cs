@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Identity
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Identity
     /// 角色存储抽象——角色实体的 CRUD 与查询。
     /// <para>由扩展默认 FreeSql 实现（<see cref="FreeSqlRoleStore"/>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
-    public interface IRoleStore
+    public interface IRoleStore : IDomainService
     {
         /// <summary>按 ID 读取角色（不存在返回 null）。</summary>
         Task<RoleEntity?> GetByIdAsync(long id, CancellationToken ct = default);

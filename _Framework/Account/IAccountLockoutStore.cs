@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
@@ -7,7 +8,7 @@ namespace TKWF.Ext.Account
     /// 账户锁定状态存储抽象——锁定状态的读取、保存与删除。
     /// <para>由扩展默认 FreeSql 实现（<see cref="FreeSqlAccountLockoutStore"/>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
-    public interface IAccountLockoutStore
+    public interface IAccountLockoutStore : IDomainService
     {
         /// <summary>读取指定用户的锁定记录（不存在返回 null）。</summary>
         Task<AccountLockoutEntity?> GetAsync(string userName, CancellationToken ct = default);

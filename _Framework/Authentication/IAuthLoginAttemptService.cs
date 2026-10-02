@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -9,7 +10,7 @@ namespace TKWF.Ext.Authentication;
 /// <para>方案 §5.6——只增语义（Store 仅 Create/Count，无 Update/Delete 暴露，对齐 SecurityLog）；</para>
 /// <para>策略配置经 <c>AuthCenterOptions.LoginProtection</c>（短信 60s/小时/天/IP + OAuth 10 次/分钟/IP + 口令兑换 5 次/小时）。</para>
 /// </summary>
-public interface IAuthLoginAttemptService
+public interface IAuthLoginAttemptService : IDomainService
 {
     /// <summary>记录一次登录尝试（成功/失败均记录，追加写）。</summary>
     Task RecordAttemptAsync(AuthLoginAttemptEntity attempt, CancellationToken ct = default);

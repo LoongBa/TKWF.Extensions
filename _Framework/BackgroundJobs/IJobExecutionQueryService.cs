@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BackgroundJobs;
 
@@ -9,7 +10,7 @@ namespace TKWF.Ext.BackgroundJobs;
 /// 执行历史查询接口（V0.1.0）——分页过滤 + SQL 级聚合统计 + GetDetailAsync。
 /// <para>列表 DTO 不含 ErrorText（安全决策，对齐 AuditLogging 先例）；详情按 Id 取全量。</para>
 /// </summary>
-public interface IJobExecutionQueryService
+public interface IJobExecutionQueryService : IDomainService
 {
     /// <summary>分页过滤查询（JobId/JobType/Provider/IsSuccess/IsCancelled/TenantId/时间范围）。</summary>
     Task<JobExecutionPagedResult> GetListAsync(JobExecutionQueryInput input, CancellationToken ct = default);

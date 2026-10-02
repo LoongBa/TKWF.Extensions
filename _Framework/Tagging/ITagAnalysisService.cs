@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Tagging;
 
@@ -10,7 +11,7 @@ namespace TKWF.Ext.Tagging;
 /// 按维度 / 时间范围 / 标签名统计命中频次、趋势、占比。
 /// <para>V0.2.0 为占位契约；V0.3.0 补全实现。红线合规：实现委托 <see cref="TagHitRecordEntityDataService"/> 聚合业务方法。</para>
 /// </summary>
-public interface ITagAnalysisService
+public interface ITagAnalysisService : IDomainService
 {
     /// <summary>高频标签 TopN（GROUP BY Dimension+TagName——按指定维度/时间范围过滤）。</summary>
     Task<List<TagFrequency>> GetFrequencyAsync(

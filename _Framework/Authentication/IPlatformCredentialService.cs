@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
@@ -15,7 +16,7 @@ public sealed record PlatformCredentialSecret(string AppId, string AppSecret);
 /// <para>方案 §5.10——摒弃 DMP 裸 FreeSql；AES-GCM 加解密在 <c>PlatformCredentialEntityDataService</c> 边界
 /// （<c>AuthCenterOptions.SecretEncryptionKeyPath</c> 派生密钥）；本接口只见明文。</para>
 /// </summary>
-public interface IPlatformCredentialService
+public interface IPlatformCredentialService : IDomainService
 {
     /// <summary>按平台查询全部启用凭证（实体返回——AppSecretEncrypted 密文列已 DtoFieldIgnore，不外泄）。</summary>
     Task<IReadOnlyList<PlatformCredentialEntity>> GetEnabledByPlatformAsync(string platform, CancellationToken ct = default);

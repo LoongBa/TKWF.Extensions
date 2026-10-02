@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.SecurityLog
 {
@@ -12,7 +13,7 @@ namespace TKWF.Ext.SecurityLog
     /// <para><b>边界</b>：聚合仅查不改（只读 TopN）；唯一的写路径是保留清理 <see cref="CleanupExpiredAsync"/>
     /// （打破"只增不改"语义的决策已记录——见 DataService <c>DeleteExpiredAsync</c> 注释与 README §七）。</para>
     /// </summary>
-    public interface ISecurityLogAnalyticsService
+    public interface ISecurityLogAnalyticsService : IDomainService
     {
         /// <summary>
         /// 窗口内失败次数 TopN（按尝试用户名）。仅计 <c>Result=="Failed"</c> 记录；空白 UserName 跳过。

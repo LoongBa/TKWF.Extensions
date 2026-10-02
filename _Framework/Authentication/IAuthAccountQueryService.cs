@@ -1,10 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
 /// <summary>账号查询服务——对外只读查询契约（UserCenter 桥接 / 装配实例 / 内部复用）。</summary>
-public interface IAuthAccountQueryService
+public interface IAuthAccountQueryService : IDomainService
 {
     Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default);
     Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default);

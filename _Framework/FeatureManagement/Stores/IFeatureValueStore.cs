@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FeatureManagement;
 
@@ -10,7 +11,7 @@ namespace TKWF.Ext.FeatureManagement;
 /// <para>分层值 CRUD，经 SG1 DataService 委托（红线合规——无 IFreeSql/IEntityDAC）。</para>
 /// <para>异常策略：读路径静默（fail-closed 降级默认值，对齐 Settings）；写路径异常传播（管理改值失败必须告知）。</para>
 /// </summary>
-public interface IFeatureValueStore
+public interface IFeatureValueStore : IDomainService
 {
     /// <summary>按 Name+Provider 读值（不存在返回 null；读异常 → null 静默降级）。</summary>
     Task<FeatureValueEntity?> GetAsync(string name, string providerName, string? providerKey, CancellationToken ct = default);

@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
@@ -40,7 +41,7 @@ public static class SmsScenes
 /// 短信验证码服务契约——发送（生成 6 位码 + TTL 5min + 频控 60s/小时/天/IP）+ 校验（单次消费 + 频控 5 次/小时）。
 /// <para>方案 §5.5——验证码单向散列（SHA256）落库（SmsRecordEntity）；生产 Mock → 503 语义（SmsMockForbiddenException）。</para>
 /// </summary>
-public interface ISmsVerificationService
+public interface ISmsVerificationService : IDomainService
 {
     /// <summary>发送验证码（频控命中抛 AuthenticationException；生产未接 ISmsSender 抛 SmsMockForbiddenException）。</summary>
     [AllowAnonymousFlag]

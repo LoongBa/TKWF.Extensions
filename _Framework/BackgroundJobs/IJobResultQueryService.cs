@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BackgroundJobs;
 
 /// <summary>
 /// 业务结果查询接口（V0.1.0）——按 JobId 查最新/分页。
 /// </summary>
-public interface IJobResultQueryService
+public interface IJobResultQueryService : IDomainService
 {
     /// <summary>分页过滤查询（JobId/ResultType/时间范围）。</summary>
     Task<JobResultPagedResult> GetListAsync(JobResultQueryInput input, CancellationToken ct = default);

@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
@@ -55,7 +56,7 @@ public static class OAuthTicketErrorCodes
 /// <para>方案 §5.7——回调承载铁律（用户裁定 + Oracle B1）：URL 只带一次性票据 + redirect_uri，绝不带敏感信息；</para>
 /// <para>纯前端静态站走公网 /oauth/exchange + PKCE code_verifier；白名单经 <c>AuthCenterOptions.RedirectUriWhitelist</c>。</para>
 /// </summary>
-public interface IOAuthTicketService
+public interface IOAuthTicketService : IDomainService
 {
     /// <summary>签发一次性票据——高熵 ticket + TTL 5min + state +（可选）PKCE code_verifier hash 落库。</summary>
     /// <remarks>匿名面声明：票据签发为无会话入口（EduPlatform 转达 E1）。</remarks>

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BlobStoring
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.BlobStoring
     /// Blob 记录存储抽象——定义 Blob 元数据记录的 CRUD 操作。
     /// <para>V0.1.0 FreeSql 默认实现；后续可扩展 EF Core 等。</para>
     /// </summary>
-    public interface IBlobRecordStore
+    public interface IBlobRecordStore : IDomainService
     {
         /// <summary>按 ID 读取单条 Blob 记录。</summary>
         Task<BlobRecordEntity?> GetAsync(long id, CancellationToken ct = default);

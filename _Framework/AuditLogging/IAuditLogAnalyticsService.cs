@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuditLogging
 {
@@ -12,7 +13,7 @@ namespace TKWF.Ext.AuditLogging
     /// <para><b>边界</b>：聚合仅查不改（只读 TopN/统计）；唯一的写路径是保留清理 <see cref="CleanupExpiredAsync"/>
     /// （DataService <c>DeleteExpiredAsync</c> 物理删，限定单点，无管理端点）。</para>
     /// </summary>
-    public interface IAuditLogAnalyticsService
+    public interface IAuditLogAnalyticsService : IDomainService
     {
         /// <summary>
         /// 窗口内调用次数 TopN（按服务名）。空白 ServiceName 跳过。

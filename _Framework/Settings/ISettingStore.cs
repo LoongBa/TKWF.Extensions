@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Settings
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Settings
     /// 设置存储抽象——定义设置的 CRUD 操作（按 Provider 定位）。
     /// <para>V0.1.0 FreeSql 默认实现；后续可扩展 EF Core / 文件等。</para>
     /// </summary>
-    public interface ISettingStore
+    public interface ISettingStore : IDomainService
     {
         /// <summary>按名称 + 提供者读取单条设置。</summary>
         Task<SettingEntity?> GetAsync(string name, string providerName, string? providerKey, CancellationToken ct = default);

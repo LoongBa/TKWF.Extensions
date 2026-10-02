@@ -65,12 +65,20 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
     /// <summary>
     /// 幂等初始化——签名密钥 fail-fast 预检（生产缺 Issuer/密钥 → InvalidOperationException 拒绝启动；开发自动生成临时密钥 + Warning）。
     /// <para>V4.10.25 (ADR78)：sp 经参数传入（替代 IServiceProviderAware setter 注入）。</para>
+    /// <para>V0.3.1 修复（A' 裁定）：<c>ITokenService</c> 构造注入 3 个 *EntityDataService（经
+    /// <c>AddConstructibleDataService</c> 可构造工厂注册，解析需 <c>DomainUserContext.CurrentAopUser</c> 域作用域）——
+    /// 启动期 <c>InitializeExtensionsAsync(sp)</c> 无 <c>Use&lt;T&gt;()</c> 上下文，裸 <c>sp.GetService</c> 会抛守卫异常
+    /// （ADR61 Oracle B4）。改为经 <see cref="BeginSystemScopeAsync"/> 进入系统作用域 + <c>scope.System.Use&lt;ITokenService&gt;()</c>
+    /// 解析——<c>Use&lt;T&gt;()</c> 内设 <c>CurrentAopUser=SystemUser</c>（领域自治铁律零妥协，Oracle 方案 A' 裁决；
+    /// <c>ITokenService : IDomainService</c> 空标记准入）。fail-fast 语义不变（同一 <c>LoadKeysCore</c> 单一真相源）。</para>
     /// </summary>
-    public override Task InitializeAsync(IServiceProvider sp)
+    public override async Task InitializeAsync(IServiceProvider sp)
     {
-        var tokenService = sp.GetService<ITokenService>();
+        var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
+        await using var sysScope = await host.BeginSystemScopeAsync(sp);
+
+        var tokenService = sysScope.System.Use<ITokenService>();
         if (tokenService is TokenService concrete)
             concrete.EnsureKeysLoaded(); // 触发 _keys 懒加载（生产 fail-fast）
-        return Task.CompletedTask;
     }
 }

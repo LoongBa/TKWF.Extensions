@@ -105,6 +105,12 @@ namespace TKWF.Ext.Permissions
             // 弃用 V0.7.0 W1 的 synchronizer 手动调用（扩展不再自建表）。
 
             // 真实持久化未接线（未注册 IEntityDAC）→ 跳过种子（NoOp 模式下无意义）
+            // ⚠️ 已知缺陷登记（2026-10-02，Oracle 评审确认，独立修复不阻塞）：真实消费方经
+            // GetExtensionMetaContexts 聚合 + AddConstructibleDataService 注册后，此处 GetService 会执行
+            // 可构造工厂 → 启动期无 CurrentAopUser 域作用域 → 抛「解析需处于域作用域」守卫（与
+            // Authentication V0.3.1 同根缺陷，被测试宿主空 MetaContext 的 null 短路掩盖）。修复方向：
+            // 对齐 Authentication V0.3.1（Oracle 方案 A'）——种子逻辑若需 DataService，改经
+            // BeginSystemScopeAsync + scope.System.Use<T>() 系统作用域解析，避免裸 GetService 可构造工厂。
             var dataService = scoped.GetService<PermissionGrantEntityDataService>();
             if (dataService is null) return;
 

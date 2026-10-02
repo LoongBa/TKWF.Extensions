@@ -53,7 +53,10 @@ internal sealed class TokenService : ITokenService
         _blacklistDataService = blacklistDataService;
         _cache = cache;
         _logger = logger;
-        _keys = new Lazy<RsaKeySet>(LoadKeys, isThreadSafe: true);
+        // V0.3.1：Lazy 委托到静态 LoadKeysCore（单一真相源）——runtime 实例路径与 Initializer
+        // 系统作用域预检共用同一实现（Initializer 经 scope.System.Use<ITokenService>() 解析实例后
+        // 调实例 EnsureKeysLoaded()，A' 裁定——领域自治铁律零妥协，见 ADR61 Oracle B4）
+        _keys = new Lazy<RsaKeySet>(() => LoadKeysCore(_options.Value, _logger), isThreadSafe: true);
     }
 
     public async Task<TokenIssueResult> IssueTokenAsync(TokenIssueRequest request, CancellationToken ct = default)
@@ -235,7 +238,7 @@ internal sealed class TokenService : ITokenService
         _cache.Set(cacheKey, true, TimeSpan.FromSeconds(BlacklistCacheSeconds));
     }
 
-    /// <summary>启动预检（Initializer.InitializeAsync 调用）——触发密钥懒加载，生产 fail-fast（缺 Issuer/密钥 → InvalidOperationException）。</summary>
+    /// <summary>启动预检（Initializer.InitializeAsync 经系统作用域解析实例后调用）——触发密钥懒加载，生产 fail-fast（缺 Issuer/密钥 → InvalidOperationException）。</summary>
     internal void EnsureKeysLoaded() => _ = _keys.Value;
 
     // ── 私有实现 ──────────────────────────────────────────────────────────
@@ -245,14 +248,15 @@ internal sealed class TokenService : ITokenService
     /// <summary>
     /// 加载签名密钥（fail-fast：生产缺密钥/默认值 → 拒绝启动；开发自动生成临时密钥 + Warning）。
     /// <para>kid 轮换（JWK RFC 7517 语义）：CurrentKid 指定签发；验证遍历 SigningKeys 全量 kid 匹配。</para>
+    /// <para>V0.3.1：改为 static + 参数化（options/logger）——单一真相源，runtime 实例 Lazy 与 Initializer
+    /// 系统作用域预检（经 scope.System.Use&lt;ITokenService&gt;() 解析实例）共享同一实现。</para>
     /// </summary>
-    private RsaKeySet LoadKeys()
+    private static RsaKeySet LoadKeysCore(AuthCenterOptions o, ILogger logger)
     {
-        var o = _options.Value;
         if (string.IsNullOrEmpty(o.Issuer))
         {
             if (o.IsProduction) throw new InvalidOperationException("AuthCenterOptions.Issuer 未配置——生产环境禁止签发/验证令牌");
-            _logger.LogWarning("AuthCenterOptions.Issuer 未配置——开发环境使用空签发者");
+            logger.LogWarning("AuthCenterOptions.Issuer 未配置——开发环境使用空签发者");
         }
 
         var signingKey = CreateRsaFromPem(o.SigningKeyPath);
@@ -263,7 +267,7 @@ internal sealed class TokenService : ITokenService
             // 生产 fail-fast；开发自动生成临时密钥（不落盘——重启即变，仅开发便利）
             if (o.IsProduction)
                 throw new InvalidOperationException($"AuthCenterOptions.SigningKeyPath 未配置——生产环境必须提供 RSA 私钥 PEM（kid={currentKid}）");
-            _logger.LogWarning("AuthCenterOptions.SigningKeyPath 未配置——开发环境自动生成临时 RSA 密钥（重启即变，仅限开发）");
+            logger.LogWarning("AuthCenterOptions.SigningKeyPath 未配置——开发环境自动生成临时 RSA 密钥（重启即变，仅限开发）");
             signingKey = RSA.Create(RsaMinKeyBits);
         }
 
@@ -288,7 +292,7 @@ internal sealed class TokenService : ITokenService
             verifyKeys[currentKid] = signingKey;
         }
 
-        _logger.LogInformation("认证中心签名密钥已加载：kid={CurrentKid}，验证密钥数={Count}", currentKid, verifyKeys.Count);
+        logger.LogInformation("认证中心签名密钥已加载：kid={CurrentKid}，验证密钥数={Count}", currentKid, verifyKeys.Count);
         return new RsaKeySet(currentKid, signingKey, verifyKeys);
     }
 

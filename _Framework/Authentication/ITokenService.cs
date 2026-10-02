@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
 namespace TKWF.Ext.Authentication;
@@ -48,8 +49,10 @@ public sealed record TokenValidationResult(
 /// <summary>
 /// 令牌服务契约——签发/验证/刷新/撤销（业界成熟重写：持久化密钥 + 黑名单落库 + Refresh rotation + TokenVersion 闭环）。
 /// <para>方案 §5.4——摒弃 DMP 三缺陷：内存 Lazy&lt;RSA&gt; 密钥 / 内存 ConcurrentDictionary 黑名单 / 直注入 IEntityDAC。</para>
+/// <para>V0.3.1（A' 裁定）：继承 <see cref="IDomainService"/> 空标记——领域服务体系准入（<c>Use&lt;T&gt;() where T : IDomainService</c>
+/// 泛型约束 + SystemActor 调用链；启动预检经 <c>scope.System.Use&lt;ITokenService&gt;()</c> 解析，自治铁律零妥协）。</para>
 /// </summary>
-public interface ITokenService
+public interface ITokenService : IDomainService
 {
     /// <summary>签发 access + refresh 令牌对（RSA RS256 + kid + jti + exp/iat）。</summary>
     /// <remarks>匿名面声明：登录签发为无会话入口（EduPlatform 转达 E1）。</remarks>

@@ -83,6 +83,8 @@ public class MyService(IEmailSender emailSender)
 }
 ```
 
+> ⚠️ **V0.3.0 域作用域约束**：发送记录（`IEmailRecordStore`）为 `AddConstructibleService` 守卫门面——`SendAsync` 的 `RecordStore` C1 延迟解析（`SmtpEmailSender.cs:34`）**仅在域作用域（AOP 帧：`User.Use<T>()` 窗口 / `BindScope`）内合法**；后台任务 / fire-and-forget 等帧外调用触领域架构守卫（`DomainUserContext.CurrentAopUser` 为空 → `InvalidOperationException`）。**帧外发邮件请先经 `User.Use<IEmailSender>()` 或 DomainServiceBase 基类 `User` 建立 AOP 帧**（对齐接线型 C1 消费门面规则）。
+
 ### 3. 配置选项
 
 通过 `appsettings.json` 配置：

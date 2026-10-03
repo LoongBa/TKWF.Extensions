@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -15,7 +17,8 @@ using TKW.Framework.Domain.Transactions;
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>
-/// 功能管理实现（public sealed，构造函数 internal + 工厂注册）——Provider 链解析 + 版本号缓存 + 管理写路径 + 变更事件。
+/// 功能管理实现（public sealed，构造函数 public——AddConstructibleService 守卫工厂经 ActivatorUtilities 解析）——
+/// Provider 链解析 + 版本号缓存 + 管理写路径 + 变更事件。
 /// <para>v0.2.0：分层解析 Provider 化（<see cref="IFeatureValueProvider"/> 链 + <see cref="FeatureOptions.ProviderOrder"/> 顺序），
 /// 内置四层（User→Role→Tenant→Global）行为与 v0.1.0 完全一致；缓存改<b>版本号 key</b>
 /// （<see cref="FeatureCacheVersionRegistry"/>——写后 version++ 全层天然失效，修复 v0.1.0 User/Role/Tenant 层 TTL 收敛缺陷）；
@@ -23,12 +26,19 @@ namespace TKWF.Ext.FeatureManagement;
 /// <para>用户契约（C2）：接收 <see cref="IDomainUser"/>（租户/认证/角色成员在其上）；匿名（user==null 或 !IsAuthenticated）直查 Global。</para>
 /// <para>Global 唯一性（C4）：ProviderKey=null 可空唯一索引 NULL 互不相同——SetValueAsync 事务包裹 + 事务内二次校验。</para>
 /// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——只经 <see cref="IFeatureValueStore"/>（委托 DataService）。</para>
+/// <para>V4.10.53（领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （<b>IDomainUser 永不注册 DI</b>，D01；旧 Initializer 工厂 lambda 内 <c>sp.GetRequiredService&lt;IDomainUser&gt;()</c>
+/// 生产解析必失败——v0.3.3 同根缺陷）；<c>[DiContractIgnore]</c> 豁免 DI001；域服务（IFeatureValueStore/
+/// IFeatureDefinitionRepository）经基类 <c>User.Use&lt;T&gt;()</c> 懒加载（DI004 零豁免）；注册形态改
+/// <c>AddConstructibleService&lt;IFeatureManager, FeatureManager&gt;</c>（其余参数 IEnumerable&lt;IFeatureValueProvider&gt;/
+/// IMemoryCache/IOptions/ITransactionManager/ILocalEventBus/ILogger 由 ActivatorUtilities 从 DI 解析）。</para>
 /// <para>v0.3.0：类型化读写（<see cref="GetValueAsync{T}(string, IDomainUser?, T, CancellationToken)"/> /
 /// <see cref="SetValueAsync{T}(string, T, string, string, CancellationToken)"/>）——序列化/反序列化映射集中于本类
 /// 私有静态方法（bool/数字/DateTime 规范字符串 + 其他类型 JSON）；写时校验 <see cref="ValidateValueForDefinition"/>
 /// （对齐定义 ValueType，违反 → <see cref="ArgumentException"/>；未定义 Feature → 跳过校验向后兼容）。</para>
 /// </summary>
-public sealed class FeatureManager : IFeatureManager
+[DiContractIgnore]
+public sealed class FeatureManager : DomainServiceBase, IFeatureManager
 {
     private const string NotFoundSentinel = "\x02NOTFOUND\x02";
 
@@ -36,33 +46,32 @@ public sealed class FeatureManager : IFeatureManager
     private IFeatureDefinitionRepository? _definitionRepository;
     private readonly IReadOnlyList<IFeatureValueProvider> _providers;
     private readonly FeatureCacheVersionRegistry _versionRegistry;
-    private readonly IDomainUser _domainUser;
     private readonly IMemoryCache _cache;
     private readonly FeatureOptions _options;
     private readonly ITransactionManager _transactionManager;
     private readonly ILocalEventBus _eventBus;
     private readonly ILogger<FeatureManager> _logger;
 
-    // ADR88/DI004：域服务（IFeatureValueStore/IFeatureDefinitionRepository）懒加载经 IDomainUser.Use<T>()
-    private IFeatureValueStore Store => _store ??= _domainUser.Use<IFeatureValueStore>();
-    private IFeatureDefinitionRepository DefinitionRepository => _definitionRepository ??= _domainUser.Use<IFeatureDefinitionRepository>();
+    // ADR88/DI004：域服务（IFeatureValueStore/IFeatureDefinitionRepository）懒加载经基类 User.Use<T>()
+    private IFeatureValueStore Store => _store ??= User.Use<IFeatureValueStore>();
+    private IFeatureDefinitionRepository DefinitionRepository => _definitionRepository ??= User.Use<IFeatureDefinitionRepository>();
 
     // Provider 链缓存（Name 冲突懒校验结果 + 排序后顺序——首次解析构建，防重复检测，C4）
     private IReadOnlyList<IFeatureValueProvider>? _orderedProvidersCache;
 
-    internal FeatureManager(
+    public FeatureManager(
+        IDomainUser user,
         IEnumerable<IFeatureValueProvider> providers,
         FeatureCacheVersionRegistry versionRegistry,
-        IDomainUser domainUser,
         IMemoryCache cache,
         IOptions<FeatureOptions> options,
         ITransactionManager transactionManager,
         ILocalEventBus eventBus,
         ILogger<FeatureManager> logger)
+        : base(user)
     {
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
         _versionRegistry = versionRegistry ?? throw new ArgumentNullException(nameof(versionRegistry));
-        _domainUser = domainUser ?? throw new ArgumentNullException(nameof(domainUser));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
         _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
@@ -75,7 +84,7 @@ public sealed class FeatureManager : IFeatureManager
         string? defaultValue = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        var (value, _) = await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
+        var (value, _) = await ResolveViaProvidersAsync(name, user ?? User, ct);
         if (value != null) return value;
 
         // 默认值语义：显式参数优先 → 定义默认（FeatureDefinition.DefaultValue）
@@ -89,7 +98,7 @@ public sealed class FeatureManager : IFeatureManager
         if (string.IsNullOrWhiteSpace(name))
             return false;
 
-        var (value, _) = await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
+        var (value, _) = await ResolveViaProvidersAsync(name, user ?? User, ct);
         if (value == null)
             return false;   // fail-closed：未定义/无值
 
@@ -203,12 +212,12 @@ public sealed class FeatureManager : IFeatureManager
     /// <inheritdoc />
     public async Task<(string? Value, string ProviderName)> GetEffectiveValueAsync(
         string name, IDomainUser? user, CancellationToken ct = default)
-        => await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
+        => await ResolveViaProvidersAsync(name, user ?? User, ct);
 
     /// <inheritdoc />
     public async Task<T> GetValueAsync<T>(string name, IDomainUser? user, T defaultValue = default!, CancellationToken ct = default)
     {
-        var (value, _) = await ResolveViaProvidersAsync(name, user ?? _domainUser, ct);
+        var (value, _) = await ResolveViaProvidersAsync(name, user ?? User, ct);
         if (value != null)
             return DeserializeValue(value, defaultValue, _logger);
 

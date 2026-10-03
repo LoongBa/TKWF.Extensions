@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -19,8 +20,7 @@ namespace TKWF.Ext.FeatureManagement.Tests;
 /// <summary>
 /// 测试公共设施——SQLite 内存库创建 + FeatureValue 表结构同步。
 /// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
-/// <c>FreeSqlEntityDAC&lt;T&gt;</c> 驱动（对齐 Calendar/OrganizationUnit 测试宿主模式）；
-/// v4.10.8 (ADR61) 起 DataService 经测试版可构造工厂（DI 兜底，镜像生产 AddConstructibleDataService）注册。</para>
+/// <c>FreeSqlEntityDAC&lt;T&gt;</c> 驱动（对齐 Calendar/OrganizationUnit 测试宿主模式）。</para>
 /// </summary>
 internal static class FeatureManagementTestSupport
 {
@@ -37,13 +37,25 @@ internal static class FeatureManagementTestSupport
 }
 
 /// <summary>
-/// 完整测试宿主——构建 DI 容器：DataService（v4.10.8 ADR61 DI 兜底工厂注册：
-/// ActivatorUtilities.CreateInstance + DI IDomainUser）+ ITransactionManager（Noop）+ IMemoryCache 真实实例 + FeatureOptions。
+/// 完整测试宿主——V4.10.53（领域自治根治，正确路线）重写走<b>生产路径</b>：
+/// <list type="bullet">
+/// <item><b>真实 DI</b>（Initializer <c>ConfigureServices</c> + FreeSql 基础设施 + AddLogging）+ <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c>；</item>
+/// <item><b>门面经 <c>User.Use&lt;接口&gt;()</c> AOP 路径解析</b>（真实 DomainUser → 设 CurrentAopUser → GetRequiredService →
+///     AddConstructibleService 守卫工厂 → ActivatorUtilities 直建实现）——<see cref="Manager"/> / <see cref="Store"/>；</item>
+/// <item><b>DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 路径直建</b>（ActivatorUtilities + IEntityDAC 从 DI 解析，红线合规）；</item>
+/// <item><b>接线型 <see cref="IFeatureChecker"/> 普通 DI 解析</b>（GetRequiredService——框架 FeatureFilterAttribute 同路径；
+///     ctor(IServiceProvider, ILogger)，内部 C1 延迟解析 IFeatureManager——测试经 ambient 桩设 CurrentAopUser 通过守卫工厂）；</item>
+/// <item><b>IDomainUser 注册保留（T3 桥接）</b>：内置四 Provider（User/Role/Tenant/Global，边界保留组）ctor(IDomainUser)——
+///     多实现集合经普通 DI GetServices 构造需 IDomainUser 可解析（框架机制缺口 T3 转达候选，本批保留）——测试注册
+///     <see cref="TestDomainUser"/> 桩（生产永不注册 IDomainUser——D01）；</item>
+/// <item><b>Stub 桩 <c>Use&lt;T&gt;()</c> 按生产等价</b>：接口 → 设 CurrentAopUser 后 GetRequiredService（AOP 等价）；
+///     具体类 → ActivatorUtilities 直建（NoAop 等价）。</item>
+/// </list>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库实例（用例隔离）。
 /// <paramref name="configure"/> 回调在扩展初始化器之后执行——可覆盖 ITransactionManager/FeatureOptions
 /// （如缓存 TTL 缩短测试：<c>services.Configure&lt;FeatureOptions&gt;(o =&gt; o.CacheExpirationSeconds = 1)</c>）。</para>
 /// <para><b>贡献者收集</b>：初始化的 <see cref="FeatureManagementExtensionInitializer{TUserInfo}.ConfigureServices"/>
-    /// 从 <c>ProjectMetaContextBase.Instance.Contributors["Feature"]</c> 读取编译期清单（v4.10.31 A+ 阶段 3 起新桥）——测试经
+/// 从 <c>ProjectMetaContextBase.Instance.Contributors["Feature"]</c> 读取编译期清单（v4.10.31 A+ 阶段 3 起新桥）——测试经
 /// <see cref="FeatureTestMetaContext"/> 安装（镜像 ConsumerIntegrationTests FakeMetaContext 模式），
 /// 使 DI 中 <c>IFeatureDefinitionRepository</c> 含 <see cref="ConsumerFeatureContributor"/> 声明定义。
 /// 静态单例换装以锁串行化，避免并行用例交叉污染。</para>
@@ -55,22 +67,27 @@ internal sealed class FeatureManagementTestHost : IDisposable
 
     private readonly ServiceProvider _serviceProvider;
 
+    /// <summary>生产路径解析用户（真实 DomainUser&lt;TestUserInfo&gt;，匿名——Manager/Store/DataService 经 Use&lt;T&gt;() 解析）。</summary>
+    private readonly DomainUser<TestUserInfo> _domainUser = new();
+
     public IFreeSql Fsql { get; }
 
-    /// <summary>可配置用户桩——测试内可切换认证状态/UserId/TenantId/Roles（匿名 vs 认证）。</summary>
+    /// <summary>可配置用户桩——测试内可切换认证状态/UserId/TenantId/Roles（匿名 vs 认证）；作门面方法的显式 user 参数 + ambient 桩。</summary>
     public TestDomainUser User { get; }
 
-    public IFeatureManager Manager => _serviceProvider.GetRequiredService<IFeatureManager>();
+    /// <summary>门面——生产 AOP 路径：真实 DomainUser.Use&lt;IFeatureManager&gt;()（守卫工厂直建）。</summary>
+    public IFeatureManager Manager => _domainUser.Use<IFeatureManager>();
 
+    /// <summary>接线型——普通 DI 解析（框架 FeatureFilterAttribute GetService 同路径；ctor IServiceProvider + C1 延迟解析 Manager）。</summary>
     public IFeatureChecker Checker => _serviceProvider.GetRequiredService<IFeatureChecker>();
 
-    /// <summary>Feature 值存储（v0.3.0 public 契约——消费方自定义 Provider 可注入；实现类仍 internal，DI 经扩展注册）。</summary>
-    public IFeatureValueStore Store => _serviceProvider.GetRequiredService<IFeatureValueStore>();
+    /// <summary>Feature 值存储（v0.3.0 public 契约——消费方自定义 Provider 可注入；实现类仍 internal，DI 经扩展注册——守卫工厂）。</summary>
+    public IFeatureValueStore Store => _domainUser.Use<IFeatureValueStore>();
 
     public IFeatureDefinitionRepository DefinitionRepository => _serviceProvider.GetRequiredService<IFeatureDefinitionRepository>();
 
-    /// <summary>SG1 DataService（存储层——管理 API 写路径经 Manager 委托，禁止裸 CRUD 直通）。</summary>
-    public FeatureValueEntityDataService DataService => _serviceProvider.GetRequiredService<FeatureValueEntityDataService>();
+    /// <summary>SG1 DataService（存储层——管理 API 写路径经 Manager 委托，禁止裸 CRUD 直通；NoAop 路径直建）。</summary>
+    public FeatureValueEntityDataService DataService => _domainUser.Use<FeatureValueEntityDataService>();
 
     /// <summary>缓存版本表（v0.2.0/0.3.0——跨实例失效测试直读版本断言）。</summary>
     public FeatureCacheVersionRegistry VersionRegistry => _serviceProvider.GetRequiredService<FeatureCacheVersionRegistry>();
@@ -88,7 +105,7 @@ internal sealed class FeatureManagementTestHost : IDisposable
         User = user;
     }
 
-    /// <summary>全新宿主（每次调用独立 SQLite 内存库 + 独立 MemoryCache）。</summary>
+    /// <summary>全新宿主（每次调用独立 SQLite 内存库 + 独立 MemoryCache；BindScope 绑定当前异步流）。</summary>
     public static FeatureManagementTestHost Create(Action<IServiceCollection>? configure = null)
     {
         var fsql = FeatureManagementTestSupport.CreateInMemoryFreeSql();
@@ -101,15 +118,15 @@ internal sealed class FeatureManagementTestHost : IDisposable
         services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
             new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
 
+        // V4.10.53（T3 桥接）：IDomainUser 注册保留——内置四 Provider（边界保留组）ctor(IDomainUser) 经普通 DI
+        // GetServices 构造需要（框架机制缺口 T3 转达候选；生产永不注册 IDomainUser——D01）。桩同时供显式 user 参数。
         var user = new TestDomainUser();
         services.AddSingleton<IDomainUser>(sp => { user.Provider = sp; return user; });
 
-        // v4.10.8 (ADR61) 迁移：模拟生产 DataService 自动注册——测试容器不走消费方 SG 聚合，
-        // 用与生产同构的 DI 兜底工厂（镜像 AddConstructibleDataService：ActivatorUtilities.CreateInstance
-        // + 域用户；测试用户源 = DI IDomainUser 而非 AsyncLocal CurrentAopUser——免域作用域，xUnit 并行安全）。
+        // FreeSql 基础设施（消费方 DomainHost 等价注册）——DataService 不手动注册（生产经 SG 消费方聚合自动注册，
+        // 测试经 Use<具体类>() NoAop 路径直建，IEntityDAC 从 DI 解析）
         services.AddScoped<UnitOfWorkManager>();
         services.AddScoped<IEntityDAC<FeatureValueEntity>>(sp => new FreeSqlEntityDAC<FeatureValueEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        AddTestConstructibleDataService<FeatureValueEntityDataService>(services);
 
         // ITransactionManager（写路径事务包裹依赖——Noop Begin/Commit 空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；对齐 Calendar/OrganizationUnit 宿主共识）
@@ -127,7 +144,7 @@ internal sealed class FeatureManagementTestHost : IDisposable
         // v0.3.0：跨实例失效 handler 手动注册（测试项目无消费方 SG4 扫描——扩展 Initializer 不手动注册）
         services.AddTransient<DistributedFeatureChangedHandler>();
 
-        // 贡献者收集 + 扩展初始化器注册（TryAddScoped 不覆盖已注册 DataService/IMemoryCache）
+        // 贡献者收集 + 扩展初始化器注册（TryAddScoped 不覆盖已注册 IMemoryCache；Store/Manager 经 AddConstructibleService）
         lock (s_metaContextLock)
         {
             var original = ProjectMetaContextBase.Instance;
@@ -144,28 +161,21 @@ internal sealed class FeatureManagementTestHost : IDisposable
 
         configure?.Invoke(services);
 
-        return new FeatureManagementTestHost(services.BuildServiceProvider(), fsql, user);
-    }
-
-    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
-    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
-    /// 用户源改为 DI <c>IDomainUser</c>（TestDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
-    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
-    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
-        where T : class
-    {
-        services.AddScoped<T>(sp =>
-        {
-            var user = sp.GetRequiredService<IDomainUser>();
-            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
-        });
+        var provider = services.BuildServiceProvider();
+        // 生产路径：绑定当前异步流的解析作用域（DomainHost.NewDomainContext 等价——测试 BindScope）
+        DomainUser<TestUserInfo>.BindScope(provider);
+        return new FeatureManagementTestHost(provider, fsql, user);
     }
 
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
     public T GetRequiredService<T>() where T : notnull
         => _serviceProvider.GetRequiredService<T>();
 
-    public void Dispose() => _serviceProvider.Dispose();
+    public void Dispose()
+    {
+        DomainUser<TestUserInfo>.UnBindScope();
+        _serviceProvider.Dispose();
+    }
 }
 
 /// <summary>
@@ -233,14 +243,17 @@ internal sealed class NoopTransactionScope : ITransactionScope
 
 /// <summary>
 /// 可配置测试用户桩——实现 IDomainUser 最小契约（匿名/认证切换、租户、角色注入）。
-/// <para><see cref="UserInfo"/> 用可配置 <see cref="TestUserInfo"/>（Roles 列表注入——Role 层遍历序测试用）。</para>
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产路径等价实现——接口（IDomainService）经
+/// 设 <c>DomainUserContext.CurrentAopUser</c> 后 GetRequiredService（AOP 等价——AddConstructibleService 守卫工厂
+/// 需 CurrentAopUser 非空）；具体类（DataService）经 <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>
+/// 直建（IDomainUser 参数显式传 this，IEntityDAC 等其余从 DI 解析——NoAop 等价，对齐 Settings/Tagging 测试桩）。</para>
 /// </summary>
 internal sealed class TestDomainUser : IDomainUser
 {
     private readonly object _gate = new();
     private readonly Dictionary<Type, object?> _cache = new();
 
-    /// <summary>ServiceProvider（懒加载 Use&lt;T&gt; 解析源——宿主工厂注入，构建后可用）。</summary>
+    /// <summary>ServiceProvider（宿主工厂注入，构建后可用——Use&lt;T&gt; 解析源）。</summary>
     public IServiceProvider? Provider { get; set; }
 
     public string SessionKey { get; set; } = "test-session";
@@ -275,13 +288,30 @@ internal sealed class TestDomainUser : IDomainUser
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
         var provider = Provider ?? throw new NotSupportedException("Stub: Provider 未注入");
+
+        // 接口（IDomainService）：AOP 等价——设 CurrentAopUser 后 GetRequiredService（AddConstructibleService 守卫工厂需非空）
+        if (typeof(TDomainService).IsInterface)
+        {
+            var previous = DomainUserContext.CurrentAopUser;
+            DomainUserContext.CurrentAopUser = this;
+            try
+            {
+                return provider.GetRequiredService<TDomainService>();
+            }
+            finally
+            {
+                DomainUserContext.CurrentAopUser = previous;
+            }
+        }
+
+        // 具体类：NoAop 等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this——IEntityDAC 从 DI 解析）
         if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
             return svc;
         lock (_gate)
         {
             if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
                 return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
+            var resolved = (TDomainService)ActivatorUtilities.CreateInstance(provider, typeof(TDomainService), this);
             _cache[typeof(TDomainService)] = resolved;
             return resolved;
         }

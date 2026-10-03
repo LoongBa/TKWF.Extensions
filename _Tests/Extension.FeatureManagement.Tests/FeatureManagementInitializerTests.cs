@@ -18,9 +18,12 @@ namespace TKWF.Ext.FeatureManagement.Tests;
 /// <summary>
 /// FeatureManagementExtensionInitializer 测试——D15 接线。
 /// <para>覆盖：[TKWFExtension] 特性声明、ConfigureServices 注册完整
-/// （IFeatureManager/IFeatureValueStore/IFeatureChecker/IFeatureDefinitionRepository/IMemoryCache/Options 绑定）、
-/// TryAdd 不覆盖消费方实现、贡献者收集（FakeMetaContext 模式，镜像 ConsumerIntegrationTests）、
+/// （IFeatureManager/IFeatureValueStore = AddConstructibleService 守卫工厂 + throw-factory + 域外抛；
+/// IFeatureChecker = TryAddScoped ImplementationType 接线型；4 Provider = TryAddEnumerable ×4；
+/// IFeatureDefinitionRepository/IMemoryCache/Options 绑定）、贡献者收集（FakeMetaContext 模式，镜像 ConsumerIntegrationTests）、
 /// 白名单启用反射断言（ConsumerHostInitializer）、AddFeatureCheck 过滤器注册。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：Store/Manager 注册由 TryAddScoped 改 <c>AddConstructibleService</c>——
+/// 消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（AOP 路径先设 CurrentAopUser 再 GetRequiredService）。</para>
 /// </summary>
 public class FeatureManagementInitializerTests
 {
@@ -36,22 +39,55 @@ public class FeatureManagementInitializerTests
         Assert.Equal("FeatureManagement", attr!.Name);
     }
 
+    // ── V4.10.53：IFeatureManager = AddConstructibleService（守卫工厂 + throw-factory + 域外抛） ──
+
     [Fact]
-    public void ConfigureServices_Registers_IFeatureManager_Descriptor()
+    public void ConfigureServices_Registers_IFeatureManager_GuardFactoryDescriptor()
     {
         var services = new ServiceCollection();
         new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
 
+        // AddConstructibleService——接口注册为可构造守卫工厂（非实现映射），Scoped 生命周期
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IFeatureManager));
 
         Assert.NotNull(descriptor);
-        // FeatureManager 构造函数 internal（IFeatureValueStore 等为 internal 契约）→ 工厂注册（对齐 Calendar/FileManagement 先例）
-        Assert.NotNull(descriptor!.ImplementationFactory);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
-    public void ConfigureServices_Registers_IFeatureValueStore_Descriptor()
+    public void ConfigureServices_Registers_FeatureManager_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IFeatureManager>() 创建
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(FeatureManager));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<FeatureManager>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_IFeatureManager_OutsideUseScope_Throws()
+    {
+        // 接口构造工厂的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IFeatureManager>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IFeatureManager", ex.Message);
+    }
+
+    // ── V4.10.53：IFeatureValueStore = AddConstructibleService（守卫工厂 + throw-factory + 域外抛） ──
+
+    [Fact]
+    public void ConfigureServices_Registers_IFeatureValueStore_GuardFactoryDescriptor()
     {
         var services = new ServiceCollection();
         new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
@@ -59,9 +95,38 @@ public class FeatureManagementInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IFeatureValueStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FeatureValueStore), descriptor!.ImplementationType);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
+
+    [Fact]
+    public void ConfigureServices_Registers_FeatureValueStore_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(FeatureValueStore));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<FeatureValueStore>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_IFeatureValueStore_OutsideUseScope_Throws()
+    {
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IFeatureValueStore>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IFeatureValueStore", ex.Message);
+    }
+
+    // ── IFeatureChecker = TryAddScoped ImplementationType（接线型普通 DI——框架过滤器 GetService 解析） ──
 
     [Fact]
     public void ConfigureServices_Registers_IFeatureChecker_Descriptor()
@@ -74,6 +139,26 @@ public class FeatureManagementInitializerTests
         Assert.NotNull(descriptor);
         Assert.Equal(typeof(FeatureChecker<FeatureManagementUserInfo>), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    // ── 4 Provider = TryAddEnumerable ×4（多实现集合，边界保留） ──
+
+    [Fact]
+    public void ConfigureServices_Registers_FourValueProviders_TryAddEnumerable()
+    {
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+
+        var providers = services.Where(d => d.ServiceType == typeof(IFeatureValueProvider)).ToList();
+
+        Assert.Equal(4, providers.Count);
+        Assert.Equal(typeof(UserFeatureValueProvider), providers[0].ImplementationType);
+        Assert.Equal(typeof(RoleFeatureValueProvider), providers[1].ImplementationType);
+        Assert.Equal(typeof(TenantFeatureValueProvider), providers[2].ImplementationType);
+        Assert.Equal(typeof(GlobalFeatureValueProvider), providers[3].ImplementationType);
+        Assert.All(providers, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
+        // 多实现集合按实现类型去重（TryAddEnumerable 语义）——重复注册同一实现不重复
+        Assert.Equal(4, providers.Select(d => d.ImplementationType).Distinct().Count());
     }
 
     [Fact]
@@ -126,11 +211,11 @@ public class FeatureManagementInitializerTests
         {
             FeatureTestMetaContext.Install();
 
-        var services = new ServiceCollection();
-        // BindConfiguration 依赖 IConfiguration——空配置（默认值生效）
-        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
-            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
-        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+            var services = new ServiceCollection();
+            // BindConfiguration 依赖 IConfiguration——空配置（默认值生效）
+            services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
+                new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
+            new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
 
             var sp = services.BuildServiceProvider();
             var repository = sp.GetRequiredService<IFeatureDefinitionRepository>();
@@ -149,28 +234,33 @@ public class FeatureManagementInitializerTests
         }
     }
 
-    [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerManager()
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<IFeatureManager, ConsumerFeatureManager>();
-        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+    // ── V4.10.53：消费方覆盖语义（AddConstructibleService = AddScoped——后注册覆盖默认；Checker TryAdd 保留） ──
 
-        var managerDescriptors = services.Where(d => d.ServiceType == typeof(IFeatureManager)).ToList();
-        Assert.Single(managerDescriptors);
-        Assert.Equal(typeof(ConsumerFeatureManager), managerDescriptors[0].ImplementationType);
+    [Fact]
+    public void ConsumerManager_RegisteredAfterInitializer_OverridesGuardFactory()
+    {
+        // AddConstructibleService 用 AddScoped（非 TryAdd）——消费方 OnRegisterDomainServices 后注册即覆盖默认（对齐 Identity README 语义）
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+        services.AddScoped<IFeatureManager, ConsumerFeatureManager>();
+
+        var provider = services.BuildServiceProvider();
+        var manager = provider.GetRequiredService<IFeatureManager>();
+
+        Assert.IsType<ConsumerFeatureManager>(manager);   // 后注册覆盖守卫工厂
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
+    public void ConsumerStore_RegisteredAfterInitializer_OverridesGuardFactory()
     {
         var services = new ServiceCollection();
-        services.AddScoped<IFeatureValueStore, ConsumerFeatureValueStore>();
         new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+        services.AddScoped<IFeatureValueStore, ConsumerFeatureValueStore>();
 
-        var storeDescriptors = services.Where(d => d.ServiceType == typeof(IFeatureValueStore)).ToList();
-        Assert.Single(storeDescriptors);
-        Assert.Equal(typeof(ConsumerFeatureValueStore), storeDescriptors[0].ImplementationType);
+        var provider = services.BuildServiceProvider();
+        var store = provider.GetRequiredService<IFeatureValueStore>();
+
+        Assert.IsType<ConsumerFeatureValueStore>(store);   // 后注册覆盖守卫工厂
     }
 
     [Fact]
@@ -207,7 +297,7 @@ public class FeatureManagementInitializerTests
         Assert.Equal(typeof(FeatureManagementExtensionInitializer<>), attr!.InitializerType);
     }
 
-    // ── 测试专用消费方实现（TryAdd 不覆盖语义） ──
+    // ── 测试专用消费方实现（后注册覆盖 / TryAdd 不覆盖语义） ──
 
     private sealed class ConsumerFeatureManager : IFeatureManager
     {

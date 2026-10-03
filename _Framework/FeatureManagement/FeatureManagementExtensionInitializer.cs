@@ -16,9 +16,24 @@ namespace TKWF.Ext.FeatureManagement;
 /// <summary>
 /// 功能管理扩展初始化器——<c>[TKWFExtension("FeatureManagement")]</c> 被 SG1 发现，三钩子接线：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——Options 绑定 + IMemoryCache + Feature 贡献者收集 + Store/Manager/Checker 注册（TryAddScoped）</item>
+/// <item><see cref="ConfigureServices"/>——Options 绑定 + IMemoryCache + Feature 贡献者收集 + Store/Manager/Checker 注册（V4.10.53 三态）</item>
 /// <item><see cref="ConfigureFilters"/>——<c>builder.AddFeatureCheck()</c>（框架方法，接入 [RequireFeature] 过滤器——不自建）</item>
 /// <item><see cref="InitializeAsync"/>——空实现（无种子）</item>
+/// </list>
+/// <para>V4.10.53（领域自治根治，正确路线——ADR90）三态注册：</para>
+/// <list type="bullet">
+/// <item><b>门面（AddConstructibleService）</b>——<see cref="IFeatureValueStore"/> / <see cref="IFeatureManager"/>
+///     （接口 : IDomainService）：接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；
+///     消费方经 <c>User.Use&lt;IFeatureValueStore&gt;()</c> / <c>User.Use&lt;IFeatureManager&gt;()</c> 解析。
+///     旧形态 TryAddScoped 构造注入 <see cref="IDomainUser"/>（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）。</item>
+/// <item><b>接线型（TryAddScoped 普通 DI）</b>——<see cref="IFeatureChecker"/>（主框架 Core 契约，非 IDomainService
+///     不可修改）：框架 <c>FeatureFilterAttribute</c> 经 <c>context.ServiceProvider.GetService&lt;IFeatureChecker&gt;()</c>
+///     普通 DI 解析（L41）；实现 ctor(<see cref="IServiceProvider"/>, ILogger) + C1 延迟解析 <see cref="IFeatureManager"/>。</item>
+/// <item><b>多 Provider（TryAddEnumerable）</b>——<see cref="IFeatureValueProvider"/> 内置四层（User/Role/Tenant/Global）：
+///     多实现集合（按实现类型去重），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase，内部
+///     Use&lt;T&gt; 经基类 User。<b>⚠️ 框架机制边界（T3 转达候选）</b>：多实现集合中 DomainServiceBase 派生实现
+///     （ctor 需 IDomainUser）经普通 DI GetServices 构造时 IDomainUser 永不注册 → 生产解析失败（FeatureManager
+///     构造注入 IEnumerable&lt;IFeatureValueProvider&gt; 触发）——本批保留 + 记录（对齐 Authentication Provider 处理）。</item>
 /// </list>
 /// <para>贡献者收集（对齐 PermissionExtensionInitializer 链路）：<c>ProjectMetaContextBase.Instance.FeatureContributors</c>
 /// （主框架 V4.9.114 SG1 收集）→ Activator.CreateInstance → Define(context) → repository.AddRange。</para>
@@ -69,23 +84,21 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         repository.AddRange(context.Definitions);
 
         services.TryAddScoped<IFeatureDefinitionRepository>(_ => repository);
-        services.TryAddScoped<IFeatureValueStore, FeatureValueStore>();
+
+        // V4.10.53（领域自治根治）：Store/Manager 注册由 TryAddScoped 改 AddConstructibleService——
+        // 接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方经 User.Use<T>() 解析。
+        services.AddConstructibleService<IFeatureValueStore, FeatureValueStore>();
+        services.AddConstructibleService<IFeatureManager, FeatureManager>();
 
         // v0.2.0 Provider 扩展点——内置四层（TryAddEnumerable：多实现遍历，C2 评审修正——TryAddScoped 只注册第一个）
+        // V4.10.53：边界保留（多实现集合无法经 AddConstructibleService 供给 user——框架机制缺口，T3 转达候选）
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, UserFeatureValueProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, RoleFeatureValueProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, TenantFeatureValueProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, GlobalFeatureValueProvider>());
 
-        services.TryAddScoped<IFeatureManager>(sp => new FeatureManager(
-            sp.GetServices<IFeatureValueProvider>(),
-            sp.GetRequiredService<FeatureCacheVersionRegistry>(),
-            sp.GetRequiredService<IDomainUser>(),
-            sp.GetRequiredService<IMemoryCache>(),
-            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<FeatureOptions>>(),
-            sp.GetRequiredService<ITransactionManager>(),
-            sp.GetRequiredService<ILocalEventBus>(),
-            sp.GetRequiredService<ILogger<FeatureManager>>()));
+        // V4.10.53（接线型）：IFeatureChecker 主框架契约（非 IDomainService）——保持 TryAddScoped 普通 DI
+        //（框架 FeatureFilterAttribute 经 context.ServiceProvider.GetService<IFeatureChecker>() 解析；ctor IServiceProvider + C1 延迟解析 Manager）
         services.TryAddScoped<IFeatureChecker, FeatureChecker<TUserInfo>>();
         // 管理 API 服务（[GenerateController]——写路径委托 Manager：缓存失效 + Global 唯一性，C3 裁定）
         services.TryAddScoped<FeatureManagementApiService>();

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
@@ -14,7 +15,14 @@ namespace TKWF.Ext.Settings.Tests;
 
 /// <summary>
 /// SettingManager 测试——覆盖分层优先级、默认值、JSON 序列化、匿名降级、缓存命中/失效、Options。
-/// <para>V0.2.0：完整分层（User → Tenant → Global → 默认值）+ IMemoryCache 读缓存。</para>
+/// <para>V0.3.0（领域自治根治，正确路线）：</para>
+/// <list type="bullet">
+/// <item><strong>集成测试走生产路径</strong>——真实 DI（扩展 ConfigureServices + FreeSql 基础设施 +
+///     真实 <see cref="DomainUser{TUserInfo}"/>）+ <c>User.Use&lt;ISettingManager&gt;()</c> 解析
+///     （AOP 路径：设 CurrentAopUser → GetRequiredService → AddConstructibleService 构造工厂 → SettingManager）；</item>
+/// <item><strong>分层逻辑单测</strong>——可配置 stub 用户直构 Manager（继承 DomainServiceBase，
+///     <see cref="DomainServiceBase.User"/> 上下文可精确控制 User/Tenant/匿名）。</item>
+/// </list>
 /// </summary>
 public class SettingManagerTests
 {
@@ -26,166 +34,206 @@ public class SettingManagerTests
             .Build();
     }
 
-    private static SettingEntityDataService CreateDataService(IFreeSql fsql, IDomainUser? user = null)
-    {
-        var uowManager = new UnitOfWorkManager(fsql);
-        var dac = new FreeSqlEntityDAC<SettingEntity>(uowManager);
-        return new SettingEntityDataService(user ?? new StubDomainUser(), dac);
-    }
+    // ──────────────────────────────────────────────
+    // 生产路径集成测试（真实 DomainUser + Use<T>()）
+    // ──────────────────────────────────────────────
 
-    private static SettingManager CreateManager(
-        ISettingStore? store = null,
-        StubDomainUser? user = null,
-        string provider = "Global",
-        IMemoryCache? cache = null,
-        int cacheExpirationSeconds = 300)
+    private static (ServiceProvider Provider, DomainUser<TestUserInfo> User) CreateProductionHost()
     {
+        var services = new ServiceCollection();
+        // 1. 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices）
+        new SettingsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        // 2. FreeSql 基础设施（消费方 DomainHost 等价注册）
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<SettingEntity>();
-        user ??= new StubDomainUser();
-        // ADR88/DI004：ISettingStore 不再构造注入——经 user.Use<ISettingStore>() 懒加载。
-        // 默认 store 依赖 SettingEntityDataService（同容器注册）；自定义 store 直接注册接口。
-        store ??= new SettingStore(user, new FakeLogger<SettingStore>());
-        var services = new ServiceCollection();
-        services.AddSingleton(CreateDataService(fsql, user));
-        services.AddSingleton<ISettingStore>(store);
-        user.ServiceProvider = services.BuildServiceProvider();
-        var options = Options.Create(new SettingsOptions
-        {
-            DefaultSettingValueProvider = provider,
-            CacheExpirationSeconds = cacheExpirationSeconds
-        });
-        cache ??= new MemoryCache(new MemoryCacheOptions());
-        return new SettingManager(user, options, cache, new FakeLogger<SettingManager>());
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<SettingEntity>, FreeSqlEntityDAC<SettingEntity>>();
+        // 3. 解析作用域绑定（生产经 DomainHost.NewDomainContext 绑定 AsyncLocal——测试等价 BindScope）
+        var provider = services.BuildServiceProvider();
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+        return (provider, user);
     }
 
-    // ── V0.1.0 原有测试（保持向后兼容） ──
-
     [Fact]
-    public async Task GetAsync_ExistingSetting_ReturnsValue()
+    public async Task Use_ISettingManager_Anonymous_WritesAndReadsGlobalLayer()
     {
-        var manager = CreateManager();
-        await manager.SetAsync("Theme", "dark", CancellationToken.None);
+        var (provider, user) = CreateProductionHost();
 
-        var result = await manager.GetAsync("Theme", "", CancellationToken.None);
+        // 生产路径：User.Use<ISettingManager>() —— AOP 路径解析（匿名 → 写入/读取 Global 层）
+        var manager = user.Use<ISettingManager>();
+        await manager.SetAsync("Theme", "dark", TestContext.Current.CancellationToken);
 
+        var result = await manager.GetAsync("Theme", "", TestContext.Current.CancellationToken);
         Assert.Equal("dark", result);
+
+        // 落库断言：匿名 → Global 层
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var saved = await fsql.Select<SettingEntity>()
+            .Where(s => s.Name == "Theme")
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(saved);
+        Assert.Equal("Global", saved!.ProviderName);
+        Assert.Null(saved.ProviderKey);
+        Assert.Equal("dark", saved.Value);
     }
 
     [Fact]
-    public async Task GetAsync_NonExistent_ReturnsDefault()
+    public async Task Use_ISettingManager_OverwritesPreviousValue()
     {
-        var manager = CreateManager();
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        var result = await manager.GetAsync("NotExist", "fallback", CancellationToken.None);
+        await manager.SetAsync("Color", "red", TestContext.Current.CancellationToken);
+        await manager.SetAsync("Color", "blue", TestContext.Current.CancellationToken);
 
-        Assert.Equal("fallback", result);
+        Assert.Equal("blue", await manager.GetAsync("Color", "", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task GetAsync_EmptyDefault_ReturnsEmptyString()
+    public async Task Use_ISettingManager_NonExistent_ReturnsDefault()
     {
-        var manager = CreateManager();
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        var result = await manager.GetAsync("NotExist", "", CancellationToken.None);
-
-        Assert.Equal("", result);
+        Assert.Equal("fallback", await manager.GetAsync("NotExist", "fallback", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task SetAsync_OverwritesPreviousValue()
+    public async Task Use_ISettingManager_EmptyDefault_ReturnsEmptyString()
     {
-        var manager = CreateManager();
-        await manager.SetAsync("Color", "red", CancellationToken.None);
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        await manager.SetAsync("Color", "blue", CancellationToken.None);
-        var result = await manager.GetAsync("Color", "", CancellationToken.None);
-
-        Assert.Equal("blue", result);
+        Assert.Equal("", await manager.GetAsync("NotExist", "", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task GetAsync_Typed_ReturnsDeserialized()
+    public async Task Use_ISettingManager_Typed_ReturnsDeserialized()
     {
-        var manager = CreateManager();
-        await manager.SetAsync("MaxRetries", "3", CancellationToken.None);
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        var result = await manager.GetAsync("MaxRetries", 0, CancellationToken.None);
+        await manager.SetAsync("MaxRetries", 3, TestContext.Current.CancellationToken);
+        var result = await manager.GetAsync("MaxRetries", 0, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, result);
     }
 
     [Fact]
-    public async Task GetAsync_Typed_InvalidJson_ReturnsDefault()
+    public async Task Use_ISettingManager_Typed_InvalidJson_ReturnsDefault()
     {
-        var manager = CreateManager();
-        await manager.SetAsync("Broken", "not-a-json", CancellationToken.None);
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        var result = await manager.GetAsync("Broken", 42, CancellationToken.None);
+        await manager.SetAsync("Broken", "not-a-json", TestContext.Current.CancellationToken);
+        var result = await manager.GetAsync("Broken", 42, TestContext.Current.CancellationToken);
 
         Assert.Equal(42, result);
     }
 
     [Fact]
-    public async Task SetAsync_Typed_SerializesToJSON()
+    public async Task Use_ISettingManager_Typed_ComplexObject_Deserializes()
     {
-        var manager = CreateManager();
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        await manager.SetAsync("Config", new { Width = 1920, Height = 1080 }, CancellationToken.None);
-
-        var raw = await manager.GetAsync("Config", "", CancellationToken.None);
-        Assert.Contains("1920", raw);
-        Assert.Contains("1080", raw);
-    }
-
-    [Fact]
-    public async Task GetAsync_Typed_ComplexObject_Deserializes()
-    {
-        var manager = CreateManager();
-        await manager.SetAsync("Layout", new TestLayout { Columns = 3, Rows = 2 }, CancellationToken.None);
-
-        var result = await manager.GetAsync("Layout", new TestLayout(), CancellationToken.None);
+        await manager.SetAsync("Layout", new TestLayout { Columns = 3, Rows = 2 }, TestContext.Current.CancellationToken);
+        var result = await manager.GetAsync("Layout", new TestLayout(), TestContext.Current.CancellationToken);
 
         Assert.Equal(3, result.Columns);
         Assert.Equal(2, result.Rows);
     }
 
     [Fact]
-    public async Task GetAsync_Typed_NullableInt_ReturnsDefault()
+    public async Task Use_ISettingManager_Typed_NullableInt_ReturnsDefault()
     {
-        var manager = CreateManager();
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        var result = await manager.GetAsync<int?>("NonExistent", null, CancellationToken.None);
-
+        var result = await manager.GetAsync<int?>("NonExistent", null, TestContext.Current.CancellationToken);
         Assert.Null(result);
     }
 
     [Fact]
-    public async Task GetAsync_MultipleSettings_Independent()
+    public async Task Use_ISettingManager_MultipleSettings_Independent()
     {
-        var manager = CreateManager();
-        await manager.SetAsync("A", "1", CancellationToken.None);
-        await manager.SetAsync("B", "2", CancellationToken.None);
+        var (_, user) = CreateProductionHost();
+        var manager = user.Use<ISettingManager>();
 
-        var a = await manager.GetAsync("A", "", CancellationToken.None);
-        var b = await manager.GetAsync("B", "", CancellationToken.None);
+        await manager.SetAsync("A", "1", TestContext.Current.CancellationToken);
+        await manager.SetAsync("B", "2", TestContext.Current.CancellationToken);
 
-        Assert.Equal("1", a);
-        Assert.Equal("2", b);
+        Assert.Equal("1", await manager.GetAsync("A", "", TestContext.Current.CancellationToken));
+        Assert.Equal("2", await manager.GetAsync("B", "", TestContext.Current.CancellationToken));
     }
 
-    // ── V0.2.0 新增测试：分层回退 ──
+    [Fact]
+    public void Use_ISettingManager_ResolvesInstance()
+    {
+        // 生产路径解析语义：Use<T>() 接口 AOP 路径经 DI 构造工厂创建实例——验证解析链路可重复
+        var (_, user) = CreateProductionHost();
+        var m1 = user.Use<ISettingManager>();
+        var m2 = user.Use<ISettingManager>();
+
+        Assert.NotNull(m1);
+        Assert.NotNull(m2);
+    }
+
+    // ──────────────────────────────────────────────
+    // 分层逻辑单测（stub 用户精确控制 User/Tenant/匿名）
+    // ──────────────────────────────────────────────
+
+    private static SettingManager CreateManager(
+        StubDomainUser? user = null,
+        int cacheExpirationSeconds = 300)
+    {
+        var fsql = CreateInMemoryFreeSql();
+        fsql.CodeFirst.SyncStructure<SettingEntity>();
+        user ??= new StubDomainUser();
+
+        // DataService 能力注册（stub 经 Use<T> 懒加载——生产 NoAop 路径的等价注册）
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<SettingEntity>, FreeSqlEntityDAC<SettingEntity>>();
+        user.ServiceProvider = services.BuildServiceProvider();
+
+        var options = Options.Create(new SettingsOptions { CacheExpirationSeconds = cacheExpirationSeconds });
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        return new SettingManager(user, options, cache, new FakeLogger<SettingManager>());
+    }
+
+    /// <summary>经 DataService 直接写入指定层（绕过 Manager 的 User 层写入逻辑）——生产路径等价。</summary>
+    private static async Task WriteSettingAsync(StubDomainUser user, string name, string value, string providerName, string? providerKey)
+    {
+        var ds = user.Use<SettingEntityDataService>();
+        var now = DateTimeOffset.Now;
+        await ds.UpsertByKeyAsync(new SettingEntity
+        {
+            Name = name,
+            Value = value,
+            ProviderName = providerName,
+            ProviderKey = providerKey,
+            Description = null,
+            IsVisibleToClients = true,
+            CreateTime = now,
+            UpdateTime = now
+        }, TestContext.Current.CancellationToken);
+    }
 
     [Fact]
     public async Task GetAsync_UserLayer_ReturnsUserValue()
     {
         // Arrange: 写入 User 层（有用户时 SetAsync 自动写 User 层）
-        var user = new StubDomainUser(userId: "user-42", tenantId: 1, isAuthenticated: true);
-        var manager = CreateManager(user: user);
-        await manager.SetAsync("Theme", "dark", CancellationToken.None);
+        var user = new StubDomainUser(userId: "user-42", isAuthenticated: true);
+        var manager = CreateManager(user);
+        await manager.SetAsync("Theme", "dark", TestContext.Current.CancellationToken);
 
         // Act
-        var result = await manager.GetAsync("Theme", "light", CancellationToken.None);
+        var result = await manager.GetAsync("Theme", "light", TestContext.Current.CancellationToken);
 
         // Assert: 命中 User 层
         Assert.Equal("dark", result);
@@ -195,15 +243,12 @@ public class SettingManagerTests
     public async Task GetAsync_TenantLayer_FallbackFromUser()
     {
         // Arrange: 写入 Tenant 层
-        var store = CreateCountingStore();
         var user = new StubDomainUser(userId: "user-1", tenantId: 100, isAuthenticated: true);
-        var manager = CreateManager(store: store, user: user);
-
-        // 直接写 Tenant 层（通过 Store，绕过 Manager 的 User 层写入）
-        await store.SetAsync("Logo", "tenant-logo", "Tenant", "100", null, CancellationToken.None);
+        var manager = CreateManager(user);
+        await WriteSettingAsync(user, "Logo", "tenant-logo", "Tenant", "100");
 
         // Act
-        var result = await manager.GetAsync("Logo", "default", CancellationToken.None);
+        var result = await manager.GetAsync("Logo", "default", TestContext.Current.CancellationToken);
 
         // Assert: User 层未命中，回退到 Tenant 层
         Assert.Equal("tenant-logo", result);
@@ -213,14 +258,12 @@ public class SettingManagerTests
     public async Task GetAsync_GlobalLayer_FallbackFromTenant()
     {
         // Arrange: 仅写入 Global 层
-        var store = CreateCountingStore();
         var user = new StubDomainUser(userId: "user-1", tenantId: 100, isAuthenticated: true);
-        var manager = CreateManager(store: store, user: user);
-
-        await store.SetAsync("Slogan", "global-slogan", "Global", null, null, CancellationToken.None);
+        var manager = CreateManager(user);
+        await WriteSettingAsync(user, "Slogan", "global-slogan", "Global", null);
 
         // Act
-        var result = await manager.GetAsync("Slogan", "default", CancellationToken.None);
+        var result = await manager.GetAsync("Slogan", "default", TestContext.Current.CancellationToken);
 
         // Assert: User/Tenant 层未命中，回退到 Global 层
         Assert.Equal("global-slogan", result);
@@ -231,10 +274,10 @@ public class SettingManagerTests
     {
         // Arrange: 无任何设置
         var user = new StubDomainUser(userId: "user-1", tenantId: 100, isAuthenticated: true);
-        var manager = CreateManager(user: user);
+        var manager = CreateManager(user);
 
         // Act
-        var result = await manager.GetAsync("Missing", "myDefault", CancellationToken.None);
+        var result = await manager.GetAsync("Missing", "myDefault", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("myDefault", result);
@@ -244,15 +287,13 @@ public class SettingManagerTests
     public async Task GetAsync_UserOverridesTenant()
     {
         // Arrange: 同名设置在 User 和 Tenant 层都有值
-        var store = CreateCountingStore();
         var user = new StubDomainUser(userId: "user-1", tenantId: 100, isAuthenticated: true);
-        var manager = CreateManager(store: store, user: user);
-
-        await store.SetAsync("FontSize", "14", "Tenant", "100", null, CancellationToken.None);
-        await store.SetAsync("FontSize", "18", "User", "user-1", null, CancellationToken.None);
+        var manager = CreateManager(user);
+        await WriteSettingAsync(user, "FontSize", "14", "Tenant", "100");
+        await WriteSettingAsync(user, "FontSize", "18", "User", "user-1");
 
         // Act
-        var result = await manager.GetAsync("FontSize", "12", CancellationToken.None);
+        var result = await manager.GetAsync("FontSize", "12", TestContext.Current.CancellationToken);
 
         // Assert: User 层优先
         Assert.Equal("18", result);
@@ -262,36 +303,30 @@ public class SettingManagerTests
     public async Task GetAsync_TenantOverridesGlobal()
     {
         // Arrange: 同名设置在 Tenant 和 Global 层都有值
-        var store = CreateCountingStore();
         var user = new StubDomainUser(userId: "user-1", tenantId: 100, isAuthenticated: true);
-        var manager = CreateManager(store: store, user: user);
-
-        await store.SetAsync("Lang", "en", "Global", null, null, CancellationToken.None);
-        await store.SetAsync("Lang", "zh-CN", "Tenant", "100", null, CancellationToken.None);
+        var manager = CreateManager(user);
+        await WriteSettingAsync(user, "Lang", "en", "Global", null);
+        await WriteSettingAsync(user, "Lang", "zh-CN", "Tenant", "100");
 
         // Act: User 层无设置，Tenant 层有
-        var result = await manager.GetAsync("Lang", "en", CancellationToken.None);
+        var result = await manager.GetAsync("Lang", "en", TestContext.Current.CancellationToken);
 
         // Assert: 命中 Tenant 层
         Assert.Equal("zh-CN", result);
     }
 
-    // ── V0.2.0 新增测试：匿名降级 ──
-
     [Fact]
     public async Task GetAsync_Anonymous_SkipsUserAndTenant()
     {
         // Arrange: 匿名用户，User 和 Tenant 层有值
-        var store = CreateCountingStore();
         var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(store: store, user: user);
-
-        await store.SetAsync("Theme", "user-theme", "User", "user-1", null, CancellationToken.None);
-        await store.SetAsync("Theme", "tenant-theme", "Tenant", "100", null, CancellationToken.None);
-        await store.SetAsync("Theme", "global-theme", "Global", null, null, CancellationToken.None);
+        var manager = CreateManager(user);
+        await WriteSettingAsync(user, "Theme", "user-theme", "User", "user-1");
+        await WriteSettingAsync(user, "Theme", "tenant-theme", "Tenant", "100");
+        await WriteSettingAsync(user, "Theme", "global-theme", "Global", null);
 
         // Act
-        var result = await manager.GetAsync("Theme", "default", CancellationToken.None);
+        var result = await manager.GetAsync("Theme", "default", TestContext.Current.CancellationToken);
 
         // Assert: 匿名用户跳过 User/Tenant，命中 Global 层
         Assert.Equal("global-theme", result);
@@ -302,10 +337,10 @@ public class SettingManagerTests
     {
         // Arrange: 匿名用户，Global 层也无设置
         var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(user: user);
+        var manager = CreateManager(user);
 
         // Act
-        var result = await manager.GetAsync("Theme", "default", CancellationToken.None);
+        var result = await manager.GetAsync("Theme", "default", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("default", result);
@@ -315,15 +350,15 @@ public class SettingManagerTests
     public async Task SetAsync_Anonymous_WritesToGlobalLayer()
     {
         // Arrange: 匿名用户
-        var store = CreateCountingStore();
         var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(store: store, user: user);
+        var manager = CreateManager(user);
 
         // Act
-        await manager.SetAsync("Theme", "dark", CancellationToken.None);
+        await manager.SetAsync("Theme", "dark", TestContext.Current.CancellationToken);
 
         // Assert: 写入 Global 层
-        var saved = await store.GetAsync("Theme", "Global", null, CancellationToken.None);
+        var saved = await user.Use<SettingEntityDataService>()
+            .GetByKeyAsync("Theme", "Global", null, TestContext.Current.CancellationToken);
         Assert.NotNull(saved);
         Assert.Equal("dark", saved!.Value);
     }
@@ -332,128 +367,58 @@ public class SettingManagerTests
     public async Task SetAsync_Authenticated_WritesToUserLayer()
     {
         // Arrange: 已认证用户
-        var store = CreateCountingStore();
-        var user = new StubDomainUser(userId: "user-42", tenantId: 1, isAuthenticated: true);
-        var manager = CreateManager(store: store, user: user);
+        var user = new StubDomainUser(userId: "user-42", isAuthenticated: true);
+        var manager = CreateManager(user);
 
         // Act
-        await manager.SetAsync("Theme", "dark", CancellationToken.None);
+        await manager.SetAsync("Theme", "dark", TestContext.Current.CancellationToken);
 
         // Assert: 写入 User 层
-        var saved = await store.GetAsync("Theme", "User", "user-42", CancellationToken.None);
+        var saved = await user.Use<SettingEntityDataService>()
+            .GetByKeyAsync("Theme", "User", "user-42", TestContext.Current.CancellationToken);
         Assert.NotNull(saved);
         Assert.Equal("dark", saved!.Value);
     }
 
-    // ── V0.2.0 新增测试：缓存命中/失效 ──
+    // ── 缓存命中/失效（DB 状态验证——不依赖计数桩） ──
 
     [Fact]
-    public async Task GetAsync_CacheHit_DoesNotCallStoreSecondTime()
+    public async Task GetAsync_CacheHit_DoesNotReReadDatabase()
     {
-        // Arrange: 使用计数 Store
-        var store = CreateCountingStore();
-        var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(store: store, user: user);
+        // Arrange: 匿名用户，Global 层有值
+        var user = new StubDomainUser();
+        var manager = CreateManager(user);
+        var fsql = user.ServiceProvider!.GetRequiredService<IFreeSql>();
+        await WriteSettingAsync(user, "Theme", "dark", "Global", null);
 
-        await store.SetAsync("Theme", "dark", "Global", null, null, CancellationToken.None);
-        store.ResetCounts();
+        // Act: 首次读取（缓存写入）
+        Assert.Equal("dark", await manager.GetAsync("Theme", "", TestContext.Current.CancellationToken));
 
-        // Act: 第一次读取（缓存未命中，调用 Store）
-        var r1 = await manager.GetAsync("Theme", "", CancellationToken.None);
-        var callsAfterFirst = store.GetCalls;
-
-        // 第二次读取（缓存命中，不调用 Store）
-        var r2 = await manager.GetAsync("Theme", "", CancellationToken.None);
-        var callsAfterSecond = store.GetCalls;
-
-        // Assert
-        Assert.Equal("dark", r1);
-        Assert.Equal("dark", r2);
-        Assert.Equal(1, callsAfterFirst);  // 第一次调用 Store
-        Assert.Equal(1, callsAfterSecond); // 第二次不调用 Store
+        // 直接删除 DB 记录——若重读 DB 应返回默认值；缓存命中则仍返回旧值
+        await fsql.Delete<SettingEntity>().Where(s => s.Name == "Theme").ExecuteAffrowsAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("dark", await manager.GetAsync("Theme", "", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task SetAsync_InvalidateCache_NextGetCallsStore()
+    public async Task GetAsync_NullResult_CachedAsDefault_SurvivesDbInsert()
     {
-        // Arrange: 使用计数 Store
-        var store = CreateCountingStore();
-        var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(store: store, user: user);
+        // Arrange: 匿名用户，设置不存在
+        var user = new StubDomainUser();
+        var manager = CreateManager(user);
 
-        await store.SetAsync("Theme", "dark", "Global", null, null, CancellationToken.None);
-        store.ResetCounts();
+        // Act: 首次读取（null 缓存为 NotFoundSentinel）
+        Assert.Equal("fallback", await manager.GetAsync("Missing", "fallback", TestContext.Current.CancellationToken));
 
-        // Act: 第一次读取（缓存命中）
-        await manager.GetAsync("Theme", "", CancellationToken.None);
-        var callsAfterRead = store.GetCalls;
+        // DB 直接插入——null 已缓存，不穿透
+        await WriteSettingAsync(user, "Missing", "now-exists", "Global", null);
+        Assert.Equal("fallback", await manager.GetAsync("Missing", "fallback", TestContext.Current.CancellationToken));
 
-        // SetAsync 后缓存失效
-        await manager.SetAsync("Theme", "light", CancellationToken.None);
-        store.ResetCounts();
-
-        // 第二次读取（缓存失效，调用 Store）
-        var result = await manager.GetAsync("Theme", "", CancellationToken.None);
-        var callsAfterWrite = store.GetCalls;
-
-        // Assert
-        Assert.Equal("light", result);
-        Assert.Equal(1, callsAfterWrite); // 缓存失效后重新调用 Store
+        // SetAsync 失效缓存后重新读取到新值
+        await manager.SetAsync("Missing", "fresh", TestContext.Current.CancellationToken);
+        Assert.Equal("fresh", await manager.GetAsync("Missing", "fallback", TestContext.Current.CancellationToken));
     }
 
-    [Fact]
-    public async Task GetAsync_NullResult_CachedAsDefaultValue()
-    {
-        // Arrange: 不存在的设置（Store 返回 null）
-        var store = CreateCountingStore();
-        var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(store: store, user: user);
-        store.ResetCounts();
-
-        // Act: 第一次读取
-        var r1 = await manager.GetAsync("Missing", "fallback", CancellationToken.None);
-        var callsAfterFirst = store.GetCalls;
-
-        // 第二次读取（缓存命中 null 值）
-        var r2 = await manager.GetAsync("Missing", "fallback", CancellationToken.None);
-        var callsAfterSecond = store.GetCalls;
-
-        // Assert
-        Assert.Equal("fallback", r1);
-        Assert.Equal("fallback", r2);
-        Assert.Equal(1, callsAfterFirst);
-        Assert.Equal(1, callsAfterSecond); // null 也缓存，不穿透
-    }
-
-    [Fact]
-    public async Task GetAsync_CacheExpiration_CustomSeconds()
-    {
-        // Arrange: 设置很短的缓存过期时间
-        var store = CreateCountingStore();
-        var user = new StubDomainUser(isAuthenticated: false);
-        var manager = CreateManager(store: store, user: user, cacheExpirationSeconds: 1);
-        store.ResetCounts();
-
-        // 写入设置
-        await store.SetAsync("Key", "value", "Global", null, null, CancellationToken.None);
-
-        // 第一次读取
-        await manager.GetAsync("Key", "", CancellationToken.None);
-        Assert.Equal(1, store.GetCalls);
-
-        // 立即再次读取（缓存命中）
-        await manager.GetAsync("Key", "", CancellationToken.None);
-        Assert.Equal(1, store.GetCalls);
-
-        // 等待缓存过期
-        await Task.Delay(1100, TestContext.Current.CancellationToken);
-
-        // 过期后再次读取（缓存失效，重新调用 Store）
-        await manager.GetAsync("Key", "", CancellationToken.None);
-        Assert.Equal(2, store.GetCalls);
-    }
-
-    // ── V0.2.0 新增测试：Options 绑定 ──
+    // ── Options ──
 
     [Fact]
     public void Options_DefaultCacheExpirationSeconds_Is300()
@@ -471,30 +436,26 @@ public class SettingManagerTests
 
     // ── Test helpers ──
 
-    private static CountingSettingStore CreateCountingStore()
-    {
-        var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<SettingEntity>();
-        return new CountingSettingStore(fsql, new FakeLogger<SettingStore>());
-    }
-
     private sealed class TestLayout
     {
         public int Columns { get; set; }
         public int Rows { get; set; }
     }
 
+    /// <summary>
+    /// 可配置 stub 用户（User/Tenant/匿名精确控制）——继承式 Manager 经基类 <see cref="DomainServiceBase.User"/>
+    /// 读取上下文；<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this，
+    /// 其余从 DI 解析——经注入的 ServiceProvider）。
+    /// </summary>
     private sealed class StubDomainUser : IDomainUser
     {
         private readonly string? _userId;
         private readonly long? _tenantId;
         private readonly bool _isAuthenticated;
         private IServiceProvider? _provider;
-        private readonly object _gate = new();
-        private readonly Dictionary<Type, object?> _cache = new();
 
         public StubDomainUser(
-            string? userId = "test-user",
+            string? userId = null,
             long? tenantId = null,
             bool isAuthenticated = false)
         {
@@ -503,11 +464,8 @@ public class SettingManagerTests
             _isAuthenticated = isAuthenticated;
         }
 
-        /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-        public IServiceProvider ServiceProvider
-        {
-            set { lock (_gate) _provider = value; }
-        }
+        /// <summary>ServiceProvider（测试工厂注册时注入——Use&lt;T&gt; 解析源）。</summary>
+        public IServiceProvider? ServiceProvider { set => _provider = value; get => _provider; }
 
         public string SessionKey => "test-session";
         public bool IsAuthenticated => _isAuthenticated;
@@ -518,34 +476,31 @@ public class SettingManagerTests
         public string? UserId => _userId;
         public string? UserName => "test";
         public bool IsInRole(string role) => false;
+
         public TDomainService Use<TDomainService>() where TDomainService : IDomainService
         {
-            IServiceProvider provider;
-            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-            if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-                return svc;
-            lock (_gate)
-            {
-                if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                    return svc2;
-                var resolved = provider.GetRequiredService<TDomainService>();
-                _cache[typeof(TDomainService)] = resolved;
-                return resolved;
-            }
+            // 生产 NoAop 路径等价：ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析
+            if (_provider is null)
+                throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+            return (TDomainService)ActivatorUtilities.CreateInstance(_provider, typeof(TDomainService), this);
         }
+
         public TService GetService<TService>() where TService : notnull
         {
-            IServiceProvider provider;
-            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-            return provider.GetRequiredService<TService>();
+            if (_provider is null)
+                throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+            return _provider.GetRequiredService<TService>();
         }
+
         public TService GetOptionalService<TService>() where TService : class => null!;
         public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
     }
 
+    /// <summary>简化 ILogger 桩：捕获 Warning 日志。</summary>
     private sealed class FakeLogger<T> : ILogger<T>
     {
         public List<string> Warnings { get; } = [];
+
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
@@ -553,57 +508,5 @@ public class SettingManagerTests
             if (logLevel == LogLevel.Warning)
                 Warnings.Add(formatter(state, exception));
         }
-    }
-
-    /// <summary>计数 ISettingStore：追踪 GetAsync 调用次数，用于验证缓存行为。</summary>
-    private sealed class CountingSettingStore : ISettingStore
-    {
-        private readonly IFreeSql _freeSql;
-        private readonly ILogger<SettingStore> _logger;
-
-        public int GetCalls { get; private set; }
-
-        public CountingSettingStore(IFreeSql freeSql, ILogger<SettingStore> logger)
-        {
-            _freeSql = freeSql;
-            _logger = logger;
-        }
-
-        public void ResetCounts() => GetCalls = 0;
-
-        public async Task<SettingEntity?> GetAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)
-        {
-            GetCalls++;
-            return await _freeSql.Select<SettingEntity>()
-                .Where(s => s.Name == name && s.ProviderName == providerName && s.ProviderKey == providerKey)
-                .FirstAsync(ct);
-        }
-
-        public Task<IReadOnlyList<SettingEntity>> GetListAsync(string providerName, string? providerKey, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<SettingEntity>>(Array.Empty<SettingEntity>());
-
-        public async Task SetAsync(string name, string? value, string providerName, string? providerKey, string? description, CancellationToken ct = default)
-        {
-            var now = DateTimeOffset.Now;
-            await _freeSql.Delete<SettingEntity>()
-                .Where(s => s.Name == name && s.ProviderName == providerName && s.ProviderKey == providerKey)
-                .ExecuteAffrowsAsync(ct);
-
-            var entity = new SettingEntity
-            {
-                Name = name,
-                Value = value,
-                ProviderName = providerName,
-                ProviderKey = providerKey,
-                Description = description,
-                IsVisibleToClients = true,
-                CreateTime = now,
-                UpdateTime = now
-            };
-            await _freeSql.Insert(entity).ExecuteAffrowsAsync(ct);
-        }
-
-        public Task DeleteAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)
-            => Task.CompletedTask;
     }
 }

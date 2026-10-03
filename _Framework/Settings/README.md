@@ -22,33 +22,33 @@
 
 ## 二、设计原理 (Design Principles)
 
-本扩展采用 **"存储抽象 + ORM 无关持久化 + 分层读取 + 异常静默"** 架构。
+本扩展采用 **"领域服务门面 + SG1 DataService + 分层读取 + 异常静默"** 架构（**V0.3.0 正确路线**：扩展=业务领域开发——门面继承 `DomainServiceBase`，数据访问经 SG1 DataService，消费方 `User.Use<T>()`）。
 
 ### 1. 结构分层
 
-- **存储抽象 (`ISettingStore`)**：定义 CRUD 操作，按 Provider 定位设置（名称 + ProviderName + ProviderKey）。
+- **领域服务门面 (`ISettingManager`)**：分层读写接口，屏蔽 Provider 细节，提供类型安全的 Get/Set——`internal sealed class SettingManager : DomainServiceBase, ISettingManager`（经基类 `User` 获取用户上下文，IDomainUser 永不注册 DI）。
 
-- **持久化实现 (`FreeSqlSettingStore`)**：将设置映射为 `SettingEntity` 并持久化。异常静默处理（不阻塞业务）。
-
-- **管理器 (`ISettingManager`)**：分层读写接口，屏蔽 Provider 细节，提供类型安全的 Get/Set。
+- **数据访问 (`SettingEntityDataService`)**：SG1/xCodeGen 生成 DataService（`DomainDataServiceBase<,>` 派生 + 手写分部业务方法 `GetByKeyAsync`/`GetListByProviderAsync`/`UpsertByKeyAsync`/`DeleteByKeyAsync`）——门面经 `User.Use<SettingEntityDataService>()` NoAop 路径直建。
 
 - **管理器实现 (`SettingManager`)**：分层查找逻辑（User → Tenant → Global → 默认值），JSON 序列化支持，内存缓存。
 
 - **声明式实体 (`SettingEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` 特性。
 
+> **V0.3.0（领域自治根治，ADR90）**：删除 `ISettingStore`/`SettingStore` 伪 DataService 层（职责与 DataService 完全重叠）；门面继承 `DomainServiceBase` + 注册改 `AddConstructibleService`（接口可构造守卫工厂 + 实现类 throw-factory）。
+
 ### 2. 安全语义
 
-- **异常静默**：读写失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
+- **异常静默**：读写失败时记录 Warning 日志，不抛出异常（不阻塞业务调用——对齐 UserCenter 降级矩阵）。
 
-- **TryAdd 语义**：DI 注册用 `TryAddScoped`——消费方自定义实现优先；扩展默认实现不覆盖消费方。
+- **域作用域守卫**：`ISettingManager` 经 `AddConstructibleService` 注册——DI 中唯一可解析的是接口本身，且解析必须处于 `User.Use<T>()` 调用链内（`CurrentAopUser` 守卫）；实现类注册为 throw-factory（禁直接 DI 解析）。
 
-- **Scoped 生命周期**：`ISettingStore` / `ISettingManager` Scoped，自动参与当前请求上下文。
+- **Scoped 生命周期**：`ISettingManager` Scoped，自动参与当前请求上下文。
 
 ### 3. 与主框架的关系
 
-- `IDomainUser` 由主框架定义（不动），用于获取当前用户/租户上下文。
-- 本扩展提供 `FreeSqlSettingStore` + `SettingManager` 实现 + `SettingsExtensionInitializer` 注册。
-- 消费方通过 `ISettingManager` 进行设置读写，无需关心 Provider 细节。
+- `IDomainUser` 由主框架定义（**永不注册 DI**——D01）；门面经基类 `DomainServiceBase.User` 获取用户上下文。
+- 本扩展提供 `SettingManager`（继承 `DomainServiceBase`）+ `SettingsExtensionInitializer` 注册（`AddConstructibleService<ISettingManager, SettingManager>`）。
+- 消费方经 `User.Use<ISettingManager>()` 进行设置读写，无需关心 Provider 细节。
 
 ---
 
@@ -63,16 +63,19 @@
 public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-白名单声明后自动注册：`ISettingStore`（默认 `FreeSqlSettingStore`）+ `ISettingManager`（默认 `SettingManager`）+ `IMemoryCache`（默认 `MemoryCache`）。
+白名单声明后自动注册：`ISettingManager`（默认 `SettingManager`，`AddConstructibleService` 接口守卫工厂）+ `IMemoryCache`（默认 `MemoryCache`）。
 
 ### 2. 读写设置
 
 ```csharp
-// 注入 ISettingManager
-public class MyService(ISettingManager settingManager)
+// V0.3.0：领域服务门面经 User.Use<ISettingManager>() 解析（禁构造注入——DI004 零豁免）
+public class MyService : DomainServiceBase
 {
+    public MyService(IDomainUser user) : base(user) { }
+
     public async Task<string> GetThemeAsync()
     {
+        var settingManager = User.Use<ISettingManager>();
         return await settingManager.GetAsync("Theme", "light");
     }
 
@@ -109,16 +112,9 @@ public class MyService(ISettingManager settingManager)
 > `services.Configure<SettingsOptions>(configuration.GetSection("TKWF:Settings"))`（与 Navigation/Permissions 同模式）。
 > 亦可在消费方 `ConfigureExtensions` 中 `services.Configure<SettingsOptions>(o => ...)` 覆盖。
 
-### 4. 自定义 ISettingStore
+### 4. 数据访问（V0.3.0 起：SG1 DataService，无 Store 层）
 
-若需替换 `FreeSqlSettingStore`（如写文件、Redis）：
-
-```csharp
-// 消费方 ConfigureServices 中
-services.AddScoped<ISettingStore, RedisSettingStore>();
-```
-
-TryAdd 语义确保消费方实现优先。
+设置数据访问一律经 SG1/xCodeGen 生成的 `SettingEntityDataService`（`DomainDataServiceBase<,>` 派生）——门面 `SettingManager` 经 `User.Use<SettingEntityDataService>()` NoAop 路径直建（`IEntityDAC<SettingEntity>` 从 DI 解析，走租户/软删链路）。**扩展/消费方均不得直接注入 IFreeSql / IEntityDAC / DataService**（数据访问红线 + DI004 零豁免）。
 
 ---
 
@@ -126,7 +122,8 @@ TryAdd 语义确保消费方实现优先。
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`ISettingStore`** | 设置存储抽象（CRUD） | `FreeSqlSettingStore`（本扩展） |
+| **`ISettingManager`** | 领域服务门面——分层读写管理器（V0.3.0 起 `: IDomainService`，消费方 `User.Use<ISettingManager>()`） | `SettingManager`（本扩展，继承 `DomainServiceBase`，`AddConstructibleService` 注册） |
+| **`SettingEntityDataService`** | 设置表 DataService（SG1/xCodeGen——CRUD + `GetByKeyAsync`/`UpsertByKeyAsync` 等业务方法） | 内置，SG 消费方聚合自动注册（throw-factory） |
 | **`ISettingManager`** | 分层读写管理器 | `SettingManager`（本扩展） |
 | **`SettingEntity`** | 设置表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`SettingsUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |

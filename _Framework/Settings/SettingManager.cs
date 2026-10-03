@@ -1,23 +1,28 @@
 using System;
-using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Settings
 {
     /// <summary>
     /// 设置管理器实现——分层读写（User → Tenant → Global → 默认值）+ 内存缓存。
-    /// <para>V0.2.0：完整分层（User → Tenant → Global → 默认值逐层回退）+ IMemoryCache 读缓存。
-    /// 匿名用户（IsAuthenticated == false）跳过 User/Tenant 层，直接查 Global。</para>
-    /// <para>ADR88/DI004（A 批整改）：<see cref="ISettingStore"/> 不再构造注入——经
-    /// <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析（IDomainUser 字段沿用既有注入）。</para>
+    /// <para>V0.3.0（领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>（与业务领域开发方式一致），
+    /// 经基类 <see cref="DomainServiceBase.User"/> 获取用户上下文——IDomainUser 永不注册 DI（D01 领域自治，
+    /// 构造注入 IDomainUser 而 IDomainUser 不进 DI 正是 v0.3.3 故障根因）。</para>
+    /// <para>删除 ISettingStore/SettingStore 伪 DataService 层（职责与 <see cref="SettingEntityDataService"/> 完全重叠），
+    /// 直接经 <c>User.Use&lt;SettingEntityDataService&gt;()</c> 懒加载 DataService（NoAop 路径，ActivatorUtilities 直建，
+    /// IEntityDAC 从 DI 解析——数据访问红线合规，零 ORM/零 IEntityDAC 直接注入）。</para>
+    /// <para>注册形态由 TryAddScoped 改为 <c>AddConstructibleService&lt;ISettingManager, SettingManager&gt;</c>——
+    /// 接口构造工厂 + CurrentAopUser 守卫（构造注入链在域作用域外解析即抛 InvalidOperationException，DI004 编译期门控零豁免）。</para>
+    /// <para>异常静默保留（对齐 UserCenter §5.3 降级矩阵仓库惯例）：数据访问失败记录 Warning，不阻塞业务调用。</para>
     /// </summary>
-    internal sealed class SettingManager : ISettingManager
+    internal sealed class SettingManager : DomainServiceBase, ISettingManager
     {
         private const string UserProvider = "User";
         private const string TenantProvider = "Tenant";
@@ -25,21 +30,20 @@ namespace TKWF.Ext.Settings
         private const string CacheKeyPrefix = "Setting:";
         private const string NotFoundSentinel = "\x02NOTFOUND\x02";
 
-        private readonly IDomainUser _user;
         private readonly SettingsOptions _options;
         private readonly IMemoryCache _cache;
         private readonly ILogger<SettingManager> _logger;
 
-        private ISettingStore? _store;
-        private ISettingStore Store => _store ??= _user.Use<ISettingStore>();
+        private SettingEntityDataService? _dataService;
+        private SettingEntityDataService DataService => _dataService ??= User.Use<SettingEntityDataService>();
 
         public SettingManager(
             IDomainUser user,
             IOptions<SettingsOptions> options,
             IMemoryCache cache,
             ILogger<SettingManager> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? new SettingsOptions();
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -49,13 +53,13 @@ namespace TKWF.Ext.Settings
         public async Task<string> GetAsync(string name, string defaultValue = "", CancellationToken ct = default)
         {
             // 匿名用户跳过 User/Tenant 层，直接查 Global → 默认值
-            if (!_user.IsAuthenticated)
+            if (!User.IsAuthenticated)
             {
                 return await GetFromGlobalOrCacheAsync(name, defaultValue, ct);
             }
 
             // 分层回退：User → Tenant → Global → 默认值
-            var userId = _user.UserId;
+            var userId = User.UserId;
             if (!string.IsNullOrEmpty(userId))
             {
                 var (found, value) = await TryGetFromLayerAsync(name, UserProvider, userId, ct);
@@ -63,7 +67,7 @@ namespace TKWF.Ext.Settings
                     return value;
             }
 
-            var tenantId = _user.TenantId;
+            var tenantId = User.TenantId;
             if (tenantId.HasValue)
             {
                 var (found, value) = await TryGetFromLayerAsync(name, TenantProvider, tenantId.Value.ToString(), ct);
@@ -98,10 +102,10 @@ namespace TKWF.Ext.Settings
             string providerName;
             string? providerKey;
 
-            if (_user.IsAuthenticated && !string.IsNullOrEmpty(_user.UserId))
+            if (User.IsAuthenticated && !string.IsNullOrEmpty(User.UserId))
             {
                 providerName = UserProvider;
-                providerKey = _user.UserId;
+                providerKey = User.UserId;
             }
             else
             {
@@ -109,7 +113,27 @@ namespace TKWF.Ext.Settings
                 providerKey = null;
             }
 
-            await Store.SetAsync(name, value, providerName, providerKey, description: null, ct);
+            try
+            {
+                var now = DateTimeOffset.Now;
+                var entity = new SettingEntity
+                {
+                    Name = name,
+                    Value = value,
+                    ProviderName = providerName,
+                    ProviderKey = providerKey,
+                    Description = null,
+                    IsVisibleToClients = true,
+                    CreateTime = now,
+                    UpdateTime = now
+                };
+                await DataService.UpsertByKeyAsync(entity, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "设置写入失败: Name={Name}, Provider={ProviderName}/{ProviderKey}", name, providerName, providerKey);
+            }
+
             InvalidateCacheForName(name);
         }
 
@@ -136,7 +160,7 @@ namespace TKWF.Ext.Settings
                 return (true, cached!);
             }
 
-            var entity = await Store.GetAsync(name, providerName, providerKey, ct);
+            var entity = await TryReadAsync(name, providerName, providerKey, ct);
 
             var cacheOptions = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(TimeSpan.FromSeconds(_options.CacheExpirationSeconds));
@@ -163,7 +187,7 @@ namespace TKWF.Ext.Settings
                 return cached == NotFoundSentinel ? defaultValue : cached!;
             }
 
-            var entity = await Store.GetAsync(name, GlobalProvider, providerKey: null, ct);
+            var entity = await TryReadAsync(name, GlobalProvider, providerKey: null, ct);
 
             var result = entity?.Value;
 
@@ -180,14 +204,30 @@ namespace TKWF.Ext.Settings
             return result;
         }
 
+        /// <summary>
+        /// 读取单条设置——异常静默（对齐仓库降级矩阵惯例）：失败记录 Warning 返回 null，不阻塞业务调用。
+        /// </summary>
+        private async Task<SettingEntity?> TryReadAsync(string name, string providerName, string? providerKey, CancellationToken ct)
+        {
+            try
+            {
+                return await DataService.GetByKeyAsync(name, providerName, providerKey, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "设置读取失败: Name={Name}, Provider={ProviderName}/{ProviderKey}", name, providerName, providerKey);
+                return null;
+            }
+        }
+
         /// <summary>清除指定设置名称在所有层的缓存。</summary>
         private void InvalidateCacheForName(string name)
         {
-            if (_user.IsAuthenticated && !string.IsNullOrEmpty(_user.UserId))
-                _cache.Remove(BuildCacheKey(UserProvider, _user.UserId, name));
+            if (User.IsAuthenticated && !string.IsNullOrEmpty(User.UserId))
+                _cache.Remove(BuildCacheKey(UserProvider, User.UserId, name));
 
-            if (_user.TenantId.HasValue)
-                _cache.Remove(BuildCacheKey(TenantProvider, _user.TenantId.Value.ToString(), name));
+            if (User.TenantId.HasValue)
+                _cache.Remove(BuildCacheKey(TenantProvider, User.TenantId.Value.ToString(), name));
 
             _cache.Remove(BuildCacheKey(GlobalProvider, providerKey: null, name));
         }

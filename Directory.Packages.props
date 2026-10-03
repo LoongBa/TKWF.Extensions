@@ -70,23 +70,24 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.52" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.52" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.52" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.52" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.52" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.52" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.52" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.52" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.54" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.54" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.54" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.52" />
-    <!-- ✅ 4.10.52 lockstep（2026-10-03）：主框架 4.10.52 已发布（ADR89 IEntityDAC 条件原子更新原语
-         UpdateWhereAsync——响应扩展组转达 docs/转达-MFA原子条件更新能力缺口-请框架组裁定.md，方案 A 落地；
-         MFA B 批 IFreeSql 逃生口移除 + Outbox InboxDbVersionStore 非原子 RMW 根治 + xCodeGen 模板增
-         EntityUpdateWhereAsync 转发器；另含 v4.10.51 ADR88 构造注入门控 DI004/DI005 诊断） -->
-  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.52" />
-  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.52" />
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.54" />
+    <!-- ✅ 4.10.54 lockstep（2026-10-04，本地部署模式）：主框架 v4.10.54 交付（周期调度 IRecurringBackgroundJobManager
+         ADR91——议题 2 兑现；测试宿主辅助 A 精简版 BindTestScope/AssertConstructible 入 TKWF.Domain.Testing.xUnit——
+         议题 1 兑现，包定位分叉关闭：Testing.xUnit/.Mock 早已随框架发布）。本地部署模式验证：DLL 模式运行时 refs
+         4.10.54 + TKWF.CodeGeneration 4.10.54-local（本地 feed）——nuget.org 4.10.54 发布完成后切正式号 + 删本地源；
+         需测试辅助（C 基座对齐 A）时新增 TKWF.Domain.Testing.xUnit 4.10.54 条目（随正式发布） -->
+  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.54-local" />
+  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.54" />
   </ItemGroup>
 </Project>

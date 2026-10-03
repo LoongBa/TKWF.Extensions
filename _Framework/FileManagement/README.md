@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.FileManagement` |
-| 版本 | v0.3.0（用户级配额 + 并发上传竞态加固；v0.2.0 零迁移） |
+| 版本 | v0.3.0（用户级配额 + 并发上传竞态加固；v0.2.0 零迁移）+ **V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线：3 Store 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ FileManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径）** |
 | 依赖 | `TKWF.Domain` + `TKWF.Domain.FreeSql`（V0.2.0 配额 SQL 聚合）+ `TKWF.Ext.BlobStoring.Abstractions`（契约，ADR50 L2）+ SG1（框架既有） |
 | 数据 | 表 `FileFolder` + `ManagedFile` + `ManagedFileVersion`（V0.2.0；框架 `SyncTables` 统一建表） |
 
@@ -17,13 +17,17 @@
 ```
 FileFolderEntity / ManagedFileEntity / ManagedFileVersionEntity   # SG1 声明式实体（partial + [DomainGenerateCode]）
 ├── FileFolderEntityDataService / ManagedFileEntityDataService / ManagedFileVersionEntityDataService  # SG1 DataService（版本/聚合业务方法）
-├── IFileFolderStore / IManagedFileStore / IManagedFileVersionStore  # internal 存储抽象（委托 DataService，异常自然传播）
-└── IFileManager / FileManager                           # 公开门面（安全校验链 + SHA256 去重 + 版本化 + 配额 + 事务包裹 + Blob 委托）
+├── IFileFolderStore / IManagedFileStore / IManagedFileVersionStore  # internal 存储抽象（V0.4.0 接线型：ctor IServiceProvider + C1 延迟解析 DataService，异常自然传播）
+└── IFileManager / FileManager                           # 门面（V0.4.0 internal sealed 继承 DomainServiceBase + AddConstructibleService 注册——安全校验链 + SHA256 去重 + 版本化 + 配额 + 事务包裹 + Blob 委托）
 
 TKWF.Ext.BlobStoring.IBlobStorageService                 # Abstractions 契约（消费方启用 BlobStoring 或自定义实现提供）
 ```
 
 - **数据访问红线**：Store/Manager 不注入 `IFreeSql`/`IEntityDAC`——全部经 SG1 DataService 委托；事务由 Manager 层统一管理。
+- **V4.10.53（领域自治根治，ADR90，正确路线）注册形态三态**：
+  - **门面（AddConstructibleService）**——`IFileManager`（接口 `: IDomainService`）：接口可构造守卫工厂（`CurrentAopUser` 守卫）+ 实现类 throw-factory；`FileManager` 继承 `DomainServiceBase`（经基类 `User` 取上下文——**IDomainUser 永不注册 DI**，旧工厂 lambda `sp.GetRequiredService<IDomainUser>()` 生产解析必失败）+ `[DiContractIgnore]` 豁免 DI001（internal sealed——ctor 含 internal Store 契约参数，CS0051；对齐 AuditLogging QueryService 先例）；消费方统一经 `User.Use<IFileManager>()` 解析。
+  - **内部接线型（TryAddScoped 普通 DI）**——三 Store：接口 internal（FileManager 内部组合依赖，不可改可见性），实现 ctor `(IServiceProvider)` + C1 延迟解析 DataService（`GetRequiredService<XxxDataService>()`）——修复真实生产故障：旧 ctor 注入 IDomainUser 在 FileManager 工厂经 `sp.GetRequiredService<Store接口>()` 解析时构造失败。
+  - **接线（契约）**——`IBlobStorageService` 由消费方启用 BlobStoring 扩展（`TryAddScoped<IBlobStorageService, LocalStorageService>`）或自定义实现提供（FileManagement 不注册——C1/ADR50 L2 依赖倒置，不引实现项目）。
 - **依赖倒置（C1/ADR50 L2）**：只引用 `TKWF.Ext.BlobStoring.Abstractions`（`IBlobStorageService`/`BlobInfo`，namespace `TKWF.Ext.BlobStoring`）——不引用 BlobStoring 实现项目。物理文件字节进出全部经契约委托；`ManagedFileEntity` 为唯一业务元数据（P2 裁定，不注入 `IBlobRecordStore`）。
 - **配额 SQL 聚合（V0.2.0）**：`SumSizeByFolderIdAsync`/`SumSizeAllAsync` 经 `TKW.Framework.Domain.FreeSql.FreeSqlQueryableExtensions.SumAsync`（SQL SUM 下推，ADR15 聚合分层）——对齐 BackgroundJobs GetStatsAsync 先例；每聚合独立 `QueryForUser()` 起新查询（ISelect 原地可变陷阱）。
 - **事务包裹**：`CreateFolder`/`DeleteFolder`/`UploadFile`/`DeleteFile`/`RollbackFile` 等多步写经 `ITransactionManager` `BeginAsync → CommitAsync / 失败 RollbackAsync`。
@@ -150,7 +154,13 @@ public class UploadService(IFileManager fileManager)
 }
 ```
 
-三钩子自动接线。DI 一律 `TryAddScoped`——消费方可自定义 `IFileManager`/`IFileFolderStore`/`IManagedFileStore`/`IBlobStorageService` 实现优先。
+三钩子自动接线。自动注册（V0.4.0 领域自治根治，ADR90——按"正确路线"注册形态）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IFileManager` | `FileManager`（internal sealed，继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IFileManager>()` |
+| `IFileFolderStore` / `IManagedFileStore` / `IManagedFileVersionStore` | `FileFolderStore` / `ManagedFileStore` / `ManagedFileVersionStore`（内部接线型：ctor IServiceProvider + C1 延迟解析 DataService） | **接线型 `TryAddScoped` 普通 DI**（消费方可自定义实现优先） | FileManager ctor 注入（普通 DI） |
+| `IBlobStorageService` | 消费方启用 BlobStoring 扩展（`LocalStorageService`）或自定义实现 | 消费方注册（FileManagement 不注册——L2 依赖倒置） | FileManager ctor 注入（ActivatorUtilities 解析） |
 
 ## 数据模型
 

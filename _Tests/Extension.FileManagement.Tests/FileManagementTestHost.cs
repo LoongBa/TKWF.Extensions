@@ -7,8 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -18,7 +20,7 @@ using TKWF.Ext.FileManagement;
 namespace TKWF.Ext.FileManagement.Tests;
 
 /// <summary>
-/// 测试公共设施——SQLite 内存库创建 + 双实体表结构同步。
+/// 测试公共设施——SQLite 内存库创建 + 三实体表结构同步。
 /// <para>数据访问红线合规：Store/Manager 委托 SG1 DataService——测试用真实
 /// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 Calendar/OrganizationUnit 测试宿主同模式）。</para>
 /// </summary>
@@ -58,12 +60,28 @@ internal static class FileManagementTestSupport
 }
 
 /// <summary>
-/// 完整测试宿主——构建 DI 容器：真实 DataService 链（FreeSqlEntityDAC + UnitOfWorkManager 驱动）
-/// + <b>真实 BlobStoring 链</b>（临时目录根 → <c>BlobStoringOptions</c> → <c>LocalStorageService</c> → <c>IBlobStorageService</c>，
-/// 每用例独立临时目录，宿主 Dispose 时递归清理）+ StubDomainUser + Noop/Recording 事务管理 + FileManagement Options。
+/// 完整测试宿主——V4.10.53（领域自治根治，ADR90，正确路线）重写走<b>生产路径</b>：
+/// <list type="bullet">
+/// <item><b>真实 DI</b>（Initializer <c>ConfigureServices</c> + FreeSql 基础设施 + AddLogging）+ <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c>；</item>
+/// <item><b>门面经真实 <c>DomainUser&lt;TestUserInfo&gt;.Use&lt;IFileManager&gt;()</c> AOP 路径解析</b>（框架 Use 内部设 CurrentAopUser →
+///     GetRequiredService → AddConstructibleService 守卫工厂 → ActivatorUtilities 直建实现）——<see cref="Manager"/>
+///     （匿名——IDomainUser 永不注册 DI 语义保持，FileManager 经守卫工厂由 CurrentAopUser 传入，非 DI 解析）；</item>
+/// <item><b>内部接线型 Store 普通 DI 解析</b>（TryAddScoped ImplementationType——FileManager 守卫工厂 ActivatorUtilities
+///     ctor 注入解析；实现 ctor(<see cref="IServiceProvider"/>) + C1 延迟解析 DataService）；</item>
+/// <item><b>DataService 可构造注册</b>（接线型 Store 的 C1 延迟解析源——wiring 边界测试镜像生产 ADR61 可构造工厂，
+///     非 throw-factory；ctor 需 IDomainUser + IEntityDAC 均从 DI 解析）；</item>
+/// <item><b>IBlobStorageService 真实链</b>（临时目录根 → <c>BlobStoringOptions</c> → <c>LocalStorageService</c>——
+///     FileManagement 依赖 BlobStoring.Abstractions 契约，消费方启用 BlobStoring 扩展或自定义实现提供；测试直引实现项目注册）；</item>
+/// <item><b>IDomainUser 注册（T3 桥接）</b>：DataService ctor 需 IDomainUser（测试注册 <see cref="TestDomainUser"/> 桩——
+///     生产 DataService 经 Use&lt;具体类&gt;() NoAop 直建不经 DI；接线型 Store 的 GetRequiredService 需要）；</item>
+/// <item><b>分层逻辑单测（V0.3.0 用户级配额/所有权）</b>——<see cref="ManagerFor(TestDomainUser)"/> 直构 FileManager
+///     （internal 类 + IVT；可配置桩经基类 <c>User</c> 精确控制 IsAuthenticated/UserId/IsSystemActor——skill §4.5）。
+///     注：测试项目无主框架 DomainUserContext IVT（框架仅授 FeatureManagement/Permissions 测试），可配置桩无法
+///     经守卫工厂 AOP 注入——匿名 AOP 路径（<see cref="Manager"/>）覆盖生产解析语义，认证路径经直构等价验证。</item>
+/// </list>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库 + 全新临时目录（用例隔离）。
-/// <paramref name="configure"/> 回调在初始化器之后执行——事务记录型测试可覆盖 ITransactionManager
-/// （RemoveAll + AddSingleton Recording，对齐 CalendarTransactionTests 模式）。</para>
+/// <c>configure</c> 回调在扩展初始化器之后执行——可覆盖 ITransactionManager/FileManagementOptions
+/// （对齐 Calendar/OrganizationUnit/FeatureManagement 宿主模式）。</para>
 /// </summary>
 internal sealed class FileManagementTestHost : IDisposable
 {
@@ -71,21 +89,32 @@ internal sealed class FileManagementTestHost : IDisposable
     private readonly string _blobRoot;
     private readonly string? _dbPath;   // 文件模式 SQLite 库路径（若有，Dispose 清理）
 
+    /// <summary>生产 AOP 路径用户（真实 DomainUser&lt;TestUserInfo&gt;，匿名——经框架 Use 设 CurrentAopUser）。</summary>
+    private readonly DomainUser<TestUserInfo> _domainUser = new();
+
     public IFreeSql Fsql { get; }
 
-    public IFileManager Manager => _serviceProvider.GetRequiredService<IFileManager>();
+    /// <summary>可配置用户桩（默认匿名；AsAuthenticated 切换认证/UserId/SystemActor）——作 DI DataService 构造用户
+    /// + <see cref="ManagerFor"/> 直构 FileManager 的用户上下文。</summary>
+    public TestDomainUser User { get; }
+
+    /// <summary>门面——生产 AOP 路径：真实 DomainUser&lt;TestUserInfo&gt;.Use&lt;IFileManager&gt;()（匿名——守卫工厂直建实现）。</summary>
+    public IFileManager Manager => _domainUser.Use<IFileManager>();
 
     public IBlobStorageService BlobStorage => _serviceProvider.GetRequiredService<IBlobStorageService>();
 
-    public FileFolderEntityDataService FolderDataService => _serviceProvider.GetRequiredService<FileFolderEntityDataService>();
+    /// <summary>SG1 DataService（NoAop 路径直建——DataService 禁构造注入，DI004 零豁免；IEntityDAC 从 DI 解析）。</summary>
+    public FileFolderEntityDataService FolderDataService => _domainUser.Use<FileFolderEntityDataService>();
 
-    public ManagedFileEntityDataService FileDataService => _serviceProvider.GetRequiredService<ManagedFileEntityDataService>();
+    /// <summary>SG1 DataService（NoAop 路径直建——DataService 禁构造注入，DI004 零豁免；IEntityDAC 从 DI 解析）。</summary>
+    public ManagedFileEntityDataService FileDataService => _domainUser.Use<ManagedFileEntityDataService>();
 
-    private FileManagementTestHost(ServiceProvider serviceProvider, IFreeSql fsql, string blobRoot, string? dbPath = null)
+    private FileManagementTestHost(ServiceProvider serviceProvider, IFreeSql fsql, string blobRoot, TestDomainUser user, string? dbPath = null)
     {
         _serviceProvider = serviceProvider;
         Fsql = fsql;
         _blobRoot = blobRoot;
+        User = user;
         _dbPath = dbPath;
     }
 
@@ -135,19 +164,21 @@ internal sealed class FileManagementTestHost : IDisposable
         services.AddLogging();
         services.AddSingleton(fsql);
 
-        var stubUser = new StubDomainUser();
-        services.AddSingleton<IDomainUser>(stubUser);
+        // T3 桥接：IDomainUser 注册保留（DataService ctor 需 IDomainUser——生产经 Use<具体类>() NoAop 直建
+        // 不经 DI；接线型 Store 的 GetRequiredService<DataService>() 需 DI 可构造）。桩供可配置用户切换
+        // （V0.3.0 用户级配额/所有权测试经 ManagerFor 直构）——生产永不注册 IDomainUser（D01）。
+        var user = new TestDomainUser();
+        services.AddSingleton<IDomainUser>(sp => { user.Provider = sp; return user; });
 
-        // v4.10.8 (ADR61)：DataService 不再手动 new/注册——DI 兜底工厂（镜像生产 AddConstructibleDataService，
-        // 用户源 = DI IDomainUser，免域作用域）；IEntityDAC<T> 基础设施注册同生产 Host。
-        // 注：每 DataService 独立 UnitOfWorkManager（对齐旧 Host 语义——并发版本上传测试依赖
-        // 各 DataService 事务隔离，共享 UoW 会改变竞态时序）。
+        // 接线型 Store 的 DataService 解析源：普通 DI 可构造（wiring 边界测试镜像生产 ADR61 可构造工厂，非 throw-factory）；
+        // IEntityDAC<T> 基础设施注册同生产 Host。每 DataService 独立 UnitOfWorkManager（对齐旧 Host 语义——
+        // 并发版本上传测试依赖各 DataService 事务隔离，共享 UoW 会改变竞态时序）。
         services.AddScoped<IEntityDAC<FileFolderEntity>>(sp => new FreeSqlEntityDAC<FileFolderEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
         services.AddScoped<IEntityDAC<ManagedFileEntity>>(sp => new FreeSqlEntityDAC<ManagedFileEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
         services.AddScoped<IEntityDAC<ManagedFileVersionEntity>>(sp => new FreeSqlEntityDAC<ManagedFileVersionEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
-        AddTestConstructibleDataService<FileFolderEntityDataService>(services);
-        AddTestConstructibleDataService<ManagedFileEntityDataService>(services);
-        AddTestConstructibleDataService<ManagedFileVersionEntityDataService>(services);   // V0.2.0
+        services.AddScoped<FileFolderEntityDataService>();
+        services.AddScoped<ManagedFileEntityDataService>();
+        services.AddScoped<ManagedFileVersionEntityDataService>();   // V0.2.0
 
         // ITransactionManager（默认 Noop——Create/Update/Delete 写路径事务包裹依赖空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；Recording 由 configure 覆盖）
@@ -163,33 +194,37 @@ internal sealed class FileManagementTestHost : IDisposable
         // 初始化器经 AddOptions/Option 绑定注册的默认配置对已存在 IOptions 实例不生效，测试以显式 options 为准）
         services.AddSingleton<IOptions<FileManagementOptions>>(Options.Create(options ?? new FileManagementOptions()));
 
-        // 扩展初始化器注册 Store/Manager（v4.10.8 ADR61：DataService 经 DI 兜底工厂注册，初始化器不再手动注册）
+        // 扩展初始化器注册 Store（TryAddScoped 接线型）/FileManager（AddConstructibleService 门面）
         new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
 
         configure?.Invoke(services);
 
         var provider = services.BuildServiceProvider();
-        // ADR88/DI004：StubDomainUser 注入能力容器——懒加载 Use<T>() 经 provider 解析。
-        // 用 provider.GetService 取最终解析桩（configure 覆盖 IDomainUser 注册时对其生效——FileUserQuotaTests 先例）。
-        if (provider.GetService<IDomainUser>() is StubDomainUser stub) stub.ServiceProvider = provider;
-        return new FileManagementTestHost(provider, fsql, blobRoot, dbPath);
+        // 生产路径：绑定当前异步流的解析作用域（DomainHost.NewDomainContext 等价——测试 BindScope）
+        DomainUser<TestUserInfo>.BindScope(provider);
+        return new FileManagementTestHost(provider, fsql, blobRoot, user, dbPath);
     }
 
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
     public T GetRequiredService<T>() where T : notnull
         => _serviceProvider.GetRequiredService<T>();
 
-    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产 AddConstructibleDataService
-    ///（ActivatorUtilities.CreateInstance + 域用户），用户源 = DI IDomainUser（免域作用域、xUnit 并行安全）。</summary>
-    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
-        where T : class
-    {
-        services.AddScoped<T>(sp =>
-        {
-            var user = sp.GetRequiredService<IDomainUser>();
-            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
-        });
-    }
+    /// <summary>
+    /// 分层逻辑单测专用：直构 FileManager（internal 类 + IVT）——可配置桩经基类 <c>User</c> 精确控制
+    /// IsAuthenticated/UserId/IsSystemActor（V0.3.0 用户级配额/所有权测试；skill §4.5）。
+    /// <para>经宿主 DI 解析其余参数（3 Store 接线型 TryAddScoped + IBlobStorageService + ITransactionManager +
+    /// IOptions + ILogger）——与守卫工厂 ActivatorUtilities 相同的解析源，仅用户上下文经直构传入。</para>
+    /// </summary>
+    public IFileManager ManagerFor(TestDomainUser user)
+        => new FileManager(
+            user,
+            _serviceProvider.GetRequiredService<IFileFolderStore>(),
+            _serviceProvider.GetRequiredService<IManagedFileStore>(),
+            _serviceProvider.GetRequiredService<IManagedFileVersionStore>(),
+            _serviceProvider.GetRequiredService<IBlobStorageService>(),
+            _serviceProvider.GetRequiredService<ITransactionManager>(),
+            _serviceProvider.GetRequiredService<IOptions<FileManagementOptions>>(),
+            NullLogger<FileManager>.Instance);
 
     /// <summary>快捷辅助：创建目录（委托 Manager）。</summary>
     public Task<FileFolderEntity> CreateFolderAsync(
@@ -219,10 +254,11 @@ internal sealed class FileManagementTestHost : IDisposable
         => Convert.ToHexString(SHA256.HashData(content));
 
     /// <summary>
-    /// 释放宿主 + 清理 Blob 临时目录（每用例独立根，递归删除）。
+    /// 释放宿主 + 清理 Blob 临时目录（每用例独立根，递归删除）+ 解绑解析作用域。
     /// </summary>
     public void Dispose()
     {
+        DomainUser<TestUserInfo>.UnBindScope();
         _serviceProvider.Dispose();
         if (Directory.Exists(_blobRoot))
             Directory.Delete(_blobRoot, recursive: true);
@@ -304,65 +340,71 @@ internal sealed class NoopTransactionScope : ITransactionScope
     public void Rollback() { }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约。
-/// <para>默认匿名（IsAuthenticated=false，无租户，兼容既有测试）；可参数化 userId/isAuthenticated/isSystemActor
-/// 支持 V0.3.0 用户级配额测试场景（Oracle 条件 9）。
-/// ADR88/DI004：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-/// （测试宿主构建后经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</para></summary>
-internal sealed class StubDomainUser : IDomainUser
+/// <summary>
+/// 可配置测试用户桩——实现 IDomainUser 最小契约（匿名/认证切换、系统账号、UserId 注入）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价（具体类 DataService——
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Tagging 测试桩）。
+/// 认证路径（V0.3.0 用户级配额）经 <see cref="FileManagementTestHost.ManagerFor(TestDomainUser)"/> 直构
+/// FileManager（经基类 <c>User</c> 读取上下文）——测试项目无主框架 DomainUserContext IVT，
+/// 可配置桩的接口 AOP 解析（设 CurrentAopUser）不可用，故不实现。</para>
+/// </summary>
+internal sealed class TestDomainUser : IDomainUser
 {
-    private readonly string? _userId;
-    private readonly bool _isAuthenticated;
-    private readonly bool _isSystemActor;
-    private IServiceProvider? _provider;
     private readonly object _gate = new();
     private readonly Dictionary<Type, object?> _cache = new();
 
-    public StubDomainUser(string? userId = null, bool isAuthenticated = false, bool isSystemActor = false)
-    {
-        _userId = userId;
-        _isAuthenticated = isAuthenticated;
-        _isSystemActor = isSystemActor;
-    }
+    /// <summary>ServiceProvider（宿主工厂注入，构建后可用——Use&lt;T&gt; 解析源）。</summary>
+    public IServiceProvider? Provider { get; set; }
 
-    /// <summary>ServiceProvider（宿主构建后注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-    public IServiceProvider ServiceProvider
-    {
-        set { lock (_gate) _provider = value; }
-    }
+    public string SessionKey { get; set; } = "test-session";
 
-    public string SessionKey => "test-session";
-    public bool IsAuthenticated => _isAuthenticated;
-    public bool IsSystemActor => _isSystemActor;
-    public IUserInfo? UserInfo => null;
-    public long? TenantId => null;
-    public bool IsNoAuditActive => false;
-    public string? UserId => _userId;
-    public string? UserName => null;
-    public bool IsInRole(string role) => false;
+    public bool IsAuthenticated { get; set; } = false;
+
+    public bool IsSystemActor { get; set; } = false;
+
+    public IUserInfo? UserInfo { get; set; }
+
+    public long? TenantId { get; set; }
+
+    public bool IsNoAuditActive { get; set; } = false;
+
+    public string? UserId { get; set; }
+
+    public string? UserName { get; set; }
+
+    public bool IsInRole(string role) => UserInfo?.IsInRole(role) ?? false;
+
+    /// <summary>快捷配置：认证用户（UserId/TenantId/角色列表一步就位；系统账号经 IsSystemActor）。</summary>
+    public TestDomainUser AsAuthenticated(string userId, long? tenantId = null, params string[] roles)
+    {
+        IsAuthenticated = true;
+        UserId = userId;
+        TenantId = tenantId;
+        UserName = userId;
+        UserInfo = new TestUserInfo(userId, userId, roles);
+        return this;
+    }
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        var provider = Provider ?? throw new NotSupportedException("Stub: Provider 未注入");
+
+        // 具体类（DataService）：NoAop 等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this——IEntityDAC 从 DI 解析）
         if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
             return svc;
         lock (_gate)
         {
             if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
                 return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
+            var resolved = (TDomainService)ActivatorUtilities.CreateInstance(provider, typeof(TDomainService), this);
             _cache[typeof(TDomainService)] = resolved;
             return resolved;
         }
     }
 
     public TService GetService<TService>() where TService : notnull
-    {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-        return provider.GetRequiredService<TService>();
-    }
+        => (Provider ?? throw new NotSupportedException("Stub: Provider 未注入")).GetRequiredService<TService>();
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

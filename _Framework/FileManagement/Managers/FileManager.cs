@@ -8,6 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.BlobStoring;
@@ -15,18 +17,23 @@ using TKWF.Ext.BlobStoring;
 namespace TKWF.Ext.FileManagement
 {
     /// <summary>
-    /// 文件管理实现（public）——目录树生命周期 + 文件上传/下载/删除/重命名/移动门面。
+    /// 文件管理实现（internal sealed，构造函数 public——AddConstructibleService 守卫工厂经 ActivatorUtilities 解析需 public 构造器；
+    /// 类 internal 因 ctor 含 internal Store 契约参数（CS0051 可访问性一致），对齐 AuditLogging QueryService 先例）——
+    /// 目录树生命周期 + 文件上传/下载/删除/重命名/移动门面。
     /// <para>事务包裹（对齐 OU/Approval/Calendar 范式）：目录 Create/Delete、文件 Upload/Delete 多步写经
     /// <see cref="ITransactionManager"/> BeginAsync → 业务 → CommitAsync / 失败 RollbackAsync（using scope）。</para>
     /// <para>物理存储委托：文件字节进出全部经 <see cref="IBlobStorageService"/>（BlobStoring.Abstractions 契约，C1/ADR50 L2）——
     /// 本扩展<b>不</b>直接触碰文件系统/ORM（红线合规）；<c>ManagedFileEntity</c> 为唯一业务元数据（P2 裁定，不注入 IBlobRecordStore）。</para>
     /// <para>上传校验链（D4/D5 评审修订）：非空 → 防穿越 → 扩展名白名单 → 大小限制（seekable fail-fast / 非 seekable 边复制计数）
     /// → SHA256 → 去重预查 → ContentType 服务端推导（C5）→ Blob 落盘 → 事务内元数据落库 → 失败 best-effort 清理 Blob（D16/D17）。</para>
-    /// <para>类为 public 但构造函数 internal（Store 为 internal 契约）——
-    /// 由 <see cref="FileManagementExtensionInitializer{TUserInfo}.ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/>
-    /// 以工厂方式 TryAddScoped 注册（消费方仍可自定义实现优先）。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+    /// （<b>IDomainUser 永不注册 DI</b>，D01；旧 Initializer 工厂 lambda 内 <c>sp.GetRequiredService&lt;IDomainUser&gt;()</c>
+    /// 生产解析必失败——v0.3.3 同根缺陷）；<c>[DiContractIgnore]</c> 豁免 DI001；Store（internal 接线型普通 DI）经
+    /// ctor 注入解析；注册形态改 <c>AddConstructibleService&lt;IFileManager, FileManager&gt;</c>（其余参数 3 Store +
+    /// IBlobStorageService/ITransactionManager/IOptions/ILogger 由 ActivatorUtilities 从 DI 解析——Store 接线型普通注册可解析）。</para>
     /// </summary>
-    public sealed class FileManager : IFileManager
+    [DiContractIgnore]
+    internal sealed class FileManager : DomainServiceBase, IFileManager
     {
         private readonly IFileFolderStore _folderStore;
         private readonly IManagedFileStore _fileStore;
@@ -35,7 +42,6 @@ namespace TKWF.Ext.FileManagement
         private readonly ITransactionManager _transactionManager;
         private readonly FileManagementOptions _options;
         private readonly ILogger<FileManager> _logger;
-        private readonly IDomainUser _domainUser;   // V0.3.0：用户级配额（OwnerId 归属维度，对齐 Settings/FeatureManagement 先例）
 
         /// <summary>物化路径最大长度（对齐实体列 MaxLength(1024)，对齐 OU C3）。</summary>
         private const int MaxPathLength = 1024;
@@ -49,15 +55,16 @@ namespace TKWF.Ext.FileManagement
         /// <summary>允许扩展名（构造时小写归一——C6/P3：配置 `[".JPG"]` 与上传 `.jpg` 一致）。</summary>
         private readonly HashSet<string> _allowedExtensions;
 
-        internal FileManager(
+        public FileManager(
+            IDomainUser user,
             IFileFolderStore folderStore,
             IManagedFileStore fileStore,
             IManagedFileVersionStore versionStore,
             IBlobStorageService blobStorage,
             ITransactionManager transactionManager,
             IOptions<FileManagementOptions> options,
-            ILogger<FileManager> logger,
-            IDomainUser domainUser)   // V0.3.0：用户级配额（OwnerId 归属维度）
+            ILogger<FileManager> logger)
+            : base(user)   // V4.10.53：IDomainUser 移到首位经基类 User 取上下文（IDomainUser 永不注册 DI——D01）
         {
             _folderStore = folderStore ?? throw new ArgumentNullException(nameof(folderStore));
             _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
@@ -71,7 +78,6 @@ namespace TKWF.Ext.FileManagement
                 .Where(e => e.Length > 0)
                 .ToHashSet(StringComparer.Ordinal);
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _domainUser = domainUser ?? throw new ArgumentNullException(nameof(domainUser));
         }
 
         // ── 目录 ──
@@ -569,13 +575,14 @@ namespace TKWF.Ext.FileManagement
         /// <summary>
         /// V0.3.0 归属用户解析——认证 + 非系统账号 + 数值型 UserId → OwnerId；否则 null。
         /// <para>非数值 UserId 首次失败 Warning 告警（Oracle 条件 5：便于消费方排查"配额配置了但不生效"）。</para>
+        /// <para>V4.10.53：经基类 <see cref="DomainServiceBase.User"/> 取上下文（IDomainUser 永不注册 DI——D01）。</para>
         /// </summary>
         private long? ResolveOwnerId()
         {
-            if (!_domainUser.IsAuthenticated || _domainUser.IsSystemActor || string.IsNullOrWhiteSpace(_domainUser.UserId))
+            if (!User.IsAuthenticated || User.IsSystemActor || string.IsNullOrWhiteSpace(User.UserId))
                 return null;
 
-            if (long.TryParse(_domainUser.UserId, out var uid))
+            if (long.TryParse(User.UserId, out var uid))
                 return uid;
 
             // 非数值 UserId（GUID/字符串）——用户配额不可用（全局兜底）；首次告警
@@ -584,7 +591,7 @@ namespace TKWF.Ext.FileManagement
                 _nonNumericUserIdWarned = true;
                 _logger.LogWarning(
                     "用户级配额跳过：UserId '{UserId}' 非数值型（用户配额仅支持数值型 UserId，已降级到全局配额兜底）",
-                    _domainUser.UserId);
+                    User.UserId);
             }
             return null;
         }

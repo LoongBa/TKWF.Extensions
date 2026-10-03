@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications
 {
@@ -12,14 +13,17 @@ namespace TKWF.Ext.Notifications
     /// </summary>
     internal sealed class NotificationSubscriptionStore : INotificationSubscriptionManager
     {
-        private readonly NotificationSubscriptionEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private NotificationSubscriptionEntityDataService? _dataService;
         private readonly ILogger<NotificationSubscriptionStore> _logger;
 
+        private NotificationSubscriptionEntityDataService DataService => _dataService ??= _user.Use<NotificationSubscriptionEntityDataService>();
+
         public NotificationSubscriptionStore(
-            NotificationSubscriptionEntityDataService dataService,
+            IDomainUser user,
             ILogger<NotificationSubscriptionStore> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -34,10 +38,10 @@ namespace TKWF.Ext.Notifications
         {
             try
             {
-                var exists = await _dataService.ExistsAsync(userId, notificationName, entityTypeName, entityId, ct);
+                var exists = await DataService.ExistsAsync(userId, notificationName, entityTypeName, entityId, ct);
                 if (exists) return; // 幂等：已订阅跳过
 
-                await _dataService.CreateAsync(new NotificationSubscriptionEntity
+                await DataService.CreateAsync(new NotificationSubscriptionEntity
                 {
                     UserId = userId,
                     NotificationName = notificationName,
@@ -56,7 +60,7 @@ namespace TKWF.Ext.Notifications
         {
             try
             {
-                await _dataService.DeleteByUserAndNameAsync(userId, notificationName, ct);
+                await DataService.DeleteByUserAndNameAsync(userId, notificationName, ct);
             }
             catch (Exception)
             {

@@ -18,7 +18,7 @@ public class UserNotificationViewQueryServiceTests
 {
     private static ServiceProvider BuildWithUser(long userId, IFreeSql fsql)
         => NotificationTestHost.Build(fsql, s =>
-            s.AddScoped<IDomainUser>(_ => new AuthenticatedStubUser(userId.ToString())));
+            s.AddScoped<IDomainUser>(sp => { var u = new AuthenticatedStubUser(userId.ToString()); u.ServiceProvider = sp; return u; }));
 
     // ── N2：REST 直接暴露——VEntity DTO 完整字段（JOIN 三列不再丢弃）+ 仅本人 ──
 

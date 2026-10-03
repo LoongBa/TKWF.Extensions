@@ -66,7 +66,7 @@ INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
         services.AddScoped<IEntityDAC<UserNotificationEntity>>(sp => new FreeSqlEntityDAC<UserNotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<NotificationSubscriptionEntity>>(sp => new FreeSqlEntityDAC<NotificationSubscriptionEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddScoped<IEntityDAC<NotificationPreferenceEntity>>(sp => new FreeSqlEntityDAC<NotificationPreferenceEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
+        services.AddScoped<IDomainUser>(sp => { var u = new StubDomainUser(); u.ServiceProvider = sp; return u; });
         AddTestConstructibleDataService<NotificationEntityDataService>(services);
         AddTestConstructibleDataService<UserNotificationEntityDataService>(services);
         AddTestConstructibleDataService<NotificationSubscriptionEntityDataService>(services);
@@ -175,9 +175,21 @@ internal sealed class FakePermissionBatchChecker : IPermissionBatchChecker
         => Task.FromResult(userIds.Distinct().ToDictionary(id => id, id => _grantedUserIds.Contains(id)));
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
+/// <para>Use&lt;T&gt;() 懒加载解析：从 DI 容器取域服务（宿主经 AddScoped 工厂注入 ServiceProvider，
+/// DataService 经测试版可构造工厂注册——镜像生产 AddConstructibleDataService）。</para></summary>
 internal class StubDomainUser : IDomainUser
 {
+    private IServiceProvider? _provider;
+    private readonly object _gate = new();
+    private readonly Dictionary<Type, object? > _cache = new();
+
+    /// <summary>ServiceProvider（宿主注册工厂注入——懒加载 Use&lt;T&gt; 解析源）。</summary>
+    public IServiceProvider ServiceProvider
+    {
+        set { lock (_gate) _provider = value; }
+    }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -189,10 +201,27 @@ internal class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new InvalidOperationException("Stub: ServiceProvider 未注入——Use<T> 解析不可用");
+        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+            return svc;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                return svc2;
+            var resolved = provider.GetRequiredService<TDomainService>();
+            _cache[typeof(TDomainService)] = resolved;
+            return resolved;
+        }
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new InvalidOperationException("Stub: ServiceProvider 未注入——GetService<T> 解析不可用");
+        return provider.GetRequiredService<TService>();
+    }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public System.Collections.Generic.IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
@@ -18,14 +19,17 @@ namespace TKWF.Ext.Notifications;
 /// </summary>
 internal sealed class NotificationPreferenceStore : INotificationPreferenceManager
 {
-    private readonly NotificationPreferenceEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private NotificationPreferenceEntityDataService? _dataService;
     private readonly ILogger<NotificationPreferenceStore> _logger;
 
+    private NotificationPreferenceEntityDataService DataService => _dataService ??= _user.Use<NotificationPreferenceEntityDataService>();
+
     public NotificationPreferenceStore(
-        NotificationPreferenceEntityDataService dataService,
+        IDomainUser user,
         ILogger<NotificationPreferenceStore> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -34,7 +38,7 @@ internal sealed class NotificationPreferenceStore : INotificationPreferenceManag
     {
         try
         {
-            var preference = await _dataService.GetByUserAndNameAsync(userId, notificationName, ct);
+            var preference = await DataService.GetByUserAndNameAsync(userId, notificationName, ct);
             return DeserializeChannels(preference?.ChannelsJson);
         }
         catch (Exception ex)
@@ -50,10 +54,10 @@ internal sealed class NotificationPreferenceStore : INotificationPreferenceManag
         try
         {
             var json = SerializeChannels(channels);
-            var preference = await _dataService.GetByUserAndNameAsync(userId, notificationName, ct);
+            var preference = await DataService.GetByUserAndNameAsync(userId, notificationName, ct);
             if (preference == null)
             {
-                await _dataService.CreateAsync(new NotificationPreferenceEntity
+                await DataService.CreateAsync(new NotificationPreferenceEntity
                 {
                     UserId = userId,
                     NotificationName = notificationName,
@@ -66,7 +70,7 @@ internal sealed class NotificationPreferenceStore : INotificationPreferenceManag
             {
                 preference.ChannelsJson = json;
                 preference.UpdateTime = DateTime.UtcNow;
-                await _dataService.UpdateAsync(preference, ct);
+                await DataService.UpdateAsync(preference, ct);
             }
         }
         catch (Exception ex)
@@ -79,7 +83,7 @@ internal sealed class NotificationPreferenceStore : INotificationPreferenceManag
     {
         try
         {
-            await _dataService.DeleteByUserAndNameAsync(userId, notificationName, ct);
+            await DataService.DeleteByUserAndNameAsync(userId, notificationName, ct);
         }
         catch (Exception ex)
         {
@@ -93,7 +97,7 @@ internal sealed class NotificationPreferenceStore : INotificationPreferenceManag
         var result = new Dictionary<long, IReadOnlyList<string>?>();
         try
         {
-            var map = await _dataService.GetChannelsBatchAsync(userIds, notificationName, ct);
+            var map = await DataService.GetChannelsBatchAsync(userIds, notificationName, ct);
             foreach (var (uid, json) in map)
                 result[uid] = DeserializeChannels(json);
         }

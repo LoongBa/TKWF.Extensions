@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.Transactions;
 using TKW.Framework.Localization;
+using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Notifications
@@ -23,29 +24,29 @@ namespace TKWF.Ext.Notifications
     /// </summary>
     internal sealed class NotificationPublisher : INotificationPublisher
     {
-        private readonly INotificationDefinitionManager _definitionManager;
-        private readonly NotificationEntityDataService _notificationDataService;
-        private readonly NotificationSubscriptionEntityDataService _subscriptionDataService;
-        private readonly INotificationPreferenceManager _preferenceManager;
+        private readonly IDomainUser _user;
+        private INotificationDefinitionManager? _definitionManager;
+        private NotificationEntityDataService? _notificationDataService;
+        private NotificationSubscriptionEntityDataService? _subscriptionDataService;
+        private INotificationPreferenceManager? _preferenceManager;
         private readonly IEnumerable<INotificationNotifier> _notifiers;
         private readonly ITransactionManager _transactionManager;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<NotificationPublisher> _logger;
 
+        private INotificationDefinitionManager DefinitionManager => _definitionManager ??= _user.Use<INotificationDefinitionManager>();
+        private NotificationEntityDataService NotificationDataService => _notificationDataService ??= _user.Use<NotificationEntityDataService>();
+        private NotificationSubscriptionEntityDataService SubscriptionDataService => _subscriptionDataService ??= _user.Use<NotificationSubscriptionEntityDataService>();
+        private INotificationPreferenceManager PreferenceManager => _preferenceManager ??= _user.Use<INotificationPreferenceManager>();
+
         public NotificationPublisher(
-            INotificationDefinitionManager definitionManager,
-            NotificationEntityDataService notificationDataService,
-            NotificationSubscriptionEntityDataService subscriptionDataService,
-            INotificationPreferenceManager preferenceManager,
+            IDomainUser user,
             IEnumerable<INotificationNotifier> notifiers,
             ITransactionManager transactionManager,
             IServiceProvider serviceProvider,
             ILogger<NotificationPublisher> logger)
         {
-            _definitionManager = definitionManager ?? throw new ArgumentNullException(nameof(definitionManager));
-            _notificationDataService = notificationDataService ?? throw new ArgumentNullException(nameof(notificationDataService));
-            _subscriptionDataService = subscriptionDataService ?? throw new ArgumentNullException(nameof(subscriptionDataService));
-            _preferenceManager = preferenceManager ?? throw new ArgumentNullException(nameof(preferenceManager));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _notifiers = notifiers ?? throw new ArgumentNullException(nameof(notifiers));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
@@ -65,7 +66,7 @@ namespace TKWF.Ext.Notifications
             ArgumentException.ThrowIfNullOrWhiteSpace(notificationName);
 
             // 1. 定义校验（快速失败）
-            var definition = _definitionManager.Get(notificationName);
+            var definition = DefinitionManager.Get(notificationName);
 
             // 2. 发布方权限门控（C1：仅校验发布方当前用户）
             if (definition.PermissionName != null)
@@ -87,7 +88,7 @@ namespace TKWF.Ext.Notifications
             }
 
             // 3.6 V0.3.0 偏好覆盖——事务前一次批量预取（P2-1：避免事务内 N 次往返）
-            var preferenceMap = await _preferenceManager.GetChannelsBatchAsync(recipients, notificationName, ct);
+            var preferenceMap = await PreferenceManager.GetChannelsBatchAsync(recipients, notificationName, ct);
 
             // 4. 事务写入（C4：Notification + 全部 inbox 行原子提交）
             using var scope = await _transactionManager.BeginAsync(ct: ct);
@@ -104,7 +105,7 @@ namespace TKWF.Ext.Notifications
                     EntityId = entityId,
                     CreateTime = now
                 };
-                await _notificationDataService.CreateAsync(notification, ct);
+                await NotificationDataService.CreateAsync(notification, ct);
 
                 foreach (var recipientId in recipients)
                 {
@@ -229,7 +230,7 @@ namespace TKWF.Ext.Notifications
             else
             {
                 // 按订阅者解析（M2 修订：并集语义——定义级订阅者收全部，实体级订阅者收匹配实体）
-                var subscribers = await _subscriptionDataService.GetSubscriberUserIdsAsync(
+                var subscribers = await SubscriptionDataService.GetSubscriberUserIdsAsync(
                     notificationName, entityTypeName, entityId, ct);
                 recipients = subscribers.Where(id => !excluded.Contains(id)).ToList();
             }

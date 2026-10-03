@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications
 {
@@ -13,20 +14,23 @@ namespace TKWF.Ext.Notifications
     /// </summary>
     internal sealed class InboxNotifier : INotificationNotifier
     {
-        private readonly UserNotificationEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private UserNotificationEntityDataService? _dataService;
 
-        public InboxNotifier(UserNotificationEntityDataService dataService)
-            => _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        private UserNotificationEntityDataService DataService => _dataService ??= _user.Use<UserNotificationEntityDataService>();
+
+        public InboxNotifier(IDomainUser user)
+            => _user = user ?? throw new ArgumentNullException(nameof(user));
 
         /// <summary>通道名。</summary>
         public string Name => "Inbox";
 
         public async Task DeliverAsync(NotificationDeliveryRequest request, CancellationToken ct = default)
         {
-            var exists = await _dataService.ExistsByUserIdAndNotificationAsync(request.UserId, request.NotificationId, ct);
+            var exists = await DataService.ExistsByUserIdAndNotificationAsync(request.UserId, request.NotificationId, ct);
             if (exists) return; // 幂等：已投递跳过
 
-            await _dataService.CreateAsync(new UserNotificationEntity
+            await DataService.CreateAsync(new UserNotificationEntity
             {
                 UserId = request.UserId,
                 NotificationId = request.NotificationId,

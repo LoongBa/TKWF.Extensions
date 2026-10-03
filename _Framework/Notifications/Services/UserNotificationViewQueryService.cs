@@ -21,9 +21,12 @@ namespace TKWF.Ext.Notifications;
 /// 对齐 <see cref="NotificationsExtensionInitializer{TUserInfo}"/> 内既有 Service 形态（不补 TryAddScoped）。</para>
 /// </summary>
 [GenerateController]
-public partial class UserNotificationViewQueryService(IDomainUser user, UserNotificationViewDataService viewDataService)
+public partial class UserNotificationViewQueryService(IDomainUser user)
     : DomainServiceBase(user)
 {
+    private UserNotificationViewDataService? _viewDataService;
+    private UserNotificationViewDataService ViewDataService => _viewDataService ??= User.Use<UserNotificationViewDataService>();
+
     /// <summary>取当前用户收件箱（VEntity DTO 一等公民——含 Name/Severity/DisplayName 完整字段）。
     /// ⚠️ 仅本人（userId 从 <see cref="IDomainUser"/> 解析）；name 可空——null = 查全部收件箱
     /// （对齐门面 <c>NotificationStore.GetListAsync</c> 无 name 语义，REST 面 ≥ 门面面）。</summary>
@@ -35,8 +38,8 @@ public partial class UserNotificationViewQueryService(IDomainUser user, UserNoti
         // name 可空（oracle3 C4-med/C7）：null = 查全部收件箱。两路径均走 VEntity 视图——
         // JOIN 携带列（Name/Severity/DisplayName）不再丢弃（方案 03 目标 1 完整落地）。
         var views = name is null
-            ? await viewDataService.GetPagedAsync(userId, page, pageSize, ct)
-            : await viewDataService.GetPagedByNameAsync(userId, page, pageSize, name, ct);
+            ? await ViewDataService.GetPagedAsync(userId, page, pageSize, ct)
+            : await ViewDataService.GetPagedByNameAsync(userId, page, pageSize, name, ct);
         return views.Select(UserNotificationViewDto.FromEntity).ToList();
     }
 

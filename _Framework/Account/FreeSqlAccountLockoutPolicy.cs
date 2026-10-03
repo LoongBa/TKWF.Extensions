@@ -1,35 +1,41 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.AuthController;
-using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
     /// <summary>
     /// 账户锁定策略默认实现——<see cref="IAccountLockoutPolicy"/>（主框架 V4.9.45 扩展点）。
     /// <para>基于 <see cref="IAccountLockoutStore"/>（FreeSql）持久化失败计数与锁定截止时间；
-    /// 框架 AuthController<typeparamref name="TUserInfo"/>.LoginByContext 已注册时自动调用。</para>
-    /// <para>ADR88/DI004（A 批整改）：<see cref="IAccountLockoutStore"/> 不再构造注入——经
-    /// <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// 框架 AuthController&lt;TUserInfo&gt;.LoginByContext 已注册时自动调用。</para>
+    /// <para>V4.10.53（领域自治根治，正确路线）：**接线型**（skill §4.2）——显式 userName 参数、无需用户上下文，
+    /// 不继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>、不注入 <see cref="TKW.Framework.Domain.Interfaces.IDomainUser"/>。
+    /// 主框架契约 <see cref="IAccountLockoutPolicy"/> 非 IDomainService（不可修改主框架），AuthController 经普通
+    /// DI（<c>GetOptionalService</c>）解析——旧 ctor 注入 IDomainUser（永不注册 DI）致 GetService 构造失败、
+    /// 锁定检查静默失效（真实生产故障）；改后 ctor 全为 DI 可解析基础设施 → GetService 可构造、锁定检查生效。</para>
+    /// <para><see cref="IAccountLockoutStore"/> 经 <see cref="IServiceProvider"/> 延迟解析（C1 模式，对齐
+    /// LoginHistoryService/NotificationPublisher）——Store 现经 <c>AddConstructibleService</c> 注册（接口可构造守卫工厂），
+    /// Policy 不持用户上下文，改普通 DI 解析 Store（接线型边界不吞守卫语义，读取失败仍异常静默降级）。</para>
     /// </summary>
     internal sealed class FreeSqlAccountLockoutPolicy : IAccountLockoutPolicy
     {
-        private readonly IDomainUser _user;
+        private readonly IServiceProvider _serviceProvider;
         private readonly AccountOptions _options;
         private readonly ILogger<FreeSqlAccountLockoutPolicy> _logger;
 
         private IAccountLockoutStore? _store;
-        private IAccountLockoutStore Store => _store ??= _user.Use<IAccountLockoutStore>();
+        private IAccountLockoutStore Store => _store ??= _serviceProvider.GetRequiredService<IAccountLockoutStore>();
 
         public FreeSqlAccountLockoutPolicy(
-            IDomainUser user,
+            IServiceProvider serviceProvider,
             IOptions<AccountOptions> options,
             ILogger<FreeSqlAccountLockoutPolicy> logger)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _options = options?.Value ?? new AccountOptions();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }

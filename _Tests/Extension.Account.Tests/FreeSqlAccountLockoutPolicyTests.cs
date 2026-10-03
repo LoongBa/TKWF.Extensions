@@ -2,14 +2,20 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Core.AuthController;
+using TKW.Framework.Domain;
 
 namespace TKWF.Ext.Account.Tests;
 
 /// <summary>
 /// FreeSqlAccountLockoutPolicy 测试——锁定判定/失败递增到阈值/成功重置/解锁/过期自动解锁。
+/// <para>V4.10.53（领域自治根治，正确路线）：Policy 改<b>接线型</b>（skill §4.2）——ctor
+/// <c>(IServiceProvider, IOptions&lt;AccountOptions&gt;, ILogger)</c>，不注入 IDomainUser（永不注册 DI，生产
+/// AuthController 普通 DI 构造失败修复）；Store 经 <see cref="IServiceProvider"/> 延迟解析（C1 模式）。
+/// 测试经<b>真实 DI</b>（Initializer ConfigureServices + AddLogging）构建 Policy；Store 直构真实实例后注册
+/// （守卫工厂路径由 Initializer 测试 + 生产路径集成测试覆盖，此处聚焦 Policy 业务断言语义）。</para>
 /// </summary>
 public class FreeSqlAccountLockoutPolicyTests
 {
@@ -25,16 +31,22 @@ public class FreeSqlAccountLockoutPolicyTests
 
     private static FreeSqlAccountLockoutPolicy CreatePolicy(IFreeSql fsql, AccountOptions? options = null)
     {
-        // ADR88/DI004：Policy 构造不再注入 IAccountLockoutStore——经 IDomainUser.Use<IAccountLockoutStore>() 懒加载
         var services = new ServiceCollection();
+        services.AddLogging();
+        new AccountExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        // options 覆盖（默认值兜底：不传则用 AccountOptions 默认）
+        services.Configure<AccountOptions>(o =>
+        {
+            if (options == null) return;
+            o.MaxFailedAttempts = options.MaxFailedAttempts;
+            o.DefaultLockoutMinutes = options.DefaultLockoutMinutes;
+            o.ResetCodeValidityMinutes = options.ResetCodeValidityMinutes;
+            o.IsEnabled = options.IsEnabled;
+        });
+        // Store 直构真实实例注册（Policy 经 IServiceProvider 解析；守卫路径由其他测试覆盖）
         services.AddSingleton<IAccountLockoutStore>(AccountTestHost.CreateLockoutStore(fsql));
         var sp = services.BuildServiceProvider();
-        var user = new StubDomainUser();
-        user.ServiceProvider = sp;
-        return new FreeSqlAccountLockoutPolicy(
-            user,
-            Options.Create(options ?? new AccountOptions()),
-            NullLogger<FreeSqlAccountLockoutPolicy>.Instance);
+        return (FreeSqlAccountLockoutPolicy)sp.GetRequiredService<IAccountLockoutPolicy>();
     }
 
     [Fact]

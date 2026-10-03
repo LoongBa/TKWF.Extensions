@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.AuthController;
-using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
@@ -17,28 +16,30 @@ namespace TKWF.Ext.Account
     /// <para>新密码采用 SecurePassword 契约：客户端已计算 PBKDF2（newClientHash + salt），服务端仅存储。</para>
     /// <para><see cref="IAccountPasswordManager"/> 经 <see cref="IServiceProvider"/> 延迟解析（消费方未注册时
     /// GetService 返回 null——重置不可用但不阻断 DI 激活）。</para>
-    /// <para>ADR88/DI004（A 批整改）：<see cref="IPasswordResetStore"/> 不再构造注入——经
-    /// <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析；IServiceProvider 保留（C1 延迟解析密码管理器）。</para>
+    /// <para>V4.10.53（领域自治根治，正确路线）：**接线型**（skill §4.2）——显式 userName 参数、无需用户上下文，
+    /// 不继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>、不注入 <see cref="TKW.Framework.Domain.Interfaces.IDomainUser"/>。
+    /// 主框架契约 <see cref="IPasswordResetFlow"/> 非 IDomainService（不可修改主框架）——旧 ctor 注入 IDomainUser 致
+    /// AuthController 普通 DI 构造失败；改后 ctor 全为 DI 可解析基础设施。</para>
+    /// <para><see cref="IPasswordResetStore"/> 经 <see cref="IServiceProvider"/> 延迟解析（C1 模式，对齐
+    /// LoginHistoryService/NotificationPublisher）——Store 现经 <c>AddConstructibleService</c> 注册，接线型 Policy/Flow
+    /// 不持用户上下文，改普通 DI 解析 Store。</para>
     /// </summary>
     internal sealed class DefaultPasswordResetFlow : IPasswordResetFlow
     {
         private const string AllowedChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 去混淆字符集
 
-        private readonly IDomainUser _user;
         private readonly IServiceProvider _serviceProvider;
         private readonly AccountOptions _options;
         private readonly ILogger<DefaultPasswordResetFlow> _logger;
 
         private IPasswordResetStore? _store;
-        private IPasswordResetStore Store => _store ??= _user.Use<IPasswordResetStore>();
+        private IPasswordResetStore Store => _store ??= _serviceProvider.GetRequiredService<IPasswordResetStore>();
 
         public DefaultPasswordResetFlow(
-            IDomainUser user,
             IServiceProvider serviceProvider,
             IOptions<AccountOptions> options,
             ILogger<DefaultPasswordResetFlow> logger)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _options = options?.Value ?? new AccountOptions();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

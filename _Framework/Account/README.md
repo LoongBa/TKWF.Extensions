@@ -1,6 +1,6 @@
 # TKWF.Ext.Account 账户管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0（依赖倒置改造） | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0（领域自治根治，ADR90） | **框架**: .NET 10
 
 **核心约束**: 主框架缺口实现、FreeSql 持久化、异常静默处理、SG1 声明式实体、不重建 AuthController
 
@@ -70,7 +70,17 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-自动注册：`IAccountLockoutStore`（`FreeSqlAccountLockoutStore`）+ `IPasswordResetStore`（`FreeSqlPasswordResetStore`）+ `IAccountLockoutPolicy`（`FreeSqlAccountLockoutPolicy`）+ `IPasswordResetFlow`（`DefaultPasswordResetFlow`）+ `ILoginHistoryService`（`LoginHistoryService`，V0.3.0——登录历史与异常检测，消费 SecurityLog 扩展查询 API；LoginHistoryService 经 IServiceProvider 延迟解析 SecurityLog.Abstractions 契约——V0.4.0 改引契约包，L2 门控合规）。
+自动注册（V0.5.0 领域自治根治，ADR90——按"正确路线"注册形态）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IAccountLockoutStore` | `AccountLockoutStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IAccountLockoutStore>()` |
+| `IPasswordResetStore` | `PasswordResetStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IPasswordResetStore>()` |
+| `IAccountLockoutPolicy` | `FreeSqlAccountLockoutPolicy` | **接线型普通 DI**（TryAddScoped，ctor IServiceProvider/IOptions/ILogger——无 IDomainUser） | `AuthController` 经 `GetOptionalService` 自动调用 |
+| `IPasswordResetFlow` | `DefaultPasswordResetFlow` | **接线型普通 DI** | `AuthController` 经 `GetOptionalService` 自动调用 |
+| `ILoginHistoryService` | `LoginHistoryService` | **接线型**（ctor IServiceProvider + ILogger） | 消费方普通 DI 解析；经 SP 延迟解析 SecurityLog.Abstractions 契约（V0.4.0 改引契约包，L2 门控合规；C1 模式） |
+
+> **V0.5.0（V4.10.53 ADR90 领域自治根治）**：两 Store 继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）+ `[DiContractIgnore]`；注册改 `AddConstructibleService`（消费方统一 `User.Use<接口>()` 解析）。Policy/Flow 改**接线型**（skill §4.2——显式 userName 参数、无需用户上下文，不继承 DomainServiceBase）：修复真实生产故障——旧 ctor 注入 IDomainUser 致 `AuthController.GetOptionalService` 构造失败、锁定检查静默失效；改后 ctor 全 DI 可解析，`IAccountLockoutPolicy`/`IPasswordResetFlow` 非 `IDomainService`（主框架契约不可改），`AddConstructibleService` 编译约束不满足、保持 TryAddScoped 普通 DI。Store 经 `IServiceProvider` C1 延迟解析（接线型边界不吞守卫语义，读取失败仍异常静默降级）。
 
 ### 2. 注册密码落地适配器
 
@@ -165,6 +175,13 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 ---
 
 ## 六、架构演进路线 (Architecture Roadmap)
+
+### V0.5.0（已实施：V4.10.53 领域自治根治，ADR90——正确路线）
+- **两 Store 继承 `DomainServiceBase`**（`AccountLockoutStore`/`PasswordResetStore`）——经基类 `User` 获取用户上下文（**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——v0.3.3 同根缺陷）；`[DiContractIgnore]` 豁免 DI001；DataService 仍经 `User.Use<具体类>()` NoAop 懒加载（DI004 零豁免）
+- **注册形态改 `AddConstructibleService`**（Store）——接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方统一 `User.Use<IAccountLockoutStore>()` / `User.Use<IPasswordResetStore>()` 解析
+- **Policy/Flow 改接线型**（不继承 DomainServiceBase、不注入 IDomainUser）——修复真实生产故障：旧 ctor 注入 IDomainUser 致 `AuthController.GetOptionalService` 构造失败、锁定检查静默失效；改 ctor `(IServiceProvider, IOptions, ILogger)` 全 DI 可解析；Store 经 `IServiceProvider` C1 延迟解析；注册保持 TryAddScoped（`IAccountLockoutPolicy`/`IPasswordResetFlow` 主框架契约非 `IDomainService`，AddConstructibleService 编译约束不满足）
+- 测试宿主重写：真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 注册形态断言（守卫工厂/throw-factory/TryAddScoped）；登录历史（`LoginHistoryService`）确认接线型判定 OK 不改（ctor IServiceProvider + ILogger，方法全显式参数，无 User 依赖）
+- 51 用例全绿（禁止 slnx 构建，仅 Account 项目 + 测试项目）
 
 ### V0.1.0（已实施）
 - 账户锁定默认实现（`IAccountLockoutPolicy`——失败计数/锁定阈值/自动解锁）

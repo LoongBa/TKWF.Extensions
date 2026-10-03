@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
@@ -11,93 +10,92 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.Account.Tests;
 
 /// <summary>
-/// 测试公共设施——StubDomainUser + 基于 FreeSqlEntityDAC 的 Store 工厂。
-/// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
-/// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 Settings/BlobStoring 测试同模式）。</para>
-/// <para>ADR88/DI004（A 批整改）：Store 构造不再注入 DataService——经 <c>User.Use&lt;T&gt;()</c> 懒加载解析。
-/// 测试工厂构建 StubDomainUser + 能力容器（注册真实 DAC 驱动的 DataService 实例），注入 ServiceProvider。</para>
+/// 测试公共设施——分层单测宿主（V4.10.53 领域自治根治后重写）。
+/// <para>生产路径等价：Store 现继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>，DataService 经基类
+/// <c>User</c> 懒加载（NoAop 路径）——测试用可配置 <see cref="StubDomainUser"/> 直构 Store（经基类 User 取上下文），
+/// 其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现（<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，
+/// IEntityDAC 从 DI 解析——与 Settings/Tagging 测试同模式）。</para>
+/// <para>集成测试（真实 DI + BindScope + User.Use&lt;接口&gt;()）见 <see cref="AccountProductionPathTests"/>。</para>
 /// </summary>
 internal static class AccountTestHost
 {
-    /// <summary>构建 StubDomainUser + 能力容器（direct-new 工厂模式）：注册真实 DAC 驱动的 DataService 实例。</summary>
-    private static StubDomainUser CreateStub(IFreeSql fsql, Action<IServiceCollection, StubDomainUser> register)
-    {
-        var stub = new StubDomainUser();
-        var services = new ServiceCollection();
-        register(services, stub);
-        stub.ServiceProvider = services.BuildServiceProvider();
-        return stub;
-    }
-
-    /// <summary>创建基于 SQLite 内存库的 AccountLockoutStore（DataService 委托）。</summary>
+    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 AccountLockoutStore（分层单测用）。</summary>
     public static AccountLockoutStore CreateLockoutStore(IFreeSql fsql)
     {
-        var stub = CreateStub(fsql, (s, user) =>
-        {
-            var uow = new UnitOfWorkManager(fsql);
-            s.AddSingleton(new AccountLockoutEntityDataService(user, new FreeSqlEntityDAC<AccountLockoutEntity>(uow)));
-        });
-        return new AccountLockoutStore(stub, NullLogger<AccountLockoutStore>.Instance);
+        var user = BuildStub(fsql, typeof(AccountLockoutEntity));
+        return new AccountLockoutStore(user, NullLogger<AccountLockoutStore>.Instance);
     }
 
-    /// <summary>创建基于 SQLite 内存库的 PasswordResetStore（DataService 委托）。</summary>
+    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 PasswordResetStore（分层单测用）。</summary>
     public static PasswordResetStore CreatePasswordResetStore(IFreeSql fsql)
     {
-        var stub = CreateStub(fsql, (s, user) =>
+        var user = BuildStub(fsql, typeof(PasswordResetCodeEntity));
+        return new PasswordResetStore(user, NullLogger<PasswordResetStore>.Instance);
+    }
+
+    private static StubDomainUser BuildStub(IFreeSql fsql, params Type[] entityTypes)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        foreach (var entityType in entityTypes)
         {
-            var uow = new UnitOfWorkManager(fsql);
-            s.AddSingleton(new PasswordResetCodeEntityDataService(user, new FreeSqlEntityDAC<PasswordResetCodeEntity>(uow)));
-        });
-        return new PasswordResetStore(stub, NullLogger<PasswordResetStore>.Instance);
+            var dacType = typeof(IEntityDAC<>).MakeGenericType(entityType);
+            var implType = typeof(FreeSqlEntityDAC<>).MakeGenericType(entityType);
+            services.AddSingleton(dacType, implType);
+        }
+        var provider = services.BuildServiceProvider();
+        return new StubDomainUser { ServiceProvider = provider };
     }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
-/// <para>ADR88/DI004（A 批整改）：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-/// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时保留原抛 NotSupportedException 语义）。</para></summary>
+/// <summary>
+/// 测试用户桩——实现 <see cref="IDomainUser"/> 最小契约（User/Tenant/匿名可配置）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现——具体类经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Tagging 测试桩）；接口（IDomainService）经
+/// <c>provider.GetRequiredService(t)</c> 解析（守卫工厂在集成测试经真实 DomainUser 验证，桩内不重复守卫）。</para>
+/// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {
-    private IServiceProvider? _provider;
-    private readonly object _gate = new();
-    private readonly Dictionary<Type, object?> _cache = new();
+    private readonly string? _userId;
+    private readonly long? _tenantId;
+    private readonly bool _isAuthenticated;
 
-    /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-    public IServiceProvider ServiceProvider
+    public StubDomainUser(string? userId = null, long? tenantId = null, bool isAuthenticated = false)
     {
-        set { lock (_gate) _provider = value; }
+        _userId = userId;
+        _tenantId = tenantId;
+        _isAuthenticated = isAuthenticated;
     }
 
+    /// <summary>ServiceProvider（测试工厂注册时注入——User.Use&lt;T&gt;() 解析源）。</summary>
+    public IServiceProvider? ServiceProvider { get; set; }
+
     public string SessionKey => "test-session";
-    public bool IsAuthenticated => false;
+    public bool IsAuthenticated => _isAuthenticated;
     public bool IsSystemActor => false;
     public IUserInfo? UserInfo => null;
-    public long? TenantId => null;
+    public long? TenantId => _tenantId;
     public bool IsNoAuditActive => false;
-    public string? UserId => null;
-    public string? UserName => null;
+    public string? UserId => _userId;
+    public string? UserName => "test";
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-            return svc;
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
-            _cache[typeof(TDomainService)] = resolved;
-            return resolved;
-        }
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+
+        // 生产 NoAop 路径等价（具体类）：ActivatorUtilities 直建，IDomainUser 参数显式传 this
+        return (TDomainService)ActivatorUtilities.CreateInstance(ServiceProvider, typeof(TDomainService), this);
     }
 
     public TService GetService<TService>() where TService : notnull
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-        return provider.GetRequiredService<TService>();
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+        return ServiceProvider.GetRequiredService<TService>();
     }
 
     public TService GetOptionalService<TService>() where TService : class => null!;

@@ -2,14 +2,19 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using TKW.Framework.Core.AuthController;
+using TKW.Framework.Domain;
 
 namespace TKWF.Ext.Account.Tests;
 
 /// <summary>
 /// DefaultPasswordResetFlow 测试——发起/完成/防枚举/过期/幂等 + 密码管理器缺失容错。
+/// <para>V4.10.53（领域自治根治，正确路线）：Flow 改<b>接线型</b>（skill §4.2）——ctor
+/// <c>(IServiceProvider, IOptions&lt;AccountOptions&gt;, ILogger)</c>，不注入 IDomainUser（永不注册 DI，生产
+/// AuthController 普通 DI 构造失败修复）；Store 经 <see cref="IServiceProvider"/> 延迟解析（C1 模式）。
+/// 测试经<b>真实 DI</b>（Initializer ConfigureServices + AddLogging）构建 Flow；Store 直构真实实例后注册
+/// （守卫工厂路径由 Initializer 测试 + 生产路径集成测试覆盖）。</para>
 /// </summary>
 public class DefaultPasswordResetFlowTests
 {
@@ -26,19 +31,14 @@ public class DefaultPasswordResetFlowTests
     private static DefaultPasswordResetFlow CreateFlow(IFreeSql fsql, IAccountPasswordManager? passwordManager = null)
     {
         var services = new ServiceCollection();
+        services.AddLogging();
+        new AccountExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         if (passwordManager != null)
             services.AddSingleton(passwordManager);
-        // ADR88/DI004：Flow 构造不再注入 IPasswordResetStore——经 IDomainUser.Use<IPasswordResetStore>() 懒加载
+        // Store 直构真实实例注册（Flow 经 IServiceProvider 解析；守卫路径由其他测试覆盖）
         services.AddSingleton<IPasswordResetStore>(AccountTestHost.CreatePasswordResetStore(fsql));
         var sp = services.BuildServiceProvider();
-
-        var user = new StubDomainUser();
-        user.ServiceProvider = sp;
-        return new DefaultPasswordResetFlow(
-            user,
-            sp,
-            Options.Create(new AccountOptions()),
-            NullLogger<DefaultPasswordResetFlow>.Instance);
+        return (DefaultPasswordResetFlow)sp.GetRequiredService<IPasswordResetFlow>();
     }
 
     private sealed class FakePasswordManager : IAccountPasswordManager

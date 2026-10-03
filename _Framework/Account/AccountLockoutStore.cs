@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
@@ -10,19 +12,22 @@ namespace TKWF.Ext.Account
     /// 账户锁定存储实现——经 <see cref="AccountLockoutEntityDataService"/>（SG1/xCodeGen 生成的 DataService）
     /// 委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
-    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>（非泛型主实现）——
+    /// 经基类 <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——D01；旧 TryAddScoped 构造注入 IDomainUser
+    /// 生产解析必失败）。DataService 仍经 <c>User.Use&lt;AccountLockoutEntityDataService&gt;()</c> NoAop 懒加载。
+    /// 注册形态改 <c>AddConstructibleService&lt;IAccountLockoutStore, AccountLockoutStore&gt;</c>（接口可构造守卫工厂）。</para>
     /// </summary>
-    internal sealed class AccountLockoutStore : IAccountLockoutStore
+    [DiContractIgnore]
+    internal sealed class AccountLockoutStore : DomainServiceBase, IAccountLockoutStore
     {
-        private readonly IDomainUser _user;
         private readonly ILogger<AccountLockoutStore> _logger;
 
         private AccountLockoutEntityDataService? _dataService;
-        private AccountLockoutEntityDataService DataService => _dataService ??= _user.Use<AccountLockoutEntityDataService>();
+        private AccountLockoutEntityDataService DataService => _dataService ??= User.Use<AccountLockoutEntityDataService>();
 
         public AccountLockoutStore(IDomainUser user, ILogger<AccountLockoutStore> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

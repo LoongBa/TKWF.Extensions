@@ -13,6 +13,7 @@ using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Web.Extensions;
 using TKW.Framework.Domain.Web.Hosting;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Authentication.Tests;
 

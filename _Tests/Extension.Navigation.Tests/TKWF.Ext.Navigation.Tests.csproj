@@ -36,6 +36,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- C 基座共享（2026-10-04）：去重复样板——TestUserInfo/TestMetaContext/TestUserHelper 公共类 -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <!-- 本仓库扩展（Navigation + Permissions.Abstractions）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Navigation\TKWF.Ext.Navigation.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />

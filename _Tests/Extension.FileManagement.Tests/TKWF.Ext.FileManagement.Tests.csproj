@@ -42,6 +42,7 @@
     <!-- 本仓库扩展：FileManagement（主体）+ BlobStoring 实现（真实 LocalStorageService 链） + BlobStoring.Abstractions（契约）——
          测试项目不激活 SG1b 门控，可直接引实现 -->
     <ProjectReference Include="..\..\_Framework\FileManagement\TKWF.Ext.FileManagement.csproj" />
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <ProjectReference Include="..\..\_Framework\BlobStoring\TKWF.Ext.BlobStoring.csproj" />
     <ProjectReference Include="..\..\_Framework\BlobStoring.Abstractions\TKWF.Ext.BlobStoring.Abstractions.csproj" />
     <!-- 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->

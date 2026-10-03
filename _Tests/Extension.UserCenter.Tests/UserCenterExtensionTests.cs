@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using TKWF.Ext.Testing.Shared;
 using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.UserCenter.Tests;

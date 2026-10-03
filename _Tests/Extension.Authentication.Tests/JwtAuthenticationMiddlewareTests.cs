@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Authentication.Tests;
 

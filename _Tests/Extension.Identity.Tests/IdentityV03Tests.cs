@@ -10,6 +10,7 @@ using TKW.Framework.Core.Hosting;
 using TKWF.Ext.Account;
 using TKWF.Ext.Identity;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Identity.Tests;
 

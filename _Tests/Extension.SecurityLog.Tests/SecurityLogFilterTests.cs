@@ -6,6 +6,7 @@ using TKW.Framework.Core.AuthController;
 using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Enumerations;
 using TKWF.Ext.SecurityLog.Tests;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.SecurityLog.Tests;
 

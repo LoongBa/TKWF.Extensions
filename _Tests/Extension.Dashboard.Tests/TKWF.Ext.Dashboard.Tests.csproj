@@ -34,6 +34,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- C 基座共享（2026-10-04）：去重复样板——TestUserInfo/TestMetaContext/TestUserHelper 公共类 -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <!-- 本仓库扩展（Dashboard + Metrics——Metrics 用于验证 metricRef 接线）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\Dashboard\TKWF.Ext.Dashboard.csproj" />
     <ProjectReference Include="..\..\_Framework\Metrics\TKWF.Ext.Metrics.csproj" />

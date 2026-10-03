@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKWF.Ext.SecurityLog;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Account.Tests;
 

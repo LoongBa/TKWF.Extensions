@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 

@@ -8,6 +8,7 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Session;
 using TKW.Framework.Enumerations;
 using TKWF.Ext.BackgroundJobs;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.BackgroundJobs.Tests;
 
@@ -29,54 +30,4 @@ public sealed class ConsumerHostInitializer : DomainHostInitializerBase<TestUser
     protected override DomainUserHelperBase<TestUserInfo> OnRegisterDomainServices(
         IServiceCollection services, IConfiguration? configuration)
         => new TestUserHelper();
-}
-
-/// <summary>消费方最小元数据上下文（无业务实体/服务）。</summary>
-public sealed class TestMetaContext : IProjectMetaContext
-{
-    public IReadOnlyList<ClassMetadata> AllMetadatas => [];
-    public IReadOnlyList<ClassMetadata> Entities => [];
-    public IReadOnlyList<ClassMetadata> Views => [];
-    public IReadOnlyList<ClassMetadata> Services => [];
-    public IReadOnlyList<ClassMetadata> DataServices => [];
-    public IReadOnlyList<ClassMetadata> Controllers => [];
-    public IReadOnlyList<ClassMetadata> Decorators => [];
-    public IReadOnlyList<EnumMetadata> Enums => [];
-    public ProjectConfiguration Configuration => null!;
-    public MetadataChangeLog ChangeLog => null!;
-    public string MetadataSchemaVersion => "1.0";
-
-    public ClassMetadata FindByClassName(string className) => null!;
-    public IEnumerable<ClassMetadata> FindByNamespace(string @namespace) => [];
-    public IEnumerable<DomainServiceRegistration> GetServiceRegistrations() => [];
-    public IEnumerable<EventHandlerRegistration> GetEventHandlerRegistrations() => [];
-    public IEnumerable<string> GetTenantScopedEntityClassNames() => [];
-    public void ValidateRuntimeGates(RuntimeGateOptions options) { }
-    public MethodMetadata? GetMethodMeta(string classFullName, string methodName) => null;
-    public IReadOnlyList<object> CreateExtensionInstances() => [];
-    public IReadOnlyDictionary<string, PropertyMetadata> GetPropertyMap(string className)
-        => new Dictionary<string, PropertyMetadata>();
-}
-
-/// <summary>消费方最小用户助手。</summary>
-public sealed class TestUserHelper : DomainUserHelperBase<TestUserInfo>
-{
-    protected override Task<TestUserInfo> OnNewGuestSessionCreatedAsync(SessionInfo session)
-        => Task.FromResult(new TestUserInfo("guest", "Guest"));
-
-    protected override Task<TestUserInfo> OnLoginByPasswordAsync(
-        DomainUser<TestUserInfo> user, string userName, string credential, EnumLoginFrom loginFrom)
-        => Task.FromResult(new TestUserInfo(userName, userName));
-}
-
-/// <summary>消费方最小用户类型。</summary>
-public class TestUserInfo : SimpleUserInfo
-{
-    public TestUserInfo() : base() { }
-
-    public TestUserInfo(string userIdString, string userName, params string[] roles)
-        : base(userIdString, userName)
-    {
-        Roles = roles.ToList();
-    }
 }

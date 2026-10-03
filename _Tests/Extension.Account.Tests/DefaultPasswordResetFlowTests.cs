@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Core.AuthController;
 using TKW.Framework.Domain;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Account.Tests;
 

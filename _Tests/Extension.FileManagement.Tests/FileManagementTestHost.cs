@@ -16,6 +16,7 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.BlobStoring;
 using TKWF.Ext.FileManagement;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.FileManagement.Tests;
 

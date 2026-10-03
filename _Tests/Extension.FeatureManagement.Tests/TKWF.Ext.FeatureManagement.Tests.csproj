@@ -50,6 +50,7 @@
   <ItemGroup>
     <!-- 本仓库扩展（FeatureManagement）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <!-- V4.10.31 (A+ 阶段 3)：DLL 模式（UseLocalFw=true）主框架包走 Directory.Build.props 集中 DLL 块 +
          显式 Reference CodeGeneration.Abstractions（部署根含 ContributorDescriptor/Contributors 桥）——
          避免 NuGet 4.10.27 旧包覆盖（TypeLoadException 实证）；NuGet 模式（false）走 CPM 包 -->

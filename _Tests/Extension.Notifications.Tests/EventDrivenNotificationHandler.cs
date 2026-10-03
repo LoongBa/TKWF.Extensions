@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Notifications.Tests;
 

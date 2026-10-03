@@ -41,6 +41,8 @@
     <ProjectReference Include="..\..\_Framework\Account\TKWF.Ext.Account.csproj" />
     <!-- V0.3.0 登录历史：SecurityLog 是登录历史唯一数据源——测试宿主建 SecurityLogEntity 表 + 真实契约服务 -->
     <ProjectReference Include="..\..\_Framework\SecurityLog\TKWF.Ext.SecurityLog.csproj" />
+    <!-- C 基座（2026-10-04）：共享测试设施——TestUserInfo/TestMetaContext/TestUserHelper 去重复样板 -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />

@@ -12,6 +12,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.SecurityLog.Tests;
 

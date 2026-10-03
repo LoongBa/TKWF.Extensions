@@ -9,6 +9,7 @@ using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Calendar;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Calendar.Tests;
 

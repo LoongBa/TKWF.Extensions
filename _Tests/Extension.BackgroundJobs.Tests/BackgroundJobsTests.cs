@@ -13,6 +13,7 @@ using TKW.Framework.Domain.BackgroundJobs;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.BackgroundJobs;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.BackgroundJobs.Tests;
 

@@ -8,6 +8,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.UserCenter;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Authentication.Tests;
 

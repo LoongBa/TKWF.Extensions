@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.BlobStoring.Tests;
 

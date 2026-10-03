@@ -9,6 +9,7 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Notifications;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Notifications.Tests;
 

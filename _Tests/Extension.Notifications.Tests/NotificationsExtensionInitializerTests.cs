@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKWF.Ext.Notifications;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Notifications.Tests;
 

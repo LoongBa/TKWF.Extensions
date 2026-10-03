@@ -42,6 +42,7 @@
   <ItemGroup>
     <!-- 本仓库扩展（Notifications + Permissions.Abstractions）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Notifications\TKWF.Ext.Notifications.csproj" />
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />

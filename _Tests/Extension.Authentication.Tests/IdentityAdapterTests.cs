@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Enumerations;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Authentication.Tests;
 

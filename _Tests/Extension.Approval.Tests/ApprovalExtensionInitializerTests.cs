@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKWF.Ext.Approval;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Approval.Tests;
 

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 

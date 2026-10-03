@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Core.AuthController;
 using TKW.Framework.Domain;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Account.Tests;
 

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Utility.Tags;
 using TKWF.Ext.Tagging;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Tagging.Tests;
 

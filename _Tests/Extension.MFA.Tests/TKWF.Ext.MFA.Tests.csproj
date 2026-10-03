@@ -40,6 +40,8 @@
   <ItemGroup>
     <!-- 本仓库扩展：MFA（主体）——测试项目不激活 SG1b 门控，可直接引实现 -->
     <ProjectReference Include="..\..\_Framework\MFA\TKWF.Ext.MFA.csproj" />
+    <!-- C 基座（2026-10-04）：共享测试设施——TestUserInfo/TestMetaContext/TestUserHelper 去重复样板 -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <!-- 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />

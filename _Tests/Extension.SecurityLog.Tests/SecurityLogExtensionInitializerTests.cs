@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.SecurityLog.Tests;
 

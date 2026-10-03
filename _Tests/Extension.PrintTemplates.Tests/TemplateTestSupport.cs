@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 

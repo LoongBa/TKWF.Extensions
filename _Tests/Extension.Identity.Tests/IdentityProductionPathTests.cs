@@ -10,6 +10,7 @@ using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Account;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Identity.Tests;
 

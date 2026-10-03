@@ -14,6 +14,7 @@ using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.FeatureManagement;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.FeatureManagement.Tests;
 
@@ -324,19 +325,3 @@ internal sealed class TestDomainUser : IDomainUser
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }
 
-/// <summary>
-/// 消费方最小用户类型——模拟真实消费方定义自己的 UserInfo。
-/// <para>Role 层测试要点：<see cref="SimpleUserInfo.Roles"/> 为可 set 属性——
-/// 既支持构造器注入（<c>new TestUserInfo("u-1", "u-1", "role-a", "role-b")</c>）也支持集合初始化
-/// （<c>new TestUserInfo { Roles = ["role-a"] }</c>）。</para>
-/// </summary>
-public class TestUserInfo : SimpleUserInfo
-{
-    public TestUserInfo() : base() { }
-
-    public TestUserInfo(string userIdString, string userName, params string[] roles)
-        : base(userIdString, userName)
-    {
-        Roles = roles.ToList();
-    }
-}

@@ -49,6 +49,8 @@
     <!-- v0.2.0：UserCenter 契约承接测试（N2-N5——UserCenterQueryService 门面 + IUserProfileSource 契约） -->
     <ProjectReference Include="..\..\_Framework\UserCenter\TKWF.Ext.UserCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
+    <!-- C 基座（2026-10-04）：共享测试设施——TestUserInfo/TestMetaContext/TestUserHelper 去重复样板 -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- v4.10.45 冒烟测试（ConfigWebAppDomain/UseWebExtensions 全链宿主）——TKWF.Domain.Web 双模式引用 -->

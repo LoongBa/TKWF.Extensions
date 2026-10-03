@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKWF.Ext.Dashboard;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Dashboard.Tests;
 

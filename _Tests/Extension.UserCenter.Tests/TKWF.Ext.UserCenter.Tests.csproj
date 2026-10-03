@@ -33,6 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- C 基座共享（2026-10-04）：去重复样板——TestUserInfo/TestMetaContext/TestUserHelper 公共类 -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <!-- 本仓库扩展（UserCenter 主包 + 契约包）+ 主框架 -->
     <ProjectReference Include="..\..\_Framework\UserCenter\TKWF.Ext.UserCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />

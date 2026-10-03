@@ -8,6 +8,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Auditing;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuditLogging.Tests;
 

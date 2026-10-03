@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,7 +9,7 @@ using TKWF.Ext.Account.DTOs;
 
 namespace TKWF.Ext.Account;
 
-/// <summary>数据服务：&#x8D26;&#x6237;&#x9501;&#x5B9A;&#x8BB0;&#x5F55;&#x2014;&#x2014;&#x7528;&#x6237;&#x540D;&#x3001;&#x5931;&#x8D25;&#x8BA1;&#x6570;&#x4E0E;&#x9501;&#x5B9A;&#x622A;&#x6B62;&#x65F6;&#x95F4;&#x3002;     &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#xFF1B;     &#x4FDD;&#x7559; BCL &lt;c&gt;[Table(&quot;AccountLockout&quot;)]&lt;/c&gt;&#xFF1B;&#x5217;&#x6620;&#x5C04;&#x7528; FreeSql &lt;c&gt;[Column]&lt;/c&gt;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：账户锁定记录——用户名、失败计数与锁定截止时间。     <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；     保留 BCL <c>[Table("AccountLockout")]</c>；列映射用 FreeSql <c>[Column]</c>。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 AccountLockoutEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

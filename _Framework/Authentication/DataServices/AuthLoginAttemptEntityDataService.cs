@@ -10,7 +10,7 @@ using TKWF.Ext.Authentication.DTOs;
 
 namespace TKWF.Ext.Authentication;
 
-/// <summary>数据服务：&#x767B;&#x5F55;&#x5C1D;&#x8BD5;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x767B;&#x5F55;&#x4FDD;&#x62A4;&#xFF08;&#x9650;&#x6D41;/&#x5BA1;&#x8BA1;&#x6570;&#x636E;&#x6E90;&#xFF0C;&#x53EA;&#x589E;&#x8BED;&#x4E49;&#xFF09;&#x3002;      &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#xFF08;&#x4E0D;&#x6307;&#x5B9A; UserType&#x2014;&#x2014;ADR42 D4&#xFF09;&#x3002;&lt;/para&gt;      &lt;para&gt;&#x8BA4;&#x8BC1;&#x4E2D;&#x5FC3;&#x5B9E;&#x4F8B;&#x81EA;&#x8EAB;&#x5E93;&#x7684;&#x767B;&#x5F55;&#x5C1D;&#x8BD5;&#x8BA1;&#x6570;&#xFF08;&#x542B; authType &#x7EF4;&#x5EA6;&#xFF09;&#xFF0C;&#x4E0E; SecurityLog &#x4E8B;&#x4EF6;&#x65E5;&#x5FD7; / Account &#x9501;&#x5B9A; / RateLimiting &#x4E2D;&#x95F4;&#x4EF6;&#x4E92;&#x8865;&#x4E0D;&#x91CD;&#x53E0;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：登录尝试实体——登录保护（限流/审计数据源，只增语义）。      <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>      <para>认证中心实例自身库的登录尝试计数（含 authType 维度），与 SecurityLog 事件日志 / Account 锁定 / RateLimiting 中间件互补不重叠。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 AuthLoginAttemptEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

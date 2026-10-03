@@ -10,7 +10,7 @@ using TKWF.Ext.Authentication.DTOs;
 
 namespace TKWF.Ext.Authentication;
 
-/// <summary>数据服务：&#x77ED;&#x4FE1;&#x9A8C;&#x8BC1;&#x7801;&#x8BB0;&#x5F55;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x9891;&#x63A7;&#x6570;&#x636E;&#x6E90;&#xFF08;&#x72EC;&#x7ACB;&#x4E8E; AuthLoginAttempt&#xFF09;&#x3002;      &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#xFF08;&#x4E0D;&#x6307;&#x5B9A; UserType&#x2014;&#x2014;ADR42 D4&#xFF09;&#x3002;&lt;/para&gt;      &lt;para&gt;&#x9A8C;&#x8BC1;&#x7801;&#x5355;&#x5411;&#x6563;&#x5217;&#xFF08;SHA256&#xFF09;&#x843D;&#x5E93;&#xFF0C;&#x4E0D;&#x5B58;&#x660E;&#x6587;&#xFF1B;&#x6821;&#x9A8C;&#x6210;&#x529F;&#x540E; IsVerified=true &#x5355;&#x6B21;&#x6D88;&#x8D39;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：短信验证码记录实体——频控数据源（独立于 AuthLoginAttempt）。      <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>      <para>验证码单向散列（SHA256）落库，不存明文；校验成功后 IsVerified=true 单次消费。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 SmsRecordEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
@@ -8,7 +8,7 @@ using TKWF.Ext.PrintTemplates.DTOs;
 
 namespace TKWF.Ext.PrintTemplates;
 
-/// <summary>数据服务：&#x6253;&#x5370;&#x6A21;&#x677F;&#x8868;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x5B9A;&#x4E49;&#x6A21;&#x677F;&#x952E;&#xFF08;&#x5982; &quot;Invoice.Standard&quot;&#xFF09;&#x2B; &#x663E;&#x793A;&#x540D; &#x2B; &#x63CF;&#x8FF0;&#x3002;     &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#x3002;     SG1 &#x81EA;&#x52A8;&#x751F;&#x6210; &lt;see cref=&quot;!:TKW.Framework.Domain.IDomainEntity&quot;/&gt; &#x90E8;&#x5206;&#x4E0E; DTO/DataService&#x3002;&lt;/para&gt;     &lt;para&gt;&#x4FDD;&#x7559; BCL &lt;c&gt;[Table(&quot;PrintTemplate&quot;)]&lt;/c&gt;&#xFF08;&lt;c&gt;FreeSqlTableStructureSynchronizer&lt;/c&gt; &#x9760;&#x5B83;&#x53D1;&#x73B0;&#x5B9E;&#x4F53;&#x5EFA;&#x8868;&#xFF09;&#xFF1B;     &#x5217;&#x6620;&#x5C04;&#x7528; FreeSql &lt;c&gt;[Column]&lt;/c&gt;&#xFF08;IsPrimary/IsIdentity/Position&#xFF0C;&#x5168;&#x9650;&#x5B9A;&#x907F;&#x514D;&#x4E0E; BCL Schema &#x7279;&#x6027;&#x540D;&#x51B2;&#x7A81;&#xFF09;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：打印模板表实体——定义模板键（如 "Invoice.Standard"）+ 显示名 + 描述。     <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。     SG1 自动生成 <see cref="!:TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>     <para>保留 BCL <c>[Table("PrintTemplate")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；     列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 PrintTemplateEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

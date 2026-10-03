@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -11,7 +11,7 @@ using TKWF.Ext.BlobStoring.DTOs;
 
 namespace TKWF.Ext.BlobStoring;
 
-/// <summary>数据服务：Blob &#x8BB0;&#x5F55;&#x8868;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x5B58;&#x50A8;&#x4E8C;&#x8FDB;&#x5236;&#x5927;&#x5BF9;&#x8C61;&#x7684;&#x5143;&#x6570;&#x636E;&#xFF08;&#x540D;&#x79F0;&#x3001;&#x8DEF;&#x5F84;&#x3001;&#x5185;&#x5BB9;&#x7C7B;&#x578B;&#x3001;&#x5927;&#x5C0F;&#x3001;&#x6807;&#x7B7E;&#x3001;&#x4E0A;&#x4F20;&#x8005;&#x7B49;&#xFF09;&#x3002;     &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#x3002;     SG1 &#x81EA;&#x52A8;&#x751F;&#x6210; &lt;see cref=&quot;!:TKW.Framework.Domain.IDomainEntity&quot;/&gt; &#x90E8;&#x5206;&#x4E0E; DTO/DataService&#x3002;&lt;/para&gt;     &lt;para&gt;&#x4FDD;&#x7559; BCL &lt;c&gt;[Table(&quot;BlobRecord&quot;)]&lt;/c&gt;&#xFF08;&lt;c&gt;FreeSqlTableStructureSynchronizer&lt;/c&gt; &#x9760;&#x5B83;&#x53D1;&#x73B0;&#x5B9E;&#x4F53;&#x5EFA;&#x8868;&#xFF09;&#xFF1B;     &#x5217;&#x6620;&#x5C04;&#x7528; FreeSql &lt;c&gt;[Column]&lt;/c&gt;&#xFF08;IsPrimary/IsIdentity/Position&#xFF0C;&#x5168;&#x9650;&#x5B9A;&#x907F;&#x514D;&#x4E0E; BCL Schema &#x7279;&#x6027;&#x540D;&#x51B2;&#x7A81;&#xFF09;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：Blob 记录表实体——存储二进制大对象的元数据（名称、路径、内容类型、大小、标签、上传者等）。     <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。     SG1 自动生成 <see cref="!:TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>     <para>保留 BCL <c>[Table("BlobRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；     列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 BlobRecordEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

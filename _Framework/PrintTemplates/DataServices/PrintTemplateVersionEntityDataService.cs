@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -10,7 +10,7 @@ using TKWF.Ext.PrintTemplates.DTOs;
 
 namespace TKWF.Ext.PrintTemplates;
 
-/// <summary>数据服务：&#x6253;&#x5370;&#x6A21;&#x677F;&#x7248;&#x672C;&#x8868;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x5173;&#x8054;&#x6A21;&#x677F;&#xFF08;TemplateId&#xFF09;&#x2B; &#x7248;&#x672C;&#x53F7;&#xFF08;SemVer &#x5B57;&#x7B26;&#x4E32;&#xFF09;&#x2B; &#x6B63;&#x6587; &#x2B; &#x72B6;&#x6001;&#x3002;     &lt;para&gt;TemplateId &#x2B; Version &#x552F;&#x4E00;&#xFF08;&#x5E76;&#x53D1;&#x53D1;&#x5E03;&#x9632;&#x51B2;&#x7A81;&#x2014;&#x2014;&#x8D25;&#x8005;&#x663E;&#x5F0F;&#x5F02;&#x5E38;&#xFF09;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：打印模板版本表实体——关联模板（TemplateId）+ 版本号（SemVer 字符串）+ 正文 + 状态。     <para>TemplateId + Version 唯一（并发发布防冲突——败者显式异常）。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 PrintTemplateVersionEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

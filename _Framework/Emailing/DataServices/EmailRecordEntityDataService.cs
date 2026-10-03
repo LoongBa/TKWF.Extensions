@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Threading;
@@ -10,7 +10,7 @@ using TKWF.Ext.Emailing.DTOs;
 
 namespace TKWF.Ext.Emailing;
 
-/// <summary>数据服务：&#x90AE;&#x4EF6;&#x8BB0;&#x5F55;&#x8868;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x5B58;&#x50A8;&#x53D1;&#x9001;&#x90AE;&#x4EF6;&#x7684;&#x8BB0;&#x5F55;&#xFF08;&#x6536;&#x4EF6;&#x4EBA;&#x3001;&#x53D1;&#x4EF6;&#x4EBA;&#x3001;&#x4E3B;&#x9898;&#x3001;&#x6B63;&#x6587;&#x3001;&#x72B6;&#x6001;&#x3001;&#x9519;&#x8BEF;&#x4FE1;&#x606F;&#x7B49;&#xFF09;&#x3002;     &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#x3002;     SG1 &#x81EA;&#x52A8;&#x751F;&#x6210; IDomainEntity &#x90E8;&#x5206;&#x4E0E; DTO/DataService&#x3002;&lt;/para&gt;     &lt;para&gt;&#x4FDD;&#x7559; BCL &lt;c&gt;[Table(&quot;EmailRecord&quot;)]&lt;/c&gt;&#xFF08;&lt;c&gt;FreeSqlTableStructureSynchronizer&lt;/c&gt; &#x9760;&#x5B83;&#x53D1;&#x73B0;&#x5B9E;&#x4F53;&#x5EFA;&#x8868;&#xFF09;&#xFF1B;     &#x5217;&#x6620;&#x5C04;&#x7528; FreeSql &lt;c&gt;[Column]&lt;/c&gt;&#xFF08;IsPrimary/IsIdentity/Position&#xFF0C;&#x5168;&#x9650;&#x5B9A;&#x907F;&#x514D;&#x4E0E; BCL Schema &#x7279;&#x6027;&#x540D;&#x51B2;&#x7A81;&#xFF09;&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：邮件记录表实体——存储发送邮件的记录（收件人、发件人、主题、正文、状态、错误信息等）。     <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。     SG1 自动生成 IDomainEntity 部分与 DTO/DataService。</para>     <para>保留 BCL <c>[Table("EmailRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；     列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 EmailRecordEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

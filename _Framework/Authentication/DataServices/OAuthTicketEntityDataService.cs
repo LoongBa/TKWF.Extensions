@@ -10,7 +10,7 @@ using TKWF.Ext.Authentication.DTOs;
 
 namespace TKWF.Ext.Authentication;
 
-/// <summary>数据服务：&#x4E00;&#x6B21;&#x6027;&#x7968;&#x636E;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x7968;&#x636E;&#x6362;&#x4EE4;&#x724C;&#xFF08;TTL 5min &#x5355;&#x6B21;&#x6D88;&#x8D39; &#x2B; PKCE &#x2B; app_id/redirect_uri &#x767D;&#x540D;&#x5355; &#x2B; state &#x9632;&#x91CD;&#x653E;&#xFF09;&#x3002;      &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#xFF08;&#x4E0D;&#x6307;&#x5B9A; UserType&#x2014;&#x2014;ADR42 D4&#xFF09;&#x3002;&lt;/para&gt;      &lt;para&gt;&#x56DE;&#x8C03;&#x627F;&#x8F7D;&#x94C1;&#x5F8B;&#xFF08;&#x7528;&#x6237;&#x88C1;&#x5B9A; &#x2B; Oracle B1&#xFF09;&#xFF1A;URL &#x53EA;&#x5E26;&#x4E00;&#x6B21;&#x6027;&#x7968;&#x636E; &#x2B; redirect_uri&#xFF0C;&#x7EDD;&#x4E0D;&#x5E26;&#x654F;&#x611F;&#x4FE1;&#x606F;&#xFF1B;&#x7EAF;&#x524D;&#x7AEF;&#x9759;&#x6001;&#x7AD9;&#x8D70;&#x516C;&#x7F51; /oauth/exchange &#x2B; PKCE code_verifier&#x3002;&lt;/para&gt;</summary>
+/// <summary>数据服务：一次性票据实体——票据换令牌（TTL 5min 单次消费 + PKCE + app_id/redirect_uri 白名单 + state 防重放）。      <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>      <para>回调承载铁律（用户裁定 + Oracle B1）：URL 只带一次性票据 + redirect_uri，绝不带敏感信息；纯前端静态站走公网 /oauth/exchange + PKCE code_verifier。</para></summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 OAuthTicketEntityDataService.g.cs 承载。
 // 这里的分部类仅用于编写特定的业务查询方法。
 //

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BlobStoring
@@ -10,19 +12,22 @@ namespace TKWF.Ext.BlobStoring
     /// <summary>
     /// Blob 记录存储实现——经 <see cref="BlobRecordEntityDataService"/>（SG1/xCodeGen 生成的 DataService）委托持久化，
     /// 遵循数据访问红线（2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
+    /// <para>V4.10.53（领域自治根治，ADR90 正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——
+    /// v0.3.3 同根缺陷）；DataService 仍经 <c>User.Use&lt;BlobRecordEntityDataService&gt;()</c> NoAop 懒加载（DI004 零豁免）。</para>
+    /// <para><c>[DiContractIgnore]</c>：运行时手写注册（AddConstructibleService），豁免 SG1a DI001 误报。</para>
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
     /// </summary>
-    internal sealed class BlobRecordStore : IBlobRecordStore
+    [DiContractIgnore]
+    internal sealed class BlobRecordStore : DomainServiceBase, IBlobRecordStore
     {
-        private readonly IDomainUser _user;
         private BlobRecordEntityDataService? _dataService;
         private readonly ILogger<BlobRecordStore> _logger;
 
-        private BlobRecordEntityDataService DataService => _dataService ??= _user.Use<BlobRecordEntityDataService>();
+        private BlobRecordEntityDataService DataService => _dataService ??= User.Use<BlobRecordEntityDataService>();
 
-        public BlobRecordStore(IDomainUser user, ILogger<BlobRecordStore> logger)
+        public BlobRecordStore(IDomainUser user, ILogger<BlobRecordStore> logger) : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

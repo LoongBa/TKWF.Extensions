@@ -5,14 +5,22 @@ using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BlobStoring.Tests;
 
 /// <summary>
-/// BlobRecordStore 测试——使用 SQLite 内存库验证真实读写 + 异常静默。
-/// <para>BlobRecordStore 经 BlobRecordEntityDataService（FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化。</para>
+/// BlobRecordStore 测试——覆盖记录 CRUD + 异常静默。
+/// <para>V4.10.53（领域自治根治，正确路线——对齐 Extension.Settings.Tests）：</para>
+/// <list type="bullet">
+/// <item><strong>集成测试走生产路径</strong>——真实 DI（扩展 ConfigureServices + FreeSql 基础设施 +
+///     真实 <see cref="DomainUser{TUserInfo}"/>）+ <c>User.Use&lt;IBlobRecordStore&gt;()</c> 解析
+///     （AOP 路径：设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 → BlobRecordStore）；</item>
+/// <item><strong>异常静默单测</strong>——可配置 stub 用户直构 Store（继承 DomainServiceBase，
+///     <see cref="DomainServiceBase.User"/> 上下文 + FakeLogger 捕获 Warning），对齐分层逻辑单测模式。</item>
+/// </list>
 /// </summary>
 public class FreeSqlBlobRecordStoreTests
 {
@@ -25,35 +33,35 @@ public class FreeSqlBlobRecordStoreTests
             .Build();
     }
 
-    /// <summary>构造 BlobRecordEntityDataService——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动。</summary>
-    private static BlobRecordEntityDataService CreateDataService(IFreeSql fsql, IDomainUser user)
-    {
-        var uowManager = new UnitOfWorkManager(fsql);
-        var dac = new FreeSqlEntityDAC<BlobRecordEntity>(uowManager);
-        return new BlobRecordEntityDataService(user, dac);
-    }
+    // ──────────────────────────────────────────────
+    // 生产路径集成测试（真实 DomainUser + User.Use<IBlobRecordStore>()）
+    // ──────────────────────────────────────────────
 
-    /// <summary>
-    /// ADR88/DI004：Store 不再注入 DataService——经 IDomainUser.Use&lt;T&gt;() 懒加载解析，
-    /// 测试桩注入能力容器（真实 DataService 注册到 ServiceProvider，stub 解析）。
-    /// </summary>
-    private static BlobRecordStore CreateStore(IFreeSql fsql, FakeLogger<BlobRecordStore> logger)
+    private static (ServiceProvider Provider, DomainUser<TestUserInfo> User) CreateProductionHost()
     {
-        var stub = new StubDomainUser();
         var services = new ServiceCollection();
-        services.AddSingleton(CreateDataService(fsql, stub));
-        stub.ServiceProvider = services.BuildServiceProvider();
-        return new BlobRecordStore(stub, logger);
+        // 1. 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices）
+        new BlobStoringExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        // 2. FreeSql 基础设施（消费方 DomainHost 等价注册）
+        var fsql = CreateInMemoryFreeSql();
+        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<BlobRecordEntity>, FreeSqlEntityDAC<BlobRecordEntity>>();
+        // 3. 解析作用域绑定（生产经 DomainHost.NewDomainContext 绑定 AsyncLocal——测试等价 BindScope）
+        var provider = services.BuildServiceProvider();
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+        return (provider, user);
     }
 
     [Fact]
     public async Task SaveAsync_NewRecord_PersistsToDatabase()
     {
-        // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        // Arrange — 生产路径：User.Use<IBlobRecordStore>() AOP 解析（守卫工厂）
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         var record = new BlobRecordEntity
         {
@@ -82,10 +90,8 @@ public class FreeSqlBlobRecordStoreTests
     public async Task SaveAsync_UpdateExisting_UpdatesRecord()
     {
         // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         var record = new BlobRecordEntity
         {
@@ -115,10 +121,8 @@ public class FreeSqlBlobRecordStoreTests
     public async Task GetAsync_ExistingRecord_ReturnsEntity()
     {
         // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         var record = new BlobRecordEntity
         {
@@ -143,10 +147,8 @@ public class FreeSqlBlobRecordStoreTests
     public async Task GetAsync_NonExistent_ReturnsNull()
     {
         // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         // Act
         var result = await store.GetAsync(999);
@@ -159,10 +161,8 @@ public class FreeSqlBlobRecordStoreTests
     public async Task GetByNameAsync_ExistingRecord_ReturnsEntity()
     {
         // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         await store.SaveAsync(new BlobRecordEntity
         {
@@ -183,10 +183,8 @@ public class FreeSqlBlobRecordStoreTests
     public async Task GetListAsync_MultipleRecords_ReturnsAll()
     {
         // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         await store.SaveAsync(new BlobRecordEntity { Name = "a.txt", Path = "a/a.txt", ContentType = "text/plain" });
         await store.SaveAsync(new BlobRecordEntity { Name = "b.png", Path = "b/b.png", ContentType = "image/png" });
@@ -203,16 +201,46 @@ public class FreeSqlBlobRecordStoreTests
     public async Task SaveAsync_NullRecord_DoesNotThrow()
     {
         // Arrange
-        using var fsql = CreateInMemoryFreeSql();
-        fsql.CodeFirst.SyncStructure<BlobRecordEntity>();
-        var logger = new FakeLogger<BlobRecordStore>();
-        var store = CreateStore(fsql, logger);
+        var (_, user) = CreateProductionHost();
+        var store = user.Use<IBlobRecordStore>();
 
         // Act — null record should be silently skipped
         await store.SaveAsync(null!);
 
         // Assert — no records created
         Assert.Empty(await store.GetListAsync(ct: CancellationToken.None));
+    }
+
+    [Fact]
+    public void Use_IBlobRecordStore_ResolvesInstance()
+    {
+        // 生产路径解析语义：Use<T>() 接口 AOP 路径经 DI 守卫工厂创建实例——验证解析链路可重复
+        var (_, user) = CreateProductionHost();
+        var s1 = user.Use<IBlobRecordStore>();
+        var s2 = user.Use<IBlobRecordStore>();
+
+        Assert.NotNull(s1);
+        Assert.NotNull(s2);
+    }
+
+    // ──────────────────────────────────────────────
+    // 异常静默单测（stub 用户 + FakeLogger 直构 Store——分层逻辑单测模式）
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// 直构 BlobRecordStore（继承 DomainServiceBase，经基类 User 读上下文）——stub 的 Use&lt;T&gt;()
+    /// 按生产 NoAop 路径等价（ActivatorUtilities 直建 BlobRecordEntityDataService，IDomainUser 显式传 this，
+    /// IEntityDAC 从 DI 解析）。
+    /// </summary>
+    private static BlobRecordStore CreateStore(IFreeSql fsql, FakeLogger<BlobRecordStore> logger)
+    {
+        var stub = new StubDomainUser();
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<BlobRecordEntity>, FreeSqlEntityDAC<BlobRecordEntity>>();
+        stub.ServiceProvider = services.BuildServiceProvider();
+        return new BlobRecordStore(stub, logger);
     }
 
     [Fact]
@@ -238,19 +266,17 @@ public class FreeSqlBlobRecordStoreTests
 
     // ── Test helpers ──
 
-    /// <summary>最小 IDomainUser 桩——Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-    /// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</summary>
+    /// <summary>
+    /// 可配置 stub 用户——继承式 Store 经基类 <see cref="DomainServiceBase.User"/> 读取上下文；
+    /// <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this，
+    /// 其余从 DI 解析——经注入的 ServiceProvider）。
+    /// </summary>
     private sealed class StubDomainUser : IDomainUser
     {
         private IServiceProvider? _provider;
-        private readonly object _gate = new();
-        private readonly Dictionary<Type, object?> _cache = new();
 
-        /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-        public IServiceProvider ServiceProvider
-        {
-            set { lock (_gate) _provider = value; }
-        }
+        /// <summary>ServiceProvider（测试工厂注册时注入——Use&lt;T&gt; 解析源）。</summary>
+        public IServiceProvider? ServiceProvider { set => _provider = value; get => _provider; }
 
         public string SessionKey => "test-session";
         public bool IsAuthenticated => false;
@@ -259,30 +285,22 @@ public class FreeSqlBlobRecordStoreTests
         public long? TenantId => null;
         public bool IsNoAuditActive => false;
         public string? UserId => null;
-        public string? UserName => null;
+        public string? UserName => "test";
         public bool IsInRole(string role) => false;
 
         public TDomainService Use<TDomainService>() where TDomainService : IDomainService
         {
-            IServiceProvider provider;
-            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-            if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-                return svc;
-            lock (_gate)
-            {
-                if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                    return svc2;
-                var resolved = provider.GetRequiredService<TDomainService>();
-                _cache[typeof(TDomainService)] = resolved;
-                return resolved;
-            }
+            // 生产 NoAop 路径等价：ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析
+            if (_provider is null)
+                throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+            return (TDomainService)ActivatorUtilities.CreateInstance(_provider, typeof(TDomainService), this);
         }
 
         public TService GetService<TService>() where TService : notnull
         {
-            IServiceProvider provider;
-            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-            return provider.GetRequiredService<TService>();
+            if (_provider is null)
+                throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+            return _provider.GetRequiredService<TService>();
         }
 
         public TService GetOptionalService<TService>() where TService : class => null!;

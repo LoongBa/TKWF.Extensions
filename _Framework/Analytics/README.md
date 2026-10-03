@@ -2,6 +2,8 @@
 
 **状态**: 业务分析扩展 (Analytics Extension) | **版本**: V0.1.0 (骨架——门面/Options/Initializer) | **框架**: .NET 10
 
+> **V4.10.53 领域自治评估（2026-10-04）**：`AnalyticsQueryService`（实现 `IAnalyticsQueryService : IDomainService`）判定为**接线型保留**——ctor 仅 `AnalyticsSpecLoader`（主框架 Utility 类型，普通 DI 可解析）、零 IDomainUser 依赖、无持久化；注册保持 `TryAddSingleton`（消费方 `User.Use<IAnalyticsQueryService>()` AOP 路径经 GetRequiredService 解析普通描述符，无需守卫）。**零代码改动**。
+
 **核心约束**: 两层架构（核心加载校验在主框架 `TKW.Framework.Utility.Analytics` 零依赖 / 本包集成门面）、spec 文件驱动（git-tracked `docs/analytics-specs/`）、flint 单一真相（JsonDocument 透传不镜像强类型）、路径安全（domain/specKey 正则 + chartType 消毒）
 
 ---

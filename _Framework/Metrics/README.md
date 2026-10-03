@@ -2,6 +2,8 @@
 
 **状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (指标结果持久化契约——IMetricResultStore) | **框架**: .NET 10
 
+> **V4.10.53 领域自治评估（2026-10-04）**：`MetricsSpecFileProvider`（规格文件加载，Singleton）判定为**接线型保留**——ctor 零 IDomainUser 依赖（纯文件系统读取 + IConfiguration 直读），注册保持 `TryAddSingleton`。**零代码改动**。
+
 **核心约束**: 纯计算内核（无取数/无 ETL）、零第三方依赖、静态注册表零反射、顺序执行、规格文件驱动（git-tracked）、**指标结果持久化为契约层（扩展不内建实体/默认实现，实体归消费方）**
 
 ---

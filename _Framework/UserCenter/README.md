@@ -2,6 +2,8 @@
 
 **状态**: 通用档案面扩展（用户中心——从认证中心 v0.2.0 拆分独立立项） | **版本**: V0.1.0 | **框架**: .NET 10
 
+> **V4.10.53 领域自治评估（2026-10-04）**：`UserCenterQueryService`（实现 `IUserCenterQueryService : IDomainService`，契约在 Abstractions）判定为**接线型保留**——ctor（`IServiceProvider` + `ILogger`）零 IDomainUser 依赖（三 Source 经 `GetService<T>()` 可空解析 + 降级矩阵；仅本人防护靠门面显式 `userId` 参数，不依赖用户上下文）；注册保持 `TryAddScoped`（消费方 `User.Use<IUserCenterQueryService>()` AOP 解析普通描述符）。**零代码改动**。
+
 **核心约束**: 契约归中立 `UserCenter.Abstractions`（数据属主扩展实现）、领域逻辑（脱敏/降级/聚合）进主包门面、**零实体零存储**（聚合读取层）、数据访问红线合规（零 ORM/零 IEntityDAC——接线型不适用边界）、仅本人防护（门面显式 userId 参数，装配层强制）
 
 ---

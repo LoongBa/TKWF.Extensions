@@ -2,6 +2,8 @@
 
 **状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (Metrics 展示层数据服务) | **框架**: .NET 10
 
+> **V4.10.53 领域自治评估（2026-10-04）**：`DashboardDataService`（实现 `IDashboardDataService : IDomainService`）判定为**接线型保留**——ctor（`DashboardSpecFileProvider` + `IEnumerable<IDashboardDataProvider>` + `IServiceProvider` + `ILogger`）零 IDomainUser 依赖（数据源由消费方注册，Metrics 经 `GetService<IMetricCalculatorFactory>` 可空判定）；注册保持 `TryAddScoped`（消费方 `User.Use<IDashboardDataService>()` AOP 解析普通描述符）。`DashboardSpecFileProvider` 同判定（Singleton 纯文件加载）。**零代码改动**。
+
 **核心约束**: 消费 `TKW.Framework.Utility.Metrics` 复合指标（不定义/不计算/不存储指标）、JSON 描述符驱动（git-tracked）、**不引入图表库**（UI 渲染归消费方）、数据源抽象（`IDashboardDataProvider`）、严格失败
 
 ---

@@ -2,6 +2,8 @@
 
 **状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (菜单数据模型与贡献机制) | **框架**: .NET 10
 
+> **V4.10.53 领域自治评估（2026-10-04）**：`MenuManager<TUserInfo>`（实现 `IMenuManager : IDomainService`）判定为**接线型保留**——ctor（`IMenuDefinitionRepository` + `IServiceProvider` + `IOptions<NavigationOptions>`）零 IDomainUser 依赖（权限过滤经 `GetService<IPermissionChecker>()` 可空解析，checker 未注册降级不过滤）；注册保持 `TryAddSingleton`（消费方 `User.Use<IMenuManager>()` AOP 解析普通描述符）。**零代码改动**。
+
 **核心约束**: 编译期贡献者发现、纯内存无持久化、权限过滤降级安全、TryAdd 可替换
 
 ---

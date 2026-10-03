@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Metrics.Tests;
 
@@ -14,15 +15,19 @@ namespace TKWF.Ext.Metrics.Tests;
 /// <para>行→实体映射：Value 用 switch 三路径（null→null / string 直通 / 复杂对象 JsonSerializer.Serialize
 /// 复用 <see cref="MetricResultMapper.JsonOptions"/>，对齐方案 §3.4 示例 ③）；实体→行：ValueText 原样返回
 /// （存储态字符串，Query 返回标准化行 Value = 落库文本）。</para>
+/// <para>ADR88/DI004：DataService 不再构造注入——经 IDomainUser.Use&lt;T&gt;() 懒加载（扩展侧测试桩整改）。</para>
 /// </summary>
 public sealed class TestMetricResultStore : IMetricResultStore
 {
-    private readonly TestMetricResultEntityDataService _ds;
+    private readonly IDomainUser _user;
+    private TestMetricResultEntityDataService? _ds;
+
+    private TestMetricResultEntityDataService Ds => _ds ??= _user.Use<TestMetricResultEntityDataService>();
 
     /// <summary>构造消费方 Store。</summary>
-    public TestMetricResultStore(TestMetricResultEntityDataService ds)
+    public TestMetricResultStore(IDomainUser user)
     {
-        _ds = ds ?? throw new ArgumentNullException(nameof(ds));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
     }
 
     /// <inheritdoc />
@@ -47,7 +52,7 @@ public sealed class TestMetricResultStore : IMetricResultStore
             CalculatedAtUtc = r.CalculatedAtUtc
         }).ToList();
 
-        await _ds.CreateBatchAsync(entities, ct);
+        await Ds.CreateBatchAsync(entities, ct);
         return entities.Count;
     }
 
@@ -59,7 +64,7 @@ public sealed class TestMetricResultStore : IMetricResultStore
         // 须提前短路返回空集，不能把 take=0 传给 DataService。
         if (take <= 0) return [];
 
-        var entities = await _ds.QueryByMetricAsync(
+        var entities = await Ds.QueryByMetricAsync(
             query.SpecKey, query.Name, query.FromUtc, query.ToUtc, skip, take, ct);
 
         return entities.Select(MapToRow).ToList();
@@ -67,14 +72,14 @@ public sealed class TestMetricResultStore : IMetricResultStore
 
     /// <inheritdoc />
     public async Task<long> CountAsync(MetricResultQuery query, CancellationToken ct = default)
-        => await _ds.CountByMetricAsync(
+        => await Ds.CountByMetricAsync(
             query.SpecKey, query.Name, query.FromUtc, query.ToUtc, ct);
 
     /// <inheritdoc />
     public Task<int> CleanupExpiredAsync(int retentionDays, int batchSize = 500, CancellationToken ct = default)
     {
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
-        return _ds.DeleteBeforeAsync(cutoff, batchSize, ct);
+        return Ds.DeleteBeforeAsync(cutoff, batchSize, ct);
     }
 
     /// <summary>

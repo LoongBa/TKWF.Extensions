@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using FreeSql;
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
@@ -9,6 +11,7 @@ namespace TKWF.Ext.Metrics.Tests;
 /// v0.2.0 持久化契约测试公共设施——SQLite 内存库 + 真实 <see cref="FreeSqlEntityDAC{TEntity}"/> 驱动
 /// <see cref="TestMetricResultEntityDataService"/>（红线合规测试模式，对齐既有扩展测试先例：
 /// AuditLogging <c>AuditLoggingTestHost</c>——真实 DAC 而非内存桩）。
+/// <para>ADR88/DI004：Store 构造不再注入 DataService——经 User.Use&lt;T&gt;() 懒加载（扩展侧测试桩整改）。</para>
 /// </summary>
 internal static class MetricResultStoreTestHost
 {
@@ -23,9 +26,15 @@ internal static class MetricResultStoreTestHost
         return fsql;
     }
 
-    /// <summary>创建基于 SQLite 内存库的消费方 Store（DataService 委托路径，红线合规）。</summary>
+    /// <summary>创建基于 SQLite 内存库的消费方 Store（DataService 懒加载经 User.Use 解析，红线合规）。</summary>
     public static TestMetricResultStore CreateStore(IFreeSql fsql)
-        => new(CreateDataService(fsql));
+    {
+        var stub = new StubDomainUser();
+        var services = new ServiceCollection();
+        services.AddSingleton(new TestMetricResultEntityDataService(stub, new FreeSqlEntityDAC<TestMetricResultEntity>(new UnitOfWorkManager(fsql))));
+        stub.ServiceProvider = services.BuildServiceProvider();
+        return new TestMetricResultStore(stub);
+    }
 
     /// <summary>创建基于 SQLite 内存库的 DataService（真实 FreeSql DAC 驱动）。</summary>
     public static TestMetricResultEntityDataService CreateDataService(IFreeSql fsql)
@@ -35,9 +44,21 @@ internal static class MetricResultStoreTestHost
     }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户；对齐既有扩展测试 StubDomainUser）。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户；对齐既有扩展测试 StubDomainUser）。
+/// <para>ADR88/DI004：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
+/// （测试工厂经 <see cref="ServiceProvider"/> 注入）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly object _gate = new();
+    private readonly Dictionary<Type, object?> _cache = new();
+    private IServiceProvider? _provider;
+
+    /// <summary>ServiceProvider（测试工厂注入时设置——懒加载 Use&lt;T&gt; 解析源）。</summary>
+    public IServiceProvider ServiceProvider
+    {
+        set { lock (_gate) _provider = value; }
+    }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -49,11 +70,27 @@ internal sealed class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Provider 未注入");
+        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+            return svc;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                return svc2;
+            var resolved = provider.GetRequiredService<TDomainService>();
+            _cache[typeof(TDomainService)] = resolved;
+            return resolved;
+        }
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Provider 未注入");
+        return provider.GetRequiredService<TService>();
+    }
     public TService GetOptionalService<TService>() where TService : class => null!;
-    public System.Collections.Generic.IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+    public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

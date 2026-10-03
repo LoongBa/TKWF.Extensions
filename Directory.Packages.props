@@ -86,7 +86,7 @@
          UpdateWhereAsync——响应扩展组转达 docs/转达-MFA原子条件更新能力缺口-请框架组裁定.md，方案 A 落地；
          MFA B 批 IFreeSql 逃生口移除 + Outbox InboxDbVersionStore 非原子 RMW 根治 + xCodeGen 模板增
          EntityUpdateWhereAsync 转发器；另含 v4.10.51 ADR88 构造注入门控 DI004/DI005 诊断） -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.52" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.52" />
+  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.52" />
+  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.52" />
   </ItemGroup>
 </Project>

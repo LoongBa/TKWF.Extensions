@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -30,27 +31,28 @@ internal sealed class TokenService : ITokenService
     private const int BlacklistCacheSeconds = 45;
 
     private readonly IOptions<AuthCenterOptions> _options;
-    private readonly AuthAccountEntityDataService _accountDataService;
-    private readonly AuthRefreshTokenEntityDataService _refreshTokenDataService;
-    private readonly AuthTokenBlacklistEntityDataService _blacklistDataService;
+    private readonly IDomainUser _user;
+    private AuthAccountEntityDataService? _accountDataService;
+    private AuthRefreshTokenEntityDataService? _refreshTokenDataService;
+    private AuthTokenBlacklistEntityDataService? _blacklistDataService;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TokenService> _logger;
+
+    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= _user.Use<AuthAccountEntityDataService>();
+    private AuthRefreshTokenEntityDataService RefreshTokenDataService => _refreshTokenDataService ??= _user.Use<AuthRefreshTokenEntityDataService>();
+    private AuthTokenBlacklistEntityDataService BlacklistDataService => _blacklistDataService ??= _user.Use<AuthTokenBlacklistEntityDataService>();
 
     // 签名密钥（懒加载——启动首个调用时加载，kid 轮换经 SigningKeys 遍历验证）
     private readonly Lazy<RsaKeySet> _keys;
 
     public TokenService(
         IOptions<AuthCenterOptions> options,
-        AuthAccountEntityDataService accountDataService,
-        AuthRefreshTokenEntityDataService refreshTokenDataService,
-        AuthTokenBlacklistEntityDataService blacklistDataService,
+        IDomainUser user,
         IMemoryCache cache,
         ILogger<TokenService> logger)
     {
         _options = options;
-        _accountDataService = accountDataService;
-        _refreshTokenDataService = refreshTokenDataService;
-        _blacklistDataService = blacklistDataService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _cache = cache;
         _logger = logger;
         // V0.3.1：Lazy 委托到静态 LoadKeysCore（单一真相源）——runtime 实例路径与 Initializer
@@ -83,9 +85,9 @@ internal sealed class TokenService : ITokenService
         var accessToken = SignToken(payload, keys);
 
         // Refresh rotation：SHA256 落库（不存明文）+ TokenVersion 闭环（账号当前版本）
-        var account = await _accountDataService.GetByUIdAsync(request.UserId, ct);
+        var account = await AccountDataService.GetByUIdAsync(request.UserId, ct);
         var refreshToken = NewTokenId();
-        await _refreshTokenDataService.CreateAsync(new AuthRefreshTokenEntity
+        await RefreshTokenDataService.CreateAsync(new AuthRefreshTokenEntity
         {
             Jti = jti,
             UserId = request.UserId,
@@ -150,7 +152,7 @@ internal sealed class TokenService : ITokenService
         var cacheKey = "auth:blacklist:" + jti;
         if (_cache.TryGetValue(cacheKey, out _))
             throw new AuthenticationException("TOKEN_REVOKED");
-        var blacklisted = await _blacklistDataService.GetByJtiAsync(jti, ct);
+        var blacklisted = await BlacklistDataService.GetByJtiAsync(jti, ct);
         if (blacklisted != null)
         {
             _cache.Set(cacheKey, true, TimeSpan.FromSeconds(BlacklistCacheSeconds));
@@ -183,20 +185,20 @@ internal sealed class TokenService : ITokenService
     {
         if (string.IsNullOrWhiteSpace(refreshToken)) throw new AuthenticationException("REFRESH_NOT_FOUND");
 
-        var row = await _refreshTokenDataService.GetByTokenHashAsync(Sha256Hex(refreshToken), ct);
+        var row = await RefreshTokenDataService.GetByTokenHashAsync(Sha256Hex(refreshToken), ct);
         if (row == null) throw new AuthenticationException("REFRESH_NOT_FOUND");
 
         // 重用检测（业界 BCP）：已撤销 TokenHash 再次出现 → 判定泄露 → 撤销该用户全部 refresh + Warning
         if (row.IsRevoked)
         {
             _logger.LogWarning("Refresh token reuse detected for user {UserId} — revoking all refresh tokens", row.UserId);
-            await _refreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
+            await RefreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
             throw new AuthenticationException("REFRESH_REUSED");
         }
 
         if (row.ExpiresAt <= DateTime.UtcNow) throw new AuthenticationException("REFRESH_EXPIRED");
 
-        var account = await _accountDataService.GetByUIdAsync(row.UserId, ct);
+        var account = await AccountDataService.GetByUIdAsync(row.UserId, ct);
         if (account == null || !account.IsEnabled) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
 
         // TokenVersion 闭环：刷新时校验（不匹配 → 拒绝——密码/绑定变更后旧 refresh 失效）
@@ -204,10 +206,10 @@ internal sealed class TokenService : ITokenService
 
         // Oracle M1：条件撤销（TryMarkRevokedAsync 防 TOCTOU）——输者触发重用检测
         //（并发同 token 刷新：谁先 TryMarkRevoked 赢；输者 false → 判定泄露 → 撤销该用户全部 refresh）
-        if (!await _refreshTokenDataService.TryMarkRevokedAsync(row.Id, DateTime.UtcNow, ct))
+        if (!await RefreshTokenDataService.TryMarkRevokedAsync(row.Id, DateTime.UtcNow, ct))
         {
             _logger.LogWarning("Refresh token race detected for user {UserId} — revoking all refresh tokens", row.UserId);
-            await _refreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
+            await RefreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
             throw new AuthenticationException("REFRESH_REUSED");
         }
 
@@ -222,12 +224,12 @@ internal sealed class TokenService : ITokenService
         if (string.IsNullOrWhiteSpace(jti)) return;
 
         var cacheKey = "auth:blacklist:" + jti;
-        var existing = await _blacklistDataService.GetByJtiAsync(jti, ct);
+        var existing = await BlacklistDataService.GetByJtiAsync(jti, ct);
         if (existing != null) return; // 幂等
 
         // ExpiresAt = 该 token 自然过期（近似：剩余生命 ≤ 全生命周期——调用方通常先 ValidateToken 后撤销）
         var now = DateTime.UtcNow;
-        await _blacklistDataService.CreateAsync(new AuthTokenBlacklistEntity
+        await BlacklistDataService.CreateAsync(new AuthTokenBlacklistEntity
         {
             Jti = jti,
             UserId = "",

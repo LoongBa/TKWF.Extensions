@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -21,16 +22,18 @@ namespace TKWF.Ext.Authentication;
 internal sealed class AuthLoginAttemptService : IAuthLoginAttemptService
 {
     private readonly IOptions<AuthCenterOptions> _options;
-    private readonly AuthLoginAttemptEntityDataService _dataService;
+    private AuthLoginAttemptEntityDataService? _dataService;
+    private readonly IDomainUser _user;
     private readonly ILogger<AuthLoginAttemptService> _logger;
+    private AuthLoginAttemptEntityDataService DataService => _dataService ??= _user.Use<AuthLoginAttemptEntityDataService>();
 
     public AuthLoginAttemptService(
         IOptions<AuthCenterOptions> options,
-        AuthLoginAttemptEntityDataService dataService,
+        IDomainUser user,
         ILogger<AuthLoginAttemptService> logger)
     {
         _options = options;
-        _dataService = dataService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 
@@ -40,7 +43,7 @@ internal sealed class AuthLoginAttemptService : IAuthLoginAttemptService
         // 追加写（append-only）；AttemptTime 默认值时补 UTC 当前时间（实体默认值语义兜底）
         if (attempt.AttemptTime == default)
             attempt.AttemptTime = DateTime.UtcNow;
-        await _dataService.CreateAsync(attempt, ct);
+        await DataService.CreateAsync(attempt, ct);
     }
 
     /// <inheritdoc />
@@ -53,12 +56,12 @@ internal sealed class AuthLoginAttemptService : IAuthLoginAttemptService
         {
             // 微信 OAuth：60s 滑窗计数（identity+authType）≥ OAuthPerMinutePerIp → 限流
             AuthTypes.Wechat =>
-                await _dataService.CountInWindowAsync(userIdentity, authType, now.AddSeconds(-60), ct)
+                await DataService.CountInWindowAsync(userIdentity, authType, now.AddSeconds(-60), ct)
                     >= protection.OAuthPerMinutePerIp,
 
             // 口令兑换：60min 滑窗计数 ≥ RedeemPerHour → 限流
             AuthTypes.Redeem =>
-                await _dataService.CountInWindowAsync(userIdentity, authType, now.AddMinutes(-60), ct)
+                await DataService.CountInWindowAsync(userIdentity, authType, now.AddMinutes(-60), ct)
                     >= protection.RedeemPerHour,
 
             // 短信：返回 false——短信发送/校验频控由 SmsVerificationService 经 SmsRecordEntity 拥有
@@ -74,7 +77,7 @@ internal sealed class AuthLoginAttemptService : IAuthLoginAttemptService
     /// <inheritdoc />
     public async Task<List<AuthLoginAttemptEntity>> GetRecentAttemptsAsync(
         string userIdentity, string authType, int count, CancellationToken ct = default)
-        => await _dataService.EntitySelectAsync(
+        => await DataService.EntitySelectAsync(
             e => e.UserIdentity == userIdentity && e.AuthType == authType,
             0, count,
             q => q.OrderByDescending(e => e.AttemptTime),

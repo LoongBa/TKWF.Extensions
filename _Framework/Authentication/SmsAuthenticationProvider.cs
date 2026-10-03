@@ -3,6 +3,7 @@ using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -13,17 +14,17 @@ namespace TKWF.Ext.Authentication;
 /// </summary>
 internal sealed class SmsAuthenticationProvider : IAuthenticationProvider
 {
-    private readonly ISmsVerificationService _smsVerification;
-    private readonly AuthAccountEntityDataService _accountDataService;
+    private ISmsVerificationService? _smsVerification;
+    private AuthAccountEntityDataService? _accountDataService;
+    private readonly IDomainUser _user;
     private readonly ILogger<SmsAuthenticationProvider> _logger;
 
-    public SmsAuthenticationProvider(
-        ISmsVerificationService smsVerification,
-        AuthAccountEntityDataService accountDataService,
-        ILogger<SmsAuthenticationProvider> logger)
+    private ISmsVerificationService SmsVerification => _smsVerification ??= _user.Use<ISmsVerificationService>();
+    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= _user.Use<AuthAccountEntityDataService>();
+
+    public SmsAuthenticationProvider(IDomainUser user, ILogger<SmsAuthenticationProvider> logger)
     {
-        _smsVerification = smsVerification;
-        _accountDataService = accountDataService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 
@@ -36,7 +37,7 @@ internal sealed class SmsAuthenticationProvider : IAuthenticationProvider
 
         try
         {
-            await _smsVerification.VerifyCodeAsync(context.Phone, context.Code, SmsScenes.Login, ct);
+            await SmsVerification.VerifyCodeAsync(context.Phone, context.Code, SmsScenes.Login, ct);
         }
         catch (AuthenticationException ex)
         {
@@ -44,7 +45,7 @@ internal sealed class SmsAuthenticationProvider : IAuthenticationProvider
         }
 
         // 有账号 → 登录；无账号 → 建账号（手机号主键——方案 §5.5 登录/注册合一）
-        var account = await _accountDataService.GetByPhoneAsync(context.Phone, ct);
+        var account = await AccountDataService.GetByPhoneAsync(context.Phone, ct);
         if (account != null)
         {
             if (!account.IsEnabled) return new ProviderAuthenticateResult(false, null, "ACCOUNT_DISABLED");
@@ -60,13 +61,13 @@ internal sealed class SmsAuthenticationProvider : IAuthenticationProvider
         };
         try
         {
-            await _accountDataService.CreateAsync(created, ct);
+            await AccountDataService.CreateAsync(created, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // 并发注册同手机号——唯一约束兜底，重查
             _logger.LogDebug(ex, "短信登录建账号并发冲突——重查（UX_AuthAccount_Phone 唯一约束兜底）");
-            var existing = await _accountDataService.GetByPhoneAsync(context.Phone, ct);
+            var existing = await AccountDataService.GetByPhoneAsync(context.Phone, ct);
             if (existing != null) return new ProviderAuthenticateResult(true, existing.UId, null, AuthLevel.Phone);
             return new ProviderAuthenticateResult(false, null, "ACCOUNT_CREATE_FAILED");
         }

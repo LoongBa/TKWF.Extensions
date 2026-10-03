@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -19,16 +20,19 @@ internal sealed class WeChatApiClient : IWeChatApiClient
     private const string ApiBase = "https://api.weixin.qq.com";
     private static readonly TimeSpan TokenEarlyRefresh = TimeSpan.FromMinutes(5);
 
-    private readonly IPlatformCredentialService _credentials;
+    private readonly IDomainUser _user;
+    private IPlatformCredentialService? _credentials;
     private readonly ILogger<WeChatApiClient> _logger;
+
+    private IPlatformCredentialService Credentials => _credentials ??= _user.Use<IPlatformCredentialService>();
 
     // L1 缓存：appId → (accessToken, expiresAtUtc)；SemaphoreSlim 并发锁防 stampede（对齐 DMP 语义）
     private readonly ConcurrentDictionary<string, CachedToken> _tokenCache = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
 
-    public WeChatApiClient(IPlatformCredentialService credentials, ILogger<WeChatApiClient> logger)
+    public WeChatApiClient(IDomainUser user, ILogger<WeChatApiClient> logger)
     {
-        _credentials = credentials;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 
@@ -44,7 +48,7 @@ internal sealed class WeChatApiClient : IWeChatApiClient
             if (_tokenCache.TryGetValue(appId, out cached) && cached.ExpiresAtUtc > DateTime.UtcNow)
                 return cached.AccessToken;
 
-            var secret = await _credentials.GetSecretAsync(AuthTypes.Wechat, appType, ct);
+            var secret = await Credentials.GetSecretAsync(AuthTypes.Wechat, appType, ct);
             if (secret == null) throw new InvalidOperationException($"微信凭证未配置：platform=wechat appType={appType} appId={appId}");
 
             // cgi-bin/token?grant_type=client_credential&appid=&secret=
@@ -72,7 +76,7 @@ internal sealed class WeChatApiClient : IWeChatApiClient
     {
         // Oracle M3：按发起授权绑定的 AppId 精确定位凭证（微信 code 与 AppId 绑定——通配/顺序 fallback 在多应用/双形态
         // （公众号 mp + 扫码 web）并存时会用错凭证致 40029；appId 参数必须参与解析）。
-        var secret = await _credentials.GetSecretByAppIdAsync(AuthTypes.Wechat, appId, ct)
+        var secret = await Credentials.GetSecretByAppIdAsync(AuthTypes.Wechat, appId, ct)
             ?? throw new InvalidOperationException($"微信凭证未配置：platform=wechat appId={appId}");
 
         // sns/oauth2/access_token?appid=&secret=&code=&grant_type=authorization_code（网页授权 code 换 openid——结果不缓存）

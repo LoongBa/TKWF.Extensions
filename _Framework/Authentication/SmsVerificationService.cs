@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -27,18 +28,21 @@ internal sealed class SmsVerificationService : ISmsVerificationService
 
     private readonly ISmsSender? _sender;
     private readonly IOptions<AuthCenterOptions> _options;
-    private readonly SmsRecordEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private SmsRecordEntityDataService? _dataService;
     private readonly ILogger<SmsVerificationService> _logger;
+
+    private SmsRecordEntityDataService DataService => _dataService ??= _user.Use<SmsRecordEntityDataService>();
 
     public SmsVerificationService(
         ISmsSender? sender,
         IOptions<AuthCenterOptions> options,
-        SmsRecordEntityDataService dataService,
+        IDomainUser user,
         ILogger<SmsVerificationService> logger)
     {
         _sender = sender;
         _options = options;
-        _dataService = dataService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 
@@ -50,15 +54,15 @@ internal sealed class SmsVerificationService : ISmsVerificationService
 
         // (a) 频控检查——重发间隔 / 小时 / 天（SmsRecord 为唯一频控数据源，含已消费与过期记录）
         // 重发间隔：最新未消费记录 CreateTime 距今 < SmsResendIntervalSeconds → 拒绝
-        var latest = await _dataService.GetLatestUnverifiedAsync(phone, scene, ct);
+        var latest = await DataService.GetLatestUnverifiedAsync(phone, scene, ct);
         if (latest is not null
             && now.Subtract(latest.CreateTime).TotalSeconds < protection.SmsResendIntervalSeconds)
             throw new AuthenticationException("SMS_RESEND_TOO_FREQUENT");
 
-        if (await _dataService.CountSentAsync(phone, scene, now.AddHours(-1), ct) >= protection.SmsHourlyLimitPerPhone)
+        if (await DataService.CountSentAsync(phone, scene, now.AddHours(-1), ct) >= protection.SmsHourlyLimitPerPhone)
             throw new AuthenticationException("SMS_HOURLY_LIMIT");
 
-        if (await _dataService.CountSentAsync(phone, scene, now.AddDays(-1), ct) >= protection.SmsDailyLimitPerPhone)
+        if (await DataService.CountSentAsync(phone, scene, now.AddDays(-1), ct) >= protection.SmsDailyLimitPerPhone)
             throw new AuthenticationException("SMS_DAILY_LIMIT");
 
         // (b) 生成 6 位随机码——RandomNumberGenerator（加密安全，禁用 System.Random）
@@ -85,7 +89,7 @@ internal sealed class SmsVerificationService : ISmsVerificationService
             ExpireAt = now.AddMinutes(CodeTtlMinutes),
             CreateTime = now
         };
-        await _dataService.CreateAsync(record, ct);
+        await DataService.CreateAsync(record, ct);
 
         // (e) 发送——发送器失败向上传播（调用方 503 语义）；记录不标记 verified，未消费自然过期作废
         if (sender is not null)
@@ -102,12 +106,12 @@ internal sealed class SmsVerificationService : ISmsVerificationService
 
         // (a) 校验频控——窗口内活动验证码数（已发送未过期记录）≥ SmsVerifyAttemptsPerHour → 拒绝
         //     （设计决策：不落独立"尝试"行；复用 SmsRecord 活动码行计数，SendCodeAsync 每码一行即一次尝试机会）
-        if (await _dataService.CountVerifyAttemptsAsync(phone, scene, now.AddHours(-1), ct)
+        if (await DataService.CountVerifyAttemptsAsync(phone, scene, now.AddHours(-1), ct)
             >= protection.SmsVerifyAttemptsPerHour)
             throw new AuthenticationException("SMS_VERIFY_ATTEMPT_LIMIT");
 
         // (b) 取最新未消费记录并校验（不存在 / 过期 / 散列不匹配）
-        var record = await _dataService.GetLatestUnverifiedAsync(phone, scene, ct);
+        var record = await DataService.GetLatestUnverifiedAsync(phone, scene, ct);
         if (record is null)
             throw new AuthenticationException("SMS_CODE_NOT_FOUND");
         if (record.ExpireAt < now)
@@ -116,7 +120,7 @@ internal sealed class SmsVerificationService : ISmsVerificationService
             throw new AuthenticationException("SMS_CODE_MISMATCH");
 
         // (c) 成功——单次消费（IsVerified=true）
-        return await _dataService.MarkVerifiedAsync(record.Id, ct);
+        return await DataService.MarkVerifiedAsync(record.Id, ct);
     }
 
     /// <summary>验证码 SHA256 hex（单向散列落库，不存明文）。</summary>

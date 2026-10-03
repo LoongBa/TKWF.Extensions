@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -14,22 +15,25 @@ namespace TKWF.Ext.Authentication;
 /// </summary>
 public sealed class PlatformAccountMapService : IPlatformAccountMapService
 {
-    private readonly PlatformAccountMapEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private PlatformAccountMapEntityDataService? _dataService;
     private readonly ILogger<PlatformAccountMapService> _logger;
 
-    public PlatformAccountMapService(PlatformAccountMapEntityDataService dataService, ILogger<PlatformAccountMapService> logger)
+    private PlatformAccountMapEntityDataService DataService => _dataService ??= _user.Use<PlatformAccountMapEntityDataService>();
+
+    public PlatformAccountMapService(IDomainUser user, ILogger<PlatformAccountMapService> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
     public Task<PlatformAccountMapEntity?> GetByPlatformAsync(string platformAccountId, string businessAppId, CancellationToken ct = default)
-        => _dataService.EntityGetAsync(m => m.PlatformAccountId == platformAccountId && m.BusinessAppId == businessAppId, ct);
+        => DataService.EntityGetAsync(m => m.PlatformAccountId == platformAccountId && m.BusinessAppId == businessAppId, ct);
 
     /// <inheritdoc />
     public Task<PlatformAccountMapEntity?> GetByBusinessAsync(string businessAppId, string businessLocalId, CancellationToken ct = default)
-        => _dataService.EntityGetAsync(m => m.BusinessAppId == businessAppId && m.BusinessLocalId == businessLocalId, ct);
+        => DataService.EntityGetAsync(m => m.BusinessAppId == businessAppId && m.BusinessLocalId == businessLocalId, ct);
 
     /// <inheritdoc />
     public async Task<PlatformAccountMapEntity> LinkAsync(
@@ -37,7 +41,7 @@ public sealed class PlatformAccountMapService : IPlatformAccountMapService
     {
         // upsert：同键（唯一索引 UX_PlatformAccountMap）存在 → 更新 UnionId（仅当提供且变化）+ UpdateTime=UtcNow；
         // 不存在 → 新建（CreateTime/UpdateTime=UtcNow，Id 由 EntityCreateAsync 回填）。
-        var existing = await _dataService.EntityGetAsync(
+        var existing = await DataService.EntityGetAsync(
             m => m.PlatformAccountId == platformAccountId
                 && m.BusinessAppId == businessAppId
                 && m.BusinessLocalId == businessLocalId, ct);
@@ -48,7 +52,7 @@ public sealed class PlatformAccountMapService : IPlatformAccountMapService
             {
                 existing.UnionId = unionId;
                 existing.UpdateTime = DateTime.UtcNow;
-                await _dataService.EntityUpdateAsync(existing, ct);
+                await DataService.EntityUpdateAsync(existing, ct);
             }
             return existing;   // 无变更 → 幂等返回，不写库
         }
@@ -62,10 +66,10 @@ public sealed class PlatformAccountMapService : IPlatformAccountMapService
             CreateTime = DateTime.UtcNow,
             UpdateTime = DateTime.UtcNow,
         };
-        return await _dataService.EntityCreateAsync(created, ct);
+        return await DataService.EntityCreateAsync(created, ct);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<PlatformAccountMapEntity>> GetByUnionIdAsync(string unionId, CancellationToken ct = default)
-        => await _dataService.EntitySelectAsync(m => m.UnionId == unionId, ct: ct);
+        => await DataService.EntitySelectAsync(m => m.UnionId == unionId, ct: ct);
 }

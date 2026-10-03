@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.Interfaces;
@@ -16,14 +17,23 @@ public interface IAuthAccountQueryService : IDomainService
 /// <summary>账号查询服务实现——委托 AuthAccountEntityDataService（红线合规）。
 /// <para>internal sealed——与 IdentityPasswordManager 先例一致（public sealed + TryAddScoped 为注册方）；
 /// 本类仅门面委托无外部扩展需求，internal 即可（AuthAccountEntityDataService 亦 internal，注入合法）。</para></summary>
-internal sealed class AuthAccountQueryService(AuthAccountEntityDataService dataService) : IAuthAccountQueryService
+internal sealed class AuthAccountQueryService : IAuthAccountQueryService
 {
+    private AuthAccountEntityDataService? _dataService;
+    private readonly IDomainUser _user;
+    private AuthAccountEntityDataService DataService => _dataService ??= _user.Use<AuthAccountEntityDataService>();
+
+    public AuthAccountQueryService(IDomainUser user)
+    {
+        _user = user ?? throw new ArgumentNullException(nameof(user));
+    }
+
     public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)
-        => dataService.GetByUIdAsync(uid, ct);
+        => DataService.GetByUIdAsync(uid, ct);
     public Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default)
-        => dataService.GetByPhoneAsync(phone, ct);
+        => DataService.GetByPhoneAsync(phone, ct);
     public Task<AuthAccountEntity?> GetByWechatMpOpenIdAsync(string openId, CancellationToken ct = default)
-        => dataService.GetByWechatMpOpenIdAsync(openId, ct);
+        => DataService.GetByWechatMpOpenIdAsync(openId, ct);
     public Task<AuthAccountEntity?> GetByWechatWebOpenIdAsync(string openId, CancellationToken ct = default)
-        => dataService.GetByWechatWebOpenIdAsync(openId, ct);
+        => DataService.GetByWechatWebOpenIdAsync(openId, ct);
 }

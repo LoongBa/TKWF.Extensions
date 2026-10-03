@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -18,20 +19,22 @@ namespace TKWF.Ext.Authentication;
 internal sealed class OAuthTicketService : IOAuthTicketService
 {
     private readonly AuthCenterOptions _options;
-    private readonly OAuthTicketEntityDataService _dataService;
-    private readonly ITokenService _tokenService;
+    private OAuthTicketEntityDataService? _dataService;
+    private ITokenService? _tokenService;
+    private readonly IDomainUser _user;
     private readonly ILogger<OAuthTicketService> _logger;
 
-    /// <summary>构造——注入认证中心配置、票据数据服务、令牌服务与日志。</summary>
+    private OAuthTicketEntityDataService DataService => _dataService ??= _user.Use<OAuthTicketEntityDataService>();
+    private ITokenService TokenService => _tokenService ??= _user.Use<ITokenService>();
+
+    /// <summary>构造——注入认证中心配置、用户上下文与日志（DataService/TokenService 经 User.Use&lt;T&gt;() 懒加载）。</summary>
     public OAuthTicketService(
         IOptions<AuthCenterOptions> options,
-        OAuthTicketEntityDataService dataService,
-        ITokenService tokenService,
+        IDomainUser user,
         ILogger<OAuthTicketService> logger)
     {
         _options = options.Value;
-        _dataService = dataService;
-        _tokenService = tokenService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 
@@ -76,7 +79,7 @@ internal sealed class OAuthTicketService : IOAuthTicketService
             CreateTime = DateTime.UtcNow
         };
 
-        await _dataService.CreateAsync(entity, ct);
+        await DataService.CreateAsync(entity, ct);
         return ticket;
     }
 
@@ -84,7 +87,7 @@ internal sealed class OAuthTicketService : IOAuthTicketService
     public async Task<OAuthTicketExchangeResult> ExchangeAsync(OAuthTicketExchangeRequest request, CancellationToken ct = default)
     {
         // (a) 票据存在性。
-        var entity = await _dataService.GetByTicketAsync(request.Ticket, ct);
+        var entity = await DataService.GetByTicketAsync(request.Ticket, ct);
         if (entity is null)
         {
             throw new AuthenticationException("TICKET_NOT_FOUND");
@@ -137,7 +140,7 @@ internal sealed class OAuthTicketService : IOAuthTicketService
         }
 
         // (h) 条件标记已消费（单次消费防重放——Oracle M2：输者抛 TICKET_CONSUMED）
-        if (!await _dataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct))
+        if (!await DataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct))
         {
             throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
         }
@@ -145,7 +148,7 @@ internal sealed class OAuthTicketService : IOAuthTicketService
         // (i) 签发 JWT 对。
         // 说明：票据换取是认证完成路径，调用方在签发时已绑定用户；此处认证方式取默认登录方式 sms，
         //      认证强度取手机号级（AuthLevel.Phone），教师核实声明默认 false（身份声明，非业务角色）。
-        var tokenResult = await _tokenService.IssueTokenAsync(
+        var tokenResult = await TokenService.IssueTokenAsync(
             new TokenIssueRequest(
                 entity.UserId,
                 AuthTypes.Sms,

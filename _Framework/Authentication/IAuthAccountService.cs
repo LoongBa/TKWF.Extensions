@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.Interfaces;
@@ -25,14 +26,23 @@ public interface IAuthAccountService : IDomainService
 
 /// <summary>账号管理服务实现——委托 AuthAccountEntityDataService（红线合规）。
 /// <para>internal sealed——与 <see cref="AuthAccountQueryService"/> 先例一致（public 契约 + internal 实现 + TryAddScoped 注册）。</para></summary>
-internal sealed class AuthAccountService(AuthAccountEntityDataService dataService) : IAuthAccountService
+internal sealed class AuthAccountService : IAuthAccountService
 {
+    private AuthAccountEntityDataService? _dataService;
+    private readonly IDomainUser _user;
+    private AuthAccountEntityDataService DataService => _dataService ??= _user.Use<AuthAccountEntityDataService>();
+
+    public AuthAccountService(IDomainUser user)
+    {
+        _user = user ?? throw new ArgumentNullException(nameof(user));
+    }
+
     public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)
-        => dataService.GetByUIdAsync(uid, ct);
+        => DataService.GetByUIdAsync(uid, ct);
     public Task CreateAsync(AuthAccountEntity account, CancellationToken ct = default)
-        => dataService.CreateAsync(account, ct);
+        => DataService.CreateAsync(account, ct);
     public Task UpdateAsync(AuthAccountEntity account, CancellationToken ct = default)
-        => dataService.UpdateAsync(account, ct);
+        => DataService.UpdateAsync(account, ct);
     public Task IncrementTokenVersionAsync(string uid, CancellationToken ct = default)
-        => dataService.IncrementTokenVersionAsync(uid, ct);
+        => DataService.IncrementTokenVersionAsync(uid, ct);
 }

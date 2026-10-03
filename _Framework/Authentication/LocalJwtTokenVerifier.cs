@@ -1,5 +1,7 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -10,13 +12,15 @@ namespace TKWF.Ext.Authentication;
 /// </summary>
 internal sealed class LocalJwtTokenVerifier : ITokenVerifier
 {
-    private readonly ITokenService _tokenService;
+    private ITokenService? _tokenService;
+    private readonly IDomainUser _user;
+    private ITokenService TokenService => _tokenService ??= _user.Use<ITokenService>();
 
-    public LocalJwtTokenVerifier(ITokenService tokenService)
+    public LocalJwtTokenVerifier(IDomainUser user)
     {
-        _tokenService = tokenService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
     }
 
     public Task<TokenValidationResult> VerifyAsync(string token, CancellationToken ct = default)
-        => _tokenService.ValidateTokenAsync(token, ct);
+        => TokenService.ValidateTokenAsync(token, ct);
 }

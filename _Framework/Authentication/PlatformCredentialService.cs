@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -17,16 +18,19 @@ namespace TKWF.Ext.Authentication;
 /// </summary>
 internal sealed class PlatformCredentialService : IPlatformCredentialService
 {
-    private readonly PlatformCredentialEntityDataService _dataService;
+    private PlatformCredentialEntityDataService? _dataService;
+    private readonly IDomainUser _user;
     private readonly IOptions<AuthCenterOptions> _options;
     private readonly ILogger<PlatformCredentialService> _logger;
 
+    private PlatformCredentialEntityDataService DataService => _dataService ??= _user.Use<PlatformCredentialEntityDataService>();
+
     public PlatformCredentialService(
-        PlatformCredentialEntityDataService dataService,
+        IDomainUser user,
         IOptions<AuthCenterOptions> options,
         ILogger<PlatformCredentialService> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -43,29 +47,29 @@ internal sealed class PlatformCredentialService : IPlatformCredentialService
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PlatformCredentialEntity>> GetEnabledByPlatformAsync(string platform, CancellationToken ct = default)
-        => _dataService.GetEnabledByPlatformAsync(platform, ct);
+        => DataService.GetEnabledByPlatformAsync(platform, ct);
 
     /// <inheritdoc />
     public Task<PlatformCredentialEntity?> GetAsync(string platform, string appType, CancellationToken ct = default)
-        => _dataService.GetByAppAsync(platform, appType, ct);
+        => DataService.GetByAppAsync(platform, appType, ct);
 
     /// <inheritdoc />
     public Task<PlatformCredentialSecret?> GetSecretAsync(string platform, string appType, CancellationToken ct = default)
-        => _dataService.GetSecretByAppAsync(platform, appType, ct);
+        => DataService.GetSecretByAppAsync(platform, appType, ct);
 
     /// <inheritdoc />
     public Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default)
-        => _dataService.GetSecretByAppIdAsync(platform, appId, ct);
+        => DataService.GetSecretByAppIdAsync(platform, appId, ct);
 
     /// <inheritdoc />
     public Task CreateAsync(PlatformCredentialEntity credential, string plainSecret, CancellationToken ct = default)
-        => _dataService.CreateEncryptedAsync(credential, plainSecret, ct);
+        => DataService.CreateEncryptedAsync(credential, plainSecret, ct);
 
     /// <inheritdoc />
     public Task UpdateAsync(PlatformCredentialEntity credential, string? newPlainSecret, CancellationToken ct = default)
-        => _dataService.UpdateEncryptedAsync(credential, newPlainSecret, ct);
+        => DataService.UpdateEncryptedAsync(credential, newPlainSecret, ct);
 
     /// <inheritdoc />
     public Task SetEnabledAsync(long id, bool enabled, CancellationToken ct = default)
-        => _dataService.SetEnabledAsync(id, enabled, ct);
+        => DataService.SetEnabledAsync(id, enabled, ct);
 }

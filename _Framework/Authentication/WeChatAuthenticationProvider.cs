@@ -3,6 +3,7 @@ using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -14,17 +15,17 @@ namespace TKWF.Ext.Authentication;
 /// </summary>
 internal sealed class WeChatAuthenticationProvider : IAuthenticationProvider
 {
-    private readonly IWeChatApiClient _weChatApi;
-    private readonly AuthAccountEntityDataService _accountDataService;
+    private IWeChatApiClient? _weChatApi;
+    private AuthAccountEntityDataService? _accountDataService;
+    private readonly IDomainUser _user;
     private readonly ILogger<WeChatAuthenticationProvider> _logger;
 
-    public WeChatAuthenticationProvider(
-        IWeChatApiClient weChatApi,
-        AuthAccountEntityDataService accountDataService,
-        ILogger<WeChatAuthenticationProvider> logger)
+    private IWeChatApiClient WeChatApi => _weChatApi ??= _user.Use<IWeChatApiClient>();
+    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= _user.Use<AuthAccountEntityDataService>();
+
+    public WeChatAuthenticationProvider(IDomainUser user, ILogger<WeChatAuthenticationProvider> logger)
     {
-        _weChatApi = weChatApi;
-        _accountDataService = accountDataService;
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 
@@ -39,7 +40,7 @@ internal sealed class WeChatAuthenticationProvider : IAuthenticationProvider
         try
         {
             // appId 参数预留（多应用场景 Provider 扩展时按 context 扩展定位凭证；当前按 platform 模糊查凭证）
-            openId = await _weChatApi.GetOpenIdAsync("", context.WechatCode, ct);
+            openId = await WeChatApi.GetOpenIdAsync("", context.WechatCode, ct);
         }
         catch (Exception ex) when (ex is AuthenticationException or InvalidOperationException)
         {
@@ -50,12 +51,12 @@ internal sealed class WeChatAuthenticationProvider : IAuthenticationProvider
 
         // 查账号：按 openid 绑定列（公众号 vs 网站应用）
         var account = isMpScope
-            ? await _accountDataService.GetByWechatMpOpenIdAsync(openId, ct)
-            : await _accountDataService.GetByWechatWebOpenIdAsync(openId, ct);
+            ? await AccountDataService.GetByWechatMpOpenIdAsync(openId, ct)
+            : await AccountDataService.GetByWechatWebOpenIdAsync(openId, ct);
         if (account == null && !isMpScope)
         {
             // 扫码兜底：网页授权列也可能已绑定（双形态归并）
-            account = await _accountDataService.GetByWechatMpOpenIdAsync(openId, ct);
+            account = await AccountDataService.GetByWechatMpOpenIdAsync(openId, ct);
         }
 
         if (account != null)
@@ -79,14 +80,14 @@ internal sealed class WeChatAuthenticationProvider : IAuthenticationProvider
 
         try
         {
-            await _accountDataService.CreateAsync(created, ct);
+            await AccountDataService.CreateAsync(created, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "微信登录建账号并发冲突——重查（openid 绑定兜底）");
             var existing = isMpScope
-                ? await _accountDataService.GetByWechatMpOpenIdAsync(openId, ct)
-                : await _accountDataService.GetByWechatWebOpenIdAsync(openId, ct);
+                ? await AccountDataService.GetByWechatMpOpenIdAsync(openId, ct)
+                : await AccountDataService.GetByWechatWebOpenIdAsync(openId, ct);
             if (existing != null) return new ProviderAuthenticateResult(true, existing.UId, null, AuthLevel.Wechat);
             return new ProviderAuthenticateResult(false, null, "ACCOUNT_CREATE_FAILED");
         }

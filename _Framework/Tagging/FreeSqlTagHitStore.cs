@@ -4,9 +4,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.Tags;
 using TKWF.Ext.Tagging.DTOs;
-using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Tagging;
 
@@ -15,18 +17,19 @@ namespace TKWF.Ext.Tagging;
 /// 遵循数据访问红线（2026-09-07 用户裁定）：不直接注入 IFreeSql / IEntityDAC。
 /// <para>批量落库经 DataService <c>EntityCreateBatchAsync</c>（单事务）；DTO ↔ <see cref="TagHit"/> 映射零逻辑。</para>
 /// <para>异常静默对齐既有扩展：查询失败返回空，写入失败记录 Warning。</para>
+/// <para>V4.10.53（领域自治根治）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；注册形态改 <c>AddConstructibleService</c>（接口可构造守卫工厂）。</para>
 /// </summary>
-internal sealed class FreeSqlTagHitStore : ITagHitStore
+[DiContractIgnore]
+internal sealed class FreeSqlTagHitStore : DomainServiceBase, ITagHitStore
 {
-    private readonly IDomainUser _user;
     private TagHitRecordEntityDataService? _dataService;
     private readonly ILogger<FreeSqlTagHitStore> _logger;
 
-    private TagHitRecordEntityDataService DataService => _dataService ??= _user.Use<TagHitRecordEntityDataService>();
+    private TagHitRecordEntityDataService DataService => _dataService ??= User.Use<TagHitRecordEntityDataService>();
 
-    public FreeSqlTagHitStore(IDomainUser user, ILogger<FreeSqlTagHitStore> logger)
+    public FreeSqlTagHitStore(IDomainUser user, ILogger<FreeSqlTagHitStore> logger) : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 

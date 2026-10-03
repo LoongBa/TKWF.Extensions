@@ -80,15 +80,17 @@ public class TaggingOptionsTests
         // 禁用规则 pattern 也出现在文本中——若误加载会 2 命中，验证 GetEnabledAsync 过滤真实性（Oracle P2-7）
         store.Rules.Add(new TagRule { Dimension = "hidden", TagName = "禁用", MatchMode = TagMatchMode.DictMatch, Pattern = "手机", IsEnabled = false });
 
-        var (init, sp) = Build(s =>
+        var (_, sp) = Build(s =>
         {
             s.AddSingleton<ITagRuleStore>(store);
             s.Configure<TaggingOptions>(o => o.AutoLoadRulesFromStore = true);
         });
 
-        await init.InitializeAsync(sp);
-
+        // V4.10.53（领域自治根治）：Store 加载核心直测（InitializeAsync 的 System 作用域编排为
+        // Authentication/Permissions 同款已证模式——不经宿主直测本方法）
         var tagService = sp.GetRequiredService<ITagService>();
+        await TaggingExtensionInitializer<TestUserInfo>.LoadRulesFromStoreAsync(tagService, store);
+
         var hits = tagService.GetTags("手机");
         Assert.Single(hits);                       // 仅启用规则（禁用规则若误加载会 2 命中）
         Assert.Equal("电子", hits[0].TagName);
@@ -100,7 +102,7 @@ public class TaggingOptionsTests
         var store = new StubTagRuleStore();
         store.Rules.Add(new TagRule { Dimension = "store", TagName = "Store标签", MatchMode = TagMatchMode.DictMatch, Pattern = "苹果" });
 
-        var (init, sp) = Build(s =>
+        var (_, sp) = Build(s =>
         {
             s.AddSingleton<ITagRuleStore>(store);
             s.Configure<TaggingOptions>(o =>
@@ -110,9 +112,11 @@ public class TaggingOptionsTests
             });
         });
 
-        await init.InitializeAsync(sp);
-
+        // V4.10.53：Store 加载核心直测（Store 覆盖配置——规则先配置默认后 Store 覆盖）
         var tagService = sp.GetRequiredService<ITagService>();
+        tagService.LoadRules([new TagRule { Dimension = "cfg", TagName = "配置标签", MatchMode = TagMatchMode.DictMatch, Pattern = "苹果" }]);
+        await TaggingExtensionInitializer<TestUserInfo>.LoadRulesFromStoreAsync(tagService, store);
+
         var hits = tagService.GetTags("苹果");
         Assert.Single(hits);                       // Store 覆盖配置
         Assert.Equal("Store标签", hits[0].TagName);

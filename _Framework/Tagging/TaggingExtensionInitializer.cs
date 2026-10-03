@@ -62,10 +62,12 @@ public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUser
         services.TryAddSingleton<TagExtractionPipeline>();
         // 5. 业务门面 ITagService（消费方经 Use<ITagService>() 调用；实现类 TagService 可从 DI 解析）
         services.TryAddSingleton<ITagService, TagService>();
-        // 6. V0.3.0 存储扩展（持久化）：规则/命中/分析——Store 委托 SG1 DataService（红线合规，TryAddScoped 消费方可覆盖）
-        services.TryAddScoped<ITagRuleStore, FreeSqlTagRuleStore>();
-        services.TryAddScoped<ITagHitStore, FreeSqlTagHitStore>();
-        services.TryAddScoped<ITagAnalysisService, FreeSqlTagAnalysisService>();
+        // 6. V0.3.0 存储扩展（持久化）：规则/命中/分析——委托 SG1 DataService（红线合规）。
+        // V4.10.53（领域自治根治）：注册形态由 TryAddScoped 改 AddConstructibleService——旧形态构造注入
+        // IDomainUser（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）；消费方统一经 User.Use<T>() 解析。
+        services.AddConstructibleService<ITagRuleStore, FreeSqlTagRuleStore>();
+        services.AddConstructibleService<ITagHitStore, FreeSqlTagHitStore>();
+        services.AddConstructibleService<ITagAnalysisService, FreeSqlTagAnalysisService>();
     }
 
     /// <summary>Tagging 无全局过滤器。</summary>
@@ -90,19 +92,30 @@ public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUser
             tagService.LoadRules(options.DefaultRules);
 
         // 2. Store 自动加载（动态场景，覆盖配置默认——Store 权威）
+        // V4.10.53（领域自治根治）：ITagRuleStore 注册形态改 AddConstructibleService——裸 GetService
+        // 触 CurrentAopUser 守卫必抛；改经 System 作用域 + scope.System.Use<ITagRuleStore>()（Use<T> 内设
+        // CurrentAopUser=SystemUser——对齐 Authentication V0.3.1 / Permissions V4.10.53 方案 A'）
         if (options.AutoLoadRulesFromStore)
         {
-            var store = sp2.GetService<ITagRuleStore>();
-            if (store is not null)
-            {
-                var rules = await store.GetEnabledAsync();
-                if (rules.Count > 0) tagService.LoadRules(rules);
-            }
+            var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
+            await using var sysScope = await host.BeginSystemScopeAsync(sp);
+            var store = sysScope.System.Use<ITagRuleStore>();
+            await LoadRulesFromStoreAsync(tagService, store);
         }
 
         // 3. 软校验（Oracle P1-3）：两条自动加载路径均未配置 → Warning 提示（非结构校验，不阻断启动）
         if (!options.AutoLoadRulesFromStore && options.DefaultRules is not { Length: > 0 })
             sp2.GetService<ILogger<TaggingExtensionInitializer<TUserInfo>>>()
                 ?.LogWarning("Tagging 未配置 DefaultRules 且未启用 AutoLoadRulesFromStore——规则需消费方显式 LoadRules。");
+    }
+
+    /// <summary>
+    /// Store 自动加载核心（供 InitializeAsync 经 System 作用域解析 store 后调用；测试直测本方法，免宿主）。
+    /// 加载启用规则进 <see cref="ITagService"/>（覆盖配置默认——Store 权威）。
+    /// </summary>
+    internal static async Task LoadRulesFromStoreAsync(ITagService tagService, ITagRuleStore store)
+    {
+        var rules = await store.GetEnabledAsync();
+        if (rules.Count > 0) tagService.LoadRules(rules);
     }
 }

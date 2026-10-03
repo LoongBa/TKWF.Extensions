@@ -1,8 +1,10 @@
 # TKWF.Ext.Tagging 标签存储扩展技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.3（聚合 SQL 下推） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.3（聚合 SQL 下推）+ **V0.4.4（领域自治根治，ADR90）** | **框架**: .NET 10
 
 **定位**（ADR52 V0.2.0 瘦身）：标签算法已回归 `TKW.Framework.Utility.Tags`（主框架）；本扩展为**标签存储扩展**——V0.3.0 落地 `ITagRuleStore`/`ITagHitStore`/`ITagAnalysisService` 三接口持久化（SG1 实体 + FreeSql，Store 委托 DataService 红线合规）；V0.4.0 落地匹配器演进（AC 自动机 `DictMatch` 批量匹配）+ `TaggingOptions` 配置接入（`[Options("TKWF:Tagging")]`）。
+
+> **V0.4.4（V4.10.53 ADR90 领域自治根治）**：三 Store 实现（`FreeSqlTagRuleStore`/`FreeSqlTagHitStore`/`FreeSqlTagAnalysisService`）继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——IDomainUser 永不注册 DI）+ `[DiContractIgnore]`（运行时手写注册豁免 DI001）；Initializer 注册由 `TryAddScoped` 改 **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory，消费方经 `User.Use<ITagRuleStore>()` 等解析）；`InitializeAsync` Store 自动加载改 System 作用域（`BeginSystemScopeAsync` + `scope.System.Use<ITagRuleStore>()`）+ `LoadRulesFromStoreAsync` 核心提取直测。
 
 **核心约束**: 存储扩展数据访问走 DataService 委托（禁裸 ORM/IEntityDAC）；实体 `[DomainGenerateCode]` 不指定 UserType（ADR42 D4）；审计字段 DateTime（UTC——SQLite DateTimeOffset 不可靠实证）；AC 自动机纯算法归主框架 Utility（ADR52 收纳准则）
 

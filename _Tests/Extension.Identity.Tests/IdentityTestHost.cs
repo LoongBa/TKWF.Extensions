@@ -12,11 +12,13 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.Identity.Tests;
 
 /// <summary>
-/// 测试公共设施——StubDomainUser + 基于 FreeSqlEntityDAC 的 Store 工厂。
-/// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
-/// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 Settings/BlobStoring 测试同模式）。</para>
-/// <para>ADR88/DI004（A 批整改）：Store 构造不再注入 DataService——经 <c>User.Use&lt;T&gt;()</c> 懒加载解析。
-/// 测试工厂构建 StubDomainUser + 能力容器（注册真实 DAC 驱动的 DataService 实例），注入 ServiceProvider。</para>
+/// 测试公共设施——分层单测宿主（V4.10.53 领域自治根治后重写）。
+/// <para>生产路径等价：Store/Manager 现继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>，DataService 经基类
+/// <c>User</c> 懒加载（NoAop 路径）——测试用可配置 <see cref="StubDomainUser"/> 直构门面（经基类 User 取上下文），
+/// 其 <c>Use&lt;T&gt;()</c> 按生产路径等价实现：具体类经 <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>
+/// 直建（IEntityDAC 从 DI 解析），接口（IDomainService）经 <c>provider.GetRequiredService(t)</c> 解析
+/// （对齐 Settings/Tagging 测试桩；守卫工厂在集成测试经真实 DomainUser 验证，桩内不重复守卫）。</para>
+/// <para>集成测试（真实 DI + BindScope + User.Use&lt;接口&gt;()）见 <see cref="IdentityProductionPathTests"/>。</para>
 /// </summary>
 internal static class IdentityTestHost
 {
@@ -36,149 +38,139 @@ FROM ""IdentityUserRole"" ur
 INNER JOIN ""IdentityRole"" r ON ur.""RoleId"" = r.""Id""");
     }
 
-    /// <summary>构建 StubDomainUser + 能力容器（direct-new 工厂模式）：注册真实 DAC 驱动的 DataService 实例。</summary>
-    private static StubDomainUser CreateStub(IFreeSql fsql, Action<IServiceCollection, StubDomainUser> register)
-    {
-        var stub = new StubDomainUser();
-        var services = new ServiceCollection();
-        register(services, stub);
-        stub.ServiceProvider = services.BuildServiceProvider();
-        return stub;
-    }
-
-    /// <summary>创建基于 SQLite 内存库的 UserStore（3 DataService 委托 + VEntity 只读 DataService）。</summary>
+    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 UserStore（3 DataService 委托 + VEntity 只读 DataService）。</summary>
     public static UserStore CreateUserStore(IFreeSql fsql)
     {
-        var stub = CreateStub(fsql, (s, user) =>
-        {
-            var uow = new UnitOfWorkManager(fsql);
-            s.AddSingleton(new UserEntityDataService(user, new FreeSqlEntityDAC<UserEntity>(uow)));
-            s.AddSingleton(new UserRoleEntityDataService(user, new FreeSqlEntityDAC<UserRoleEntity>(uow)));
-            s.AddSingleton(new UserRoleViewDataService(user, new FreeSqlEntityDAC<UserRoleView>(uow)));
-        });
-        return new UserStore(stub, NullLogger<UserStore>.Instance);
+        var user = BuildStub(fsql, [typeof(UserEntity), typeof(UserRoleEntity), typeof(UserRoleView)]);
+        return new UserStore(user, NullLogger<UserStore>.Instance);
     }
 
-    /// <summary>构建仅解析 IUserManager 的 StubDomainUser（IdentityPasswordManager/IdentityRoleProvider 测试用——
-    /// 经基类 User.Use&lt;IUserManager&gt; 懒加载解析，测试注入能力容器）。</summary>
-    public static StubDomainUser CreateUserManagerStub(IUserManager manager)
-    {
-        var stub = new StubDomainUser();
-        var services = new ServiceCollection();
-        services.AddSingleton<IUserManager>(manager);
-        stub.ServiceProvider = services.BuildServiceProvider();
-        return stub;
-    }
-
-    /// <summary>创建基于 SQLite 内存库的 RoleStore（2 DataService 委托）。</summary>
+    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 RoleStore（2 DataService 委托）。</summary>
     public static RoleStore CreateRoleStore(IFreeSql fsql)
     {
-        var stub = CreateStub(fsql, (s, user) =>
-        {
-            var uow = new UnitOfWorkManager(fsql);
-            s.AddSingleton(new RoleEntityDataService(user, new FreeSqlEntityDAC<RoleEntity>(uow)));
-            s.AddSingleton(new UserRoleEntityDataService(user, new FreeSqlEntityDAC<UserRoleEntity>(uow)));
-        });
-        return new RoleStore(stub, NullLogger<RoleStore>.Instance);
+        var user = BuildStub(fsql, [typeof(RoleEntity), typeof(UserRoleEntity)]);
+        return new RoleStore(user, NullLogger<RoleStore>.Instance);
     }
 
-    /// <summary>创建 UserManager（UserStore + RoleStore 组合，V0.3.0 测试用）。</summary>
+    /// <summary>创建 UserManager（UserStore + RoleStore 组合，V0.3.0 测试用）——经基类 User.Use&lt;IUserStore&gt;() 懒加载。</summary>
     public static IUserManager CreateUserManager(IFreeSql fsql, IdentityOptions? options = null)
     {
-        var stub = CreateStub(fsql, (s, user) =>
-        {
-            var uow = new UnitOfWorkManager(fsql);
-            s.AddSingleton(new UserEntityDataService(user, new FreeSqlEntityDAC<UserEntity>(uow)));
-            s.AddSingleton(new UserRoleEntityDataService(user, new FreeSqlEntityDAC<UserRoleEntity>(uow)));
-            s.AddSingleton(new UserRoleViewDataService(user, new FreeSqlEntityDAC<UserRoleView>(uow)));
-            s.AddSingleton(new RoleEntityDataService(user, new FreeSqlEntityDAC<RoleEntity>(uow)));
-            s.AddSingleton<IUserStore>(new UserStore(user, NullLogger<UserStore>.Instance));
-            s.AddSingleton<IRoleStore>(new RoleStore(user, NullLogger<RoleStore>.Instance));
-        });
-        return new UserManager(stub, Options.Create(options ?? new IdentityOptions()), NullLogger<UserManager>.Instance);
+        var user = BuildStub(fsql,
+            [typeof(UserEntity), typeof(UserRoleEntity), typeof(UserRoleView), typeof(RoleEntity)],
+            (s, u) =>
+            {
+                s.AddSingleton<IUserStore>(new UserStore(u, NullLogger<UserStore>.Instance));
+                s.AddSingleton<IRoleStore>(new RoleStore(u, NullLogger<RoleStore>.Instance));
+            });
+        return new UserManager(user, Options.Create(options ?? new IdentityOptions()), NullLogger<UserManager>.Instance);
     }
 
-    /// <summary>创建 IdentityAuthService（V0.3.0 注册/登录测试用）。
-    /// <para>ADR88/DI004：构造不再注入 IUserManager——经基类 User.Use 懒加载解析，测试注入能力容器。</para></summary>
+    /// <summary>创建 IdentityAuthService（V0.3.0 注册/登录测试用）——经基类 User.Use&lt;IUserManager&gt;() 懒加载。</summary>
     public static IdentityAuthService CreateAuthService(IFreeSql fsql)
     {
-        var stub = CreateStub(fsql, (s, user) =>
-        {
-            var uow = new UnitOfWorkManager(fsql);
-            s.AddSingleton(new UserEntityDataService(user, new FreeSqlEntityDAC<UserEntity>(uow)));
-            s.AddSingleton(new UserRoleEntityDataService(user, new FreeSqlEntityDAC<UserRoleEntity>(uow)));
-            s.AddSingleton(new UserRoleViewDataService(user, new FreeSqlEntityDAC<UserRoleView>(uow)));
-            s.AddSingleton(new RoleEntityDataService(user, new FreeSqlEntityDAC<RoleEntity>(uow)));
-            s.AddSingleton<IUserStore>(new UserStore(user, NullLogger<UserStore>.Instance));
-            s.AddSingleton<IRoleStore>(new RoleStore(user, NullLogger<RoleStore>.Instance));
-            s.AddSingleton<IUserManager>(new UserManager(user, Options.Create(new IdentityOptions()), NullLogger<UserManager>.Instance));
-        });
-        return new IdentityAuthService(stub);
+        var user = BuildStub(fsql,
+            [typeof(UserEntity), typeof(UserRoleEntity), typeof(UserRoleView), typeof(RoleEntity)],
+            (s, u) =>
+            {
+                s.AddSingleton<IUserStore>(new UserStore(u, NullLogger<UserStore>.Instance));
+                s.AddSingleton<IRoleStore>(new RoleStore(u, NullLogger<RoleStore>.Instance));
+                s.AddSingleton<IUserManager>(new UserManager(u, Options.Create(new IdentityOptions()), NullLogger<UserManager>.Instance));
+            });
+        return new IdentityAuthService(user);
     }
 
-    /// <summary>创建 UserRoleViewQueryService（V0.4.0 REST 直接暴露测试用）——对齐
-    /// <c>UserRoleViewDataService</c> 手动构造先例（L43），依赖经真实 FreeSqlEntityDAC 驱动。
-    /// ADR88：构造不再注入 DataService——经基类 User.Use 懒加载解析，测试注入能力容器。</summary>
+    /// <summary>构建解析 IUserManager 的 ServiceProvider（IdentityPasswordManager/IdentityRoleProvider 接线型直构用——
+    /// ctor(IServiceProvider) + GetRequiredService 延迟解析）。</summary>
+    public static IServiceProvider CreateProviderForManager(IUserManager manager)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IUserManager>(manager);
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>创建 UserRoleViewQueryService（V0.4.0 REST 直接暴露测试用）——依赖经真实 FreeSqlEntityDAC 驱动。</summary>
     public static UserRoleViewQueryService CreateRoleViewQueryService(IFreeSql fsql, IDomainUser? user = null)
     {
         var currentUser = user ?? new StubDomainUser();
         if (currentUser is StubDomainUser stub)
-        {
-            var services = new ServiceCollection();
-            var uow = new UnitOfWorkManager(fsql);
-            services.AddSingleton(new UserRoleViewDataService(currentUser, new FreeSqlEntityDAC<UserRoleView>(uow)));
-            stub.ServiceProvider = services.BuildServiceProvider();
-        }
+            stub.ServiceProvider = BuildProvider(fsql, typeof(UserRoleView));
         return new UserRoleViewQueryService(currentUser);
+    }
+
+    private static StubDomainUser BuildStub(IFreeSql fsql, Type[] entityTypes, Action<IServiceCollection, StubDomainUser>? register = null)
+    {
+        var user = new StubDomainUser();
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        RegisterDacs(services, entityTypes);
+        register?.Invoke(services, user);
+        user.ServiceProvider = services.BuildServiceProvider();
+        return user;
+    }
+
+    private static IServiceProvider BuildProvider(IFreeSql fsql, params Type[] entityTypes)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        RegisterDacs(services, entityTypes);
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>注册真实 FreeSqlEntityDAC——IEntityDAC（读写 DataService）+ IEntityReadOnlyDAC（VEntity 只读 DataService）。</summary>
+    private static void RegisterDacs(IServiceCollection services, Type[] entityTypes)
+    {
+        foreach (var entityType in entityTypes)
+        {
+            var implType = typeof(FreeSqlEntityDAC<>).MakeGenericType(entityType);
+            services.AddSingleton(typeof(IEntityDAC<>).MakeGenericType(entityType), implType);
+            services.AddSingleton(typeof(IEntityReadOnlyDAC<>).MakeGenericType(entityType), implType);
+        }
     }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
-/// <para>ADR88/DI004（A 批整改）：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-/// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时保留原抛 NotSupportedException 语义）。</para></summary>
-internal class StubDomainUser : IDomainUser
+/// <summary>
+/// 测试用户桩——实现 <see cref="IDomainUser"/> 最小契约（User/Tenant/认证可配置）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产路径等价实现——具体类（DataService）经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Tagging 测试桩）；接口（IDomainService，如 UserManager 的
+/// <c>Use&lt;IUserStore&gt;()</c>）经 <c>provider.GetRequiredService(t)</c> 解析（测试注册的门面实例；
+/// 守卫工厂在集成测试经真实 DomainUser 验证，桩内不重复守卫）。</para>
+/// </summary>
+internal class StubDomainUser(string? userId = null, long? tenantId = null, bool isAuthenticated = false) : IDomainUser
 {
-    private IServiceProvider? _provider;
-    private readonly object _gate = new();
-    private readonly Dictionary<Type, object?> _cache = new();
-
-    /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-    public IServiceProvider ServiceProvider
-    {
-        set { lock (_gate) _provider = value; }
-    }
+    /// <summary>ServiceProvider（测试工厂注册时注入——User.Use&lt;T&gt;() 解析源）。</summary>
+    public IServiceProvider? ServiceProvider { get; set; }
 
     public string SessionKey => "test-session";
-    public bool IsAuthenticated => false;
+    public bool IsAuthenticated => isAuthenticated;
     public bool IsSystemActor => false;
     public IUserInfo? UserInfo => null;
-    public long? TenantId => null;
+    public long? TenantId => tenantId;
     public bool IsNoAuditActive => false;
-    public virtual string? UserId => null;
-    public string? UserName => null;
+    public string? UserId => userId;
+    public string? UserName => "test";
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-            return svc;
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
-            _cache[typeof(TDomainService)] = resolved;
-            return resolved;
-        }
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+
+        // 接口（IDomainService）：DI 解析（测试注册的门面实例——UserManager.Use<IUserStore>() 等 AOP 懒加载路径）
+        if (typeof(TDomainService).IsInterface)
+            return ServiceProvider.GetRequiredService<TDomainService>();
+
+        // 具体类：生产 NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this——IEntityDAC 从 DI 解析）
+        return (TDomainService)ActivatorUtilities.CreateInstance(ServiceProvider, typeof(TDomainService), this);
     }
 
     public TService GetService<TService>() where TService : notnull
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-        return provider.GetRequiredService<TService>();
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+        return ServiceProvider.GetRequiredService<TService>();
     }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
@@ -186,7 +178,4 @@ internal class StubDomainUser : IDomainUser
 }
 
 /// <summary>认证用户桩——具 userId 的 IDomainUser（V0.4.0 仅本人测试用）。</summary>
-internal sealed class AuthenticatedStubUser(string userId) : StubDomainUser
-{
-    public override string? UserId => userId;
-}
+internal sealed class AuthenticatedStubUser(string userId) : StubDomainUser(userId: userId, isAuthenticated: true);

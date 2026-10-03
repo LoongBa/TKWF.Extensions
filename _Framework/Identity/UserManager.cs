@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.Cryptography;
 
@@ -13,23 +15,25 @@ namespace TKWF.Ext.Identity
     /// <summary>
     /// 用户管理实现——组合 <see cref="IUserStore"/>（用户）+ <see cref="IRoleStore"/>（角色）。
     /// <para>密码用主框架 <see cref="PasswordHasher"/> 散列/校验（PBKDF2，不引第三方库）；异常静默处理。</para>
-    /// <para>ADR88/DI004（A 批整改）：IUserStore/IRoleStore 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类
+    /// <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）；
+    /// IUserStore/IRoleStore 仍经 <c>User.Use&lt;接口&gt;()</c> AOP 懒加载（DI004 零豁免）。
+    /// <c>[DiContractIgnore]</c>：运行时手写注册（AddConstructibleService），豁免 SG1a DI001 误报。</para>
     /// </summary>
-    internal sealed class UserManager : IUserManager
+    [DiContractIgnore]
+    internal sealed class UserManager : DomainServiceBase, IUserManager
     {
-        private readonly IDomainUser _user;
         private readonly IdentityOptions _options;
         private readonly ILogger<UserManager> _logger;
 
         private IUserStore? _userStore;
         private IRoleStore? _roleStore;
 
-        private IUserStore UserStore => _userStore ??= _user.Use<IUserStore>();
-        private IRoleStore RoleStore => _roleStore ??= _user.Use<IRoleStore>();
+        private IUserStore UserStore => _userStore ??= User.Use<IUserStore>();
+        private IRoleStore RoleStore => _roleStore ??= User.Use<IRoleStore>();
 
-        public UserManager(IDomainUser user, IOptions<IdentityOptions> options, ILogger<UserManager> logger)
+        public UserManager(IDomainUser user, IOptions<IdentityOptions> options, ILogger<UserManager> logger) : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? new IdentityOptions();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Identity
@@ -11,22 +13,24 @@ namespace TKWF.Ext.Identity
     /// 角色存储实现——经 <see cref="RoleEntityDataService"/> + <see cref="UserRoleEntityDataService"/>
     /// （SG1/xCodeGen 生成的 DataService）委托持久化，遵循数据访问红线（2026-09-07 用户裁定）。
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
-    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类
+    /// <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）；
+    /// DataService 仍经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载（DI004 零豁免）。
+    /// <c>[DiContractIgnore]</c>：运行时手写注册（AddConstructibleService），豁免 SG1a DI001 误报。</para>
     /// </summary>
-    internal sealed class RoleStore : IRoleStore
+    [DiContractIgnore]
+    internal sealed class RoleStore : DomainServiceBase, IRoleStore
     {
-        private readonly IDomainUser _user;
         private readonly ILogger<RoleStore> _logger;
 
         private RoleEntityDataService? _roleDataService;
         private UserRoleEntityDataService? _userRoleDataService;
 
-        private RoleEntityDataService RoleDataService => _roleDataService ??= _user.Use<RoleEntityDataService>();
-        private UserRoleEntityDataService UserRoleDataService => _userRoleDataService ??= _user.Use<UserRoleEntityDataService>();
+        private RoleEntityDataService RoleDataService => _roleDataService ??= User.Use<RoleEntityDataService>();
+        private UserRoleEntityDataService UserRoleDataService => _userRoleDataService ??= User.Use<UserRoleEntityDataService>();
 
-        public RoleStore(IDomainUser user, ILogger<RoleStore> logger)
+        public RoleStore(IDomainUser user, ILogger<RoleStore> logger) : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

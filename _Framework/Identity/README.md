@@ -1,6 +1,6 @@
 # TKWF.Ext.Identity 身份管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露 + 领域自治根治 ADR90) | **框架**: .NET 10
 
 **核心约束**: 用户/角色持久化、PasswordHasher 凭据验证、FreeSql 存储、异常静默处理、SG1 声明式实体
 
@@ -26,9 +26,9 @@
 
 ### 1. 结构分层
 
-- **存储抽象 (`IUserStore` / `IRoleStore`)**：定义用户/角色 CRUD 与用户-角色分配操作。扩展提供 FreeSql 默认实现。
+- **存储抽象 (`IUserStore` / `IRoleStore`)**：定义用户/角色 CRUD 与用户-角色分配操作。扩展提供默认实现。
 
-- **持久化实现 (`FreeSqlUserStore` / `FreeSqlRoleStore`)**：将 `UserEntity` / `RoleEntity` / `UserRoleEntity` 持久化到数据库。异常静默处理。
+- **持久化实现 (`UserStore` / `RoleStore`)**：将 `UserEntity` / `RoleEntity` / `UserRoleEntity` 持久化到数据库（委托 SG1 DataService，异常静默处理）。
 
 - **管理门面 (`IUserManager` / `UserManager`)**：组合 UserStore + RoleStore，提供用户 CRUD、**凭据验证**（供消费方登录钩子调用）、密码修改、角色分配、角色 CRUD。
 
@@ -40,9 +40,9 @@
 
 - **异常静默**：存储/管理操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
 
-- **TryAdd 语义**：DI 注册用 `TryAddScoped`——消费方自定义实现优先；扩展默认实现不覆盖消费方。
+- **域作用域守卫（V0.5.0）**：三接口经 `AddConstructibleService` 注册——接口 = 可构造守卫工厂（`User.Use<接口>()` 调用链内解析，`CurrentAopUser` 守卫），实现类 = throw-factory（禁直接 DI 解析）。旧 TryAddScoped 构造注入 `IDomainUser`（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）。
 
-- **Scoped 生命周期**：`IUserStore` / `IRoleStore` / `IUserManager` Scoped，自动参与当前请求上下文。
+- **Scoped 生命周期**：`IUserStore` / `IRoleStore` / `IUserManager` Scoped，自动参与当前请求上下文。消费方统一经 `User.Use<接口>()` 解析（AOP 路径——先设 CurrentAopUser 再 GetRequiredService，守卫工厂经 ActivatorUtilities 直建实现）。
 
 ### 3. 与主框架的关系
 
@@ -69,7 +69,17 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-自动注册：`IUserStore`（默认 `FreeSqlUserStore`）+ `IRoleStore`（默认 `FreeSqlRoleStore`）+ `IUserManager`（默认 `UserManager`）。
+自动注册（V0.5.0 领域自治根治，ADR90——按"正确路线"注册形态）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IUserStore` | `UserStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IUserStore>()` |
+| `IRoleStore` | `RoleStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IRoleStore>()` |
+| `IUserManager` | `UserManager`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IUserManager>()` |
+| `IAccountPasswordManager` | `IdentityPasswordManager` | **接线型普通 DI**（TryAddScoped，ctor IServiceProvider + IOptions——无 IDomainUser） | Account `DefaultPasswordResetFlow` 经 `GetService` 解析 |
+| `IRoleProvider<TUserInfo>` | `IdentityRoleProvider<TUserInfo>` | **接线型普通 DI**（AddScoped，ctor IServiceProvider——覆盖 Permissions 默认） | Permissions `PermissionChecker` 构造注入 |
+
+> **V0.5.0（V4.10.53 ADR90 领域自治根治）**：三接口 Store/Manager 继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）+ `[DiContractIgnore]` 豁免 DI001；注册改 `AddConstructibleService`（消费方统一 `User.Use<接口>()` 解析）。两跨扩展契约（`IAccountPasswordManager` / `IRoleProvider<TUserInfo>`，Abstractions 契约非 IDomainService 不可修改）改**接线型**（skill §4.2——ctor `IServiceProvider` + C1 延迟解析 `IUserManager`）：修复真实生产故障——旧 ctor 注入 `IDomainUser` 致 Account Flow `GetService` 解析 / Permissions `PermissionChecker` ActivatorUtilities 构造失败（密码重置静默不可用 / 角色查库失效）。
 
 ### 2. 用户管理与凭据验证
 
@@ -125,9 +135,9 @@ protected override async Task<MyUserInfo> OnLoginByPasswordAsync(
 }
 ```
 
-### 5. 自定义 IUserManager / IUserStore
+### 5. 自定义 IUserStore / IRoleStore / IUserManager
 
-TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
+V0.5.0 起三接口为 AddConstructibleService 注册。消费方自定义实现方式：经 `services.AddScoped<IUserStore, MyCustomStore>()` 显式覆盖（后注册覆盖 AddConstructibleService 默认——扩展钩子先于消费方 OnRegisterDomainServices，消费方可见 AddScoped 覆盖默认；自定义实现同样须继承 `DomainServiceBase` 且禁构造注入其它域服务/DataService——DI004 零豁免）。<see cref="IAccountPasswordManager"/>（TryAddScoped 接线型）与 <see cref="IRoleProvider{TUserInfo}"/>（AddScoped 接线型）的消费方覆盖保持 TryAdd/AddScoped 语义。
 
 ---
 
@@ -135,9 +145,9 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`IUserStore`** | 用户存储抽象（CRUD + 角色分配） | `FreeSqlUserStore`（本扩展） |
-| **`IRoleStore`** | 角色存储抽象（CRUD） | `FreeSqlRoleStore`（本扩展） |
-| **`IUserManager`** | 用户管理门面（CRUD + 凭据验证 + 角色分配） | `UserManager`（本扩展） |
+| **`IUserStore`** | 用户存储抽象（CRUD + 角色分配） | `UserStore`（本扩展，继承 `DomainServiceBase`，AddConstructibleService 注册） |
+| **`IRoleStore`** | 角色存储抽象（CRUD） | `RoleStore`（本扩展，继承 `DomainServiceBase`，AddConstructibleService 注册） |
+| **`IUserManager`** | 用户管理门面（CRUD + 凭据验证 + 角色分配） | `UserManager`（本扩展，继承 `DomainServiceBase`，AddConstructibleService 注册） |
 | **`UserEntity`** | 用户表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`RoleEntity`** | 角色表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`UserRoleEntity`** | 用户-角色映射实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
@@ -172,7 +182,7 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0（已实施）
 - 用户/角色/映射实体 + FreeSql 存储
 - 凭据验证（PasswordHasher）+ 用户/角色 CRUD + 角色分配
 - Admin 系统角色种子（幂等）
@@ -199,7 +209,15 @@ TryAdd 语义确保消费方实现优先；`IRoleStore` 自定义同理。
 - **门面链路零改动**：`IUserManager.GetUserRolesAsync` 仍返回 `RoleEntity`（`IdentityRoleProvider`/`IdentityUserHelperBase` 业务消费不变）；`UserRoleViewDataService` public 化（公开 ctor 依赖 + 只读查询面可注入）
 - **生产部署**：`vw_UserRoleView` 视图 ViewSql 沿用 V0.2.0（生产 DBA 手动建视图）
 
-### V0.5.0（规划）
+### V0.5.0（已实施：V4.10.53 领域自治根治，ADR90——正确路线）
+- **三接口 Store/Manager 继承 `DomainServiceBase`**（`UserStore`/`RoleStore`/`UserManager`）——经基类 `User` 获取用户上下文（**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——v0.3.3 同根缺陷）；`[DiContractIgnore]` 豁免 DI001；DataService/Store 仍经 `User.Use<具体类>()` NoAop / `User.Use<接口>()` AOP 懒加载（DI004 零豁免）
+- **注册形态改 `AddConstructibleService`**（三接口）——接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方统一 `User.Use<IUserStore>()` / `User.Use<IRoleStore>()` / `User.Use<IUserManager>()` 解析
+- **两跨扩展契约改接线型**（不继承 DomainServiceBase、不注入 IDomainUser）——`IdentityRoleProvider<TUserInfo>` / `IdentityPasswordManager` ctor 改 `IServiceProvider`（+ IO<DomainOptions>），`IUserManager` 经 C1 延迟解析（GetRequiredService）。修复真实生产故障：旧 ctor(IDomainUser) 致 Permissions `PermissionChecker` ActivatorUtilities 构造 `IRoleProvider` 失败（角色查库静默失效）/ Account Flow `GetService<IAccountPasswordManager>` 构造失败（密码重置落地静默不可用）；注册保持 AddScoped（覆盖 Permissions 默认）/ TryAddScoped（AddConstructibleService 编译约束 where TInterface : IDomainService 不满足——Abstractions 契约不可修改）
+- **`InitializeAsync` 种子改 System 作用域**（方案 A'，对齐 Tagging/Permissions/Authentication）——IRoleStore 经 `BeginSystemScopeAsync` + `sysScope.System.Use<IRoleStore>()` 解析（裸 GetService 触守卫必抛）；种子核心提取 `SeedAdminRoleAsync(roleStore)` internal static 供直测；无 IEntityDAC<RoleEntity>（真实持久化未接线）时守卫跳过种子
+- 测试宿主重写：真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 注册形态断言（守卫工厂/throw-factory/接线型普通 DI）+ 种子核心直测 + 守卫跳过路径直测；接线型直构（`new IdentityPasswordManager(sp, options)` / `new IdentityRoleProvider<TUserInfo>(sp)` + 真实解析链）
+- 73 用例全绿（禁止 slnx 构建，仅 Identity 项目 + 测试项目）
+
+### V0.6.0（规划）
 - **`IAccountPasswordManager` 适配器对接 Account V0.2.0 通知渠道**（重置码邮件）
 - 与 Permissions 深度集成（逐用户权限门控）
 - 多租户用户隔离

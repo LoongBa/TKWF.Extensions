@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Identity
@@ -15,24 +17,26 @@ namespace TKWF.Ext.Identity
     /// 扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
     /// <para>V0.2.0：GetRolesAsync 改用 <see cref="UserRoleViewDataService"/>（VEntity JOIN 单查询，替代两步查询）。</para>
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
-    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类
+    /// <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）；
+    /// DataService 仍经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载（DI004 零豁免）。
+    /// <c>[DiContractIgnore]</c>：运行时手写注册（AddConstructibleService），豁免 SG1a DI001 误报。</para>
     /// </summary>
-    internal sealed class UserStore : IUserStore
+    [DiContractIgnore]
+    internal sealed class UserStore : DomainServiceBase, IUserStore
     {
-        private readonly IDomainUser _user;
         private readonly ILogger<UserStore> _logger;
 
         private UserEntityDataService? _userDataService;
         private UserRoleEntityDataService? _userRoleDataService;
         private UserRoleViewDataService? _userRoleViewDataService;
 
-        private UserEntityDataService UserDataService => _userDataService ??= _user.Use<UserEntityDataService>();
-        private UserRoleEntityDataService UserRoleDataService => _userRoleDataService ??= _user.Use<UserRoleEntityDataService>();
-        private UserRoleViewDataService UserRoleViewDataService => _userRoleViewDataService ??= _user.Use<UserRoleViewDataService>();
+        private UserEntityDataService UserDataService => _userDataService ??= User.Use<UserEntityDataService>();
+        private UserRoleEntityDataService UserRoleDataService => _userRoleDataService ??= User.Use<UserRoleEntityDataService>();
+        private UserRoleViewDataService UserRoleViewDataService => _userRoleViewDataService ??= User.Use<UserRoleViewDataService>();
 
-        public UserStore(IDomainUser user, ILogger<UserStore> logger)
+        public UserStore(IDomainUser user, ILogger<UserStore> logger) : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

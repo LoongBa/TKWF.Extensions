@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
 
@@ -17,19 +18,25 @@ namespace TKWF.Ext.Identity;
 /// （HasSystemPermissionAsync + 角色循环）+ 批量放大 2N——同一请求内按 userIdString 缓存，首查 DB 后命中内存。</para>
 /// <para>DI 注册：Identity 扩展用 <c>AddScoped</c>（非 TryAdd）覆盖 Permissions 默认——仅当消费方双白名单
 /// 声明 Identity + Permissions 时生效（Oracle P1-4）。</para>
+/// <para>V4.10.53（领域自治根治，正确路线）：**接线型**（skill §4.2）——跨扩展契约
+/// <see cref="IRoleProvider{TUserInfo}"/>（Permissions.Abstractions）非 IDomainService（不可修改契约），
+/// Permissions.<c>PermissionChecker</c> ctor 经普通 DI 构造注入本实现——<c>AddConstructibleService</c>
+/// 编译约束（where TInterface : IDomainService）不满足。旧 ctor(IDomainUser) 在 PermissionChecker 解析时
+/// IDomainUser 无可解析（永不注册 DI——D01）生产必失败（真实故障）；改 ctor(<see cref="IServiceProvider"/>)——
+/// <see cref="IUserManager"/> 经 C1 延迟解析（<c>GetRequiredService</c>，消费链内已注册）。</para>
 /// </summary>
 public sealed class IdentityRoleProvider<TUserInfo> : IRoleProvider<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
-    private readonly IDomainUser _user;
+    private readonly IServiceProvider _serviceProvider;
     private IUserManager? _userManager;
     private Dictionary<string, IReadOnlyList<string>>? _cache;   // Scoped 缓存：userIdString → roles
 
-    private IUserManager UserManager => _userManager ??= _user.Use<IUserManager>();
+    private IUserManager UserManager => _userManager ??= _serviceProvider.GetRequiredService<IUserManager>();
 
-    public IdentityRoleProvider(IDomainUser user)
+    public IdentityRoleProvider(IServiceProvider serviceProvider)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     }
 
     public async Task<IReadOnlyList<string>> GetRolesAsync(TUserInfo userInfo)

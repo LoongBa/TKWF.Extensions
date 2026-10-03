@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.Hosting;
-using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Account;
 
 namespace TKWF.Ext.Identity;
@@ -18,18 +18,25 @@ namespace TKWF.Ext.Identity;
 /// 下发客户端单一来源，用户裁定可配置——不可硬编码否则登录必失败）。</para>
 /// <para>keysize 前提（已实证）：客户端 PBKDF2 输出 = 32 bytes（ts-client crypto.ts L42-46 <c>deriveBits(..., 256)</c>），
 /// 与服务端 PasswordHasher.KeySize=32 一致；适配器校验 hash 长度，不符返回 false。</para>
+/// <para>V4.10.53（领域自治根治，正确路线）：**接线型**（skill §4.2）——跨扩展契约
+/// <see cref="IAccountPasswordManager"/>（Account.Abstractions）非 IDomainService（不可修改契约），
+/// Account.<c>DefaultPasswordResetFlow</c> 经 <see cref="IServiceProvider"/>.GetService 解析（C1 普通 DI）——
+/// <c>AddConstructibleService</c> 编译约束（where TInterface : IDomainService）不满足。
+/// 旧 ctor(IDomainUser) 在普通 DI 构造时 IDomainUser 无可解析（永不注册 DI——D01）生产必失败（真实故障）；
+/// 改 ctor(<see cref="IServiceProvider"/>, IOptions&lt;DomainOptions&gt;)——<see cref="IUserManager"/> 经
+/// C1 延迟解析（<c>GetRequiredService</c>，消费链内已注册）。</para>
 /// </summary>
 public sealed class IdentityPasswordManager : IAccountPasswordManager
 {
-    private readonly IDomainUser _user;
+    private readonly IServiceProvider _serviceProvider;
     private readonly int _iterations;
     private IUserManager? _userManager;
 
-    private IUserManager UserManager => _userManager ??= _user.Use<IUserManager>();
+    private IUserManager UserManager => _userManager ??= _serviceProvider.GetRequiredService<IUserManager>();
 
-    public IdentityPasswordManager(IDomainUser user, IOptions<DomainOptions> options)
+    public IdentityPasswordManager(IServiceProvider serviceProvider, IOptions<DomainOptions> options)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _iterations = options?.Value.Auth.Pbkdf2Iterations ?? 600000;
     }
 

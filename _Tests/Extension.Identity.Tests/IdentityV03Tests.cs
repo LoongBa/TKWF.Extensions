@@ -16,6 +16,11 @@ namespace TKWF.Ext.Identity.Tests;
 /// <summary>
 /// Identity V0.3.0 测试——IAccountPasswordManager 适配器（组装方案 + 可配置迭代）、
 /// IRoleProvider 实时查库（Scoped 缓存）、IdentityAuthService 注册/登录、IdentityUserHelperBase 登录衔接基类。
+/// <para>V4.10.53（领域自治根治）：<see cref="IdentityPasswordManager"/> / <see cref="IdentityRoleProvider{TUserInfo}"/>
+/// 改<b>接线型</b>（skill §4.2）——ctor(IServiceProvider) + GetRequiredService 延迟解析（跨扩展契约非 IDomainService，
+/// AddConstructibleService 不可用；修复旧 ctor(IDomainUser) 普通 DI 构造失败生产故障）。测试直构：
+/// <c>new IdentityPasswordManager(sp, options)</c> / <c>new IdentityRoleProvider&lt;TestUserInfo&gt;(sp)</c>——真实解析链
+/// （sp 内注册真实 IUserManager，IUserManager 内部经基类 User.Use&lt;IUserStore&gt;() 懒加载）。</para>
 /// </summary>
 public class IdentityV03Tests
 {
@@ -31,10 +36,6 @@ public class IdentityV03Tests
 
     private static IUserManager CreateManager(IFreeSql fsql)
         => IdentityTestHost.CreateUserManager(fsql);
-
-    private static UserManager CreateConcreteManager(IFreeSql fsql)
-        => IdentityTestHost.CreateUserManager(fsql) as UserManager
-           ?? throw new InvalidOperationException("CreateUserManager 应返回 UserManager");
 
     // ── IdentityPasswordManager（组装方案 + 可配置迭代）──
 
@@ -56,7 +57,7 @@ public class IdentityV03Tests
         var clientHashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
         var options = Options.Create(new DomainOptions());   // Pbkdf2Iterations 默认 600000
-        var pm = new IdentityPasswordManager(IdentityTestHost.CreateUserManagerStub(manager), options);
+        var pm = new IdentityPasswordManager(IdentityTestHost.CreateProviderForManager(manager), options);
 
         Assert.True(await pm.SetPasswordAsync("alice", clientHashHex, saltHex, CancellationToken.None));
 
@@ -81,7 +82,7 @@ public class IdentityV03Tests
     {
         using var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
-        var pm = new IdentityPasswordManager(IdentityTestHost.CreateUserManagerStub(manager), Options.Create(new DomainOptions()));
+        var pm = new IdentityPasswordManager(IdentityTestHost.CreateProviderForManager(manager), Options.Create(new DomainOptions()));
 
         await manager.CreateUserAsync("bob", "pass12345", "Bob", CancellationToken.None);
         Assert.True(await pm.UserExistsAsync("bob", CancellationToken.None));
@@ -93,7 +94,7 @@ public class IdentityV03Tests
     {
         using var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
-        var pm = new IdentityPasswordManager(IdentityTestHost.CreateUserManagerStub(manager), Options.Create(new DomainOptions()));
+        var pm = new IdentityPasswordManager(IdentityTestHost.CreateProviderForManager(manager), Options.Create(new DomainOptions()));
 
         await manager.CreateUserAsync("carol", "pass12345", "Carol", CancellationToken.None);
         Assert.False(await pm.SetPasswordAsync("carol", "not-hex!", "not-hex!", CancellationToken.None));
@@ -104,7 +105,7 @@ public class IdentityV03Tests
     {
         using var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
-        var pm = new IdentityPasswordManager(IdentityTestHost.CreateUserManagerStub(manager), Options.Create(new DomainOptions()));
+        var pm = new IdentityPasswordManager(IdentityTestHost.CreateProviderForManager(manager), Options.Create(new DomainOptions()));
 
         await manager.CreateUserAsync("dave", "pass12345", "Dave", CancellationToken.None);
         var saltHex = Convert.ToHexString(new byte[32]).ToLowerInvariant();
@@ -120,7 +121,7 @@ public class IdentityV03Tests
         await manager.CreateUserAsync("erin", "pass12345", "Erin", CancellationToken.None);
 
         var options = Options.Create(new DomainOptions { Auth = { Pbkdf2Iterations = 123456 } });  // 自定义迭代（可配置）
-        var pm = new IdentityPasswordManager(IdentityTestHost.CreateUserManagerStub(manager), options);
+        var pm = new IdentityPasswordManager(IdentityTestHost.CreateProviderForManager(manager), options);
 
         var saltHex = Convert.ToHexString(new byte[32]).ToLowerInvariant();
         var hashHex = Convert.ToHexString(new byte[32]).ToLowerInvariant();
@@ -141,7 +142,7 @@ public class IdentityV03Tests
         var role = await manager.CreateRoleAsync("Admin", "管理员", true, CancellationToken.None);
         await manager.AssignRolesAsync(user!.Id, new[] { role!.Id }, CancellationToken.None);
 
-        var provider = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateUserManagerStub(manager));
+        var provider = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateProviderForManager(manager));
         var userInfo = new TestUserInfo(user.Id.ToString(), user.UserName);
 
         var roles = await provider.GetRolesAsync(userInfo);
@@ -159,13 +160,13 @@ public class IdentityV03Tests
         var role2 = await manager.CreateRoleAsync("Role2", "角色2", false, CancellationToken.None);
         var userInfo = new TestUserInfo(user!.Id.ToString(), user.UserName);
 
-        var provider = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateUserManagerStub(manager));
+        var provider = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateProviderForManager(manager));
         Assert.Empty(await provider.GetRolesAsync(userInfo));       // 无角色
 
         await manager.AssignRolesAsync(user.Id, new[] { role1!.Id }, CancellationToken.None);
 
         // 实时查库——新请求（新 provider 实例 = 新 Scoped 缓存）立即看到新角色，无需重新登录
-        var provider2 = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateUserManagerStub(manager));
+        var provider2 = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateProviderForManager(manager));
         var afterAssign = await provider2.GetRolesAsync(userInfo);
         Assert.Single(afterAssign);
         Assert.Equal("Role1", afterAssign[0]);
@@ -180,7 +181,7 @@ public class IdentityV03Tests
     {
         using var fsql = CreateFreeSql();
         var manager = CreateManager(fsql);
-        var provider = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateUserManagerStub(manager));
+        var provider = new IdentityRoleProvider<TestUserInfo>(IdentityTestHost.CreateProviderForManager(manager));
 
         var badUserInfo = new TestUserInfo("not-a-number", "weird");
         Assert.Empty(await provider.GetRolesAsync(badUserInfo));

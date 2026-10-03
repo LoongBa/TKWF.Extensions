@@ -1,18 +1,27 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
-using FreeSql;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 
 /// <summary>
-/// TemplateManager 测试——版本生命周期（Publish/Draft/Archive）+ 渲染入口 + 发布版本自动递增。
-/// <para>集成测试：真实 TemplateStore（经 SG1/xCodeGen DataService 委托，SQLite 内存）+ 真实 ScribanTemplateRenderer。</para>
+/// TemplateManager 测试（V0.3.0 领域自治根治重写——走生产路径）——
+/// 版本生命周期（Publish/Draft/Archive）+ 渲染入口 + 发布版本自动递增 + VEntity 读路径（N3/N4/N5）。
+/// <para>生产路径：真实 DI + <see cref="DomainUser{TUserInfo}"/> BindScope → <c>User.Use&lt;ITemplateManager&gt;()</c>
+/// AOP 路径解析（AddConstructibleService 接口守卫工厂）；Store/Renderer/ViewDataService 经基类 User 懒加载
+/// （ITemplateRenderer 接线型 TryAddSingleton——测试宿主补裸 Options 注册兜底）。</para>
 /// </summary>
 public class TemplateManagerTests
 {
-    /// <summary>创建 Manager（真实 Store + 真实 Renderer + VEntity 只读 DataService，默认 Options）。</summary>
-    private static TemplateManager CreateManager(IFreeSql fsql)
-        => TemplateTestSupport.CreateManager(fsql);
+    /// <summary>同步建宿主 + AOP 解析 Manager（BindScope 必须发生在测试自身上下文，禁 async helper；
+    /// 同一宿主 user 共享 fsql——种子与断言同源）。</summary>
+    private static (ITemplateManager Manager, DomainUser<TestUserInfo> User) CreateManager()
+    {
+        var (provider, user) = TemplateTestSupport.CreateProductionHost();
+        return (user.Use<ITemplateManager>(), user);
+    }
 
     private static Dictionary<string, object?> RenderModel(string name = "Alice")
         => new()
@@ -23,9 +32,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_FirstVersion_Returns1_0_0()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         var result = await manager.PublishAsync("Invoice.Standard", "Hello {{ model.Name }}");
 
@@ -38,9 +45,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_SecondVersion_Returns1_1_0()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("k", "v1");
         var result = await manager.PublishAsync("k", "v2");
@@ -52,9 +57,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_OldActive_Archived()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("k", "v1");
         await manager.PublishAsync("k", "v2");
@@ -71,9 +74,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task PublishAsync_TemplateNotFound_AutoCreates()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("Invoice.Standard", "content", "desc");
 
@@ -88,9 +89,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task DraftAsync_CreatesDraft()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         var result = await manager.DraftAsync("k", "draft content");
 
@@ -102,9 +101,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task DraftAsync_UpsertsExistingDraft()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.DraftAsync("k", "first draft");
         var result = await manager.DraftAsync("k", "updated draft");
@@ -121,9 +118,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task DraftAsync_DoesNotOccupyActive()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.DraftAsync("k", "draft content");
 
@@ -135,9 +130,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task ArchiveAsync_ArchivesVersion()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("k", "content");
         await manager.ArchiveAsync("k", "1.0.0");
@@ -150,9 +143,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task RenderAsync_NullVersion_RendersActive()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("k", "Hello {{ model.Name }}");
 
@@ -164,9 +155,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task RenderAsync_SpecificVersion_RendersFixed()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("k", "v1-{{ model.Name }}");
         await manager.PublishAsync("k", "v2-{{ model.Name }}");
@@ -186,11 +175,9 @@ public class TemplateManagerTests
     [Fact]
     public async Task GetVersionAsync_SingleQuery_ReturnsViewWithKeyAndTemplateName()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = user.Use<ITemplateStore>();
         await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "tpl desc" });
         var tpl = await store.GetByKeyAsync("Invoice.Standard");
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
@@ -221,9 +208,7 @@ public class TemplateManagerTests
     [Fact]
     public async Task GetActiveVersionAsync_SingleQuery_ReturnsActive()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.PublishAsync("k", "v1");
         await manager.PublishAsync("k", "v2"); // 1.0.0 → Archived，1.1.0 → Active
@@ -242,10 +227,9 @@ public class TemplateManagerTests
     [Fact]
     public async Task RenderAsync_VEntityPath_RendersContentFromView()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
+        var (manager, user) = CreateManager();
 
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = user.Use<ITemplateStore>();
         await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k", Name = "自定义模板名" });
         var tpl = await store.GetByKeyAsync("k");
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
@@ -255,8 +239,6 @@ public class TemplateManagerTests
             Content = "{{ model.Name }} 你好",
             Status = PrintTemplateVersionStatus.Active
         });
-
-        var manager = CreateManager(fsql);
 
         // JOIN 核心收益再确认（渲染取数同源：vw_PrintTemplateVersionView）
         var active = await manager.GetActiveVersionAsync("k");

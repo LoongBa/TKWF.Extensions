@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates
@@ -12,19 +14,22 @@ namespace TKWF.Ext.PrintTemplates
     /// 扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
     /// <para>异常传播：所有存储层异常向上传递（模板是审计关键资产，不静默）——
     /// 区别于 Settings/BlobStoring/Emailing 的异常静默模式。</para>
+    /// <para>V0.3.0（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+    /// （IDomainUser 永不注册 DI）；注册形态改 <c>AddConstructibleService&lt;ITemplateStore, TemplateStore&gt;</c>
+    /// （接口可构造守卫工厂 + 实现类 throw-factory，消费方经 <c>User.Use&lt;ITemplateStore&gt;()</c> 解析）。</para>
     /// </summary>
-    internal sealed class TemplateStore : ITemplateStore
+    [DiContractIgnore]
+    internal sealed class TemplateStore : DomainServiceBase, ITemplateStore
     {
-        private readonly IDomainUser _user;
         private PrintTemplateEntityDataService? _templateDataService;
         private PrintTemplateVersionEntityDataService? _versionDataService;
 
-        private PrintTemplateEntityDataService TemplateDataService => _templateDataService ??= _user.Use<PrintTemplateEntityDataService>();
-        private PrintTemplateVersionEntityDataService VersionDataService => _versionDataService ??= _user.Use<PrintTemplateVersionEntityDataService>();
+        private PrintTemplateEntityDataService TemplateDataService => _templateDataService ??= User.Use<PrintTemplateEntityDataService>();
+        private PrintTemplateVersionEntityDataService VersionDataService => _versionDataService ??= User.Use<PrintTemplateVersionEntityDataService>();
 
         public TemplateStore(IDomainUser user)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         /// <inheritdoc />

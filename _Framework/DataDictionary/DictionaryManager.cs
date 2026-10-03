@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary
@@ -14,16 +16,20 @@ namespace TKWF.Ext.DataDictionary
     /// 数据字典管理实现（V0.2.0）——组合 <see cref="IDictionaryStore"/> 提供按编码的聚合查询。
     /// <para>V0.2.0 新增：按 Code 内存缓存（key=<c>DD:{Code}</c>）+ 树形分组组装。</para>
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
+    /// <para>V0.3.0（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+    /// （IDomainUser 永不注册 DI）；注册形态改 <c>AddConstructibleService&lt;IDictionaryManager, DictionaryManager&gt;</c>
+    /// （接口可构造守卫工厂 + 实现类 throw-factory，消费方经 <c>User.Use&lt;IDictionaryManager&gt;()</c> 解析）。
+    /// ctor 保留 IMemoryCache/IOptions 构造注入（非域基础设施，ActivatorUtilities 正常解析）。</para>
     /// </summary>
-    internal sealed class DictionaryManager : IDictionaryManager
+    [DiContractIgnore]
+    internal sealed class DictionaryManager : DomainServiceBase, IDictionaryManager
     {
-        private readonly IDomainUser _user;
         private IDictionaryStore? _store;
         private readonly ILogger<DictionaryManager> _logger;
         private readonly IMemoryCache _cache;
         private readonly DataDictionaryOptions _options;
 
-        private IDictionaryStore Store => _store ??= _user.Use<IDictionaryStore>();
+        private IDictionaryStore Store => _store ??= User.Use<IDictionaryStore>();
 
         private const string CacheKeyPrefix = "DD:";
 
@@ -32,8 +38,8 @@ namespace TKWF.Ext.DataDictionary
             ILogger<DictionaryManager> logger,
             IMemoryCache cache,
             IOptions<DataDictionaryOptions> options)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));

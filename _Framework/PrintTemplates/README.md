@@ -1,6 +1,6 @@
 # TKWF.Ext.PrintTemplates 打印模板引擎与版本化扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (Scriban 沙箱渲染 + 模板版本化 + VEntity 读模型) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (Scriban 沙箱渲染 + 模板版本化 + VEntity 读模型) + **V0.3.0（领域自治根治，ADR90）** | **框架**: .NET 10
 
 **核心约束**: Scriban 沙箱契约（操作者可编辑安全）、Draft/Active/Archived 版本生命周期、`{Key}@{Version}` 审计固定渲染、存储异常传播不静默（审计关键）、SG1 声明式实体、**V0.2.0 读路径 VEntity 化（`vw_PrintTemplateVersionView` JOIN 单查询 + 敏感视图经门面）**
 
@@ -23,7 +23,7 @@
 - **模板存储（`ITemplateStore`）**：模板/版本 CRUD + 按 `Key`/`Key@Version`/`Active` 查询。经 SG1/xCodeGen 生成的 DataService 委托持久化（遵循数据访问红线，不直接注入 IFreeSql），**异常传播不静默**——模板是审计关键资产，存储层错误必须显式暴露（C1）。
 - **沙箱渲染（`ITemplateRenderer`）**：Scriban 沙箱渲染——`MemberFilter` 公共属性白名单 + **不配置 `TemplateLoader`**（阻断 `include` 读盘）+ 数据模型递归转换（不暴露原始 .NET 对象）+ 解析缓存 + 执行限制。无状态 → Singleton 线程安全。
 - **管理门面（`ITemplateManager`）**：版本生命周期（Draft→Active→Archived）+ 发布版本自动 minor 递增 + 渲染入口（`version=null` 取最新 Active / 显式 version 精确固定，审计用）。Scoped。
-- **扩展接线（`PrintTemplatesExtensionInitializer`）**：`[TKWFExtension]` SG1 发现 + 三钩子——ConfigureServices 注册三件套（TryAdd 语义，消费方可覆盖）+ Options 绑定；ConfigureFilters/InitializeAsync 不调用（V0.1.0 无过滤器/无种子数据）。
+- **扩展接线（`PrintTemplatesExtensionInitializer`）**：`[TKWFExtension]` SG1 发现 + 三钩子——ConfigureServices 注册三件套（V0.3.0 领域自治根治：`ITemplateStore`/`ITemplateManager` 改 `AddConstructibleService` 接口守卫工厂 + 实现类 throw-factory；`ITemplateRenderer` 接线型 `TryAddSingleton` 保留——纯渲染基础设施无 user 依赖）+ Options 绑定；ConfigureFilters/InitializeAsync 不调用（V0.1.0 无过滤器/无种子数据）。消费方统一经 `User.Use<ITemplateStore>()` / `User.Use<ITemplateManager>()` 解析（禁构造注入，DI004 零豁免）。
 
 ### 2. 关键设计
 
@@ -37,9 +37,9 @@
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`ITemplateStore`** | 模板/版本 CRUD + 按 Key/Key@Version/Active 查询；**异常传播**（审计关键，不静默，C1） | `TemplateStore`（经 SG1/xCodeGen DataService 委托） |
-| **`ITemplateRenderer`** | Scriban 沙箱渲染（公共属性白名单 + 无 TemplateLoader + 递归转换 + 解析缓存 + 执行限制） | `ScribanTemplateRenderer`（Singleton） |
-| **`ITemplateManager`** | 管理门面：版本生命周期 + 发布自动 minor 递增 + 渲染入口 | `TemplateManager`（Scoped） |
+| **`ITemplateStore`** | 模板/版本 CRUD + 按 Key/Key@Version/Active 查询；**异常传播**（审计关键，不静默，C1） | `TemplateStore`（继承 `DomainServiceBase` + `[DiContractIgnore]`，经 SG1/xCodeGen DataService 委托；V0.3.0 `AddConstructibleService` 注册） |
+| **`ITemplateRenderer`** | Scriban 沙箱渲染（公共属性白名单 + 无 TemplateLoader + 递归转换 + 解析缓存 + 执行限制） | `ScribanTemplateRenderer`（接线型，`TryAddSingleton`——无状态 + 解析缓存线程安全） |
+| **`ITemplateManager`** | 管理门面：版本生命周期 + 发布自动 minor 递增 + 渲染入口 | `TemplateManager`（继承 `DomainServiceBase` + `[DiContractIgnore]`，V0.3.0 `AddConstructibleService` 注册） |
 | **`PrintTemplateEntity`** | 模板定义实体（Key 唯一 + Name + Description + 审计时间） | SG1 声明式实体 → `PrintTemplate` 表 |
 | **`PrintTemplateVersionEntity`** | 版本实体（TemplateId + Version 唯一 + Content + Status + 发布审计） | SG1 声明式实体 → `PrintTemplateVersion` 表 |
 | **`PrintTemplateVersionStatus`** | 版本状态枚举（Draft / Active / Archived） | 内置 |
@@ -105,14 +105,19 @@ Draft（草稿）──── Publish ────→ Active（唯一）──�
 
 ## 七、架构演进路线 (Architecture Roadmap)
 
-### V0.2.0（当前，VEntity 化）
+### V0.2.0（已发布，VEntity 化）
 - **读路径 VEntity 化（02 倒推优化方案）**：`GetVersionAsync`/`GetActiveVersionAsync`/`ListVersionsAsync`/`RenderAsync` 经 `vw_PrintTemplateVersionView`（JOIN 版本→模板，12 投影列含 **Key/TemplateName 核心收益**）单查询下推 DB——**2 次往返 → 1 次**（真消除往返）；返回类型 `PrintTemplateVersionEntity` → `PrintTemplateVersionView`（C3 签名变更，用户裁定内部测试无历史负担接受）
 - **敏感视图经门面**：`ExposeGraphqlQuery = false`（含模板正文 Content 商业资产；ADR-PrintTemplates-敏感视图经门面暴露策略）；数据访问统一经 `ITemplateManager`
 - **写路径零触碰**：`PublishAsync`/`DraftAsync`/`ArchiveAsync` 仍经 Store 实体读方法（VEntity 只读禁写——Status/Content 回写需实体，oracle3 C-high-2）
 - **生产部署**：`SyncViewsAsync` 仅开发自动建视图；生产需 DBA 手动执行 ViewSql（PG 方言 + SQLite 开发变体）
 - 测试：33/33（原 29 + N3/N4/N5）
 
-### V0.3.0（候选，能力完善）
+### V0.3.0（已实施，领域自治根治 ADR90——V4.10.53 正确路线）
+- 门面/Store 继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——IDomainUser 永不注册 DI）+ `[DiContractIgnore]` 豁免 DI001
+- 注册形态：`ITemplateStore` / `ITemplateManager` 改 `AddConstructibleService`（接口可构造守卫工厂 + 实现类 throw-factory）；`ITemplateRenderer` 接线型 `TryAddSingleton` 保留
+- 测试宿主重写走生产路径（真实 DI + `DomainUser<T>.BindScope` + `User.Use<接口>()` AOP；Initializer 注册形态断言守卫工厂/throw-factory/域外抛；Renderer 单测保持现状）
+
+### V0.4.0（候选，能力完善）
 - 显式 SemVer 版本号指定（当前仅自动 minor 递增；手动版本号允许并发小版本/补丁发布）
 - 设计期 git-tracked 模板文件（embedded/VFS，对齐 ABP `VirtualFileTemplateContentContributor`）+ DB 覆盖模型（租户覆盖默认模板 + 权限门控）
 - 模板启用/禁用管理（`IsEnabled` schema 列 + 管理 API，当前 schema 不含该列）

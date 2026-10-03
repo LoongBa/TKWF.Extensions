@@ -2,40 +2,29 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 
 /// <summary>
-/// DictionaryTreeNode 树形组装测试（V0.2.0 W7）——正常层级、空父节点归根、平级无 Children、降级行为。
+/// DictionaryTreeNode 树形组装测试（V0.2.0 W7，V0.3.0 领域自治根治重写——走生产路径）——
+/// 正常层级、空父节点归根、平级无 Children、降级行为。
+/// <para>manager 与种子经同一生产宿主（共享 fsql/IMemoryCache）——数据落库同源。</para>
 /// </summary>
 public class DictionaryTreeTests
 {
-    private static IFreeSql CreateFreeSql()
+    /// <summary>同步建宿主 + AOP 解析 Manager（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
+    private static (IDictionaryManager Manager, DomainUser<TestUserInfo> User) CreateManager(bool enableTreeMode = true)
     {
-        var fsql = new FreeSql.FreeSqlBuilder()
-            .UseConnectionString(FreeSql.DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-        fsql.CodeFirst.SyncStructure<DictionaryDefinitionEntity>();
-        fsql.CodeFirst.SyncStructure<DictionaryItemEntity>();
-        return fsql;
+        var (provider, user) = DataDictionaryTestHost.CreateProductionHost(o => o.EnableTreeMode = enableTreeMode);
+        return (user.Use<IDictionaryManager>(), user);
     }
 
-    private static DictionaryManager CreateManager(IFreeSql fsql, bool enableTreeMode = true)
+    /// <summary>种子：省市区三级树形数据（经同一宿主 user 的 IDictionaryStore 生产路径落库）。</summary>
+    private static async Task SeedRegionTree(DomainUser<TestUserInfo> user)
     {
-        var store = DataDictionaryTestHost.CreateStore(fsql);
-        var cache = new MemoryCache(new MemoryCacheOptions());
-        var options = Options.Create(new DataDictionaryOptions { EnableTreeMode = enableTreeMode });
-        return new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
-    }
-
-    /// <summary>种子：省市区三级树形数据。</summary>
-    private static async Task SeedRegionTree(IFreeSql fsql)
-    {
-        var store = DataDictionaryTestHost.CreateStore(fsql);
+        var store = user.Use<IDictionaryStore>();
         var def = new DictionaryDefinitionEntity { Code = "Region", DisplayName = "地区" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -76,9 +65,8 @@ public class DictionaryTreeTests
     [Fact]
     public async Task GetItemsTree_ThreeLevelHierarchy_ReturnsNestedTree()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-        await SeedRegionTree(fsql);
+        var (manager, user) = CreateManager();
+        await SeedRegionTree(user);
 
         var tree = await manager.GetItemsTreeAsync("Region", CancellationToken.None);
 
@@ -100,10 +88,8 @@ public class DictionaryTreeTests
     [Fact]
     public async Task GetItemsTree_NullParentCode_GoesToRoot()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-
-        var store = DataDictionaryTestHost.CreateStore(fsql);
+        var (manager, user) = CreateManager();
+        var store = user.Use<IDictionaryStore>();
         var def = new DictionaryDefinitionEntity { Code = "Flat", DisplayName = "平级" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -131,10 +117,8 @@ public class DictionaryTreeTests
     [Fact]
     public async Task GetItemsTree_SiblingItems_NoChildren()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-
-        var store = DataDictionaryTestHost.CreateStore(fsql);
+        var (manager, user) = CreateManager();
+        var store = user.Use<IDictionaryStore>();
         var def = new DictionaryDefinitionEntity { Code = "Siblings", DisplayName = "兄弟" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -165,8 +149,7 @@ public class DictionaryTreeTests
     [Fact]
     public async Task GetItemsTree_UnknownCode_ReturnsEmpty()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         var tree = await manager.GetItemsTreeAsync("NOBODY", CancellationToken.None);
 
@@ -176,9 +159,8 @@ public class DictionaryTreeTests
     [Fact]
     public async Task GetItemsTree_EnableTreeModeFalse_ReturnsFlatList()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql, enableTreeMode: false);
-        await SeedRegionTree(fsql);
+        var (manager, user) = CreateManager(enableTreeMode: false);
+        await SeedRegionTree(user);
 
         var tree = await manager.GetItemsTreeAsync("Region", CancellationToken.None);
 
@@ -190,10 +172,8 @@ public class DictionaryTreeTests
     [Fact]
     public async Task GetItemsTree_EmptyDictionary_ReturnsEmpty()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-
-        var store = DataDictionaryTestHost.CreateStore(fsql);
+        var (manager, user) = CreateManager();
+        var store = user.Use<IDictionaryStore>();
         await store.UpsertDefinitionAsync(new DictionaryDefinitionEntity
         {
             Code = "Empty", DisplayName = "空"
@@ -204,3 +184,4 @@ public class DictionaryTreeTests
         Assert.Empty(tree);
     }
 }
+

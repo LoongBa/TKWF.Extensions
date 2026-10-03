@@ -1,24 +1,33 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 
 /// <summary>
-/// FreeSqlTemplateStore 测试——使用 SQLite 内存库验证真实 CRUD / 版本查询 / Active 查询 / 版本倒序列表。
-/// <para>TemplateStore 经两个 DataService（SG1/xCodeGen 生成，FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化——
-/// 数据访问红线整改后不直接注入 IFreeSql。</para>
+/// FreeSqlTemplateStore 测试（V0.3.0 领域自治根治重写——走生产路径）——
+/// 使用 SQLite 内存库验证真实 CRUD / 版本查询 / Active 查询 / 版本倒序列表。
+/// <para>生产路径：真实 DI + <see cref="DomainUser{TUserInfo}"/> BindScope → <c>User.Use&lt;ITemplateStore&gt;()</c>
+/// AOP 路径解析（AddConstructibleService 接口守卫工厂）；TemplateStore 经两个 DataService（SG1/xCodeGen 生成，
+/// FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化——数据访问红线不直接注入 IFreeSql。</para>
 /// <para>存储层异常传播（审计关键，不静默）：唯一约束冲突（同 TemplateId+Version 并发直插）显式抛异常——"并发发布败者"语义（C1）。</para>
 /// </summary>
 public class FreeSqlTemplateStoreTests
 {
+    /// <summary>同步建宿主 + AOP 解析 Store（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
+    private static ITemplateStore CreateStore()
+    {
+        var (provider, user) = TemplateTestSupport.CreateProductionHost();
+        return user.Use<ITemplateStore>();
+    }
+
     [Fact]
     public async Task GetByKeyAsync_Exists_ReturnsTemplate()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "测试模板" };
         await store.UpsertTemplateAsync(template);
@@ -34,9 +43,7 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task GetByKeyAsync_NotExists_ReturnsNull()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         var result = await store.GetByKeyAsync("No.Such.Key");
 
@@ -46,9 +53,7 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task UpsertTemplateAsync_InsertsNewTemplate()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k1", Name = "n1" });
 
@@ -59,9 +64,7 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task GetVersionAsync_Exists_ReturnsVersion()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -87,9 +90,7 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task GetActiveVersionAsync_Exists_ReturnsActiveVersion()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -121,9 +122,7 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task ListVersionsAsync_ReturnsVersions()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -145,9 +144,7 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task UpsertVersionAsync_InsertsNewVersion()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -168,7 +165,7 @@ public class FreeSqlTemplateStoreTests
         Assert.Equal("content", versions[0].Content);
     }
 
-    // ── 异常传播（审计关键，不静默）——数据访问红线整改后补充 ──
+    // ── 异常传播（审计关键，不静默）──
 
     /// <summary>
     /// 唯一约束冲突（同 TemplateId+Version 并发直插）→ 数据库约束异常显式向上传播，不被吞掉（C1）。
@@ -178,9 +175,8 @@ public class FreeSqlTemplateStoreTests
     [Fact]
     public async Task UpsertVersionAsync_DuplicateTemplateVersion_ThrowsNotSwallowed()
     {
-        using var fsql = TemplateTestSupport.CreateInMemoryFreeSql();
-        TemplateTestSupport.SyncStructure(fsql);
-        var store = TemplateTestSupport.CreateStore(fsql);
+        var (provider, user) = TemplateTestSupport.CreateProductionHost();
+        var store = user.Use<ITemplateStore>();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
         await store.UpsertTemplateAsync(template);
@@ -196,7 +192,8 @@ public class FreeSqlTemplateStoreTests
 
         // 并发败者直插同键 → 唯一约束异常必须向上传播（不吞）
         var dupDataService = new PrintTemplateVersionEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionEntity>(new UnitOfWorkManager(fsql)));
+            user, new FreeSqlEntityDAC<PrintTemplateVersionEntity>(new UnitOfWorkManager(
+                provider.GetRequiredService<IFreeSql>())));
         var ex = await Record.ExceptionAsync(() => dupDataService.EntityCreateAsync(new PrintTemplateVersionEntity
         {
             TemplateId = savedTemplate.Id,
@@ -210,3 +207,4 @@ public class FreeSqlTemplateStoreTests
         Assert.Single(versions);
     }
 }
+

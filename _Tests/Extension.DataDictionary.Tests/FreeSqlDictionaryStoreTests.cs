@@ -2,28 +2,24 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging.Abstractions;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 
 /// <summary>
-/// FreeSqlDictionaryStore 测试——定义/项 CRUD、按编码查询、Upsert 幂等、异常静默。
+/// FreeSqlDictionaryStore 测试（V0.3.0 领域自治根治重写——走生产路径）——
+/// 定义/项 CRUD、按编码查询、Upsert 幂等、异常静默。
+/// <para>生产路径：真实 DI（扩展 ConfigureServices + FreeSql 基础设施）+ <see cref="DomainUser{TUserInfo}"/> BindScope
+/// → <c>User.Use&lt;IDictionaryStore&gt;()</c> AOP 路径解析（AddConstructibleService 接口守卫工厂）。</para>
 /// </summary>
 public class FreeSqlDictionaryStoreTests
 {
-    private static IFreeSql CreateFreeSql()
+    /// <summary>同步建宿主 + AOP 解析 Store（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
+    private static IDictionaryStore CreateStore()
     {
-        var fsql = new FreeSql.FreeSqlBuilder()
-            .UseConnectionString(FreeSql.DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-        fsql.CodeFirst.SyncStructure<DictionaryDefinitionEntity>();
-        fsql.CodeFirst.SyncStructure<DictionaryItemEntity>();
-        return fsql;
+        var (provider, user) = DataDictionaryTestHost.CreateProductionHost();
+        return user.Use<IDictionaryStore>();
     }
-
-    private static DictionaryStore CreateStore(IFreeSql fsql)
-        => DataDictionaryTestHost.CreateStore(fsql);
 
     private static DictionaryDefinitionEntity NewDefinition(string code = "Gender")
         => new() { Code = code, DisplayName = code };
@@ -34,8 +30,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task UpsertDefinition_New_SetsId()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition();
 
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
@@ -48,8 +43,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task UpsertDefinition_Existing_Updates()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition();
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -67,8 +61,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task GetDefinitionByCode_ReturnsDefinition()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition("OrderStatus");
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -81,8 +74,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task GetDefinitionByCode_NotExists_ReturnsNull()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
 
         var result = await store.GetDefinitionByCodeAsync("NOBODY", CancellationToken.None);
 
@@ -92,8 +84,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task GetDefinitions_ReturnsPaged()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         for (var i = 0; i < 3; i++)
             await store.UpsertDefinitionAsync(NewDefinition($"Def{i}"), CancellationToken.None);
 
@@ -107,8 +98,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task UpsertItem_NewAndUpdate_ByIdentity()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition();
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -130,8 +120,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task GetItems_SortedByOrder_ExcludesDisabled()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition();
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -150,8 +139,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task DeleteDefinition_CascadesItems()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition();
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(NewItem(def.Id, "Male", 1), CancellationToken.None);
@@ -167,8 +155,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task DeleteItem_Removes()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
         var def = NewDefinition();
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         var item = NewItem(def.Id, "Male", 1);
@@ -183,8 +170,7 @@ public class FreeSqlDictionaryStoreTests
     [Fact]
     public async Task Operations_FailSilently_OnNullEntity()
     {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
+        var store = CreateStore();
 
         await store.UpsertDefinitionAsync(null!, CancellationToken.None);
         await store.UpsertItemAsync(null!, CancellationToken.None);
@@ -196,3 +182,4 @@ public class FreeSqlDictionaryStoreTests
         Assert.Empty(items);
     }
 }
+

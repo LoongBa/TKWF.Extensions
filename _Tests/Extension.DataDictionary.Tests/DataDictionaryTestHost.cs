@@ -3,33 +3,39 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 
 /// <summary>
-/// 测试公共设施——StubDomainUser + 基于 FreeSqlEntityDAC 的 DictionaryStore 工厂。
-/// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
-/// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 Settings/BlobStoring 测试同模式）。</para>
-/// <para>V0.2.0 VEntity：CreateStore 同步建真实视图 <c>vw_DictionaryItemView</c>（SQLite 方言）并接线
-/// <see cref="DictionaryItemViewDataService"/>——与 ApprovalTestSupport.SyncStructure 同模式（不跑宿主 SyncViewsAsync）。</para>
+/// 测试公共设施（V0.3.0 领域自治根治重写——对齐 Settings 宿主生产路径范式）。
+/// <list type="bullet">
+/// <item><strong>生产路径集成</strong>：<see cref="CreateProductionHost"/>——真实 DI（扩展 ConfigureServices +
+///     FreeSql 基础设施 + AddLogging）+ 真实 <see cref="DomainUser{TUserInfo}"/>（BindScope）→
+///     <c>User.Use&lt;IDictionaryStore&gt;()</c> / <c>User.Use&lt;IDictionaryManager&gt;()</c> AOP 路径解析；</item>
+/// <item><strong>分层单测</strong>：<see cref="StubDomainUser"/>——可配置用户桩，<c>Use&lt;T&gt;()</c> 按生产
+///     NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析）。</item>
+/// <item>VEntity：建真实视图 <c>vw_DictionaryItemView</c>（SQLite 方言，来自 DictionaryItemView.ViewSqlSQLite）——
+///     与 ApprovalTestSupport.SyncStructure 同模式（不跑宿主 SyncViewsAsync）。</item>
+/// </list>
 /// </summary>
 internal static class DataDictionaryTestHost
 {
-    /// <summary>创建基于 SQLite 内存库的 DictionaryStore（DataService 委托）。</summary>
-    public static DictionaryStore CreateStore(IFreeSql fsql)
+    /// <summary>创建 SQLite 内存库 + 同步两张表结构 + 建 VEntity 视图（每次调用新连接 = 独立内存库）。</summary>
+    public static IFreeSql CreateFreeSql()
     {
+        var fsql = new FreeSqlBuilder()
+            .UseConnectionString(DataType.Sqlite, "Data Source=:memory:")
+            .UseAutoSyncStructure(true)
+            .Build();
+        fsql.CodeFirst.SyncStructure<DictionaryDefinitionEntity>();
+        fsql.CodeFirst.SyncStructure<DictionaryItemEntity>();
         CreateView(fsql);
-        var defDac = new FreeSqlEntityDAC<DictionaryDefinitionEntity>(new UnitOfWorkManager(fsql));
-        var itemDac = new FreeSqlEntityDAC<DictionaryItemEntity>(new UnitOfWorkManager(fsql));
-        var viewDac = new FreeSqlEntityDAC<DictionaryItemView>(new UnitOfWorkManager(fsql));
-        var defDataService = new DictionaryDefinitionEntityDataService(new StubDomainUser(), defDac);
-        var itemDataService = new DictionaryItemEntityDataService(new StubDomainUser(), itemDac);
-        var viewDataService = new DictionaryItemViewDataService(new StubDomainUser(), viewDac);
-        var stubUser = new StubDomainUser().With(defDataService).With(itemDataService).With(viewDataService);
-        return new DictionaryStore(stubUser, NullLogger<DictionaryStore>.Instance);
+        return fsql;
     }
 
     /// <summary>创建真实视图 vw_DictionaryItemView（SQLite 方言，来自 DictionaryItemView.ViewSqlSQLite）。</summary>
@@ -42,19 +48,62 @@ SELECT i.""Id"", i.""DefinitionId"", d.""Code"" AS ""DefinitionCode"", i.""Code"
 FROM ""DictionaryItem"" i
 INNER JOIN ""DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""");
     }
+
+    /// <summary>
+    /// 生产路径 DI 主机（集成测试）：真实 DI（扩展 ConfigureServices + FreeSql 基础设施 + AddLogging）+
+    /// <see cref="DomainUser{TUserInfo}"/> BindScope。可选配置回调用于按测试覆盖 <see cref="DataDictionaryOptions"/>。
+    /// </summary>
+    public static (ServiceProvider Provider, DomainUser<TestUserInfo> User) CreateProductionHost(
+        Action<DataDictionaryOptions>? configure = null)
+    {
+        var services = new ServiceCollection();
+        // 1. 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices）
+        new DataDictionaryExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        if (configure != null)
+            services.Configure<DataDictionaryOptions>(configure);
+        // 2. FreeSql 基础设施（消费方 DomainHost 等价注册）——实体 + VEntity 视图（IEntityReadOnlyDAC 红线契约）
+        var fsql = CreateFreeSql();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<DictionaryDefinitionEntity>, FreeSqlEntityDAC<DictionaryDefinitionEntity>>();
+        services.AddSingleton<IEntityDAC<DictionaryItemEntity>, FreeSqlEntityDAC<DictionaryItemEntity>>();
+        services.AddSingleton<IEntityReadOnlyDAC<DictionaryItemView>, FreeSqlEntityDAC<DictionaryItemView>>();
+        // 3. 解析作用域绑定（生产经 DomainHost.NewDomainContext 绑定 AsyncLocal——测试等价 BindScope）
+        var provider = services.BuildServiceProvider();
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+        return (provider, user);
+    }
+
+    /// <summary>
+    /// 分层单测宿主：构造 DataService 能力齐全的 ServiceProvider（stub 经 Use&lt;T&gt; 懒加载——
+    /// 生产 NoAop 路径等价，ActivatorUtilities 直建 DataService，IEntityDAC 从 DI 解析）。
+    /// </summary>
+    public static StubDomainUser CreateStubUser(IFreeSql fsql)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<DictionaryDefinitionEntity>, FreeSqlEntityDAC<DictionaryDefinitionEntity>>();
+        services.AddSingleton<IEntityDAC<DictionaryItemEntity>, FreeSqlEntityDAC<DictionaryItemEntity>>();
+        services.AddSingleton<IEntityReadOnlyDAC<DictionaryItemView>, FreeSqlEntityDAC<DictionaryItemView>>();
+        return new StubDomainUser { ServiceProvider = services.BuildServiceProvider() };
+    }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+/// <summary>
+/// 测试用户桩（V0.3.0 重写）——实现 IDomainUser 最小契约；<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价：
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>——IDomainUser 参数显式传 this，其余从 DI 解析
+/// （对齐 Settings 宿主 StubDomainUser 范式）。
+/// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {
-    private readonly Dictionary<Type, object? > _services = new();
+    private IServiceProvider? _provider;
 
-    /// <summary>注册外部服务实例（懒加载 Use&lt;T&gt;() 解析源——测试构造 DataService 后注册）。</summary>
-    public StubDomainUser With<T>(T service) where T : class
-    {
-        _services[typeof(T)] = service;
-        return this;
-    }
+    /// <summary>ServiceProvider（测试工厂注册时注入——Use&lt;T&gt; 解析源）。</summary>
+    public IServiceProvider? ServiceProvider { set => _provider = value; get => _provider; }
 
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
@@ -67,14 +116,19 @@ internal sealed class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => _services.TryGetValue(typeof(TDomainService), out var svc) && svc is TDomainService s
-            ? s
-            : throw new NotSupportedException($"Stub: {typeof(TDomainService).Name} 未注册——请用 With<T>() 注册（懒加载 Use<T> 解析源）");
+    {
+        // 生产 NoAop 路径等价：ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析
+        if (_provider is null)
+            throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+        return (TDomainService)ActivatorUtilities.CreateInstance(_provider, typeof(TDomainService), this);
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => _services.TryGetValue(typeof(TService), out var svc) && svc is TService s
-            ? s
-            : throw new NotSupportedException($"Stub: {typeof(TService).Name} 未注册——请用 With<T>() 注册（懒加载 GetService<T> 解析源）");
+    {
+        if (_provider is null)
+            throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+        return _provider.GetRequiredService<TService>();
+    }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

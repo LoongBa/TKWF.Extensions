@@ -3,15 +3,29 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
 
 /// <summary>
-/// 测试共享支撑——SQLite 内存库 + DataService 构造 + StubDomainUser。
-/// <para>TemplateStore 经两个 DataService（FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化，
-/// 对齐 Settings/BlobStoring 测试构造（数据访问红线整改后 Store 不接收 IFreeSql）。</para>
+/// 测试共享支撑（V0.3.0 领域自治根治重写——对齐 Settings 宿主生产路径范式）。
+/// <list type="bullet">
+/// <item><strong>生产路径集成</strong>：<see cref="CreateProductionHost"/>——真实 DI（扩展 ConfigureServices +
+///     FreeSql 基础设施 + AddLogging）+ 真实 <see cref="DomainUser{TUserInfo}"/>（BindScope）→
+///     <c>User.Use&lt;ITemplateStore&gt;()</c> / <c>User.Use&lt;ITemplateManager&gt;()</c> AOP 路径解析；</item>
+/// <item><strong>分层单测</strong>：<see cref="StubDomainUser"/>——可配置用户桩，<c>Use&lt;T&gt;()</c> 按生产
+///     NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析）；</item>
+/// <item>VEntity：建真实视图 <c>vw_PrintTemplateVersionView</c>（SQLite 方言）——不跑宿主 SyncViewsAsync。</item>
+/// </list>
+/// <para>⚠️ 测试宿主补注册 <c>PrintTemplatesOptions</c> 裸类型（<c>AddOptions</c> 仅注册 IOptions——而
+/// <see cref="ScribanTemplateRenderer"/> ctor 依赖裸 Options）——生产路径下 ITemplateRenderer 可解析的必要兜底
+/// （见整改日志：记录待报框架组）。</para>
 /// </summary>
 internal static class TemplateTestSupport
 {
@@ -41,48 +55,66 @@ FROM ""PrintTemplateVersion"" v
 INNER JOIN ""PrintTemplate"" t ON v.""TemplateId"" = t.""Id""");
     }
 
-    /// <summary>构造 TemplateStore——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动两个 DataService。
-    /// <para>ADR88 适配：TemplateStore 构造改 IDomainUser——StubDomainUser.With 注册两 DataService 懒加载源。</para></summary>
-    public static TemplateStore CreateStore(IFreeSql fsql)
+    /// <summary>
+    /// 生产路径 DI 主机（集成测试）：真实 DI（扩展 ConfigureServices + FreeSql 基础设施 + AddLogging）+
+    /// <see cref="DomainUser{TUserInfo}"/> BindScope。
+    /// </summary>
+    public static (ServiceProvider Provider, DomainUser<TestUserInfo> User) CreateProductionHost()
     {
-        var templateDataService = new PrintTemplateEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateEntity>(new UnitOfWorkManager(fsql)));
-        var versionDataService = new PrintTemplateVersionEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionEntity>(new UnitOfWorkManager(fsql)));
-        return new TemplateStore(new StubDomainUser().With(templateDataService).With(versionDataService));
+        var services = new ServiceCollection();
+        // 1. 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices）
+        new PrintTemplatesExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        // 2. 测试宿主基础设施：空 IConfiguration——AddOptions.BindConfiguration("TKWF:PrintTemplates")
+        //    ConfigureNamedOptions 在解析 IOptions 时经 sp 取 IConfiguration（注册时取不到会延迟抛）
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        // 3. 测试宿主兜底：ScribanTemplateRenderer ctor 依赖裸 PrintTemplatesOptions（AddOptions 不注册 T 本身）
+        //    ——生产路径下 ITemplateRenderer（TryAddSingleton）可解析的必要条件（记录待报框架组）
+        services.AddSingleton<PrintTemplatesOptions>(sp => sp.GetRequiredService<IOptions<PrintTemplatesOptions>>().Value);
+        // 4. FreeSql 基础设施（消费方 DomainHost 等价注册）——实体 + VEntity 视图（IEntityReadOnlyDAC 红线契约）
+        var fsql = CreateInMemoryFreeSql();
+        SyncStructure(fsql);
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<PrintTemplateEntity>, FreeSqlEntityDAC<PrintTemplateEntity>>();
+        services.AddSingleton<IEntityDAC<PrintTemplateVersionEntity>, FreeSqlEntityDAC<PrintTemplateVersionEntity>>();
+        services.AddSingleton<IEntityReadOnlyDAC<PrintTemplateVersionView>, FreeSqlEntityDAC<PrintTemplateVersionView>>();
+        // 5. 解析作用域绑定（生产经 DomainHost.NewDomainContext 绑定 AsyncLocal——测试等价 BindScope）
+        var provider = services.BuildServiceProvider();
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+        return (provider, user);
     }
 
-    /// <summary>构造 VEntity 只读 DataService——经真实 FreeSql DAC 驱动（红线：IEntityReadOnlyDAC，绝不用 IEntityDAC）。</summary>
-    public static PrintTemplateVersionViewDataService CreateViewDataService(IFreeSql fsql)
-        => new(
-            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionView>(new UnitOfWorkManager(fsql)));
-
-    /// <summary>构造 TemplateManager（真实 Store + 真实 Renderer + VEntity 只读 DataService，默认 Options）。
-    /// <para>ADR88 适配：TemplateManager 构造改 IDomainUser——StubDomainUser.With 注册 Store/Renderer/ViewDataService 懒加载源。</para></summary>
-    public static TemplateManager CreateManager(IFreeSql fsql)
+    /// <summary>
+    /// 分层单测宿主：构造 DataService 能力齐全的 ServiceProvider（stub 经 Use&lt;T&gt; 懒加载——
+    /// 生产 NoAop 路径等价，ActivatorUtilities 直建 DataService/Store/Renderer，IEntityDAC 从 DI 解析）。
+    /// </summary>
+    public static StubDomainUser CreateStubUser(IFreeSql fsql)
     {
-        var store = CreateStore(fsql);
-        var renderer = new ScribanTemplateRenderer(new PrintTemplatesOptions());
-        var viewDataService = CreateViewDataService(fsql);
-        return new TemplateManager(new StubDomainUser()
-            .With<ITemplateStore>(store)
-            .With<ITemplateRenderer>(renderer)
-            .With(viewDataService));
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<PrintTemplatesOptions>(new PrintTemplatesOptions());
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<PrintTemplateEntity>, FreeSqlEntityDAC<PrintTemplateEntity>>();
+        services.AddSingleton<IEntityDAC<PrintTemplateVersionEntity>, FreeSqlEntityDAC<PrintTemplateVersionEntity>>();
+        services.AddSingleton<IEntityReadOnlyDAC<PrintTemplateVersionView>, FreeSqlEntityDAC<PrintTemplateVersionView>>();
+        return new StubDomainUser { ServiceProvider = services.BuildServiceProvider() };
     }
 }
 
-/// <summary>最小 IDomainUser 桩——仅满足编译，不提供真实用户上下文。
-/// <para>ADR88 适配：Use&lt;T&gt;() 懒加载从服务映射表解析（<see cref="With{T}"/> 注册外部 DataService 实例）。</para></summary>
+/// <summary>
+/// 测试用户桩（V0.3.0 重写）——实现 IDomainUser 最小契约；<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价：
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>——IDomainUser 参数显式传 this，其余从 DI 解析
+/// （对齐 Settings 宿主 StubDomainUser 范式）。
+/// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {
-    private readonly Dictionary<Type, object? > _services = new();
+    private IServiceProvider? _provider;
 
-    /// <summary>注册外部服务实例（懒加载 Use&lt;T&gt;() 解析源——测试构造 DataService/Store/Renderer 后注册）。</summary>
-    public StubDomainUser With<T>(T service) where T : class
-    {
-        _services[typeof(T)] = service;
-        return this;
-    }
+    /// <summary>ServiceProvider（测试工厂注册时注入——Use&lt;T&gt; 解析源）。</summary>
+    public IServiceProvider? ServiceProvider { set => _provider = value; get => _provider; }
 
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
@@ -95,14 +127,19 @@ internal sealed class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => _services.TryGetValue(typeof(TDomainService), out var svc) && svc is TDomainService s
-            ? s
-            : throw new NotSupportedException($"Stub: {typeof(TDomainService).Name} 未注册——请用 With<T>() 注册（懒加载 Use<T> 解析源）");
+    {
+        // 生产 NoAop 路径等价：ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析
+        if (_provider is null)
+            throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+        return (TDomainService)ActivatorUtilities.CreateInstance(_provider, typeof(TDomainService), this);
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => _services.TryGetValue(typeof(TService), out var svc) && svc is TService s
-            ? s
-            : throw new NotSupportedException($"Stub: {typeof(TService).Name} 未注册——请用 With<T>() 注册（懒加载 GetService<T> 解析源）");
+    {
+        if (_provider is null)
+            throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+        return _provider.GetRequiredService<TService>();
+    }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

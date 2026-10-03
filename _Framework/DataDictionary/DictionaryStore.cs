@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary
@@ -12,24 +14,27 @@ namespace TKWF.Ext.DataDictionary
     /// （SG1/xCodeGen 生成的 DataService）委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：
     /// 扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
+    /// <para>V0.3.0（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+    /// （IDomainUser 永不注册 DI）；注册形态改 <c>AddConstructibleService&lt;IDictionaryStore, DictionaryStore&gt;</c>
+    /// （接口可构造守卫工厂 + 实现类 throw-factory，消费方经 <c>User.Use&lt;IDictionaryStore&gt;()</c> 解析）。</para>
     /// </summary>
-internal sealed class DictionaryStore : IDictionaryStore
+    [DiContractIgnore]
+    internal sealed class DictionaryStore : DomainServiceBase, IDictionaryStore
     {
-        private readonly IDomainUser _user;
         private DictionaryDefinitionEntityDataService? _definitionDataService;
         private DictionaryItemEntityDataService? _itemDataService;
         private DictionaryItemViewDataService? _itemViewDataService;
         private readonly ILogger<DictionaryStore> _logger;
 
-        private DictionaryDefinitionEntityDataService DefinitionDataService => _definitionDataService ??= _user.Use<DictionaryDefinitionEntityDataService>();
-        private DictionaryItemEntityDataService ItemDataService => _itemDataService ??= _user.Use<DictionaryItemEntityDataService>();
-        private DictionaryItemViewDataService ItemViewDataService => _itemViewDataService ??= _user.Use<DictionaryItemViewDataService>();
+        private DictionaryDefinitionEntityDataService DefinitionDataService => _definitionDataService ??= User.Use<DictionaryDefinitionEntityDataService>();
+        private DictionaryItemEntityDataService ItemDataService => _itemDataService ??= User.Use<DictionaryItemEntityDataService>();
+        private DictionaryItemViewDataService ItemViewDataService => _itemViewDataService ??= User.Use<DictionaryItemViewDataService>();
 
         public DictionaryStore(
             IDomainUser user,
             ILogger<DictionaryStore> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

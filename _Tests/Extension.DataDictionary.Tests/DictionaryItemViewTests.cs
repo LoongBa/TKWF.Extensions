@@ -2,29 +2,26 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using FreeSql;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 
 /// <summary>
-/// vw_DictionaryItemView 视图 JOIN 测试（V0.2.0 N4）——DefinitionCode 单查询返回项 + 定义列（两步骤一）。
+/// vw_DictionaryItemView 视图 JOIN 测试（V0.2.0 N4，V0.3.0 领域自治根治重写——走生产路径）——
+/// DefinitionCode 单查询返回项 + 定义列（两步骤一）。
 /// </summary>
 public class DictionaryItemViewTests
 {
-    private static IFreeSql CreateFreeSql()
+    /// <summary>同步建宿主 + AOP 解析 Store（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
+    private static (IDictionaryStore Store, DomainUser<TestUserInfo> User) CreateStore()
     {
-        var fsql = new FreeSqlBuilder()
-            .UseConnectionString(DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-        fsql.CodeFirst.SyncStructure<DictionaryDefinitionEntity>();
-        fsql.CodeFirst.SyncStructure<DictionaryItemEntity>();
-        return fsql;
+        var (provider, user) = DataDictionaryTestHost.CreateProductionHost();
+        return (user.Use<IDictionaryStore>(), user);
     }
 
-    private static async Task SeedGender(IFreeSql fsql)
+    private static async Task SeedGender(IDictionaryStore store)
     {
-        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Gender", DisplayName = "性别" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(new DictionaryItemEntity
@@ -41,9 +38,8 @@ public class DictionaryItemViewTests
     [Fact]
     public async Task GetItemsByDefinitionCode_ReturnsItemsWithDefinitionFields()
     {
-        var fsql = CreateFreeSql();
-        var store = DataDictionaryTestHost.CreateStore(fsql);
-        await SeedGender(fsql);
+        var (store, user) = CreateStore();
+        await SeedGender(store);
 
         var items = await store.GetItemsByDefinitionCodeAsync("Gender", CancellationToken.None);
 
@@ -58,8 +54,7 @@ public class DictionaryItemViewTests
     [Fact]
     public async Task GetItemsByDefinitionCode_DefinitionExistsNoItems_ReturnsEmpty()
     {
-        var fsql = CreateFreeSql();
-        var store = DataDictionaryTestHost.CreateStore(fsql);
+        var (store, user) = CreateStore();
         await store.UpsertDefinitionAsync(new DictionaryDefinitionEntity
         {
             Code = "Empty", DisplayName = "空"
@@ -75,8 +70,7 @@ public class DictionaryItemViewTests
     [Fact]
     public async Task GetItemsByDefinitionCode_ExcludesDisabledItems()
     {
-        var fsql = CreateFreeSql();
-        var store = DataDictionaryTestHost.CreateStore(fsql);
+        var (store, user) = CreateStore();
 
         var def = new DictionaryDefinitionEntity { Code = "Status", DisplayName = "状态" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
@@ -97,3 +91,4 @@ public class DictionaryItemViewTests
         Assert.Equal("Active", items[0].Code);
     }
 }
+

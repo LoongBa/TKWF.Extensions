@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates
@@ -10,22 +12,25 @@ namespace TKWF.Ext.PrintTemplates
     /// <summary>
     /// 模板管理门面——版本生命周期 + 渲染入口 + 发布版本自动递增。
     /// <para>Scoped 生命周期（按请求）。</para>
-    /// <para>⚡ ADR88（v4.10.52）构造注入门控：域服务（Store/Renderer/ViewDataService）改 IDomainUser + User.Use&lt;T&gt;() 懒加载。</para>
+    /// <para>⚡ ADR88（v4.10.52）构造注入门控：域服务（Store/Renderer/ViewDataService）改 User.Use&lt;T&gt;() 懒加载。</para>
+    /// <para>V0.3.0（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+    /// （IDomainUser 永不注册 DI）；注册形态改 <c>AddConstructibleService&lt;ITemplateManager, TemplateManager&gt;</c>
+    /// （接口可构造守卫工厂 + 实现类 throw-factory，消费方经 <c>User.Use&lt;ITemplateManager&gt;()</c> 解析）。</para>
     /// </summary>
-    internal sealed class TemplateManager : ITemplateManager
+    [DiContractIgnore]
+    internal sealed class TemplateManager : DomainServiceBase, ITemplateManager
     {
-        private readonly IDomainUser _user;
         private ITemplateStore? _store;
         private ITemplateRenderer? _renderer;
         private PrintTemplateVersionViewDataService? _viewDataService;
 
-        private ITemplateStore Store => _store ??= _user.Use<ITemplateStore>();
-        private ITemplateRenderer Renderer => _renderer ??= _user.Use<ITemplateRenderer>();
-        private PrintTemplateVersionViewDataService ViewDataService => _viewDataService ??= _user.Use<PrintTemplateVersionViewDataService>();
+        private ITemplateStore Store => _store ??= User.Use<ITemplateStore>();
+        private ITemplateRenderer Renderer => _renderer ??= User.Use<ITemplateRenderer>();
+        private PrintTemplateVersionViewDataService ViewDataService => _viewDataService ??= User.Use<PrintTemplateVersionViewDataService>();
 
         public TemplateManager(IDomainUser user)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         /// <inheritdoc />

@@ -11,7 +11,9 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.DataDictionary.Tests;
 
 /// <summary>
-/// DataDictionaryExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册、TryAddScoped 语义。
+/// DataDictionaryExtensionInitializer 测试（V0.3.0 领域自治根治重写）——
+/// [TKWFExtension] 特性声明、AddConstructibleService 注册形态（接口守卫工厂 + 实现类 throw-factory + 域外抛）、
+/// IMemoryCache + Options 注册。
 /// </summary>
 public class DataDictionaryExtensionInitializerTests
 {
@@ -28,20 +30,22 @@ public class DataDictionaryExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_Registers_IDictionaryStore_Descriptor()
+    public void ConfigureServices_Registers_IDictionaryStore_FactoryDescriptor()
     {
         var services = new ServiceCollection();
         new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
 
+        // V0.3.0：AddConstructibleService——接口注册为构造工厂（非实现映射），Scoped 生命周期
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IDictionaryStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(DictionaryStore), descriptor!.ImplementationType);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
-    public void ConfigureServices_Registers_IDictionaryManager_Descriptor()
+    public void ConfigureServices_Registers_IDictionaryManager_FactoryDescriptor()
     {
         var services = new ServiceCollection();
         new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
@@ -49,32 +53,56 @@ public class DataDictionaryExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IDictionaryManager));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(DictionaryManager), descriptor!.ImplementationType);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
+    public void ConfigureServices_Registers_DictionaryStore_ThrowFactory()
     {
         var services = new ServiceCollection();
-        services.AddScoped<IDictionaryStore, ConsumerDictionaryStore>();
         new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
 
-        var descriptors = services.Where(d => d.ServiceType == typeof(IDictionaryStore)).ToList();
-        Assert.Single(descriptors);
-        Assert.Equal(typeof(ConsumerDictionaryStore), descriptors[0].ImplementationType);
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IDictionaryStore>() 创建
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(DictionaryStore));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<DictionaryStore>());
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerManager()
+    public void ConfigureServices_Registers_DictionaryManager_ThrowFactory()
     {
         var services = new ServiceCollection();
-        services.AddScoped<IDictionaryManager, ConsumerDictionaryManager>();
         new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
 
-        var descriptors = services.Where(d => d.ServiceType == typeof(IDictionaryManager)).ToList();
-        Assert.Single(descriptors);
-        Assert.Equal(typeof(ConsumerDictionaryManager), descriptors[0].ImplementationType);
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(DictionaryManager));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<DictionaryManager>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_OutsideUseScope_Throws()
+    {
+        // V0.3.0：接口构造工厂的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var storeEx = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IDictionaryStore>());
+        Assert.Contains("领域架构守卫", storeEx.Message);
+        Assert.Contains("IDictionaryStore", storeEx.Message);
+
+        var managerEx = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IDictionaryManager>());
+        Assert.Contains("领域架构守卫", managerEx.Message);
+        Assert.Contains("IDictionaryManager", managerEx.Message);
     }
 
     [Fact]
@@ -102,39 +130,5 @@ public class DataDictionaryExtensionInitializerTests
         Assert.NotNull(options);
         Assert.True(options!.Value.EnableCache);
         Assert.Equal(300, options.Value.CacheExpirationSeconds);
-    }
-
-    /// <summary>测试专用 IDictionaryStore：标记消费方自定义实现。</summary>
-    private sealed class ConsumerDictionaryStore : IDictionaryStore
-    {
-        public Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default) => Task.FromResult<DictionaryDefinitionEntity?>(null);
-        public Task<DictionaryDefinitionEntity?> GetDefinitionByIdAsync(long id, CancellationToken ct = default) => Task.FromResult<DictionaryDefinitionEntity?>(null);
-        public Task<DictionaryItemEntity?> GetItemByIdAsync(long id, CancellationToken ct = default) => Task.FromResult<DictionaryItemEntity?>(null);
-        public Task<IReadOnlyList<DictionaryDefinitionEntity>> GetDefinitionsAsync(int skip = 0, int take = 20, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<DictionaryDefinitionEntity>>(Array.Empty<DictionaryDefinitionEntity>());
-        public Task<IReadOnlyList<DictionaryItemEntity>> GetItemsAsync(long definitionId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<DictionaryItemEntity>>(Array.Empty<DictionaryItemEntity>());
-        public Task<List<DictionaryItemView>> GetItemsByDefinitionCodeAsync(string code, CancellationToken ct = default)
-            => Task.FromResult(new List<DictionaryItemView>());
-        public Task UpsertDefinitionAsync(DictionaryDefinitionEntity definition, CancellationToken ct = default) => Task.CompletedTask;
-        public Task UpsertItemAsync(DictionaryItemEntity item, CancellationToken ct = default) => Task.CompletedTask;
-        public Task DeleteDefinitionAsync(long id, CancellationToken ct = default) => Task.CompletedTask;
-        public Task DeleteItemAsync(long id, CancellationToken ct = default) => Task.CompletedTask;
-    }
-
-    /// <summary>测试专用 IDictionaryManager：标记消费方自定义实现。</summary>
-    private sealed class ConsumerDictionaryManager : IDictionaryManager
-    {
-        public Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default) => Task.FromResult<DictionaryDefinitionEntity?>(null);
-        public Task<IReadOnlyList<DictionaryItemEntity>> GetItemsAsync(string code, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<DictionaryItemEntity>>(Array.Empty<DictionaryItemEntity>());
-        public Task<DictionaryDefinitionWithItems?> GetDefinitionWithItemsAsync(string code, CancellationToken ct = default)
-            => Task.FromResult<DictionaryDefinitionWithItems?>(null);
-        public Task UpsertDefinitionAsync(DictionaryDefinitionEntity definition, CancellationToken ct = default) => Task.CompletedTask;
-        public Task UpsertItemAsync(DictionaryItemEntity item, CancellationToken ct = default) => Task.CompletedTask;
-        public Task DeleteDefinitionAsync(long id, CancellationToken ct = default) => Task.CompletedTask;
-        public Task DeleteItemAsync(long id, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<DictionaryTreeNode>> GetItemsTreeAsync(string code, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<DictionaryTreeNode>>(Array.Empty<DictionaryTreeNode>());
     }
 }

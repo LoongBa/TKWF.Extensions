@@ -1,6 +1,6 @@
 # TKWF.Ext.DataDictionary 数据字典扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (缓存与树形分组 + VEntity JOIN 下推) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (缓存与树形分组 + VEntity JOIN 下推) + **V0.3.0（领域自治根治，ADR90）** | **框架**: .NET 10
 
 **核心约束**: 字典定义+字典项双实体、按编码查询、FreeSql 持久化、异常静默处理、SG1 声明式实体、按 Code 内存缓存、树形分组、**VEntity 读模型联邦（JOIN 下推单查询）**
 
@@ -38,7 +38,7 @@
 
 - **异常静默**：存储/管理操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
 
-- **TryAdd 语义**：DI 注册用 `TryAddScoped`——消费方自定义实现优先；扩展默认实现不覆盖消费方。`IMemoryCache` 经 `AddMemoryCache()` 注册（内部 TryAddSingleton，D8，消费方可覆盖）。
+- **域作用域守卫（V0.3.0，ADR90）**：`IDictionaryStore` / `IDictionaryManager` 经 `AddConstructibleService` 注册——DI 中唯一可解析的是接口本身，且解析必须处于 `User.Use<T>()` 调用链内（`CurrentAopUser` 守卫）；实现类注册为 throw-factory（禁直接 DI 解析）。
 
 - **Scoped 生命周期**：`IDictionaryStore` / `IDictionaryManager` Scoped，自动参与当前请求上下文；`IMemoryCache` Singleton。
 
@@ -65,7 +65,9 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-自动注册：`IDictionaryStore`（默认 `DictionaryStore`，经 SG1 DataService 委托）+ `IDictionaryManager`（默认 `DictionaryManager`）+ `IMemoryCache`（TryAddSingleton）+ `DataDictionaryOptions`（默认值，消费方自行绑定配置节）。
+自动注册（V0.3.0 领域自治根治，ADR90）：`IDictionaryStore`（默认 `DictionaryStore`，`AddConstructibleService` 接口守卫工厂）+
+`IDictionaryManager`（默认 `DictionaryManager`，`AddConstructibleService` 接口守卫工厂）+ `IMemoryCache`（TryAddSingleton）+
+`DataDictionaryOptions`（默认值，消费方自行绑定配置节）。消费方统一经 `User.Use<IDictionaryStore>()` / `User.Use<IDictionaryManager>()` 解析（AOP 路径），禁构造注入（DI004 零豁免）。
 
 ### 2. 读取字典（业务侧）
 
@@ -154,8 +156,8 @@ TryAdd 语义确保消费方实现优先；自定义实现同理。
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`IDictionaryStore`** | 字典存储抽象（CRUD + 按编码查询 + 按 Id 查询） | `DictionaryStore`（本扩展，DataService 委托，数据访问红线整改 2026-09-07） |
-| **`IDictionaryManager`** | 数据字典管理门面（按编码聚合查询 + 缓存拦截 + 树形组装） | `DictionaryManager`（本扩展） |
+| **`IDictionaryStore`** | 字典存储抽象（CRUD + 按编码查询 + 按 Id 查询） | `DictionaryStore`（本扩展，继承 `DomainServiceBase` + `[DiContractIgnore]`，DataService 委托，数据访问红线整改 2026-09-07；V0.3.0 `AddConstructibleService` 注册） |
+| **`IDictionaryManager`** | 数据字典管理门面（按编码聚合查询 + 缓存拦截 + 树形组装） | `DictionaryManager`（本扩展，继承 `DomainServiceBase` + `[DiContractIgnore]`，V0.3.0 `AddConstructibleService` 注册） |
 | **`DictionaryDefinitionEntity`** | 字典定义实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`DictionaryItemEntity`** | 字典项实体（SG1 声明式，V0.2.0 含树形字段 ParentCode/Level/Path） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`DictionaryDefinitionWithItems`** | 定义+项聚合返回（record） | 内置 |
@@ -208,7 +210,7 @@ TryAdd 语义确保消费方实现优先；自定义实现同理。
 - 按编码聚合查询（`GetDefinitionWithItemsAsync`）+ Upsert 幂等
 - 异常静默处理
 
-### V0.2.0（当前）
+### V0.2.0（已发布）
 - 内存缓存层（按 Code 缓存聚合，key=`DD:{Code}`，写入后按 Code 失效）
 - 树形分组（`GetItemsTreeAsync` 递归组装嵌套树，`EnableTreeMode` 控制）
 - `DictionaryItemEntity` 新增 ParentCode/Level/Path 三列（Position 10/11/12）
@@ -216,7 +218,12 @@ TryAdd 语义确保消费方实现优先；自定义实现同理。
 - **VEntity 化（JOIN 下推）**：新增 `vw_DictionaryItemView`（`DictionaryItem` INNER JOIN `DictionaryDefinition`，12 投影列含 `DefinitionCode`/`DefinitionDisplayName`）——`GetOrLoadAggregateAsync` 未命中路径两步骤一（定义单查 + 视图单查询项替代按 DefinitionId 查项）；**"定义存在但无项"语义保留**（先单查定义不存在→null；定义存在视图零行=空项列表，返回非 null 空聚合——oracle3 C-1/H1 方案 b）；BuildTree 留内存；缓存 key/写路径零触碰
 - **⚠️ 生产部署**：`SyncViewsAsync` 仅开发环境建视图（`DisableSyncStructure=true`）——**生产需 DBA 手动执行 ViewSql**（见 `docs/DataDictionary/数据字典扩展-使用指南.md` § VEntity 化/下推）
 
-### V0.3.0（规划）
+### V0.3.0（已实施，领域自治根治 ADR90——V4.10.53 正确路线）
+- 门面/Store 继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——IDomainUser 永不注册 DI）+ `[DiContractIgnore]` 豁免 DI001
+- 注册形态 `TryAddScoped` → `AddConstructibleService<IDictionaryStore, DictionaryStore>` / `<IDictionaryManager, DictionaryManager>`（接口可构造守卫工厂 + 实现类 throw-factory）
+- 测试宿主重写走生产路径（真实 DI + `DomainUser<T>.BindScope` + `User.Use<接口>()` AOP；Initializer 注册形态断言守卫工厂/throw-factory/域外抛）
+
+### V0.4.0（规划）
 - 管理 UI
 - 字典导入/导出
 - 与 PrintTemplates 字段映射集成

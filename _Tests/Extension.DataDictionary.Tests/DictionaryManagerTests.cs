@@ -2,51 +2,40 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary.Tests;
 
 /// <summary>
-/// DictionaryManager 测试——按编码聚合查询、项排序、Upsert 委托、异常静默。
+/// DictionaryManager 测试（V0.3.0 领域自治根治重写——走生产路径）——
+/// 按编码聚合查询、项排序、Upsert 委托、异常静默。
+/// <para>生产路径：真实 DI（同步建宿主——BindScope 绑定当前测试上下文）+ <see cref="DomainUser{TUserInfo}"/>
+/// → <c>User.Use&lt;IDictionaryManager&gt;()</c> AOP 路径解析（AddConstructibleService 接口守卫工厂 →
+/// DictionaryManager → 懒加载 IDictionaryStore → DataService 全链真实 DI）。</para>
 /// </summary>
 public class DictionaryManagerTests
 {
-    private static IFreeSql CreateFreeSql()
+    /// <summary>同步建宿主 + AOP 解析 Manager（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
+    private static (IDictionaryManager Manager, DomainUser<TestUserInfo> User) CreateManager()
     {
-        var fsql = new FreeSql.FreeSqlBuilder()
-            .UseConnectionString(FreeSql.DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-        fsql.CodeFirst.SyncStructure<DictionaryDefinitionEntity>();
-        fsql.CodeFirst.SyncStructure<DictionaryItemEntity>();
-        return fsql;
+        var (provider, user) = DataDictionaryTestHost.CreateProductionHost();
+        return (user.Use<IDictionaryManager>(), user);
     }
 
-    private static DictionaryManager CreateManager(IFreeSql fsql)
+    private static async Task SeedGender(IDictionaryManager manager)
     {
-        var store = DataDictionaryTestHost.CreateStore(fsql);
-        var cache = new MemoryCache(new MemoryCacheOptions());
-        var options = Options.Create(new DataDictionaryOptions());
-        return new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
-    }
-
-    private static async Task SeedGender(IFreeSql fsql)
-    {
-        var store = DataDictionaryTestHost.CreateStore(fsql);
         var def = new DictionaryDefinitionEntity { Code = "Gender", DisplayName = "性别" };
-        await store.UpsertDefinitionAsync(def, CancellationToken.None);
-        await store.UpsertItemAsync(new DictionaryItemEntity { DefinitionId = def.Id, Code = "Female", DisplayName = "女", Order = 2 }, CancellationToken.None);
-        await store.UpsertItemAsync(new DictionaryItemEntity { DefinitionId = def.Id, Code = "Male", DisplayName = "男", Order = 1 }, CancellationToken.None);
+        await manager.UpsertDefinitionAsync(def, CancellationToken.None);
+        await manager.UpsertItemAsync(new DictionaryItemEntity { DefinitionId = def.Id, Code = "Female", DisplayName = "女", Order = 2 }, CancellationToken.None);
+        await manager.UpsertItemAsync(new DictionaryItemEntity { DefinitionId = def.Id, Code = "Male", DisplayName = "男", Order = 1 }, CancellationToken.None);
     }
 
     [Fact]
     public async Task GetDefinitionByCode_ReturnsDefinition()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-        await SeedGender(fsql);
+        var (manager, user) = CreateManager();
+        await SeedGender(manager);
 
         var def = await manager.GetDefinitionByCodeAsync("Gender", CancellationToken.None);
 
@@ -57,9 +46,8 @@ public class DictionaryManagerTests
     [Fact]
     public async Task GetItems_ByCode_ReturnsSortedItems()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-        await SeedGender(fsql);
+        var (manager, user) = CreateManager();
+        await SeedGender(manager);
 
         var items = await manager.GetItemsAsync("Gender", CancellationToken.None);
 
@@ -70,8 +58,7 @@ public class DictionaryManagerTests
     [Fact]
     public async Task GetItems_UnknownCode_ReturnsEmpty()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         var items = await manager.GetItemsAsync("NOBODY", CancellationToken.None);
 
@@ -81,9 +68,8 @@ public class DictionaryManagerTests
     [Fact]
     public async Task GetDefinitionWithItems_ReturnsAggregate()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-        await SeedGender(fsql);
+        var (manager, user) = CreateManager();
+        await SeedGender(manager);
 
         var result = await manager.GetDefinitionWithItemsAsync("Gender", CancellationToken.None);
 
@@ -95,8 +81,7 @@ public class DictionaryManagerTests
     [Fact]
     public async Task GetDefinitionWithItems_UnknownCode_ReturnsNull()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         var result = await manager.GetDefinitionWithItemsAsync("NOBODY", CancellationToken.None);
 
@@ -106,8 +91,7 @@ public class DictionaryManagerTests
     [Fact]
     public async Task UpsertDefinition_DelegatesToStore()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
         var def = new DictionaryDefinitionEntity { Code = "Color", DisplayName = "颜色" };
 
         await manager.UpsertDefinitionAsync(def, CancellationToken.None);
@@ -120,9 +104,8 @@ public class DictionaryManagerTests
     [Fact]
     public async Task UpsertItem_DelegatesToStore()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
-        await SeedGender(fsql);
+        var (manager, user) = CreateManager();
+        await SeedGender(manager);
         var def = await manager.GetDefinitionByCodeAsync("Gender", CancellationToken.None);
         Assert.NotNull(def); // 播种定义经 manager 业务方法读取
         var item = new DictionaryItemEntity { DefinitionId = def!.Id, Code = "Other", DisplayName = "其他", Order = 3 };
@@ -137,8 +120,7 @@ public class DictionaryManagerTests
     [Fact]
     public async Task Upsert_DelegatesFailSilently_OnNull()
     {
-        var fsql = CreateFreeSql();
-        var manager = CreateManager(fsql);
+        var (manager, user) = CreateManager();
 
         await manager.UpsertDefinitionAsync(null!, CancellationToken.None);
         await manager.UpsertItemAsync(null!, CancellationToken.None);

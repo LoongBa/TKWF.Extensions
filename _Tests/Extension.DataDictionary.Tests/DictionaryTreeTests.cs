@@ -29,7 +29,7 @@ public class DictionaryTreeTests
         var store = DataDictionaryTestHost.CreateStore(fsql);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var options = Options.Create(new DataDictionaryOptions { EnableTreeMode = enableTreeMode });
-        return new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
+        return new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
     }
 
     /// <summary>种子：省市区三级树形数据。</summary>

@@ -29,7 +29,7 @@ public class DictionaryManagerTests
         var store = DataDictionaryTestHost.CreateStore(fsql);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var options = Options.Create(new DataDictionaryOptions());
-        return new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
+        return new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
     }
 
     private static async Task SeedGender(IFreeSql fsql)

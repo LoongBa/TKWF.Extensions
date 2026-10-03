@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Utility.Tags;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Tagging;
 
@@ -16,12 +17,15 @@ namespace TKWF.Ext.Tagging;
 /// </summary>
 internal sealed class FreeSqlTagRuleStore : ITagRuleStore
 {
-    private readonly TagRuleEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private TagRuleEntityDataService? _dataService;
     private readonly ILogger<FreeSqlTagRuleStore> _logger;
 
-    public FreeSqlTagRuleStore(TagRuleEntityDataService dataService, ILogger<FreeSqlTagRuleStore> logger)
+    private TagRuleEntityDataService DataService => _dataService ??= _user.Use<TagRuleEntityDataService>();
+
+    public FreeSqlTagRuleStore(IDomainUser user, ILogger<FreeSqlTagRuleStore> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -29,7 +33,7 @@ internal sealed class FreeSqlTagRuleStore : ITagRuleStore
     {
         try
         {
-var entities = await _dataService.GetAllOrderedAsync(ct);
+var entities = await DataService.GetAllOrderedAsync(ct);
             return entities.Select(ToModel).ToList();
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签规则全量读取失败"); return []; }
@@ -39,7 +43,7 @@ var entities = await _dataService.GetAllOrderedAsync(ct);
     {
         try
         {
-            var entities = await _dataService.GetEnabledAsync(ct);
+            var entities = await DataService.GetEnabledAsync(ct);
             return entities.Select(ToModel).ToList();
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签启用规则读取失败"); return []; }
@@ -55,7 +59,7 @@ var entities = await _dataService.GetAllOrderedAsync(ct);
                 return null;
 
             var entity = ToEntity(rule, new TagRuleEntity());
-            var result = await _dataService.CreateOrGetAsync(entity, ct);
+            var result = await DataService.CreateOrGetAsync(entity, ct);
             return result.Id > 0 ? result.Id : null;
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签规则创建失败: {Tag}", rule?.TagName); return null; }
@@ -68,7 +72,7 @@ var entities = await _dataService.GetAllOrderedAsync(ct);
         {
             if (rule is null) return false;
             var entity = ToEntity(rule, new TagRuleEntity());
-            var result = await _dataService.UpdateByBusinessKeyAsync(entity, ct);
+            var result = await DataService.UpdateByBusinessKeyAsync(entity, ct);
             return result != null;
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签规则更新失败: {Tag}", rule?.TagName); return false; }
@@ -78,7 +82,7 @@ var entities = await _dataService.GetAllOrderedAsync(ct);
     {
         try
         {
-            return await _dataService.DeleteByIdAsync(id, ct);
+            return await DataService.DeleteByIdAsync(id, ct);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签规则删除失败: Id={Id}", id); return false; }
     }
@@ -87,7 +91,7 @@ var entities = await _dataService.GetAllOrderedAsync(ct);
     {
         try
         {
-            var entities = await _dataService.GetByDimensionAsync(dimension, ct);
+            var entities = await DataService.GetByDimensionAsync(dimension, ct);
             return entities.Select(ToModel).ToList();
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签规则按维度读取失败: {Dim}", dimension); return []; }

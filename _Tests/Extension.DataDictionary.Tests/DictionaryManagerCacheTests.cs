@@ -35,7 +35,7 @@ public class DictionaryManagerCacheTests
             EnableCache = enableCache,
             CacheExpirationSeconds = cacheExpirationSeconds
         });
-        var manager = new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
+        var manager = new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
         return (manager, fsql);
     }
 
@@ -198,7 +198,7 @@ public class DictionaryManagerCacheTests
 
         var options = Options.Create(new DataDictionaryOptions { EnableTreeMode = true, EnableCache = true });
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var mgr = new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
+        var mgr = new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
 
         var first = await mgr.GetItemsTreeAsync("CachedTree", CancellationToken.None);
         var second = await mgr.GetItemsTreeAsync("CachedTree", CancellationToken.None);
@@ -232,7 +232,7 @@ public class DictionaryManagerCacheTests
 
         var cache = new MemoryCache(new MemoryCacheOptions());
         var options = Options.Create(new DataDictionaryOptions { EnableTreeMode = true, EnableCache = true });
-        var mgr = new DictionaryManager(store, NullLogger<DictionaryManager>.Instance, cache, options);
+        var mgr = new DictionaryManager(new StubDomainUser().With<IDictionaryStore>(store), NullLogger<DictionaryManager>.Instance, cache, options);
 
         // 第一次：视图单查询 → 实体映射 → 聚合 → 写缓存
         var first = await mgr.GetDefinitionWithItemsAsync("Region", CancellationToken.None);

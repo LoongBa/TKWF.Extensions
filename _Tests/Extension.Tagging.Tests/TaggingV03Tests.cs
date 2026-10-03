@@ -43,7 +43,7 @@ public class TaggingV03Tests
     public async Task RuleStore_CreateAndGetAll_Works()
     {
         var (_, ruleDs, _) = CreateHost();
-        var store = new FreeSqlTagRuleStore(ruleDs, NullLogger<FreeSqlTagRuleStore>.Instance);
+        var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
         var id = await store.CreateAsync(NewRule("Category", "电子", "手机"));
         Assert.NotNull(id);
@@ -58,7 +58,7 @@ public class TaggingV03Tests
     public async Task RuleStore_CreateDuplicate_ReturnsSameId_NotDuplicate()
     {
         var (_, ruleDs, _) = CreateHost();
-        var store = new FreeSqlTagRuleStore(ruleDs, NullLogger<FreeSqlTagRuleStore>.Instance);
+        var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
         var id1 = await store.CreateAsync(NewRule("Category", "电子", "手机"));
         var id2 = await store.CreateAsync(NewRule("Category", "电子", "手机"));   // 业务键幂等
@@ -71,7 +71,7 @@ public class TaggingV03Tests
     public async Task RuleStore_GetEnabled_FiltersDisabled()
     {
         var (_, ruleDs, _) = CreateHost();
-        var store = new FreeSqlTagRuleStore(ruleDs, NullLogger<FreeSqlTagRuleStore>.Instance);
+        var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
         var r1 = NewRule("Category", "电子", "手机");
         var r2 = NewRule("Category", "家电", "冰箱");
@@ -88,7 +88,7 @@ public class TaggingV03Tests
     public async Task RuleStore_Update_ModifiesRule()
     {
         var (_, ruleDs, _) = CreateHost();
-        var store = new FreeSqlTagRuleStore(ruleDs, NullLogger<FreeSqlTagRuleStore>.Instance);
+        var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
         await store.CreateAsync(NewRule("Category", "电子", "手机"));
         var updated = NewRule("Category", "电子", "手机");
@@ -103,7 +103,7 @@ public class TaggingV03Tests
     public async Task RuleStore_Delete_RemovesRule()
     {
         var (_, ruleDs, _) = CreateHost();
-        var store = new FreeSqlTagRuleStore(ruleDs, NullLogger<FreeSqlTagRuleStore>.Instance);
+        var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
         var id = await store.CreateAsync(NewRule("Category", "电子", "手机"));
         Assert.True(await store.DeleteAsync(id!.Value));
@@ -116,7 +116,7 @@ public class TaggingV03Tests
     public async Task RuleStore_LoadRules_FeedsTagService()
     {
         var (_, ruleDs, _) = CreateHost();
-        var store = new FreeSqlTagRuleStore(ruleDs, NullLogger<FreeSqlTagRuleStore>.Instance);
+        var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
         await store.CreateAsync(NewRule("Category", "电子", "手机", TagMatchMode.Contains));
         var rules = await store.GetAllAsync();
@@ -140,7 +140,7 @@ public class TaggingV03Tests
     public async Task HitStore_RecordAndQuery_Work()
     {
         var (_, _, hitDs) = CreateHost();
-        var store = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
+        var store = new FreeSqlTagHitStore(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagHitStore>.Instance);
         var fixedTime = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
 
         await store.RecordHitsAsync(new[]
@@ -176,8 +176,8 @@ public class TaggingV03Tests
     public async Task AnalysisService_GetFrequency_ReturnsTopN()
     {
         var (_, _, hitDs) = CreateHost();
-        var hitStore = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
-        var analysis = new FreeSqlTagAnalysisService(hitDs, NullLogger<FreeSqlTagAnalysisService>.Instance);
+        var hitStore = new FreeSqlTagHitStore(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagHitStore>.Instance);
+        var analysis = new FreeSqlTagAnalysisService(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagAnalysisService>.Instance);
         var t = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
 
         await hitStore.RecordHitsAsync(new[]
@@ -197,8 +197,8 @@ public class TaggingV03Tests
     public async Task AnalysisService_GetDimensionDistribution_Works()
     {
         var (_, _, hitDs) = CreateHost();
-        var hitStore = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
-        var analysis = new FreeSqlTagAnalysisService(hitDs, NullLogger<FreeSqlTagAnalysisService>.Instance);
+        var hitStore = new FreeSqlTagHitStore(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagHitStore>.Instance);
+        var analysis = new FreeSqlTagAnalysisService(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagAnalysisService>.Instance);
         var t = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
 
         await hitStore.RecordHitsAsync(new[]
@@ -222,8 +222,8 @@ public class TaggingV03Tests
     public async Task AnalysisService_SqlAggregation_PushedDownToSql()
     {
         var (fsql, _, hitDs) = CreateHost();
-        var hitStore = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
-        var analysis = new FreeSqlTagAnalysisService(hitDs, NullLogger<FreeSqlTagAnalysisService>.Instance);
+        var hitStore = new FreeSqlTagHitStore(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagHitStore>.Instance);
+        var analysis = new FreeSqlTagAnalysisService(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagAnalysisService>.Instance);
         var t = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
 
         await hitStore.RecordHitsAsync(new[]
@@ -253,8 +253,8 @@ public class TaggingV03Tests
     public async Task AnalysisService_GetTrend_ReturnsBuckets()
     {
         var (_, _, hitDs) = CreateHost();
-        var hitStore = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
-        var analysis = new FreeSqlTagAnalysisService(hitDs, NullLogger<FreeSqlTagAnalysisService>.Instance);
+        var hitStore = new FreeSqlTagHitStore(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagHitStore>.Instance);
+        var analysis = new FreeSqlTagAnalysisService(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagAnalysisService>.Instance);
         // 2026-09-01 是周二——跨 3 个自然日（同日不同时测 Hour 桶，跨日测 Day 桶）
         var t1 = new DateTime(2026, 9, 1, 10, 30, 0, DateTimeKind.Utc);
         var t2 = new DateTime(2026, 9, 1, 14, 0, 0, DateTimeKind.Utc);   // 同 Day 桶，不同 Hour 桶
@@ -308,7 +308,7 @@ public class TaggingV03Tests
     public async Task HitStore_GetByDimension_TimeFiltered()
     {
         var (_, _, hitDs) = CreateHost();
-        var store = new FreeSqlTagHitStore(hitDs, NullLogger<FreeSqlTagHitStore>.Instance);
+        var store = new FreeSqlTagHitStore(new StubDomainUser().With(hitDs), NullLogger<FreeSqlTagHitStore>.Instance);
         var t1 = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
         var t2 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
         var t3 = new DateTime(2026, 9, 2, 8, 0, 0, DateTimeKind.Utc);
@@ -334,9 +334,19 @@ public class TaggingV03Tests
     }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约。
+/// <para>ADR88 适配：Use&lt;T&gt;() 懒加载从服务映射表解析（<see cref="With{T}"/> 注册外部 DataService 实例）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly Dictionary<Type, object? > _services = new();
+
+    /// <summary>注册外部服务实例（懒加载 Use&lt;T&gt;() 解析源——测试直接 new DataService 后传给服务）。</summary>
+    public StubDomainUser With<T>(T service) where T : class
+    {
+        _services[typeof(T)] = service;
+        return this;
+    }
+
     public string SessionKey => "test";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -346,8 +356,17 @@ internal sealed class StubDomainUser : IDomainUser
     public string? UserId => null;
     public string? UserName => null;
     public bool IsInRole(string role) => false;
-    public TDomainService Use<TDomainService>() where TDomainService : IDomainService => throw new NotSupportedException();
-    public TService GetService<TService>() where TService : notnull => throw new NotSupportedException();
+
+    public TDomainService Use<TDomainService>() where TDomainService : IDomainService
+        => _services.TryGetValue(typeof(TDomainService), out var svc) && svc is TDomainService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TDomainService).Name} 未注册——请用 With<T>() 注册（懒加载 Use<T> 解析源）");
+
+    public TService GetService<TService>() where TService : notnull
+        => _services.TryGetValue(typeof(TService), out var svc) && svc is TService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TService).Name} 未注册——请用 With<T>() 注册（懒加载 GetService<T> 解析源）");
+
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

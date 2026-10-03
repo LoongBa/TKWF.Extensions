@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary
 {
@@ -16,20 +17,23 @@ namespace TKWF.Ext.DataDictionary
     /// </summary>
     internal sealed class DictionaryManager : IDictionaryManager
     {
-        private readonly IDictionaryStore _store;
+        private readonly IDomainUser _user;
+        private IDictionaryStore? _store;
         private readonly ILogger<DictionaryManager> _logger;
         private readonly IMemoryCache _cache;
         private readonly DataDictionaryOptions _options;
 
+        private IDictionaryStore Store => _store ??= _user.Use<IDictionaryStore>();
+
         private const string CacheKeyPrefix = "DD:";
 
         public DictionaryManager(
-            IDictionaryStore store,
+            IDomainUser user,
             ILogger<DictionaryManager> logger,
             IMemoryCache cache,
             IOptions<DataDictionaryOptions> options)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
@@ -58,7 +62,7 @@ namespace TKWF.Ext.DataDictionary
         {
             if (definition == null) return;
 
-            await _store.UpsertDefinitionAsync(definition, ct);
+            await Store.UpsertDefinitionAsync(definition, ct);
             InvalidateCache(definition.Code);
         }
 
@@ -67,7 +71,7 @@ namespace TKWF.Ext.DataDictionary
         {
             if (item == null) return;
 
-            await _store.UpsertItemAsync(item, ct);
+            await Store.UpsertItemAsync(item, ct);
             await InvalidateCacheByDefinitionIdAsync(item.DefinitionId, ct);
         }
 
@@ -76,7 +80,7 @@ namespace TKWF.Ext.DataDictionary
         {
             // D6：DeleteDefinition 需先按 Id 反查 Code，再删除 + 失效缓存
             await InvalidateCacheByDefinitionIdAsync(id, ct);
-            await _store.DeleteDefinitionAsync(id, ct);
+            await Store.DeleteDefinitionAsync(id, ct);
         }
 
         /// <inheritdoc />
@@ -84,7 +88,7 @@ namespace TKWF.Ext.DataDictionary
         {
             // D6：DeleteItem 需先按 Id 查 DefinitionId → 再查 Code → 失效缓存
             await InvalidateCacheByItemIdAsync(id, ct);
-            await _store.DeleteItemAsync(id, ct);
+            await Store.DeleteItemAsync(id, ct);
         }
 
         /// <inheritdoc />
@@ -194,11 +198,11 @@ namespace TKWF.Ext.DataDictionary
             if (_options.EnableCache && _cache.TryGetValue(cacheKey, out DictionaryDefinitionWithItems? cached) && cached != null)
                 return cached;
 
-            var definition = await _store.GetDefinitionByCodeAsync(code, ct);
+            var definition = await Store.GetDefinitionByCodeAsync(code, ct);
             if (definition == null) return null;
 
             // 定义存在 → 视图单查询查项（INNER JOIN 零行 = 空项列表，定义存在无项返回非 null 空聚合）
-            var viewItems = await _store.GetItemsByDefinitionCodeAsync(code, ct);
+            var viewItems = await Store.GetItemsByDefinitionCodeAsync(code, ct);
             var items = MapToEntities(viewItems);
             var aggregate = new DictionaryDefinitionWithItems(definition, items);
 
@@ -261,7 +265,7 @@ namespace TKWF.Ext.DataDictionary
 
             try
             {
-                var definition = await _store.GetDefinitionByIdAsync(definitionId, ct);
+                var definition = await Store.GetDefinitionByIdAsync(definitionId, ct);
                 if (definition != null)
                     InvalidateCache(definition.Code);
             }
@@ -282,7 +286,7 @@ namespace TKWF.Ext.DataDictionary
 
             try
             {
-                var item = await _store.GetItemByIdAsync(itemId, ct);
+                var item = await Store.GetItemByIdAsync(itemId, ct);
                 if (item != null)
                     await InvalidateCacheByDefinitionIdAsync(item.DefinitionId, ct);
             }

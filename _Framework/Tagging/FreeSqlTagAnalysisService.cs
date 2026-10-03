@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Tagging;
 
@@ -14,12 +15,15 @@ namespace TKWF.Ext.Tagging;
 /// </summary>
 internal sealed class FreeSqlTagAnalysisService : ITagAnalysisService
 {
-    private readonly TagHitRecordEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private TagHitRecordEntityDataService? _dataService;
     private readonly ILogger<FreeSqlTagAnalysisService> _logger;
 
-    public FreeSqlTagAnalysisService(TagHitRecordEntityDataService dataService, ILogger<FreeSqlTagAnalysisService> logger)
+    private TagHitRecordEntityDataService DataService => _dataService ??= _user.Use<TagHitRecordEntityDataService>();
+
+    public FreeSqlTagAnalysisService(IDomainUser user, ILogger<FreeSqlTagAnalysisService> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -29,7 +33,7 @@ internal sealed class FreeSqlTagAnalysisService : ITagAnalysisService
         try
         {
             if (topN < 1) topN = 10;
-            return await _dataService.GetFrequencyAsync(dimension, from, to, topN, ct);
+            return await DataService.GetFrequencyAsync(dimension, from, to, topN, ct);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签频次聚合失败"); return []; }
     }
@@ -39,7 +43,7 @@ internal sealed class FreeSqlTagAnalysisService : ITagAnalysisService
     {
         try
         {
-            return await _dataService.GetTrendAsync(dimension, tagName, from, to, granularity, ct);
+            return await DataService.GetTrendAsync(dimension, tagName, from, to, granularity, ct);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签趋势聚合失败: {Dim}", dimension); return []; }
     }
@@ -49,7 +53,7 @@ internal sealed class FreeSqlTagAnalysisService : ITagAnalysisService
     {
         try
         {
-            return await _dataService.GetDimensionDistributionAsync(from, to, ct);
+            return await DataService.GetDimensionDistributionAsync(from, to, ct);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签维度分布聚合失败"); return []; }
     }

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Utility.Tags;
 using TKWF.Ext.Tagging.DTOs;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Tagging;
 
@@ -17,12 +18,15 @@ namespace TKWF.Ext.Tagging;
 /// </summary>
 internal sealed class FreeSqlTagHitStore : ITagHitStore
 {
-    private readonly TagHitRecordEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private TagHitRecordEntityDataService? _dataService;
     private readonly ILogger<FreeSqlTagHitStore> _logger;
 
-    public FreeSqlTagHitStore(TagHitRecordEntityDataService dataService, ILogger<FreeSqlTagHitStore> logger)
+    private TagHitRecordEntityDataService DataService => _dataService ??= _user.Use<TagHitRecordEntityDataService>();
+
+    public FreeSqlTagHitStore(IDomainUser user, ILogger<FreeSqlTagHitStore> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -45,7 +49,7 @@ IEnumerable<TagHit> hits, string? sourceText = null, DateTime? hitTime = null, C
                 HitTime = hitTime ?? DateTime.UtcNow
             }).ToList();
             if (rows.Count == 0) return;
-            await _dataService.RecordHitsAsync(rows, ct);   // 批量单事务（P2-1）
+            await DataService.RecordHitsAsync(rows, ct);   // 批量单事务（P2-1）
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签命中批量落库失败: {Count} 条", hitList.Count); }
     }
@@ -55,7 +59,7 @@ IEnumerable<TagHit> hits, string? sourceText = null, DateTime? hitTime = null, C
     {
         try
         {
-var entities = await _dataService.GetByDimensionAsync(dimension, from, to, skip, take, ct);
+var entities = await DataService.GetByDimensionAsync(dimension, from, to, skip, take, ct);
             return entities.Select(ToModel).ToList();
         }
         catch (Exception ex) { _logger.LogWarning(ex, "标签命中查询失败: {Dim}", dimension); return []; }
@@ -66,7 +70,7 @@ var entities = await _dataService.GetByDimensionAsync(dimension, from, to, skip,
         try
         {
             if (limit < 1) limit = 50;
-            var entities = await _dataService.GetRecentAsync(limit, ct);
+            var entities = await DataService.GetRecentAsync(limit, ct);
             return entities.Select(ToModel).ToList();
         }
         catch (Exception ex) { _logger.LogWarning(ex, "最近命中查询失败"); return []; }

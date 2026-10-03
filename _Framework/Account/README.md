@@ -78,9 +78,11 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 | `IPasswordResetStore` | `PasswordResetStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IPasswordResetStore>()` |
 | `IAccountLockoutPolicy` | `FreeSqlAccountLockoutPolicy` | **接线型普通 DI**（TryAddScoped，ctor IServiceProvider/IOptions/ILogger——无 IDomainUser） | `AuthController` 经 `GetOptionalService` 自动调用 |
 | `IPasswordResetFlow` | `DefaultPasswordResetFlow` | **接线型普通 DI** | `AuthController` 经 `GetOptionalService` 自动调用 |
-| `ILoginHistoryService` | `LoginHistoryService` | **接线型**（ctor IServiceProvider + ILogger） | 消费方普通 DI 解析；经 SP 延迟解析 SecurityLog.Abstractions 契约（V0.4.0 改引契约包，L2 门控合规；C1 模式） |
+| `ILoginHistoryService` | `LoginHistoryService`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（V0.5.x 由接线型升门面——SecurityLog 契约已门面化须 AOP 帧） | `User.Use<ILoginHistoryService>()`；经基类 `User.Use<SecurityLog 契约>()` AOP 解析（C1 模式） |
 
 > **V0.5.0（V4.10.53 ADR90 领域自治根治）**：两 Store 继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）+ `[DiContractIgnore]`；注册改 `AddConstructibleService`（消费方统一 `User.Use<接口>()` 解析）。Policy/Flow 改**接线型**（skill §4.2——显式 userName 参数、无需用户上下文，不继承 DomainServiceBase）：修复真实生产故障——旧 ctor 注入 IDomainUser 致 `AuthController.GetOptionalService` 构造失败、锁定检查静默失效；改后 ctor 全 DI 可解析，`IAccountLockoutPolicy`/`IPasswordResetFlow` 非 `IDomainService`（主框架契约不可改），`AddConstructibleService` 编译约束不满足、保持 TryAddScoped 普通 DI。Store 经 `IServiceProvider` C1 延迟解析（接线型边界不吞守卫语义，读取失败仍异常静默降级）。
+>
+> **V0.5.x（批次间交互遗留修复，2026-10-04）**：`ILoginHistoryService` 由接线型（ctor IServiceProvider + `GetRequiredService` 普通解析）升**门面**——SecurityLog V0.4.0 三契约已门面化（`AddConstructibleService` 守卫工厂），普通解析在域作用域帧外触「领域架构守卫」异常（跨扩展消费链断裂，全量测试暴露 6 用例失败）；升门面后继承 `DomainServiceBase` 经基类 `User.Use<ISecurityLogQueryService>()` / `User.Use<ISecurityLogAnalyticsService>()` AOP 路径解析（IDomainUser 永不注册 DI，D01 铁律）；注册改 `AddConstructibleService<ILoginHistoryService, LoginHistoryService>`。
 
 ### 2. 注册密码落地适配器
 
@@ -147,7 +149,7 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 | **`IAccountLockoutStore`** | 锁定状态存储抽象 | `FreeSqlAccountLockoutStore`（本扩展） |
 | **`IPasswordResetStore`** | 重置码存储抽象 | `FreeSqlPasswordResetStore`（本扩展） |
 | **`IAccountPasswordManager`** | 密码落地抽象 | 消费方实现（适配 Identity IUserManager） |
-| **`ILoginHistoryService`** | 登录历史与异常检测查询（V0.3.0——消费 SecurityLog 扩展查询 API，不重复建表） | `LoginHistoryService`（本扩展，经 IServiceProvider 延迟解析 SecurityLog.Abstractions 契约服务） |
+| **`ILoginHistoryService`** | 登录历史与异常检测查询（V0.3.0——消费 SecurityLog 扩展查询 API，不重复建表） | `LoginHistoryService`（本扩展，V0.5.x 升门面继承 `DomainServiceBase`——经基类 `User.Use<SecurityLog 契约>()` AOP 路径解析） |
 | **`AccountLockoutEntity`** | 锁定记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`PasswordResetCodeEntity`** | 重置码表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`AccountUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
@@ -180,7 +182,7 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 - **两 Store 继承 `DomainServiceBase`**（`AccountLockoutStore`/`PasswordResetStore`）——经基类 `User` 获取用户上下文（**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——v0.3.3 同根缺陷）；`[DiContractIgnore]` 豁免 DI001；DataService 仍经 `User.Use<具体类>()` NoAop 懒加载（DI004 零豁免）
 - **注册形态改 `AddConstructibleService`**（Store）——接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方统一 `User.Use<IAccountLockoutStore>()` / `User.Use<IPasswordResetStore>()` 解析
 - **Policy/Flow 改接线型**（不继承 DomainServiceBase、不注入 IDomainUser）——修复真实生产故障：旧 ctor 注入 IDomainUser 致 `AuthController.GetOptionalService` 构造失败、锁定检查静默失效；改 ctor `(IServiceProvider, IOptions, ILogger)` 全 DI 可解析；Store 经 `IServiceProvider` C1 延迟解析；注册保持 TryAddScoped（`IAccountLockoutPolicy`/`IPasswordResetFlow` 主框架契约非 `IDomainService`，AddConstructibleService 编译约束不满足）
-- 测试宿主重写：真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 注册形态断言（守卫工厂/throw-factory/TryAddScoped）；登录历史（`LoginHistoryService`）确认接线型判定 OK 不改（ctor IServiceProvider + ILogger，方法全显式参数，无 User 依赖）
+- 测试宿主重写：真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 注册形态断言（守卫工厂/throw-factory/TryAddScoped）；登录历史（`LoginHistoryService`）**V0.5.x 复核升门面**——SecurityLog V0.4.0 门面化后原接线型 `GetRequiredService` 普通解析触守卫异常，升 `DomainServiceBase` + `User.Use<SecurityLog 契约>()` AOP 解析
 - 51 用例全绿（禁止 slnx 构建，仅 Account 项目 + 测试项目）
 
 ### V0.1.0（已实施）

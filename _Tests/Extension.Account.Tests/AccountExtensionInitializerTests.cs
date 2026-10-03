@@ -14,11 +14,11 @@ namespace TKWF.Ext.Account.Tests;
 /// AccountExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册形态、主框架缺口注册。
 /// <para>V4.10.53（领域自治根治，正确路线）注册形态：</para>
 /// <list type="bullet">
-/// <item><see cref="IAccountLockoutStore"/> / <see cref="IPasswordResetStore"/>（接口 : IDomainService）→
-///     <c>AddConstructibleService</c>：接口 = 可构造守卫工厂（非实现映射）+ 实现类 = throw-factory；
-///     域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
+/// <item><see cref="IAccountLockoutStore"/> / <see cref="IPasswordResetStore"/> / <see cref="ILoginHistoryService"/>
+///     （接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂（非实现映射）+
+///     实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
 /// <item><see cref="IAccountLockoutPolicy"/> / <see cref="IPasswordResetFlow"/>（主框架扩展点，非 IDomainService）→
-///     TryAddScoped 普通 DI（接线型）；<see cref="ILoginHistoryService"/> → TryAddScoped 接线型。</item>
+///     TryAddScoped 普通 DI（接线型）。</item>
 /// </list>
 /// </summary>
 public class AccountExtensionInitializerTests
@@ -140,17 +140,37 @@ public class AccountExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_Registers_ILoginHistoryService_Descriptor()
+    public void ConfigureServices_Registers_ILoginHistoryService_GuardFactory()
     {
-        // V0.3.0：登录历史与异常检测查询服务（消费 SecurityLog 扩展查询 API）——接线型 TryAddScoped
+        // V0.5.x（批次间交互遗留修复）：ILoginHistoryService 由接线型 TryAddScoped 升门面 AddConstructibleService——
+        // 消费 SecurityLog 门面须 AOP 帧（GuardFactory，非实现映射）
         var services = new ServiceCollection();
         new AccountExtensionInitializer<AccountUserInfo>().ConfigureServices(services);
 
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ILoginHistoryService));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(LoginHistoryService), descriptor!.ImplementationType);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void LoginHistoryServiceGuardFactory_OutsideUseScope_Throws()
+    {
+        // V0.5.x：校验 LoginHistoryService 实现类 throw-factory + 接口守卫工厂域外解析抛领域架构守卫
+        var services = new ServiceCollection();
+        new AccountExtensionInitializer<AccountUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+
+        var implDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(LoginHistoryService));
+        Assert.NotNull(implDescriptor);
+        Assert.NotNull(implDescriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ILoginHistoryService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("ILoginHistoryService", ex.Message);
     }
 
     [Fact]

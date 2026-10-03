@@ -6,8 +6,8 @@ using FreeSql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
-using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.SecurityLog;
 
 namespace TKWF.Ext.Account.Tests;
@@ -15,9 +15,11 @@ namespace TKWF.Ext.Account.Tests;
 /// <summary>
 /// LoginHistoryService（V0.3.0）测试——登录历史分页/过滤/投影 + 异常检测 TopN（ByUser/ByIp + 时间窗口）+
 /// SecurityLog 未启用的明确异常（C1 模式）。
-/// <para>宿主模式：SQLite 内存库 + <see cref="SecurityLogExtensionInitializer{TUserInfo}"/> 真实注册路径
-/// （SecurityLog 实现为 internal，消费方测试只能经初始化器注册真实契约服务——正是消费方集成语义）；
-/// 数据插入经公开 <see cref="ISecurityLogStore"/>（SecurityLog 唯一写路径，只增不改）。</para>
+/// <para>宿主模式 V0.5.x（批次间交互遗留修复，生产路径重写）：真实 DI（两扩展 Initializer ConfigureServices +
+/// FreeSql SQLite 基础设施 + AddLogging）+ <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> +
+/// <c>User.Use&lt;接口&gt;()</c> AOP 路径——ILoginHistoryService 现为门面（AddConstructibleService 守卫工厂），
+/// 数据插入/读取经 <c>User.Use&lt;ISecurityLogStore&gt;()</c> / <c>User.Use&lt;ILoginHistoryService&gt;()</c>
+/// （SecurityLog V0.4.0 三契约守卫工厂须 AOP 帧；IDomainUser 永不注册 DI）。</para>
 /// </summary>
 public class LoginHistoryServiceTests
 {
@@ -35,56 +37,41 @@ public class LoginHistoryServiceTests
     }
 
     /// <summary>
-    /// 构建消费方 DI：SecurityLog 扩展（真实初始化器，可关）+ Account 扩展。
-    /// <para>SecurityLog 初始化器 <c>AddOptions().BindConfiguration()</c> 需要 IConfiguration 已注册（空配置 = 默认值）；
-    /// DataService 构造依赖 IDomainUser + IEntityDAC&lt;T&gt;（FreeSqlEntityDAC 驱动，红线合规测试模式）。</para>
+    /// 构建消费方生产形态 DI：两扩展 Initializer ConfigureServices（SecurityLog 可关——C1 未启用场景）
+    /// + FreeSql 基础设施。DataService 不手动注册——生产经 SG 消费方聚合自动注册（throw-factory）；
+    /// 测试经 <c>Use&lt;具体类&gt;()</c> NoAop 路径直建（IEntityDAC 从 DI 解析，红线合规，对齐 AccountProductionPathTests）。
     /// </summary>
     private static ServiceProvider CreateProvider(IFreeSql fsql, bool registerSecurityLog = true)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());   // SecurityLog AddOptions BindConfiguration 需 IConfiguration（空 = 默认值）
         services.AddSingleton(fsql);
-        services.AddScoped<IDomainUser>(sp =>
-        {
-            var u = new StubDomainUser();
-            u.ServiceProvider = sp;
-            return u;
-        });
-        services.AddScoped<IEntityDAC<SecurityLogEntity>>(_ =>
-            new FreeSqlEntityDAC<SecurityLogEntity>(new UnitOfWorkManager(fsql)));
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<SecurityLogEntity>, FreeSqlEntityDAC<SecurityLogEntity>>();
 
-        // v4.10.8 (ADR61)：SecurityLog 初始器不再手动注册 DataService——测试 Host 经 SecurityLog 扩展
-        // 生成上下文聚合（镜像生产 RegisterGeneratedServices 的扩展聚合路径）注册其 DataService：
-        // internal 类型经 Type 对象注册（Account 测试项目无 IVT 不可命名），DI 兜底工厂 = ActivatorUtilities
-        // .CreateInstance + DI IDomainUser（免域作用域、xUnit 并行安全）。
-        foreach (var reg in TKWF.Ext.SecurityLog.Generated.ProjectMetaContext.GetOrCreateInstance().GetServiceRegistrations())
-        {
-            if (reg.Type == TKW.Framework.CodeGeneration.MetaType.DataService)
-            {
-                var impl = reg.Implementation;
-                services.AddScoped(impl, sp =>
-                {
-                    var user = sp.GetRequiredService<IDomainUser>();
-                    return ActivatorUtilities.CreateInstance(sp, impl, user);
-                });
-            }
-        }
-
+        new AccountExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         if (registerSecurityLog)
             new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-        new AccountExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>绑定生产作用域 + 创建真实 DomainUser（消费方视角；IDomainUser 永不注册 DI——经基类 User / Use&lt;T&gt;）。</summary>
+    private static DomainUser<TestUserInfo> BindUser(ServiceProvider sp)
+    {
+        DomainUser<TestUserInfo>.BindScope(sp);
+        return new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "用户42") };
     }
 
     /// <summary>构造一条登录安全事件（CreateTime 由 SaveAsync 落库时取 UtcNow）。</summary>
     private static SecurityLogEntry Login(string userName, long? userId, string ip, string result, string? ua = null)
         => new("Login", "Authentication", userName, userId, ip, ua, result, null, null);
 
-    /// <summary>经 ISecurityLogStore（SecurityLog 唯一写路径）插入安全事件。</summary>
-    private static async Task InsertAsync(ServiceProvider sp, params SecurityLogEntry[] entries)
+    /// <summary>经 ISecurityLogStore（SecurityLog 唯一写路径，AOP 守卫）插入安全事件。</summary>
+    private static async Task InsertAsync(DomainUser<TestUserInfo> user, params SecurityLogEntry[] entries)
     {
-        var store = sp.GetRequiredService<ISecurityLogStore>();
+        var store = user.Use<ISecurityLogStore>();
         foreach (var entry in entries)
             await store.SaveAsync(entry, CancellationToken.None);
     }
@@ -96,7 +83,8 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await InsertAsync(sp,
+        var user = BindUser(sp);
+        await InsertAsync(user,
             Login("alice", 1, "10.0.0.1", "Success"),
             Login("alice", 1, "10.0.0.1", "Failed"),
             Login("bob", 2, "10.0.0.2", "Failed"),
@@ -104,7 +92,7 @@ public class LoginHistoryServiceTests
             new SecurityLogEntry("Logout", "Authentication", "bob", 2, "10.0.0.2", null, "Success", null, null),   // 非 Login 事件排除
             new SecurityLogEntry("PasswordChange", "Authentication", "alice", 1, "10.0.0.1", null, "Success", null, null));
 
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var service = user.Use<ILoginHistoryService>();
         var result = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput());
 
         Assert.Equal(4, result.Total);              // 仅 4 条 Login 事件（Logout/PasswordChange 被 EventType 过滤）
@@ -127,13 +115,14 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await InsertAsync(sp,
+        var user = BindUser(sp);
+        await InsertAsync(user,
             Login("alice", 1, "10.0.0.1", "Success"),
             Login("alice", 1, "10.0.0.1", "Failed"),
             Login("bob", 2, "10.0.0.2", "Failed"),
             Login("carol", 3, "10.0.0.3", "Success"));
 
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var service = user.Use<ILoginHistoryService>();
 
         // UserName LIKE
         var byUser = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { UserName = "ali" });
@@ -161,14 +150,15 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await InsertAsync(sp,
+        var user = BindUser(sp);
+        await InsertAsync(user,
             Login("u1", 1, "10.0.0.1", "Success"),
             Login("u2", 2, "10.0.0.2", "Success"),
             Login("u3", 3, "10.0.0.3", "Success"),
             Login("u4", 4, "10.0.0.4", "Success"),
             Login("u5", 5, "10.0.0.5", "Success"));
 
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var service = user.Use<ILoginHistoryService>();
 
         // Take=3 → 3 条，Total 仍为 5
         var paged = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 3 });
@@ -195,7 +185,8 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var user = BindUser(sp);
+        var service = user.Use<ILoginHistoryService>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetLoginHistoryAsync(null!));
     }
@@ -207,8 +198,11 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql, registerSecurityLog: false);   // 仅 Account 扩展启用
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var user = BindUser(sp);
+        var service = user.Use<ILoginHistoryService>();
 
+        // C1 模式：SecurityLog 契约未注册 → 门面内 User.Use<ISecurityLogQueryService>() 经 AOP 路径 GetRequiredService
+        // 抛 InvalidOperationException（未注册异常，消息含 SecurityLog 类型名）——保持原有"明确异常"语义
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.GetLoginHistoryAsync(new LoginHistoryQueryInput()));
         Assert.Contains("SecurityLog", ex.Message);                        // 提示须启用 SecurityLog 扩展
@@ -219,7 +213,8 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql, registerSecurityLog: false);
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var user = BindUser(sp);
+        var service = user.Use<ILoginHistoryService>();
 
         var exUser = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedUsersAsync());
         Assert.Contains("SecurityLog", exUser.Message);
@@ -235,7 +230,8 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await InsertAsync(sp,
+        var user = BindUser(sp);
+        await InsertAsync(user,
             Login("alice", 1, "10.0.0.1", "Failed"),
             Login("alice", 1, "10.0.0.1", "Failed"),
             Login("alice", 1, "10.0.0.1", "Failed"),
@@ -247,7 +243,7 @@ public class LoginHistoryServiceTests
             Login("carol", 3, "10.0.0.3", "Failed"),
             Login("carol", 3, "10.0.0.3", "Failed"));
 
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var service = user.Use<ILoginHistoryService>();
 
         var top2 = await service.GetTopFailedUsersAsync(topN: 2);
         Assert.Equal(2, top2.Count);
@@ -267,14 +263,15 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await InsertAsync(sp,
+        var user = BindUser(sp);
+        await InsertAsync(user,
             Login("alice", 1, "10.0.0.1", "Failed"),
             Login("bob", 2, "10.0.0.1", "Failed"),
             Login("carol", 3, "10.0.0.2", "Failed"),
             Login("dave", 4, null, "Failed"),            // IP null 不计入
             Login("erin", 5, "", "Failed"));             // IP 空串不计入
 
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var service = user.Use<ILoginHistoryService>();
         var result = await service.GetTopFailedIpsAsync(topN: 10);
 
         Assert.Equal(2, result.Count);
@@ -291,6 +288,7 @@ public class LoginHistoryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
+        var user = BindUser(sp);
         var now = DateTime.UtcNow;
 
         // 测试种子直接经 fsql 插入带显式 CreateTime 的历史行（仅测试数据铺设，非生产数据访问）。
@@ -322,7 +320,7 @@ public class LoginHistoryServiceTests
             }).ExecuteAffrows();
         }
 
-        var service = sp.GetRequiredService<ILoginHistoryService>();
+        var service = user.Use<ILoginHistoryService>();
 
         // 默认 topN=10（不传 topN）全量 → 两用户都计入
         var all = await service.GetTopFailedUsersAsync();

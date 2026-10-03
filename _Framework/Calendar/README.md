@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.Calendar` |
-| 版本 | v0.1.0（独立起点） |
+| 版本 | v0.1.2（日历+事件 CRUD + occurrence 查询/合并 + UTC 契约）+ **V0.2.0（V4.10.53 领域自治根治，ADR90——正确路线：CalendarStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ CalendarManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径）** |
 | 依赖 | `TKWF.Domain` + `TKWF.Utility`（重复规则算法）+ SG1（框架既有） |
 | 数据 | 表 `Calendar` + `CalendarEvent`（框架 `SyncTables` 统一建表） |
 
@@ -17,8 +17,8 @@
 ```
 CalendarEntity / CalendarEventEntity                     # SG1 声明式实体（partial + [DomainGenerateCode]）
 ├── CalendarEntityDataService / CalendarEventEntityDataService  # SG1 DataService 骨架（C1 分路范围查询）
-├── ICalendarStore / CalendarStore                       # internal 存储抽象（委托 DataService + SQLite DateTime 规范化）
-└── ICalendarManager / CalendarManager                   # 公开门面（事务包裹 + 重复展开 + occurrence 合并）
+├── ICalendarStore / CalendarStore                       # internal 存储抽象（V0.2.0 接线型：ctor IServiceProvider + C1 延迟解析 DataService + SQLite DateTime 规范化，异常自然传播）
+└── ICalendarManager / CalendarManager                   # 门面（V0.2.0 internal sealed 继承 DomainServiceBase + AddConstructibleService 注册——事务包裹 + 重复展开 + occurrence 合并）
 
 TKW.Framework.Utility.Calendar.Recurrence                # 主框架 Utility：RecurrenceRule / RecurrenceExpander（纯算法零依赖）
 ```
@@ -77,7 +77,14 @@ using TKWF.Ext.Calendar;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-三钩子自动接线。DI 一律 `TryAddScoped`——消费方自定义 `ICalendarManager`/`ICalendarStore` 实现优先。
+三钩子自动接线。自动注册（V0.2.0 领域自治根治，ADR90——按"正确路线"注册形态）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `ICalendarManager` | `CalendarManager`（internal sealed，继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<ICalendarManager>()` |
+| `ICalendarStore` | `CalendarStore`（内部接线型：ctor IServiceProvider + C1 延迟解析 DataService） | **接线型 `TryAddScoped` 普通 DI**（消费方可自定义实现优先） | Manager ctor 注入（普通 DI） |
+
+> **V0.2.0（V4.10.53 领域自治根治）**：`ICalendarManager` 门面消费方统一经 `User.Use<ICalendarManager>()` 解析（AOP 路径——IDomainUser 永不注册 DI，经基类 `User` 取上下文）；`ICalendarStore` 保持 internal 接线型普通 DI（Manager 内部组合依赖，不可改可见性）。
 
 ## 数据模型
 

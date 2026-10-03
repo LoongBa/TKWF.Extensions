@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.OrganizationUnit` |
-| 版本 | v0.2.0（VEntity 下推） |
+| 版本 | v0.2.0（VEntity 下推）+ **V0.3.0（V4.10.53 领域自治根治，ADR90——正确路线：OrganizationUnitStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ OrganizationUnitManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径）** |
 | 依赖 | `TKWF.Domain` + SG1（框架既有） |
 | 数据 | 表 `OrganizationUnit` + `OrganizationUnitUser`（框架 `SyncTables` 统一建表） |
 
@@ -18,8 +18,9 @@
 OrganizationUnitEntity / OrganizationUnitUserEntity     # SG1 声明式实体（partial + [DomainGenerateCode]）
 ├── OrganizationUnitEntityDataService                   # SG1 DataService 骨架（GetByCode/GetAll/GetByIds）
 ├── OrganizationUnitUserEntityDataService               # SG1 DataService 骨架（关联 CRUD/查询）
-├── IOrganizationUnitStore / OrganizationUnitStore      # internal 存储抽象（委托 DataService，异常自然传播）
-└── IOrganizationUnitManager / OrganizationUnitManager  # 公开门面（业务规则 + 事务包裹 + 引用守卫）
+├── UserOrganizationUnitViewDataService                 # VEntity 只读 DataService（V0.2.0 视图 JOIN 单查询下推）
+├── IOrganizationUnitStore / OrganizationUnitStore      # internal 存储抽象（V0.3.0 接线型：ctor IServiceProvider + C1 延迟解析 DataService，异常自然传播）
+└── IOrganizationUnitManager / OrganizationUnitManager  # 门面（V0.3.0 internal sealed 继承 DomainServiceBase + AddConstructibleService 注册——业务规则 + 事务包裹 + 引用守卫）
 ```
 
 - **数据访问红线**：Store/Manager 不注入 `IFreeSql`/`IEntityDAC`——全部经 DataService 委托；事务由 Manager 层统一管理（Store 不触碰 `ITransactionManager`）。
@@ -68,7 +69,14 @@ using TKWF.Ext.OrganizationUnit;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-三钩子（`ConfigureServices`/`ConfigureFilters`/`InitializeAsync`）自动接线。DI 一律 `TryAddScoped`——消费方自定义 `IOrganizationUnitManager`/`IOrganizationUnitStore` 实现优先。
+三钩子（`ConfigureServices`/`ConfigureFilters`/`InitializeAsync`）自动接线。自动注册（V0.3.0 领域自治根治，ADR90——按"正确路线"注册形态）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IOrganizationUnitManager` | `OrganizationUnitManager`（internal sealed，继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IOrganizationUnitManager>()` |
+| `IOrganizationUnitStore` | `OrganizationUnitStore`（内部接线型：ctor IServiceProvider + C1 延迟解析 DataService） | **接线型 `TryAddScoped` 普通 DI**（消费方可自定义实现优先） | Manager ctor 注入（普通 DI） |
+
+> **V0.3.0（V4.10.53 领域自治根治）**：`IOrganizationUnitManager` 门面消费方统一经 `User.Use<IOrganizationUnitManager>()` 解析（AOP 路径——IDomainUser 永不注册 DI，经基类 `User` 取上下文）；`IOrganizationUnitStore` 保持 internal 接线型普通 DI（Manager 内部组合依赖，不可改可见性）。
 
 ## 数据模型
 

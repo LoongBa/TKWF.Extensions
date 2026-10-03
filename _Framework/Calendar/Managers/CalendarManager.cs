@@ -4,23 +4,32 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKW.Framework.Utility.Calendar.Recurrence;
 
 namespace TKWF.Ext.Calendar
 {
     /// <summary>
-    /// 日历管理实现（public）——日历/事件生命周期 + occurrence 合并查询。
+    /// 日历管理实现（internal sealed，构造函数 public——AddConstructibleService 守卫工厂经 ActivatorUtilities 解析需
+    /// public 构造器；类 internal 因 ctor 含 internal Store 契约参数（CS0051 可访问性一致），对齐 AuditLogging QueryService
+    /// / FileManager 先例）——日历/事件生命周期 + occurrence 合并查询。
     /// <para>事务包裹（对齐 Approval/OU CONDITION-1）：事件 Create/Update（引用守卫 + 校验 + 多步写）、
     /// 日历 Delete（删除保护）经 <see cref="ITransactionManager"/> BeginAsync → 业务 → CommitAsync / 失败 RollbackAsync。</para>
     /// <para>RecurrenceEndUtc 同源推导（C2/D4）：UNTIL 直取；COUNT 用 <see cref="RecurrenceExpander"/> 展开
     /// （从 dtStart 到覆盖 COUNT 的充分范围，写入时受上限保护）取最后 occurrence——与查询展开同源，偏差构造性消除。</para>
     /// <para>数据访问红线：不注入 IFreeSql / IEntityDAC——只经 <see cref="ICalendarStore"/>（委托 DataService）。</para>
-    /// <para>类为 public 但构造函数 internal（<see cref="ICalendarStore"/> 为 internal 契约）——
-    /// 由 <see cref="CalendarExtensionInitializer{TUserInfo}.ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/>
-    /// 以工厂方式 TryAddScoped 注册（消费方仍可自定义实现优先）。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（<b>IDomainUser 永不注册 DI</b>，D01；IDomainUser 移到 ctor 首位经基类 User）；
+    /// <c>[DiContractIgnore]</c> 豁免 DI001（ctor 含 internal Store 契约参数）；Store（internal 接线型普通 DI）经
+    /// ctor 注入解析——接线型 Store 经 TryAddScoped 普通注册可解析；注册形态改
+    /// <c>AddConstructibleService&lt;ICalendarManager, CalendarManager&gt;</c>（其余参数
+    /// ITransactionManager/ILogger 由 ActivatorUtilities 从 DI 解析）。</para>
     /// </summary>
-    public sealed class CalendarManager : ICalendarManager
+    [DiContractIgnore]
+    internal sealed class CalendarManager : DomainServiceBase, ICalendarManager
     {
         private readonly ICalendarStore _store;
         private readonly ITransactionManager _transactionManager;
@@ -29,10 +38,12 @@ namespace TKWF.Ext.Calendar
         /// <summary>COUNT 推导 RecurrenceEndUtc 的上限保护（防写入时 DoS——超大 COUNT 拒绝，C4）。</summary>
         private const int MaxDerivationCount = 100000;
 
-        internal CalendarManager(
+        public CalendarManager(
+            IDomainUser user,
             ICalendarStore store,
             ITransactionManager transactionManager,
             ILogger<CalendarManager> logger)
+            : base(user)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));

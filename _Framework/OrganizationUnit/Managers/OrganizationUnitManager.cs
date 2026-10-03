@@ -5,22 +5,31 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 
 namespace TKWF.Ext.OrganizationUnit
 {
     /// <summary>
-    /// 组织单元管理实现（public）——树形 OU 生命周期 + 用户关联 + 双向查询。
+    /// 组织单元管理实现（internal sealed，构造函数 public——AddConstructibleService 守卫工厂经 ActivatorUtilities 解析需
+    /// public 构造器；类 internal 因 ctor 含 internal Store 契约参数（CS0051 可访问性一致），对齐 AuditLogging QueryService
+    /// / FileManager 先例）——树形 OU 生命周期 + 用户关联 + 双向查询。
     /// <para>事务包裹（C1）：Create/Move/Delete 多步写路径经 <see cref="ITransactionManager"/>
     /// BeginAsync → 业务 → CommitAsync / 失败 RollbackAsync（using scope 范式，对齐 Approval CONDITION-1）。</para>
     /// <para>删除语义（C2）：物理删除（hasSoftDelete:false + 实体不声明 IsDeleted），已删 Code 可复用。</para>
     /// <para>Code 白名单 + Path 长度守卫（C3）：拒绝 LIKE 通配符/空白；Path 超 1024 抛业务异常而非 DB Overflow。</para>
     /// <para>数据访问红线：不注入 IFreeSql / IEntityDAC——只经 <see cref="IOrganizationUnitStore"/>（委托 DataService）。</para>
-    /// <para>类为 public 但构造函数 internal（<see cref="IOrganizationUnitStore"/> 为 internal 契约）——
-    /// 由 <see cref="OrganizationUnitExtensionInitializer{TUserInfo}.ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/>
-    /// 以工厂方式 TryAddScoped 注册（消费方仍可自定义实现优先）。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（<b>IDomainUser 永不注册 DI</b>，D01；IDomainUser 移到 ctor 首位经基类 User）；
+    /// <c>[DiContractIgnore]</c> 豁免 DI001（ctor 含 internal Store 契约参数）；Store（internal 接线型普通 DI）经
+    /// ctor 注入解析——接线型 Store 经 TryAddScoped 普通注册可解析；注册形态改
+    /// <c>AddConstructibleService&lt;IOrganizationUnitManager, OrganizationUnitManager&gt;</c>（其余参数
+    /// ITransactionManager/ILogger 由 ActivatorUtilities 从 DI 解析）。</para>
     /// </summary>
-    public sealed class OrganizationUnitManager : IOrganizationUnitManager
+    [DiContractIgnore]
+    internal sealed class OrganizationUnitManager : DomainServiceBase, IOrganizationUnitManager
     {
         private readonly IOrganizationUnitStore _store;
         private readonly ITransactionManager _transactionManager;
@@ -32,10 +41,12 @@ namespace TKWF.Ext.OrganizationUnit
         /// <summary>Code 白名单（C3）：字母/数字/下划线/点/连字符。</summary>
         private static readonly Regex CodeRegex = new("^[A-Za-z0-9_.-]+$", RegexOptions.Compiled);
 
-        internal OrganizationUnitManager(
+        public OrganizationUnitManager(
+            IDomainUser user,
             IOrganizationUnitStore store,
             ITransactionManager transactionManager,
             ILogger<OrganizationUnitManager> logger)
+            : base(user)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));

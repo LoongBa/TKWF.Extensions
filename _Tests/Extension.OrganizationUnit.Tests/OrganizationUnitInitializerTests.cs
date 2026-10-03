@@ -13,6 +13,12 @@ namespace TKWF.Ext.OrganizationUnit.Tests;
 
 /// <summary>
 /// D14：OrganizationUnitExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册完整、TryAddScoped 不覆盖消费方、白名单声明。
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态二态：</para>
+/// <list type="bullet">
+/// <item><see cref="IOrganizationUnitManager"/>（接口 : IDomainService）→ <b>AddConstructibleService</b>：接口 = 可构造守卫工厂
+///     （非实现映射）+ 实现类 = throw-factory；域作用域外直接 DI 解析接口必抛领域架构守卫。</item>
+/// <item><see cref="IOrganizationUnitStore"/>（internal 接线型契约）→ <b>TryAddScoped 普通 DI</b>（ImplementationType + 消费方自定义优先）。</item>
+/// </list>
 /// </summary>
 public class OrganizationUnitInitializerTests
 {
@@ -28,20 +34,53 @@ public class OrganizationUnitInitializerTests
         Assert.Equal("OrganizationUnit", attr!.Name);
     }
 
+    // ── IOrganizationUnitManager：AddConstructibleService（标准门面）──
+
     [Fact]
-    public void ConfigureServices_Registers_Manager_Descriptor()
+    public void ConfigureServices_Registers_Manager_GuardFactory()
     {
         var services = new ServiceCollection();
         new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
 
+        // V4.10.53：AddConstructibleService——接口注册为可构造守卫工厂（非实现映射），Scoped 生命周期
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IOrganizationUnitManager));
 
         Assert.NotNull(descriptor);
-        // OrganizationUnitManager 构造函数 internal（IOrganizationUnitStore 为 internal 契约）→ 工厂注册；
-        // TryAddScoped 工厂语义与类型注册等价（消费方自定义实现仍优先）
-        Assert.NotNull(descriptor!.ImplementationFactory);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
+
+    [Fact]
+    public void ConfigureServices_Registers_Manager_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
+
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IOrganizationUnitManager>() 创建
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(OrganizationUnitManager));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<OrganizationUnitManager>());
+    }
+
+    [Fact]
+    public void ManagerInterface_OutsideUseScope_Throws()
+    {
+        // AddConstructibleService 的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOrganizationUnitManager>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IOrganizationUnitManager", ex.Message);
+    }
+
+    // ── Store：内部接线型 TryAddScoped（ImplementationType 普通 DI）──
 
     [Fact]
     public void ConfigureServices_Registers_Store_Descriptor()
@@ -69,18 +108,6 @@ public class OrganizationUnitInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerManager()
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<IOrganizationUnitManager, ConsumerOrganizationUnitManager>();
-        new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
-
-        var descriptors = services.Where(d => d.ServiceType == typeof(IOrganizationUnitManager)).ToList();
-        Assert.Single(descriptors);
-        Assert.Equal(typeof(ConsumerOrganizationUnitManager), descriptors[0].ImplementationType);
-    }
-
-    [Fact]
     public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
     {
         var services = new ServiceCollection();
@@ -103,22 +130,6 @@ public class OrganizationUnitInitializerTests
         // V4.9.85 (ADR47)：消费方白名单声明——发现不自动启用，须显式声明三钩子才接线
         Assert.NotNull(attr);
         Assert.Equal(typeof(OrganizationUnitExtensionInitializer<>), attr!.InitializerType);
-    }
-
-    /// <summary>测试专用 IOrganizationUnitManager：标记消费方自定义实现（仅 DI 标记，不实际调用）。</summary>
-    private sealed class ConsumerOrganizationUnitManager : IOrganizationUnitManager
-    {
-        public Task<OrganizationUnitEntity> CreateAsync(string code, string name, long? parentId, int? sortOrder = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task UpdateAsync(long id, string? name = null, int? sortOrder = null, bool? isEnabled = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task DeleteAsync(long id, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task MoveAsync(long id, long? newParentId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<OrganizationUnitTreeNode> GetTreeAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<OrganizationUnitEntity>> GetSubTreeAsync(long id, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<OrganizationUnitEntity>> GetAncestorsAsync(long id, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task AssignUserAsync(long ouId, string userId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task UnassignUserAsync(long ouId, string userId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<string>> GetUserIdsInOrganizationUnitAsync(long ouId, bool includeDescendants, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<long>> GetOrganizationUnitIdsForUserAsync(string userId, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     /// <summary>测试专用 IOrganizationUnitStore：标记消费方自定义实现（仅 DI 标记，不实际调用）。</summary>

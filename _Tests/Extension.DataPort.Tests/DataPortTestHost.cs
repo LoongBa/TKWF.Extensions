@@ -23,9 +23,19 @@ internal static class DataPortTestHost
     }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
+/// <para>ADR88 适配：Use&lt;T&gt;() 懒加载从服务映射表解析（<see cref="With{T}"/> 注册外部 DataService 实例）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly Dictionary<Type, object? > _services = new();
+
+    /// <summary>注册外部服务实例（懒加载 Use&lt;T&gt;() 解析源——测试构造 DataService 后注册）。</summary>
+    public StubDomainUser With<T>(T service) where T : class
+    {
+        _services[typeof(T)] = service;
+        return this;
+    }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -37,10 +47,14 @@ internal sealed class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        => _services.TryGetValue(typeof(TDomainService), out var svc) && svc is TDomainService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TDomainService).Name} 未注册——请用 With<T>() 注册（懒加载 Use<T> 解析源）");
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        => _services.TryGetValue(typeof(TService), out var svc) && svc is TService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TService).Name} 未注册——请用 With<T>() 注册（懒加载 GetService<T> 解析源）");
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

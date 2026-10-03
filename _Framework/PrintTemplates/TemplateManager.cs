@@ -3,43 +3,48 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates
 {
     /// <summary>
     /// 模板管理门面——版本生命周期 + 渲染入口 + 发布版本自动递增。
     /// <para>Scoped 生命周期（按请求）。</para>
+    /// <para>⚡ ADR88（v4.10.52）构造注入门控：域服务（Store/Renderer/ViewDataService）改 IDomainUser + User.Use&lt;T&gt;() 懒加载。</para>
     /// </summary>
     internal sealed class TemplateManager : ITemplateManager
     {
-        private readonly ITemplateStore _store;
-        private readonly ITemplateRenderer _renderer;
-        private readonly PrintTemplateVersionViewDataService _viewDataService;
+        private readonly IDomainUser _user;
+        private ITemplateStore? _store;
+        private ITemplateRenderer? _renderer;
+        private PrintTemplateVersionViewDataService? _viewDataService;
 
-        public TemplateManager(ITemplateStore store, ITemplateRenderer renderer, PrintTemplateVersionViewDataService viewDataService)
+        private ITemplateStore Store => _store ??= _user.Use<ITemplateStore>();
+        private ITemplateRenderer Renderer => _renderer ??= _user.Use<ITemplateRenderer>();
+        private PrintTemplateVersionViewDataService ViewDataService => _viewDataService ??= _user.Use<PrintTemplateVersionViewDataService>();
+
+        public TemplateManager(IDomainUser user)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
-            _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
-            _viewDataService = viewDataService ?? throw new ArgumentNullException(nameof(viewDataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         /// <inheritdoc />
         public async Task<PrintTemplateEntity?> GetTemplateAsync(string key, CancellationToken ct = default)
         {
-            return await _store.GetByKeyAsync(key, ct);
+            return await Store.GetByKeyAsync(key, ct);
         }
 
         /// <inheritdoc />
         public async Task<PrintTemplateVersionView?> GetVersionAsync(string key, string version, CancellationToken ct = default)
-            => await _viewDataService.GetVersionByKeyAsync(key, version, ct);
+            => await ViewDataService.GetVersionByKeyAsync(key, version, ct);
 
         /// <inheritdoc />
         public async Task<PrintTemplateVersionView?> GetActiveVersionAsync(string key, CancellationToken ct = default)
-            => await _viewDataService.GetActiveVersionByKeyAsync(key, ct);
+            => await ViewDataService.GetActiveVersionByKeyAsync(key, ct);
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<PrintTemplateVersionView>> ListVersionsAsync(string key, CancellationToken ct = default)
-            => await _viewDataService.ListVersionsByKeyAsync(key, ct);
+            => await ViewDataService.ListVersionsByKeyAsync(key, ct);
 
         /// <inheritdoc />
         public async Task<string> RenderAsync(string key, IReadOnlyDictionary<string, object?> model, string? version = null, CancellationToken ct = default)
@@ -57,14 +62,14 @@ namespace TKWF.Ext.PrintTemplates
                 if (ver == null)
                     throw new InvalidOperationException($"模板 '{key}' 版本 '{version}' 未找到");
             }
-            return await _renderer.RenderContentAsync(ver.Content, model, ct);
+            return await Renderer.RenderContentAsync(ver.Content, model, ct);
         }
 
         /// <inheritdoc />
         public async Task<PrintTemplateVersionEntity> PublishAsync(string key, string content, string? description = null, CancellationToken ct = default)
         {
             // 1. 获取或自动创建模板（C2）
-            var template = await _store.GetByKeyAsync(key, ct);
+            var template = await Store.GetByKeyAsync(key, ct);
             if (template == null)
             {
                 template = new PrintTemplateEntity
@@ -73,14 +78,14 @@ namespace TKWF.Ext.PrintTemplates
                     Name = key, // C2: Name=Key
                     Description = description
                 };
-                await _store.UpsertTemplateAsync(template, ct);
-                template = await _store.GetByKeyAsync(key, ct)!;
+                await Store.UpsertTemplateAsync(template, ct);
+                template = await Store.GetByKeyAsync(key, ct)!;
                 if (template == null)
                     throw new InvalidOperationException($"自动创建模板 '{key}' 失败");
             }
 
             // 2. 计算下一个 minor 版本号（M4：首版 1.0.0，后续 1.{maxMinor+1}.0）
-            var versions = await _store.ListVersionsAsync(template.Id, ct);
+            var versions = await Store.ListVersionsAsync(template.Id, ct);
             var nextMinor = ComputeNextMinor(versions);
             var newVersion = $"1.{nextMinor}.0";
 
@@ -89,7 +94,7 @@ namespace TKWF.Ext.PrintTemplates
             if (currentActive != null)
             {
                 currentActive.Status = PrintTemplateVersionStatus.Archived;
-                await _store.UpsertVersionAsync(currentActive, ct);
+                await Store.UpsertVersionAsync(currentActive, ct);
             }
 
             // 4. 创建新 Active 版本
@@ -104,7 +109,7 @@ namespace TKWF.Ext.PrintTemplates
             };
 
             // 5. Upsert（TemplateId+Version 唯一约束——并发发布失败显式异常，C1）
-            await _store.UpsertVersionAsync(entity, ct);
+            await Store.UpsertVersionAsync(entity, ct);
             return entity;
         }
 
@@ -112,7 +117,7 @@ namespace TKWF.Ext.PrintTemplates
         public async Task<PrintTemplateVersionEntity> DraftAsync(string key, string content, string? description = null, CancellationToken ct = default)
         {
             // 1. 获取或自动创建模板
-            var template = await _store.GetByKeyAsync(key, ct);
+            var template = await Store.GetByKeyAsync(key, ct);
             if (template == null)
             {
                 template = new PrintTemplateEntity
@@ -121,14 +126,14 @@ namespace TKWF.Ext.PrintTemplates
                     Name = key,
                     Description = description
                 };
-                await _store.UpsertTemplateAsync(template, ct);
-                template = await _store.GetByKeyAsync(key, ct)!;
+                await Store.UpsertTemplateAsync(template, ct);
+                template = await Store.GetByKeyAsync(key, ct)!;
                 if (template == null)
                     throw new InvalidOperationException($"自动创建模板 '{key}' 失败");
             }
 
             // 2. 查找已有 Draft
-            var versions = await _store.ListVersionsAsync(template.Id, ct);
+            var versions = await Store.ListVersionsAsync(template.Id, ct);
             var existingDraft = versions.FirstOrDefault(v => v.Status == PrintTemplateVersionStatus.Draft);
 
             if (existingDraft != null)
@@ -136,7 +141,7 @@ namespace TKWF.Ext.PrintTemplates
                 // 更新已有 Draft（upsert 单 Draft）
                 existingDraft.Content = content;
                 existingDraft.Description = description;
-                await _store.UpsertVersionAsync(existingDraft, ct);
+                await Store.UpsertVersionAsync(existingDraft, ct);
                 return existingDraft;
             }
 
@@ -152,23 +157,23 @@ namespace TKWF.Ext.PrintTemplates
                 Status = PrintTemplateVersionStatus.Draft,
                 Description = description
             };
-            await _store.UpsertVersionAsync(entity, ct);
+            await Store.UpsertVersionAsync(entity, ct);
             return entity;
         }
 
         /// <inheritdoc />
         public async Task ArchiveAsync(string key, string version, CancellationToken ct = default)
         {
-            var template = await _store.GetByKeyAsync(key, ct);
+            var template = await Store.GetByKeyAsync(key, ct);
             if (template == null)
                 throw new InvalidOperationException($"模板 '{key}' 未找到");
 
-            var ver = await _store.GetVersionAsync(template.Id, version, ct);
+            var ver = await Store.GetVersionAsync(template.Id, version, ct);
             if (ver == null)
                 throw new InvalidOperationException($"模板 '{key}' 版本 '{version}' 未找到");
 
             ver.Status = PrintTemplateVersionStatus.Archived;
-            await _store.UpsertVersionAsync(ver, ct);
+            await Store.UpsertVersionAsync(ver, ct);
         }
 
         /// <summary>

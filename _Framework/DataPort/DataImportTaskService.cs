@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Utility.DataPort;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataPort
 {
@@ -18,16 +19,19 @@ namespace TKWF.Ext.DataPort
     internal sealed class DataImportTaskService : IDataImportTaskService
     {
         private readonly IImportService _importService;
-        private readonly DataImportRecordEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private DataImportRecordEntityDataService? _dataService;
         private readonly DataPortOptions _options;
+
+        private DataImportRecordEntityDataService DataService => _dataService ??= _user.Use<DataImportRecordEntityDataService>();
 
         public DataImportTaskService(
             IImportService importService,
-            DataImportRecordEntityDataService dataService,
+            IDomainUser user,
             IOptions<DataPortOptions> options)
         {
             _importService = importService ?? throw new ArgumentNullException(nameof(importService));
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         }
 
@@ -45,7 +49,7 @@ namespace TKWF.Ext.DataPort
             var fileHash = await ComputeFileHashAsync(filePath, ct);
 
             // 2. 幂等检查：同文件已导入 → 返回已有批次
-            var existing = await _dataService.GetByFileHashAsync(fileHash, ct);
+            var existing = await DataService.GetByFileHashAsync(fileHash, ct);
 
             if (existing != null)
             {
@@ -56,7 +60,7 @@ namespace TKWF.Ext.DataPort
                 }
                 // 已失败的批次 → 允许重新导入（重置记录为 Processing 后重跑）
                 // StartTime 保留首次导入时间（CanUpdate=false 语义优于原 raw SQL 覆盖）
-                await _dataService.ResetToProcessingAsync(
+                await DataService.ResetToProcessingAsync(
                     existing.Id, DateTime.UtcNow, DateTime.UtcNow, ct);
 
                 return await ExecuteImportAsync(existing, filePath, adapter, batchOptions, ct);
@@ -79,13 +83,13 @@ namespace TKWF.Ext.DataPort
                     UpdateTime = DateTime.UtcNow
                 };
 
-                await _dataService.CreateAsync(record, ct);
-                record = await _dataService.GetByBatchNoAsync(batchNo, ct);
+                await DataService.CreateAsync(record, ct);
+                record = await DataService.GetByBatchNoAsync(batchNo, ct);
             }
             catch (Exception)
             {
                 // Race condition: another concurrent import inserted the same FileHash
-                record = await _dataService.GetByFileHashAsync(fileHash, ct);
+                record = await DataService.GetByFileHashAsync(fileHash, ct);
 
                 if (record == null)
                     throw; // Not a race condition — re-throw original exception
@@ -101,7 +105,7 @@ namespace TKWF.Ext.DataPort
         public async Task<DataImportRecordEntity?> GetRecordByBatchNoAsync(
             string batchNo, CancellationToken ct = default)
         {
-            return await _dataService.GetByBatchNoAsync(batchNo, ct);
+            return await DataService.GetByBatchNoAsync(batchNo, ct);
         }
 
         /// <summary>
@@ -128,7 +132,7 @@ namespace TKWF.Ext.DataPort
                     ? string.Join("; ", result.BatchFailures.Take(5).Select(b => $"批次{b.BatchIndex}: {b.Exception.Message}"))
                     : null;
 
-                await _dataService.UpdateStatusAsync(
+                await DataService.UpdateStatusAsync(
                     record.Id, status,
                     result.SuccessCount, result.FailedCount, result.BatchFailures.Count,
                     DateTime.UtcNow, errorSummary, DateTime.UtcNow, ct);
@@ -140,7 +144,7 @@ namespace TKWF.Ext.DataPort
                 // Best-effort: update record to Failed status; if DB update fails, swallow to preserve original exception
                 try
                 {
-                    await _dataService.MarkFailedAsync(
+                    await DataService.MarkFailedAsync(
                         record.Id, DateTime.UtcNow, ex.Message, DateTime.UtcNow, ct);
                 }
                 catch

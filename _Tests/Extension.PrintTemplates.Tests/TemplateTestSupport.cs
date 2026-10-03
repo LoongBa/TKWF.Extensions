@@ -41,27 +41,49 @@ FROM ""PrintTemplateVersion"" v
 INNER JOIN ""PrintTemplate"" t ON v.""TemplateId"" = t.""Id""");
     }
 
-    /// <summary>构造 TemplateStore——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动两个 DataService。</summary>
+    /// <summary>构造 TemplateStore——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动两个 DataService。
+    /// <para>ADR88 适配：TemplateStore 构造改 IDomainUser——StubDomainUser.With 注册两 DataService 懒加载源。</para></summary>
     public static TemplateStore CreateStore(IFreeSql fsql)
-        => new(
-            new PrintTemplateEntityDataService(
-                new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateEntity>(new UnitOfWorkManager(fsql))),
-            new PrintTemplateVersionEntityDataService(
-                new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionEntity>(new UnitOfWorkManager(fsql))));
+    {
+        var templateDataService = new PrintTemplateEntityDataService(
+            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateEntity>(new UnitOfWorkManager(fsql)));
+        var versionDataService = new PrintTemplateVersionEntityDataService(
+            new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionEntity>(new UnitOfWorkManager(fsql)));
+        return new TemplateStore(new StubDomainUser().With(templateDataService).With(versionDataService));
+    }
 
     /// <summary>构造 VEntity 只读 DataService——经真实 FreeSql DAC 驱动（红线：IEntityReadOnlyDAC，绝不用 IEntityDAC）。</summary>
     public static PrintTemplateVersionViewDataService CreateViewDataService(IFreeSql fsql)
         => new(
             new StubDomainUser(), new FreeSqlEntityDAC<PrintTemplateVersionView>(new UnitOfWorkManager(fsql)));
 
-    /// <summary>构造 TemplateManager（真实 Store + 真实 Renderer + VEntity 只读 DataService，默认 Options）。</summary>
+    /// <summary>构造 TemplateManager（真实 Store + 真实 Renderer + VEntity 只读 DataService，默认 Options）。
+    /// <para>ADR88 适配：TemplateManager 构造改 IDomainUser——StubDomainUser.With 注册 Store/Renderer/ViewDataService 懒加载源。</para></summary>
     public static TemplateManager CreateManager(IFreeSql fsql)
-        => new(CreateStore(fsql), new ScribanTemplateRenderer(new PrintTemplatesOptions()), CreateViewDataService(fsql));
+    {
+        var store = CreateStore(fsql);
+        var renderer = new ScribanTemplateRenderer(new PrintTemplatesOptions());
+        var viewDataService = CreateViewDataService(fsql);
+        return new TemplateManager(new StubDomainUser()
+            .With<ITemplateStore>(store)
+            .With<ITemplateRenderer>(renderer)
+            .With(viewDataService));
+    }
 }
 
-/// <summary>最小 IDomainUser 桩——仅满足编译，不提供真实用户上下文。</summary>
+/// <summary>最小 IDomainUser 桩——仅满足编译，不提供真实用户上下文。
+/// <para>ADR88 适配：Use&lt;T&gt;() 懒加载从服务映射表解析（<see cref="With{T}"/> 注册外部 DataService 实例）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly Dictionary<Type, object? > _services = new();
+
+    /// <summary>注册外部服务实例（懒加载 Use&lt;T&gt;() 解析源——测试构造 DataService/Store/Renderer 后注册）。</summary>
+    public StubDomainUser With<T>(T service) where T : class
+    {
+        _services[typeof(T)] = service;
+        return this;
+    }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -71,10 +93,17 @@ internal sealed class StubDomainUser : IDomainUser
     public string? UserId => null;
     public string? UserName => null;
     public bool IsInRole(string role) => false;
+
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        => _services.TryGetValue(typeof(TDomainService), out var svc) && svc is TDomainService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TDomainService).Name} 未注册——请用 With<T>() 注册（懒加载 Use<T> 解析源）");
+
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        => _services.TryGetValue(typeof(TService), out var svc) && svc is TService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TService).Name} 未注册——请用 With<T>() 注册（懒加载 GetService<T> 解析源）");
+
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

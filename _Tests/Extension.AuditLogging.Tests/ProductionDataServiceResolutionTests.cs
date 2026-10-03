@@ -39,7 +39,8 @@ public class ProductionDataServiceResolutionTests
     /// <summary>
     /// 生产 DI 解析验证：镜像 DomainHostInitializerBase.RegisterGeneratedServices 的扩展上下文聚合
     /// （Q2：扩展 DataService → AddConstructibleDataService 可构造工厂）→ 注册 IAuditLogStore → Store
-    /// 构造注入 AuditLogEntityDataService 成功。修复前此链路会 Unable to resolve。
+    /// 普通 DI 可解析（V4.10.53 接线型：ctor(IServiceProvider, ILogger)，DataService 经 SP C1 延迟解析）。
+    /// 修复前旧 ctor 注入 IDomainUser（永不注册 DI）会 Unable to resolve。
     /// </summary>
     [Fact]
     public void Store_Resolves_Through_ProductionRegistrationPath()
@@ -56,7 +57,7 @@ public class ProductionDataServiceResolutionTests
         foreach (var reg in dataServiceRegs)
             AddConstructibleDataService(services, reg.Implementation);
 
-        // 2. 消费方注册默认存储（AuditLogStore 构造注入 AuditLogEntityDataService）+ 空日志
+        // 2. 消费方注册默认存储（AuditLogStore 接线型：ctor(IServiceProvider, ILogger)——DataService 经 SP 延迟解析）+ 空日志
         services.AddScoped<IAuditLogStore, AuditLogStore>();
 
         // 3. 基础设施：IDomainUser + IEntityDAC + ILogger（空日志）
@@ -66,11 +67,11 @@ public class ProductionDataServiceResolutionTests
 
         var sp = services.BuildServiceProvider();
 
-        // 4. 生产解析：Store 可解析（其内嵌 DataService 构造注入成功）
+        // 4. 生产解析：Store 可解析（接线型——普通 DI GetService 形态，即主框架 AuditLogFilter 的解析链）
         var store = sp.GetRequiredService<IAuditLogStore>();
         Assert.IsType<AuditLogStore>(store);
 
-        // 5. DataService 具体类本身生产可解析（缺口 3 核心断言）
+        // 5. DataService 具体类本身生产可解析（缺口 3 核心断言 + Store 内 C1 延迟解析的前置条件）
         var dataService = sp.GetRequiredService<AuditLogEntityDataService>();
         Assert.NotNull(dataService);
     }

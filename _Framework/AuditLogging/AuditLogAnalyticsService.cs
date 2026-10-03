@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuditLogging
@@ -15,9 +17,15 @@ namespace TKWF.Ext.AuditLogging
     /// 既有模式，不抛出异常，不阻塞消费方）。</para>
     /// <para>数据访问红线合规（2026-09-07）：不注入 IFreeSql / IEntityDAC——只依赖 DataService +
     /// <see cref="IOptions{TOptions}"/> + <see cref="ILogger{TCategoryName}"/>。</para>
-    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>（非泛型主实现）——
+    /// 经基类 <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——D01；旧 TryAddScoped 构造注入 IDomainUser
+    /// 生产解析必失败）。<c>[DiContractIgnore]</c> 豁免 DI001（AddConstructibleService 运行时手写注册非 SG DI 契约目标）。
+    /// DataService 仍经 <c>User.Use&lt;AuditLogEntityDataService&gt;()</c> NoAop 懒加载（DI004 零豁免）。
+    /// 注册形态改 <c>AddConstructibleService&lt;IAuditLogAnalyticsService, AuditLogAnalyticsService&gt;</c>
+    /// （接口可构造守卫工厂）。</para>
     /// </summary>
-    internal sealed class AuditLogAnalyticsService : IAuditLogAnalyticsService
+    [DiContractIgnore]
+    internal sealed class AuditLogAnalyticsService : DomainServiceBase, IAuditLogAnalyticsService
     {
         /// <summary>TopN 默认值（接口签名默认参数）。</summary>
         private const int DefaultTopN = 10;
@@ -25,19 +33,18 @@ namespace TKWF.Ext.AuditLogging
         /// <summary>TopN 上限——防滥用（对齐 QueryService MaxTake=200 的防护精神）。</summary>
         private const int MaxTopN = 100;
 
-        private readonly IDomainUser _user;
         private readonly IOptions<AuditLoggingOptions> _options;
         private readonly ILogger<AuditLogAnalyticsService> _logger;
 
         private AuditLogEntityDataService? _dataService;
-        private AuditLogEntityDataService DataService => _dataService ??= _user.Use<AuditLogEntityDataService>();
+        private AuditLogEntityDataService DataService => _dataService ??= User.Use<AuditLogEntityDataService>();
 
         public AuditLogAnalyticsService(
             IDomainUser user,
             IOptions<AuditLoggingOptions> options,
             ILogger<AuditLogAnalyticsService> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }

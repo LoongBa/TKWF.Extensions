@@ -12,106 +12,127 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.AuditLogging.Tests;
 
 /// <summary>
-/// 测试公共设施——StubDomainUser + 基于 FreeSqlEntityDAC 的 Store/QueryService 工厂。
-/// <para>数据访问红线整改（2026-09-07）：扩展 Store 委托 SG1 DataService——测试用真实
-/// <c>FreeSqlEntityDAC&lt;T&gt;(new UnitOfWorkManager(fsql))</c> 驱动（与 Settings/BlobStoring 测试同模式）。</para>
-/// <para>ADR88/DI004（A 批整改）：Store/QueryService/AnalyticsService 构造不再注入 DataService——经
-/// <c>User.Use&lt;T&gt;()</c> 懒加载解析。测试工厂构建 StubDomainUser + 能力容器（注册真实 DAC 驱动
-/// 的 DataService 实例），注入 ServiceProvider。</para>
+/// 测试公共设施（V4.10.53 领域自治根治后重写——生产路径等价）。
+/// <para>弃旧 StubDomainUser + 手写 DataService 单例注册（掩盖 IDomainUser 生产解析失败）；
+/// 改对齐 Settings/Account 整改后宿主：</para>
+/// <list type="bullet">
+/// <item><b>接线型 Store</b>（<see cref="AuditLogStore"/>，主框架契约非 IDomainService——不可修改主框架）——
+///     真实 DI 解析链：ctor(IServiceProvider, ILogger) 直构 + <c>sp.GetRequiredService&lt;AuditLogEntityDataService&gt;()</c>
+///     C1 延迟解析（DataService 在 provider 中可构造注册）；</item>
+/// <item><b>标准门面</b>（<see cref="AuditLogQueryService"/> / <see cref="AuditLogAnalyticsService"/>，继承 DomainServiceBase）——
+///     可配置 stub 直构（经基类 User 取上下文），其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价
+///     （<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，IEntityDAC 从 DI 解析）。</item>
+/// </list>
 /// </summary>
 internal static class AuditLoggingTestHost
 {
-    /// <summary>创建基于 SQLite 内存库的 AuditLogEntityDataService（真实 FreeSql DAC 驱动）。</summary>
+    /// <summary>构建 SQLite 内存 + 真实 FreeSql 基础设施 provider（IFreeSql/UnitOfWorkManager/IEntityDAC）——
+    /// stub <c>Use&lt;T&gt;()</c> NoAop 直建 DataService 的解析源（对齐 Settings/Account 测试桩）。</summary>
+    public static IServiceProvider BuildInfrastructure(IFreeSql fsql)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<AuditLogEntity>, FreeSqlEntityDAC<AuditLogEntity>>();
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>构建基于 SQLite 内存库的可配置 stub 用户（经基类 User 取上下文）。</summary>
+    public static StubDomainUser BuildStub(IFreeSql fsql)
+        => new() { ServiceProvider = BuildInfrastructure(fsql) };
+
+    /// <summary>构建接线型 Store 解析链 provider——DataService 经普通 DI 可构造解析
+    /// （<c>GetRequiredService&lt;AuditLogEntityDataService&gt;()</c> 需 IDomainUser + IEntityDAC 可解析；
+    /// 对齐生产 DataService 消费方聚合可构造工厂形态）。</summary>
+    private static ServiceProvider BuildWiringProvider(IFreeSql fsql)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<AuditLogEntity>, FreeSqlEntityDAC<AuditLogEntity>>();
+        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
+        services.AddScoped<AuditLogEntityDataService>();
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>创建基于 SQLite 内存库的 AuditLogStore（接线型——真实 DI 解析链，DataService 经 SP 延迟解析）。</summary>
+    public static AuditLogStore CreateStore(IFreeSql fsql)
+    {
+        var sp = BuildWiringProvider(fsql);
+        return new AuditLogStore(sp, NullLogger<AuditLogStore>.Instance);
+    }
+
+    /// <summary>创建基于 SQLite 内存库的 AuditLogQueryService（标准门面——经基类 User 懒加载 DataService）。</summary>
+    public static AuditLogQueryService CreateQueryService(IFreeSql fsql)
+    {
+        var user = BuildStub(fsql);
+        return new AuditLogQueryService(user, NullLogger<AuditLogQueryService>.Instance);
+    }
+
+    /// <summary>创建基于 SQLite 内存库的 AuditLogAnalyticsService（标准门面——经基类 User 懒加载 DataService + Options + 空日志）。</summary>
+    public static AuditLogAnalyticsService CreateAnalyticsService(
+        IFreeSql fsql, AuditLoggingOptions? options = null)
+    {
+        var user = BuildStub(fsql);
+        return new AuditLogAnalyticsService(user,
+            new OptionsWrapper<AuditLoggingOptions>(options ?? new AuditLoggingOptions()),
+            NullLogger<AuditLogAnalyticsService>.Instance);
+    }
+
+    /// <summary>创建基于 SQLite 内存库的 AuditLogEntityDataService（真实 FreeSql DAC 驱动——管理 API/落库断言直构用）。</summary>
     public static AuditLogEntityDataService CreateDataService(IFreeSql fsql, IDomainUser? user = null)
     {
         var dac = new FreeSqlEntityDAC<AuditLogEntity>(new UnitOfWorkManager(fsql));
         return new AuditLogEntityDataService(user ?? new StubDomainUser(), dac);
     }
-
-    /// <summary>构建 StubDomainUser + 能力容器（direct-new 工厂模式）：注册真实 DAC 驱动的 DataService 实例。</summary>
-    private static StubDomainUser CreateStub(IFreeSql fsql, Action<IServiceCollection, StubDomainUser> register)
-    {
-        var stub = new StubDomainUser();
-        var services = new ServiceCollection();
-        register(services, stub);
-        stub.ServiceProvider = services.BuildServiceProvider();
-        return stub;
-    }
-
-    /// <summary>创建基于 SQLite 内存库的 AuditLogStore（DataService 委托）。</summary>
-    public static AuditLogStore CreateStore(IFreeSql fsql)
-    {
-        var stub = CreateStub(fsql, (s, user) =>
-            s.AddSingleton(CreateDataService(fsql, user)));
-        return new AuditLogStore(stub, NullLogger<AuditLogStore>.Instance);
-    }
-
-    /// <summary>创建基于 SQLite 内存库的 AuditLogQueryService（DataService 委托）。</summary>
-    public static AuditLogQueryService CreateQueryService(IFreeSql fsql)
-    {
-        var stub = CreateStub(fsql, (s, user) =>
-            s.AddSingleton(CreateDataService(fsql, user)));
-        return new AuditLogQueryService(stub, NullLogger<AuditLogQueryService>.Instance);
-    }
-
-    /// <summary>创建基于 SQLite 内存库的 AuditLogAnalyticsService（DataService 委托 + Options + 空日志）。</summary>
-    public static AuditLogAnalyticsService CreateAnalyticsService(
-        IFreeSql fsql, AuditLoggingOptions? options = null)
-    {
-        var stub = CreateStub(fsql, (s, user) =>
-            s.AddSingleton(CreateDataService(fsql, user)));
-        return new AuditLogAnalyticsService(stub,
-            new OptionsWrapper<AuditLoggingOptions>(options ?? new AuditLoggingOptions()),
-            NullLogger<AuditLogAnalyticsService>.Instance);
-    }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
-/// <para>ADR88/DI004（A 批整改）：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-/// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时保留原抛 NotSupportedException 语义）。</para></summary>
+/// <summary>
+/// 测试用户桩——实现 <see cref="IDomainUser"/> 最小契约（User/Tenant/匿名可配置）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现——具体类经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Account 测试桩）。</para>
+/// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {
-    private IServiceProvider? _provider;
-    private readonly object _gate = new();
-    private readonly Dictionary<Type, object?> _cache = new();
+    private readonly string? _userId;
+    private readonly long? _tenantId;
+    private readonly bool _isAuthenticated;
 
-    /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-    public IServiceProvider ServiceProvider
+    public StubDomainUser(string? userId = null, long? tenantId = null, bool isAuthenticated = false)
     {
-        set { lock (_gate) _provider = value; }
+        _userId = userId;
+        _tenantId = tenantId;
+        _isAuthenticated = isAuthenticated;
     }
 
+    /// <summary>ServiceProvider（测试工厂注册时注入——Use&lt;T&gt; 解析源）。</summary>
+    public IServiceProvider? ServiceProvider { get; set; }
+
     public string SessionKey => "test-session";
-    public bool IsAuthenticated => false;
+    public bool IsAuthenticated => _isAuthenticated;
     public bool IsSystemActor => false;
     public IUserInfo? UserInfo => null;
-    public long? TenantId => null;
+    public long? TenantId => _tenantId;
     public bool IsNoAuditActive => false;
-    public string? UserId => null;
-    public string? UserName => null;
+    public string? UserId => _userId;
+    public string? UserName => "test";
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-            return svc;
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
-            _cache[typeof(TDomainService)] = resolved;
-            return resolved;
-        }
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+
+        // 生产 NoAop 路径等价（具体类）：ActivatorUtilities 直建，IDomainUser 参数显式传 this
+        return (TDomainService)ActivatorUtilities.CreateInstance(ServiceProvider, typeof(TDomainService), this);
     }
 
     public TService GetService<TService>() where TService : notnull
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-        return provider.GetRequiredService<TService>();
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+        return ServiceProvider.GetRequiredService<TService>();
     }
 
     public TService GetOptionalService<TService>() where TService : class => null!;

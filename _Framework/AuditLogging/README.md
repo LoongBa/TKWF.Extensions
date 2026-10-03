@@ -1,6 +1,6 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.2 (管理 API + 聚合 SQL 下推) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.2（管理 API + 聚合 SQL 下推）+ **V0.4.3（领域自治根治，ADR90）** | **框架**: .NET 10
 
 **核心约束**: 方法级审计日志持久化、查询 API、统计聚合 + 保留天数清理、**管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD）**、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 
@@ -48,7 +48,7 @@
 
 - **异常静默**：写入/查询失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
 
-- **TryAdd 语义**：DI 注册用 `TryAddScoped`——消费方自定义实现优先；扩展默认实现不覆盖消费方。
+- **TryAdd 语义**：`IAuditLogStore`（主框架契约）DI 注册用 `TryAddScoped`（接线型）——消费方自定义实现优先；扩展默认实现不覆盖消费方。`IAuditLogQueryService`/`IAuditLogAnalyticsService`（接口 `: IDomainService`）V0.4.3 起用 `AddConstructibleService`（接口守卫工厂 + 实现 throw-factory）——消费方经 `User.Use<接口>()` 解析。
 
 - **Scoped 生命周期**：`IAuditLogStore` / `IAuditLogQueryService` Scoped，自动参与当前请求上下文。
 
@@ -73,7 +73,15 @@
 public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-白名单声明后自动注册：`IAuditLogStore`（默认 `FreeSqlAuditLogStore`）+ `IAuditLogQueryService`（默认 `AuditLogQueryService`）。
+白名单声明后自动注册（**V0.4.3 领域自治根治，ADR90——正确路线注册形态三态**）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IAuditLogStore`（主框架契约） | `AuditLogStore` | **接线型 `TryAddScoped`**（ctor `IServiceProvider` + `ILogger`——无 IDomainUser） | 主框架 `AuditLogFilterAttribute` 经 `context.ServiceProvider.GetService<IAuditLogStore>()` 普通 DI 解析 |
+| `IAuditLogQueryService` | `AuditLogQueryService`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IAuditLogQueryService>()` |
+| `IAuditLogAnalyticsService` | `AuditLogAnalyticsService`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IAuditLogAnalyticsService>()` |
+
+> **V0.4.3（V4.10.53 ADR90 领域自治根治）**：`IAuditLogStore` 是**主框架契约**（非 IDomainService，不可修改主框架），主框架过滤器经普通 DI 解析 → 实现为**接线型**（skill §4.2/§4.7-7）：ctor 改 `(IServiceProvider, ILogger)`，DataService 经 `IServiceProvider.GetRequiredService<AuditLogEntityDataService>()` C1 延迟解析——**修复真实生产故障**：旧 ctor 注入 IDomainUser（永不注册 DI）致 `GetService` 构造失败、审计落库静默失效；改后全 DI 可解析、审计落库生效。Query/Analytics 两门面接口已标 `: IDomainService` → 继承 `DomainServiceBase`（经基类 `User` 取上下文）+ `[DiContractIgnore]` + 注册改 `AddConstructibleService`（消费方统一 `User.Use<接口>()` 解析）。
 
 ### 2. 启用审计日志过滤器
 
@@ -95,11 +103,12 @@ protected override void ConfigureGlobalFilters(FilterBuilder<MyUserInfo> builder
 ### 3. 查询审计日志（V0.2.0）
 
 ```csharp
-// 注入 IAuditLogQueryService
-public class AuditQueryService(IAuditLogQueryService queryService)
+// 消费方领域服务内经 User.Use<IAuditLogQueryService>() 解析（V0.4.3 起 AddConstructibleService——
+// 禁 ctor 构造注入，DI004 编译期门控零豁免）
+public class AuditQueryService
 {
     // 按时间范围 + 用户查询
-    var result = await queryService.GetListAsync(new AuditLogQueryInput
+    var result = await User.Use<IAuditLogQueryService>().GetListAsync(new AuditLogQueryInput
     {
         StartTime = DateTime.Today.AddDays(-7),
         UserName = "alice",
@@ -108,7 +117,7 @@ public class AuditQueryService(IAuditLogQueryService queryService)
     });
 
     // 统计总数
-    var total = await queryService.CountAsync(new AuditLogQueryInput
+    var total = await User.Use<IAuditLogQueryService>().CountAsync(new AuditLogQueryInput
     {
         ServiceName = "OrderService"
     });
@@ -152,7 +161,7 @@ TryAdd 语义确保消费方实现优先。
 
 ### 6. 统计聚合（V0.3.0）
 
-注入 `IAuditLogAnalyticsService`（自动注册，TryAddScoped）：
+注入 `IAuditLogAnalyticsService`（V0.4.3 起 `AddConstructibleService` 注册——经 `User.Use<IAuditLogAnalyticsService>()` 解析）：
 
 ```csharp
 public class AuditDashboardService(IAuditLogAnalyticsService analytics)
@@ -257,6 +266,12 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 - 保留天数清理（`RetentionDays` 默认 90 + `CleanupBatchSize` 默认 500，分批物理删）
 - `CountAsync` 低效修复（内存计数 → SQL COUNT）
 - 索引补建（ServiceName——聚合查询全表扫描修复）
+
+### V0.4.3（已实施：V4.10.53 领域自治根治，ADR90——正确路线）
+- **类1 `AuditLogStore` 改接线型**（主框架契约 `IAuditLogStore` 非 IDomainService，不可修改主框架；主框架 `AuditLogFilterAttribute` 经 `context.ServiceProvider.GetService<IAuditLogStore>()` 普通 DI 解析）——ctor `(IDomainUser, ILogger)` → `(IServiceProvider, ILogger)`，DataService 经 `GetRequiredService<AuditLogEntityDataService>()` C1 延迟解析；注册保持 `TryAddScoped`。**修复真实生产故障**：旧 ctor 注入 IDomainUser（永不注册 DI）致 GetService 构造失败、审计落库静默失效；改后全 DI 可解析、落库生效（对齐 Account `FreeSqlAccountLockoutPolicy`/`LoginHistoryService` 接线型先例）
+- **类2/3 改标准门面**（`AuditLogQueryService`/`AuditLogAnalyticsService`，接口已标 `: IDomainService` 勿改）——继承 `DomainServiceBase`（经基类 `User` 取上下文，IDomainUser 永不注册 DI）+ `[DiContractIgnore]`（豁免 DI001）+ DataService 仍经 `User.Use<具体类>()` NoAop 懒加载（DI004 零豁免）；注册 `TryAddScoped` → `AddConstructibleService<接口, 实现>`（接口守卫工厂 + 实现 throw-factory）
+- **测试宿主重写**：弃 StubDomainUser + 手写 DataService 单例注册（掩盖 IDomainUser 生产失败）——真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 接线型 Store 普通 DI GetService 解析（DataService 可构造注册镜像）+ 注册形态断言（TryAddScoped ImplementationType / 守卫工厂 / throw-factory / 域外抛）；管理 API 与实体/DataService 生成物未动（ExcludeMethods 保持）
+- 用例全绿（禁止 slnx 构建，仅 AuditLogging 项目 + 测试项目）
 
 ### V0.4.2（已实施：聚合 SQL 下推——V4.10.39 分组聚合 API）
 - **TopN 聚合 SQL 下推**：`CountByServiceAsync`/`CountByUserAsync` 经框架 `FreeSqlQueryableExtensions.GroupCountAsync(key, topN)`——SQL `GROUP BY + COUNT + ORDER BY COUNT DESC + LIMIT` 全下推（替代 `Take(100_000)` + 内存 GroupBy，消除全量拉取）；空白键过滤 `!string.IsNullOrWhiteSpace` 一并下推 SQL（`WHERE trim(ServiceName/UserName) <> ''`）

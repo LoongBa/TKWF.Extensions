@@ -158,7 +158,7 @@ public class AuditLogStoreTests
     }
 
     [Fact]
-    public void Constructor_NullUser_Throws()
+    public void Constructor_NullServiceProvider_Throws()
     {
         var logger = new FakeLogger<AuditLogStore>();
         Assert.Throws<ArgumentNullException>(() => new AuditLogStore(null!, logger));
@@ -169,7 +169,8 @@ public class AuditLogStoreTests
     {
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(new StubDomainUser(), null!));
+        var sp = new ServiceCollection().BuildServiceProvider();
+        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(sp, null!));
     }
 
     [Fact]

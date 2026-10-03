@@ -300,12 +300,10 @@ public class AuditLogAnalyticsServiceTests
     public async Task AnalyticsService_ExceptionSilent()
     {
         // Dispose 后操作 → 异常静默（Warning + 空结果/0，不抛异常、不阻断消费方）
+        // V4.10.53 生产路径等价：stub 经基类 User 取上下文，DataService 经 Use<T>() NoAop 直建（IEntityDAC 从 DI 基础设施解析）
         var fsql = CreateInMemoryFreeSql();
         var logger = new FakeLogger<AuditLogAnalyticsService>();
-        var stub = new StubDomainUser();
-        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        services.AddSingleton(AuditLoggingTestHost.CreateDataService(fsql, stub));
-        stub.ServiceProvider = services.BuildServiceProvider();
+        var stub = AuditLoggingTestHost.BuildStub(fsql);
         var analytics = new AuditLogAnalyticsService(
             stub,
             new OptionsWrapper<AuditLoggingOptions>(new AuditLoggingOptions()),

@@ -1,10 +1,9 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuditLogging
@@ -13,22 +12,26 @@ namespace TKWF.Ext.AuditLogging
     /// 审计日志查询服务实现（internal sealed）——经 <see cref="AuditLogEntityDataService"/>（SG1 DataService）委托查询。
     /// <para>异常静默处理：查询失败时记录 Warning 日志并返回空结果（不抛出异常，不阻塞消费方）。</para>
     /// <para>数据访问红线整改（2026-09-07）：不直接注入 IFreeSql，动态 Where 用 Expression API 拼 predicate。</para>
-    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>（非泛型主实现）——
+    /// 经基类 <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——D01；旧 TryAddScoped 构造注入 IDomainUser
+    /// 生产解析必失败）。<c>[DiContractIgnore]</c> 豁免 DI001（AddConstructibleService 运行时手写注册非 SG DI 契约目标）。
+    /// DataService 仍经 <c>User.Use&lt;AuditLogEntityDataService&gt;()</c> NoAop 懒加载（DI004 零豁免）。
+    /// 注册形态改 <c>AddConstructibleService&lt;IAuditLogQueryService, AuditLogQueryService&gt;</c>（接口可构造守卫工厂）。</para>
     /// </summary>
-    internal sealed class AuditLogQueryService : IAuditLogQueryService
+    [DiContractIgnore]
+    internal sealed class AuditLogQueryService : DomainServiceBase, IAuditLogQueryService
     {
         private const int DefaultTake = 50;
         private const int MaxTake = 200;
 
-        private readonly IDomainUser _user;
         private readonly ILogger<AuditLogQueryService> _logger;
 
         private AuditLogEntityDataService? _dataService;
-        private AuditLogEntityDataService DataService => _dataService ??= _user.Use<AuditLogEntityDataService>();
+        private AuditLogEntityDataService DataService => _dataService ??= User.Use<AuditLogEntityDataService>();
 
         public AuditLogQueryService(IDomainUser user, ILogger<AuditLogQueryService> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

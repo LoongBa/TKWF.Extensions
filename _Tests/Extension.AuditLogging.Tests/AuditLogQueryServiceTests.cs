@@ -24,15 +24,13 @@ public class AuditLogQueryServiceTests
             .Build();
     }
 
-    /// <summary>创建 AuditLogQueryService 实例。</summary>
+    /// <summary>创建 AuditLogQueryService 实例（V4.10.53 生产路径等价——stub 经基类 User 取上下文，
+    /// DataService 经 <c>Use&lt;T&gt;()</c> NoAop 直建，IEntityDAC 从 DI 基础设施解析）。</summary>
     private static (AuditLogQueryService Service, IFreeSql FreeSql, AuditLogEntityDataService DataService) CreateService()
     {
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var stub = new StubDomainUser();
-        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        services.AddSingleton(AuditLoggingTestHost.CreateDataService(fsql, stub));
-        stub.ServiceProvider = services.BuildServiceProvider();
+        var stub = AuditLoggingTestHost.BuildStub(fsql);
         var logger = new FakeLogger<AuditLogQueryService>();
         var service = new AuditLogQueryService(stub, logger);
         return (service, fsql, stub.Use<AuditLogEntityDataService>());

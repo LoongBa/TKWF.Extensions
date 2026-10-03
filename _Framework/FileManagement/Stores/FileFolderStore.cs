@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FileManagement
 {
@@ -12,38 +13,41 @@ namespace TKWF.Ext.FileManagement
     /// </summary>
     internal sealed class FileFolderStore : IFileFolderStore
     {
-        private readonly FileFolderEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private FileFolderEntityDataService? _dataService;
 
-        public FileFolderStore(FileFolderEntityDataService dataService)
+        private FileFolderEntityDataService DataService => _dataService ??= _user.Use<FileFolderEntityDataService>();
+
+        public FileFolderStore(IDomainUser user)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         public Task<FileFolderEntity?> GetByIdAsync(long id, CancellationToken ct = default)
-            => _dataService.EntityGetAsync(f => f.Id == id, ct);
+            => DataService.EntityGetAsync(f => f.Id == id, ct);
 
         public Task<FileFolderEntity?> GetByCodeAsync(string code, CancellationToken ct = default)
-            => _dataService.GetByCodeAsync(code, ct);
+            => DataService.GetByCodeAsync(code, ct);
 
         public Task<IReadOnlyList<FileFolderEntity>> GetAllAsync(CancellationToken ct = default)
-            => _dataService.GetAllAsync(ct);
+            => DataService.GetAllAsync(ct);
 
         public Task<IReadOnlyList<FileFolderEntity>> GetChildrenByParentIdAsync(long? parentId, CancellationToken ct = default)
-            => _dataService.GetChildrenByParentIdAsync(parentId, ct);
+            => DataService.GetChildrenByParentIdAsync(parentId, ct);
 
         public Task<long> CountChildrenByParentIdAsync(long? parentId, CancellationToken ct = default)
-            => _dataService.CountChildrenByParentIdAsync(parentId, ct);
+            => DataService.CountChildrenByParentIdAsync(parentId, ct);
 
         public async Task<long> CreateAsync(FileFolderEntity entity, CancellationToken ct = default)
         {
-            await _dataService.CreateAsync(entity, ct);
+            await DataService.CreateAsync(entity, ct);
             return entity.Id;
         }
 
         public Task UpdateAsync(FileFolderEntity entity, CancellationToken ct = default)
-            => _dataService.UpdateAsync(entity, ct);
+            => DataService.UpdateAsync(entity, ct);
 
         public Task DeleteAsync(long id, CancellationToken ct = default)
-            => _dataService.EntityDeleteBatchAsync(new[] { id }, ct);
+            => DataService.EntityDeleteBatchAsync(new[] { id }, ct);
     }
 }

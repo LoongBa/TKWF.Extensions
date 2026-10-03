@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FileManagement
 {
@@ -12,29 +13,32 @@ namespace TKWF.Ext.FileManagement
     /// </summary>
     internal sealed class ManagedFileVersionStore : IManagedFileVersionStore
     {
-        private readonly ManagedFileVersionEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private ManagedFileVersionEntityDataService? _dataService;
 
-        public ManagedFileVersionStore(ManagedFileVersionEntityDataService dataService)
+        private ManagedFileVersionEntityDataService DataService => _dataService ??= _user.Use<ManagedFileVersionEntityDataService>();
+
+        public ManagedFileVersionStore(IDomainUser user)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         public Task<IReadOnlyList<ManagedFileVersionEntity>> GetByFileAsync(long fileId, CancellationToken ct = default)
-            => _dataService.GetByFileAsync(fileId, ct);
+            => DataService.GetByFileAsync(fileId, ct);
 
         public Task<IReadOnlyList<string>> GetStoredPathsByFileAsync(long fileId, CancellationToken ct = default)
-            => _dataService.GetStoredPathsByFileAsync(fileId, ct);
+            => DataService.GetStoredPathsByFileAsync(fileId, ct);
 
         public Task<ManagedFileVersionEntity?> GetByFileAndVersionAsync(long fileId, int version, CancellationToken ct = default)
-            => _dataService.GetByFileAndVersionAsync(fileId, version, ct);
+            => DataService.GetByFileAndVersionAsync(fileId, version, ct);
 
         public Task<int> GetMaxVersionAsync(long fileId, CancellationToken ct = default)
-            => _dataService.GetMaxVersionAsync(fileId, ct);
+            => DataService.GetMaxVersionAsync(fileId, ct);
 
         public Task CreateAsync(ManagedFileVersionEntity entity, CancellationToken ct = default)
-            => _dataService.CreateAsync(entity, ct);
+            => DataService.CreateAsync(entity, ct);
 
         public Task DeleteByFileIdAsync(long fileId, CancellationToken ct = default)
-            => _dataService.DeleteByFileIdAsync(fileId, ct);
+            => DataService.DeleteByFileIdAsync(fileId, ct);
     }
 }

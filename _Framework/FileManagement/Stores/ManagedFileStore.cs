@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FileManagement
 {
@@ -12,53 +13,56 @@ namespace TKWF.Ext.FileManagement
     /// </summary>
     internal sealed class ManagedFileStore : IManagedFileStore
     {
-        private readonly ManagedFileEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private ManagedFileEntityDataService? _dataService;
 
-        public ManagedFileStore(ManagedFileEntityDataService dataService)
+        private ManagedFileEntityDataService DataService => _dataService ??= _user.Use<ManagedFileEntityDataService>();
+
+        public ManagedFileStore(IDomainUser user)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         public Task<ManagedFileEntity?> GetByIdAsync(long id, CancellationToken ct = default)
-            => _dataService.EntityGetAsync(f => f.Id == id, ct);
+            => DataService.EntityGetAsync(f => f.Id == id, ct);
 
         public Task<ManagedFileEntity?> GetByFolderAndNameAsync(long? folderId, string name, CancellationToken ct = default)
-            => _dataService.GetByFolderAndNameAsync(folderId, name, ct);
+            => DataService.GetByFolderAndNameAsync(folderId, name, ct);
 
         public Task<IReadOnlyList<ManagedFileEntity>> GetByFolderAsync(long? folderId, int skip, int take, CancellationToken ct = default)
-            => _dataService.GetByFolderAsync(folderId, skip, take, ct);
+            => DataService.GetByFolderAsync(folderId, skip, take, ct);
 
         public Task<IReadOnlyList<ManagedFileEntity>> GetBySha256Async(string sha256, int skip, int take, CancellationToken ct = default)
-            => _dataService.GetBySha256Async(sha256, skip, take, ct);
+            => DataService.GetBySha256Async(sha256, skip, take, ct);
 
         public Task<IReadOnlyList<ManagedFileEntity>> SearchByNameAsync(string keyword, int skip, int take, CancellationToken ct = default)
-            => _dataService.SearchByNameAsync(keyword, skip, take, ct);
+            => DataService.SearchByNameAsync(keyword, skip, take, ct);
 
         public Task<long> CountByFolderIdAsync(long? folderId, CancellationToken ct = default)
-            => _dataService.CountByFolderIdAsync(folderId, ct);
+            => DataService.CountByFolderIdAsync(folderId, ct);
 
         public Task<long> SumSizeByFolderIdAsync(long? folderId, CancellationToken ct = default)
-            => _dataService.SumSizeByFolderIdAsync(folderId, ct);
+            => DataService.SumSizeByFolderIdAsync(folderId, ct);
 
         public Task<long> SumSizeAllAsync(CancellationToken ct = default)
-            => _dataService.SumSizeAllAsync(ct);
+            => DataService.SumSizeAllAsync(ct);
 
         public Task<long> CountByOwnerAsync(long ownerId, CancellationToken ct = default)
-            => _dataService.CountByOwnerAsync(ownerId, ct);
+            => DataService.CountByOwnerAsync(ownerId, ct);
 
         public Task<long> SumSizeByOwnerAsync(long ownerId, CancellationToken ct = default)
-            => _dataService.SumSizeByOwnerAsync(ownerId, ct);
+            => DataService.SumSizeByOwnerAsync(ownerId, ct);
 
         public async Task<long> CreateAsync(ManagedFileEntity entity, CancellationToken ct = default)
         {
-            await _dataService.CreateAsync(entity, ct);
+            await DataService.CreateAsync(entity, ct);
             return entity.Id;
         }
 
         public Task UpdateAsync(ManagedFileEntity entity, CancellationToken ct = default)
-            => _dataService.UpdateAsync(entity, ct);
+            => DataService.UpdateAsync(entity, ct);
 
         public Task DeleteAsync(long id, CancellationToken ct = default)
-            => _dataService.EntityDeleteBatchAsync(new[] { id }, ct);
+            => DataService.EntityDeleteBatchAsync(new[] { id }, ct);
     }
 }

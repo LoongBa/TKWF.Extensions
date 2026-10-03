@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing
 {
@@ -13,12 +14,15 @@ namespace TKWF.Ext.Emailing
     /// </summary>
     internal sealed class EmailRecordStore : IEmailRecordStore
     {
-        private readonly EmailRecordEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private EmailRecordEntityDataService? _dataService;
         private readonly ILogger<EmailRecordStore> _logger;
 
-        public EmailRecordStore(EmailRecordEntityDataService dataService, ILogger<EmailRecordStore> logger)
+        private EmailRecordEntityDataService DataService => _dataService ??= _user.Use<EmailRecordEntityDataService>();
+
+        public EmailRecordStore(IDomainUser user, ILogger<EmailRecordStore> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -26,7 +30,7 @@ namespace TKWF.Ext.Emailing
         {
             try
             {
-                return await _dataService.GetEntityByIdAsync(id, ct);
+                return await DataService.GetEntityByIdAsync(id, ct);
             }
             catch (Exception ex)
             {
@@ -39,7 +43,7 @@ namespace TKWF.Ext.Emailing
         {
             try
             {
-                return await _dataService.GetListByStatusAsync(status, ct);
+                return await DataService.GetListByStatusAsync(status, ct);
             }
             catch (Exception ex)
             {
@@ -54,7 +58,7 @@ namespace TKWF.Ext.Emailing
 
             try
             {
-                await _dataService.UpsertAsync(entity, ct);
+                await DataService.UpsertAsync(entity, ct);
             }
             catch (Exception ex)
             {

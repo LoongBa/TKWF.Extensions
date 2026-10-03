@@ -168,7 +168,11 @@ internal sealed class FileManagementTestHost : IDisposable
 
         configure?.Invoke(services);
 
-        return new FileManagementTestHost(services.BuildServiceProvider(), fsql, blobRoot, dbPath);
+        var provider = services.BuildServiceProvider();
+        // ADR88/DI004：StubDomainUser 注入能力容器——懒加载 Use<T>() 经 provider 解析。
+        // 用 provider.GetService 取最终解析桩（configure 覆盖 IDomainUser 注册时对其生效——FileUserQuotaTests 先例）。
+        if (provider.GetService<IDomainUser>() is StubDomainUser stub) stub.ServiceProvider = provider;
+        return new FileManagementTestHost(provider, fsql, blobRoot, dbPath);
     }
 
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
@@ -302,18 +306,29 @@ internal sealed class NoopTransactionScope : ITransactionScope
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约。
 /// <para>默认匿名（IsAuthenticated=false，无租户，兼容既有测试）；可参数化 userId/isAuthenticated/isSystemActor
-/// 支持 V0.3.0 用户级配额测试场景（Oracle 条件 9）。</para></summary>
+/// 支持 V0.3.0 用户级配额测试场景（Oracle 条件 9）。
+/// ADR88/DI004：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
+/// （测试宿主构建后经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
     private readonly string? _userId;
     private readonly bool _isAuthenticated;
     private readonly bool _isSystemActor;
+    private IServiceProvider? _provider;
+    private readonly object _gate = new();
+    private readonly Dictionary<Type, object?> _cache = new();
 
     public StubDomainUser(string? userId = null, bool isAuthenticated = false, bool isSystemActor = false)
     {
         _userId = userId;
         _isAuthenticated = isAuthenticated;
         _isSystemActor = isSystemActor;
+    }
+
+    /// <summary>ServiceProvider（宿主构建后注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
+    public IServiceProvider ServiceProvider
+    {
+        set { lock (_gate) _provider = value; }
     }
 
     public string SessionKey => "test-session";
@@ -327,10 +342,27 @@ internal sealed class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+            return svc;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                return svc2;
+            var resolved = provider.GetRequiredService<TDomainService>();
+            _cache[typeof(TDomainService)] = resolved;
+            return resolved;
+        }
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        return provider.GetRequiredService<TService>();
+    }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

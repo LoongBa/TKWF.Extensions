@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Calendar
 {
@@ -14,70 +15,71 @@ namespace TKWF.Ext.Calendar
     /// </summary>
     internal sealed class CalendarStore : ICalendarStore
     {
-        private readonly CalendarEntityDataService _calendarDataService;
-        private readonly CalendarEventEntityDataService _eventDataService;
+        private readonly IDomainUser _user;
+        private CalendarEntityDataService? _calendarDataService;
+        private CalendarEventEntityDataService? _eventDataService;
 
-        public CalendarStore(
-            CalendarEntityDataService calendarDataService,
-            CalendarEventEntityDataService eventDataService)
+        private CalendarEntityDataService CalendarDataService => _calendarDataService ??= _user.Use<CalendarEntityDataService>();
+        private CalendarEventEntityDataService EventDataService => _eventDataService ??= _user.Use<CalendarEventEntityDataService>();
+
+        public CalendarStore(IDomainUser user)
         {
-            _calendarDataService = calendarDataService ?? throw new ArgumentNullException(nameof(calendarDataService));
-            _eventDataService = eventDataService ?? throw new ArgumentNullException(nameof(eventDataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
         }
 
         // ── 日历 ──
 
         public Task<CalendarEntity?> GetByIdAsync(long id, CancellationToken ct = default)
-            => _calendarDataService.EntityGetAsync(c => c.Id == id, ct);
+            => CalendarDataService.EntityGetAsync(c => c.Id == id, ct);
 
         public Task<CalendarEntity?> GetByCodeAsync(string code, CancellationToken ct = default)
-            => _calendarDataService.GetByCodeAsync(code, ct);
+            => CalendarDataService.GetByCodeAsync(code, ct);
 
         public Task<IReadOnlyList<CalendarEntity>> GetAllAsync(CancellationToken ct = default)
-            => _calendarDataService.GetAllAsync(ct);
+            => CalendarDataService.GetAllAsync(ct);
 
         public async Task<long> CreateAsync(CalendarEntity entity, CancellationToken ct = default)
         {
-            await _calendarDataService.EntityCreateAsync(entity, ct);
+            await CalendarDataService.EntityCreateAsync(entity, ct);
             return entity.Id;
         }
 
         public Task UpdateAsync(CalendarEntity entity, CancellationToken ct = default)
-            => _calendarDataService.EntityUpdateAsync(entity, ct);
+            => CalendarDataService.EntityUpdateAsync(entity, ct);
 
         public Task DeleteAsync(long id, CancellationToken ct = default)
-            => _calendarDataService.DeleteEntityAsync(id, ct);
+            => CalendarDataService.DeleteEntityAsync(id, ct);
 
         // ── 事件 ──
 
         public async Task<CalendarEventEntity?> GetEventByIdAsync(long id, CancellationToken ct = default)
-            => NormalizeEvent(await _eventDataService.GetByIdAsync(id, ct));
+            => NormalizeEvent(await EventDataService.GetByIdAsync(id, ct));
 
         public async Task<IReadOnlyList<CalendarEventEntity>> GetSingleByRangeAsync(
             long? calendarId, DateTime? fromUtc, DateTime? toUtc, int skip, int take, CancellationToken ct = default)
-            => NormalizeEvents(await _eventDataService.GetSingleByRangeAsync(calendarId, fromUtc, toUtc, skip, take, ct));
+            => NormalizeEvents(await EventDataService.GetSingleByRangeAsync(calendarId, fromUtc, toUtc, skip, take, ct));
 
         public async Task<IReadOnlyList<CalendarEventEntity>> GetRecurringByRangeAsync(
             long? calendarId, DateTime? fromUtc, DateTime? toUtc, int skip, int take, CancellationToken ct = default)
-            => NormalizeEvents(await _eventDataService.GetRecurringByRangeAsync(calendarId, fromUtc, toUtc, skip, take, ct));
+            => NormalizeEvents(await EventDataService.GetRecurringByRangeAsync(calendarId, fromUtc, toUtc, skip, take, ct));
 
         public async Task<IReadOnlyList<CalendarEventEntity>> GetByCalendarIdAsync(long calendarId, CancellationToken ct = default)
-            => NormalizeEvents(await _eventDataService.GetByCalendarIdAsync(calendarId, ct));
+            => NormalizeEvents(await EventDataService.GetByCalendarIdAsync(calendarId, ct));
 
         public Task<long> CountByCalendarIdAsync(long calendarId, CancellationToken ct = default)
-            => _eventDataService.CountByCalendarIdAsync(calendarId, ct);
+            => EventDataService.CountByCalendarIdAsync(calendarId, ct);
 
         public async Task<long> CreateEventAsync(CalendarEventEntity entity, CancellationToken ct = default)
         {
-            await _eventDataService.CreateAsync(entity, ct);
+            await EventDataService.CreateAsync(entity, ct);
             return entity.Id;
         }
 
         public Task UpdateEventAsync(CalendarEventEntity entity, CancellationToken ct = default)
-            => _eventDataService.UpdateAsync(entity, ct);
+            => EventDataService.UpdateAsync(entity, ct);
 
         public Task DeleteEventAsync(long id, CancellationToken ct = default)
-            => _eventDataService.DeleteBatchAsync(new[] { id }, ct);
+            => EventDataService.DeleteBatchAsync(new[] { id }, ct);
 
         // ── 内部：SQLite DateTime 读出规范化 ──
         // FreeSql SQLite 把 UTC DateTime 存为本地墙钟（无 Kind 标识），读出 Kind=Unspecified 且偏移 +8

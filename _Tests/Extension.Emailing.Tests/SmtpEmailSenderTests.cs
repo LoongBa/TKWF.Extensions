@@ -1,19 +1,21 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing.Tests;
 
 /// <summary>
 /// SmtpEmailSender 测试——覆盖发送成功、异常静默、日志记录、Null 消息、配置读取。
-/// <para>不真实连接 SMTP，使用 Mock/Fake 模式：SmtpEmailSender 依赖 IEmailRecordStore + IOptions&lt;EmailingOptions&gt;，
-/// 发送失败时异常静默（catch + LogWarning）。</para>
+/// <para>不真实连接 SMTP，使用 Mock/Fake 模式：SmtpEmailSender 依赖 IDomainUser（Use&lt;IEmailRecordStore&gt; 懒加载）
+/// + IOptions&lt;EmailingOptions&gt;，发送失败时异常静默（catch + LogWarning）。</para>
 /// </summary>
 public class SmtpEmailSenderTests
 {
-    /// <summary>创建 SmtpEmailSender 实例（使用 Fake 依赖）。</summary>
+    /// <summary>创建 SmtpEmailSender 实例（使用 Fake 依赖 + 能力容器桩）。</summary>
     private static (SmtpEmailSender Sender, FakeEmailRecordStore Store, FakeLogger<SmtpEmailSender> Logger) CreateSender(
         bool isEnabled = true,
         string smtpHost = "localhost",
@@ -30,7 +32,13 @@ public class SmtpEmailSenderTests
             DefaultFrom = "default@example.com",
             IsEnabled = isEnabled
         });
-        var sender = new SmtpEmailSender(store, options, logger);
+        // ADR88/DI004：SmtpEmailSender 不再注入 IEmailRecordStore——经 _user.Use<IEmailRecordStore>() 懒加载。
+        // 测试桩注册 FakeEmailRecordStore（接口 key——Use<接口> 经 GetRequiredService 精确匹配）。
+        var stub = new StubDomainUser();
+        var services = new ServiceCollection();
+        services.AddSingleton<IEmailRecordStore>(store);
+        stub.ServiceProvider = services.BuildServiceProvider();
+        var sender = new SmtpEmailSender(stub, options, logger);
         return (sender, store, logger);
     }
 
@@ -108,7 +116,7 @@ public class SmtpEmailSenderTests
     }
 
     [Fact]
-    public void Constructor_NullRecordStore_Throws()
+    public void Constructor_NullUser_Throws()
     {
         var logger = new FakeLogger<SmtpEmailSender>();
         var options = Options.Create(new EmailingOptions());
@@ -116,6 +124,57 @@ public class SmtpEmailSenderTests
     }
 
     // ── Test helpers ──
+
+    /// <summary>最小 IDomainUser 桩——Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
+    /// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</summary>
+    private sealed class StubDomainUser : IDomainUser
+    {
+        private IServiceProvider? _provider;
+        private readonly object _gate = new();
+        private readonly Dictionary<Type, object?> _cache = new();
+
+        /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
+        public IServiceProvider ServiceProvider
+        {
+            set { lock (_gate) _provider = value; }
+        }
+
+        public string SessionKey => "test-session";
+        public bool IsAuthenticated => false;
+        public bool IsSystemActor => false;
+        public IUserInfo? UserInfo => null;
+        public long? TenantId => null;
+        public bool IsNoAuditActive => false;
+        public string? UserId => null;
+        public string? UserName => null;
+        public bool IsInRole(string role) => false;
+
+        public TDomainService Use<TDomainService>() where TDomainService : IDomainService
+        {
+            IServiceProvider provider;
+            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+            if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+                return svc;
+            lock (_gate)
+            {
+                if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                    return svc2;
+                var resolved = provider.GetRequiredService<TDomainService>();
+                _cache[typeof(TDomainService)] = resolved;
+                return resolved;
+            }
+        }
+
+        public TService GetService<TService>() where TService : notnull
+        {
+            IServiceProvider provider;
+            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+            return provider.GetRequiredService<TService>();
+        }
+
+        public TService GetOptionalService<TService>() where TService : class => null!;
+        public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+    }
 
     /// <summary>简化 ILogger 桩：捕获 Warning 和 Information 日志。</summary>
     private sealed class FakeLogger<T> : ILogger<T>

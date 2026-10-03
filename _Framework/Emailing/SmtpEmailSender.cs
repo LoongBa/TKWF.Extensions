@@ -6,6 +6,7 @@ using MailKit.Net.Smtp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing
 {
@@ -19,16 +20,19 @@ namespace TKWF.Ext.Emailing
     /// </summary>
     internal sealed class SmtpEmailSender : IEmailSender
     {
-        private readonly IEmailRecordStore _recordStore;
+        private readonly IDomainUser _user;
+        private IEmailRecordStore? _recordStore;
         private readonly IOptions<EmailingOptions> _options;
         private readonly ILogger<SmtpEmailSender> _logger;
 
+        private IEmailRecordStore RecordStore => _recordStore ??= _user.Use<IEmailRecordStore>();
+
         public SmtpEmailSender(
-            IEmailRecordStore recordStore,
+            IDomainUser user,
             IOptions<EmailingOptions> options,
             ILogger<SmtpEmailSender> logger)
         {
-            _recordStore = recordStore ?? throw new ArgumentNullException(nameof(recordStore));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -85,7 +89,7 @@ namespace TKWF.Ext.Emailing
                         // 记录发送成功
                         record.Status = "Sent";
                         record.SendTime = DateTime.Now;
-                        await _recordStore.SaveAsync(record, ct);
+                        await RecordStore.SaveAsync(record, ct);
 
                         _logger.LogInformation("邮件发送成功: To={To}, Subject={Subject}", message.To, message.Subject);
                         return;
@@ -110,7 +114,7 @@ namespace TKWF.Ext.Emailing
                 // EmailRecordStore 本身异常静默（Upsert 失败仅 LogWarning），此处不会向调用方抛出。
                 record.Status = "Failed";
                 record.ErrorMessage = ex.Message;
-                await _recordStore.SaveAsync(record, CancellationToken.None);
+                await RecordStore.SaveAsync(record, CancellationToken.None);
 
                 _logger.LogWarning(ex, "邮件发送失败: To={To}, Subject={Subject}", message.To, message.Subject);
             }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -25,15 +26,25 @@ public class FreeSqlBlobRecordStoreTests
     }
 
     /// <summary>构造 BlobRecordEntityDataService——经真实 FreeSql DAC（UnitOfWorkManager + FreeSqlEntityDAC）驱动。</summary>
-    private static BlobRecordEntityDataService CreateDataService(IFreeSql fsql)
+    private static BlobRecordEntityDataService CreateDataService(IFreeSql fsql, IDomainUser user)
     {
         var uowManager = new UnitOfWorkManager(fsql);
         var dac = new FreeSqlEntityDAC<BlobRecordEntity>(uowManager);
-        return new BlobRecordEntityDataService(new StubDomainUser(), dac);
+        return new BlobRecordEntityDataService(user, dac);
     }
 
+    /// <summary>
+    /// ADR88/DI004：Store 不再注入 DataService——经 IDomainUser.Use&lt;T&gt;() 懒加载解析，
+    /// 测试桩注入能力容器（真实 DataService 注册到 ServiceProvider，stub 解析）。
+    /// </summary>
     private static BlobRecordStore CreateStore(IFreeSql fsql, FakeLogger<BlobRecordStore> logger)
-        => new(CreateDataService(fsql), logger);
+    {
+        var stub = new StubDomainUser();
+        var services = new ServiceCollection();
+        services.AddSingleton(CreateDataService(fsql, stub));
+        stub.ServiceProvider = services.BuildServiceProvider();
+        return new BlobRecordStore(stub, logger);
+    }
 
     [Fact]
     public async Task SaveAsync_NewRecord_PersistsToDatabase()
@@ -227,9 +238,20 @@ public class FreeSqlBlobRecordStoreTests
 
     // ── Test helpers ──
 
-    /// <summary>最小 IDomainUser 桩——仅满足编译，不提供真实用户上下文。</summary>
+    /// <summary>最小 IDomainUser 桩——Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
+    /// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</summary>
     private sealed class StubDomainUser : IDomainUser
     {
+        private IServiceProvider? _provider;
+        private readonly object _gate = new();
+        private readonly Dictionary<Type, object?> _cache = new();
+
+        /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
+        public IServiceProvider ServiceProvider
+        {
+            set { lock (_gate) _provider = value; }
+        }
+
         public string SessionKey => "test-session";
         public bool IsAuthenticated => false;
         public bool IsSystemActor => false;
@@ -239,10 +261,30 @@ public class FreeSqlBlobRecordStoreTests
         public string? UserId => null;
         public string? UserName => null;
         public bool IsInRole(string role) => false;
+
         public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-            => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        {
+            IServiceProvider provider;
+            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+            if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+                return svc;
+            lock (_gate)
+            {
+                if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                    return svc2;
+                var resolved = provider.GetRequiredService<TDomainService>();
+                _cache[typeof(TDomainService)] = resolved;
+                return resolved;
+            }
+        }
+
         public TService GetService<TService>() where TService : notnull
-            => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        {
+            IServiceProvider provider;
+            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+            return provider.GetRequiredService<TService>();
+        }
+
         public TService GetOptionalService<TService>() where TService : class => null!;
         public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
     }

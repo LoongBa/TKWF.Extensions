@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BlobStoring
 {
@@ -13,12 +14,15 @@ namespace TKWF.Ext.BlobStoring
     /// </summary>
     internal sealed class BlobRecordStore : IBlobRecordStore
     {
-        private readonly BlobRecordEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private BlobRecordEntityDataService? _dataService;
         private readonly ILogger<BlobRecordStore> _logger;
 
-        public BlobRecordStore(BlobRecordEntityDataService dataService, ILogger<BlobRecordStore> logger)
+        private BlobRecordEntityDataService DataService => _dataService ??= _user.Use<BlobRecordEntityDataService>();
+
+        public BlobRecordStore(IDomainUser user, ILogger<BlobRecordStore> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -26,7 +30,7 @@ namespace TKWF.Ext.BlobStoring
         {
             try
             {
-                return await _dataService.GetEntityByIdAsync(id, ct);
+                return await DataService.GetEntityByIdAsync(id, ct);
             }
             catch (Exception ex)
             {
@@ -39,7 +43,7 @@ namespace TKWF.Ext.BlobStoring
         {
             try
             {
-                return await _dataService.GetByNameAsync(name, ct);
+                return await DataService.GetByNameAsync(name, ct);
             }
             catch (Exception ex)
             {
@@ -56,7 +60,7 @@ namespace TKWF.Ext.BlobStoring
         {
             try
             {
-                return await _dataService.GetListByContentTypeAsync(contentType, skip, take, ct);
+                return await DataService.GetListByContentTypeAsync(contentType, skip, take, ct);
             }
             catch (Exception ex)
             {
@@ -72,7 +76,7 @@ namespace TKWF.Ext.BlobStoring
             try
             {
                 // 直接委托 DataService Upsert——按 Id 查存在：存在则更新（保留自增 Id），不存在则插入
-                await _dataService.UpsertAsync(record, ct);
+                await DataService.UpsertAsync(record, ct);
             }
             catch (Exception ex)
             {
@@ -84,7 +88,7 @@ namespace TKWF.Ext.BlobStoring
         {
             try
             {
-                await _dataService.DeleteByIdAsync(id, ct);
+                await DataService.DeleteByIdAsync(id, ct);
             }
             catch (Exception ex)
             {

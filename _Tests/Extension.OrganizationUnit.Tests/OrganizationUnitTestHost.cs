@@ -106,7 +106,10 @@ internal sealed class OrganizationUnitTestHost : IDisposable
 
         configure?.Invoke(services);
 
-        return new OrganizationUnitTestHost(services.BuildServiceProvider(), fsql);
+        var provider = services.BuildServiceProvider();
+        // ADR88/DI004：StubDomainUser 注入能力容器——懒加载 Use<T>() 经 provider 解析。
+        if (provider.GetService<IDomainUser>() is StubDomainUser stub) stub.ServiceProvider = provider;
+        return new OrganizationUnitTestHost(provider, fsql);
     }
 
     /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
@@ -156,9 +159,21 @@ internal sealed class NoopTransactionScope : ITransactionScope
     public void Rollback() { }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
+/// <para>ADR88/DI004：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
+/// （测试宿主构建后经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private IServiceProvider? _provider;
+    private readonly object _gate = new();
+    private readonly Dictionary<Type, object?> _cache = new();
+
+    /// <summary>ServiceProvider（宿主构建后注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
+    public IServiceProvider ServiceProvider
+    {
+        set { lock (_gate) _provider = value; }
+    }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -170,10 +185,27 @@ internal sealed class StubDomainUser : IDomainUser
     public bool IsInRole(string role) => false;
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+            return svc;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                return svc2;
+            var resolved = provider.GetRequiredService<TDomainService>();
+            _cache[typeof(TDomainService)] = resolved;
+            return resolved;
+        }
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+    {
+        IServiceProvider provider;
+        lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        return provider.GetRequiredService<TService>();
+    }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

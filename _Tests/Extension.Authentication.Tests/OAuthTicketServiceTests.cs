@@ -15,20 +15,26 @@ public class OAuthTicketServiceTests
     private static (OAuthTicketService Service, OAuthTicketEntityDataService Ds, TokenService TokenService) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ticketDs = new OAuthTicketEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<OAuthTicketEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<OAuthTicketEntity>(new UnitOfWorkManager(fsql)));
         var accountDs = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
         var refreshDs = new AuthRefreshTokenEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
         var blacklistDs = new AuthTokenBlacklistEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ticketDs);
+        stub.Register(accountDs);
+        stub.Register(refreshDs);
+        stub.Register(blacklistDs);
         var tokenService = new TokenService(
-            Options.Create(options), accountDs, refreshDs, blacklistDs,
+            Options.Create(options), stub,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             NullLogger<TokenService>.Instance);
+        stub.Register<ITokenService>(tokenService);
         tokenService.EnsureKeysLoaded();
-        return (new OAuthTicketService(Options.Create(options), ticketDs, tokenService, NullLogger<OAuthTicketService>.Instance), ticketDs, tokenService);
+        return (new OAuthTicketService(Options.Create(options), stub, NullLogger<OAuthTicketService>.Instance), ticketDs, tokenService);
     }
 
     [Fact]

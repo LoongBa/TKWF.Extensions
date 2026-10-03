@@ -21,7 +21,7 @@ public class AuthAccountUserProfileSourceTests
             AuthLevel = 3,
             WechatMpOpenId = "mp-1",
         };
-        var source = new AuthAccountUserProfileSource(new FakeAuthAccountQueryService(account));
+        var source = new AuthAccountUserProfileSource(ProfileStub(account));
 
         var profile = await source.GetProfileAsync("u-1001");
 
@@ -39,7 +39,7 @@ public class AuthAccountUserProfileSourceTests
     [Fact]
     public async Task AccountNotFound_ReturnsNull()
     {
-        var source = new AuthAccountUserProfileSource(new FakeAuthAccountQueryService(null));
+        var source = new AuthAccountUserProfileSource(ProfileStub(null));
         Assert.Null(await source.GetProfileAsync("u-unknown"));
     }
 
@@ -59,12 +59,20 @@ public class AuthAccountUserProfileSourceTests
             WechatWebOpenId = web,
             UnionId = union,
         };
-        var source = new AuthAccountUserProfileSource(new FakeAuthAccountQueryService(account));
+        var source = new AuthAccountUserProfileSource(ProfileStub(account));
 
         var profile = await source.GetProfileAsync("u-1001");
 
         Assert.NotNull(profile);
         Assert.Equal(expected, profile!.IsWechatBound);
+    }
+
+    /// <summary>构造 StubDomainUser 并注册 FakeAuthAccountQueryService（生产 Use&lt;IAuthAccountQueryService&gt;() 懒加载接口键）。</summary>
+    private static StubDomainUser ProfileStub(AuthAccountEntity? account)
+    {
+        var stub = new StubDomainUser();
+        stub.Register<IAuthAccountQueryService>(new FakeAuthAccountQueryService(account));
+        return stub;
     }
 
     /// <summary>手写假实现——每次查询返回固定账号（N2/N3 仅验证映射逻辑，不碰 DB）。</summary>

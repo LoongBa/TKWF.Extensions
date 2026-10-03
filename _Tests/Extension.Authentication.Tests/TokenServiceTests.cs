@@ -20,14 +20,18 @@ public class TokenServiceTests
     private static (TokenService Service, IFreeSql Fsql) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var accountDs = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
         var refreshDs = new AuthRefreshTokenEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
         var blacklistDs = new AuthTokenBlacklistEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(accountDs);
+        stub.Register(refreshDs);
+        stub.Register(blacklistDs);
         var service = new TokenService(
-            Options.Create(options), accountDs, refreshDs, blacklistDs,
+            Options.Create(options), stub,
             new MemoryCache(new MemoryCacheOptions()), NullLogger<TokenService>.Instance);
         return (service, fsql);
     }

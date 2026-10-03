@@ -65,18 +65,24 @@ public class IdentityAdapterTests
         // LocalJwtTokenVerifier 构造注入 ITokenService——契约接线（验签细节 TokenServiceTests 覆盖）
         var options = AuthenticationTestHost.CreateOptions();
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var accountDs = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
         var refreshDs = new AuthRefreshTokenEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
         var blacklistDs = new AuthTokenBlacklistEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(accountDs);
+        stub.Register(refreshDs);
+        stub.Register(blacklistDs);
         var tokenService = new TokenService(
-            Microsoft.Extensions.Options.Options.Create(options), accountDs, refreshDs, blacklistDs,
+            Microsoft.Extensions.Options.Options.Create(options), stub,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenService>.Instance);
+        // ADR88/DI004：LocalJwtTokenVerifier 懒加载 ITokenService（接口）——注册接口 key
+        stub.Register<ITokenService>(tokenService);
 
-        var verifier = new LocalJwtTokenVerifier(tokenService);
+        var verifier = new LocalJwtTokenVerifier(stub);
         var account = new AuthAccountEntity { UId = "u-400", Phone = "13900139000", AuthLevel = (int)AuthLevel.Phone, TokenVersion = 0 };
         await accountDs.CreateAsync(account);
 

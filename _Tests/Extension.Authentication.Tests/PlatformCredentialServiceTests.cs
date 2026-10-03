@@ -13,9 +13,11 @@ public class PlatformCredentialServiceTests
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var options = AuthenticationTestHost.CreateOptions();
         options.SecretEncryptionKeyPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"tkwf-auth-key-{System.Guid.NewGuid():N}.key");
+        var stub = new StubDomainUser(Options.Create(options));
         var ds = new PlatformCredentialEntityDataService(
-            new StubDomainUser(Options.Create(options)), new FreeSqlEntityDAC<PlatformCredentialEntity>(new UnitOfWorkManager(fsql)));
-        return (new PlatformCredentialService(ds, Options.Create(options), NullLogger<PlatformCredentialService>.Instance), ds);
+            stub, new FreeSqlEntityDAC<PlatformCredentialEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
+        return (new PlatformCredentialService(stub, Options.Create(options), NullLogger<PlatformCredentialService>.Instance), ds);
     }
 
     [Fact]

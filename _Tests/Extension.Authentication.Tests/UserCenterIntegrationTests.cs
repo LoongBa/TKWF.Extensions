@@ -43,8 +43,11 @@ public class UserCenterIntegrationTests
         });
 
         // 契约链：查询服务 → 档案源实现 → 门面
-        var queryService = new AuthAccountQueryService(ds);
-        var profileSource = new AuthAccountUserProfileSource(queryService);
+        var stub = new StubDomainUser();
+        stub.Register(ds);
+        var queryService = new AuthAccountQueryService(stub);
+        stub.Register<IAuthAccountQueryService>(queryService);
+        var profileSource = new AuthAccountUserProfileSource(stub);
 
         var services = new ServiceCollection();
         services.AddLogging();

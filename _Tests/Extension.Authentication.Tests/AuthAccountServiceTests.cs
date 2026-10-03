@@ -14,9 +14,11 @@ public class AuthAccountServiceTests
     private static (AuthAccountService Service, AuthAccountEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ds = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        return (new AuthAccountService(ds), ds);
+            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
+        return (new AuthAccountService(stub), ds);
     }
 
     [Fact]

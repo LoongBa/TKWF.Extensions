@@ -12,9 +12,11 @@ public class AuthLoginAttemptServiceTests
     private static (AuthLoginAttemptService Service, AuthLoginAttemptEntityDataService Ds) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ds = new AuthLoginAttemptEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthLoginAttemptEntity>(new UnitOfWorkManager(fsql)));
-        return (new AuthLoginAttemptService(Options.Create(options), ds, NullLogger<AuthLoginAttemptService>.Instance), ds);
+            stub, new FreeSqlEntityDAC<AuthLoginAttemptEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
+        return (new AuthLoginAttemptService(Options.Create(options), stub, NullLogger<AuthLoginAttemptService>.Instance), ds);
     }
 
     private static async Task RecordNAsync(AuthLoginAttemptService service, string identity, string authType, int n)

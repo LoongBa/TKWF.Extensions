@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using FreeSql;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -95,17 +97,23 @@ internal static class AuthenticationTestHost
 }
 
 /// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户；对齐既有扩展测试 StubDomainUser）。
+/// <para>ADR88/DI004：生产经 IDomainUser.Use&lt;T&gt;() 懒加载能力——StubDomainUser 增能力注册表
+/// （<see cref="Register{TService}"/> 按类型键）+ ServiceProvider 兜底双通道解析（PermissionsTestHost 先例）。</para>
 /// <para>可注入 <see cref="IOptions{AuthCenterOptions}"/>（GetOptionalService 解析）——早期 PlatformCredentialEntityDataService
 /// 经 GetOptionalService 加载密钥路径所需；Oracle M4 合并后 DataService 改经 PlatformCredentialKeyStore（Service 构造初始化），
 /// 此注入仅为兼容保留（PlatformCredentialServiceTests 仍传 Options——无副作用）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
     private readonly IOptions<AuthCenterOptions>? _options;
+    private readonly Dictionary<Type, object> _manual = new();
 
     public StubDomainUser(IOptions<AuthCenterOptions>? options = null)
     {
         _options = options;
     }
+
+    /// <summary>可选 IServiceProvider 兜底——未注册能力时经 DI GetRequiredService 解析。</summary>
+    public IServiceProvider? ServiceProvider { get; set; }
 
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
@@ -117,8 +125,24 @@ internal sealed class StubDomainUser : IDomainUser
     public string? UserName => null;
     public bool IsInRole(string role) => false;
 
+    /// <summary>注册能力实例（按 typeof(TService) 键）——测试为 Use&lt;T&gt;() 提供显式解析。</summary>
+    public void Register<TService>(TService instance)
+    {
+        if (instance is null) throw new ArgumentNullException(nameof(instance));
+        lock (_manual) _manual[typeof(TService)] = instance;
+    }
+
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        lock (_manual)
+        {
+            if (_manual.TryGetValue(typeof(TDomainService), out var instance))
+                return (TDomainService)instance;
+        }
+        if (ServiceProvider is not null)
+            return ServiceProvider.GetRequiredService<TDomainService>();
+        throw new NotSupportedException($"Stub: Use<{typeof(TDomainService).Name}> 未注册——测试须经 Register<TService> 或 ServiceProvider 提供能力");
+    }
 
     public TService GetService<TService>() where TService : notnull
         => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
@@ -129,5 +153,5 @@ internal sealed class StubDomainUser : IDomainUser
             return (TService)(object)_options;
         return null!;
     }
-    public System.Collections.Generic.IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+    public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

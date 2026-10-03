@@ -11,9 +11,11 @@ public class PlatformAccountMapServiceTests
     private static (PlatformAccountMapService Service, PlatformAccountMapEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ds = new PlatformAccountMapEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<PlatformAccountMapEntity>(new UnitOfWorkManager(fsql)));
-        return (new PlatformAccountMapService(ds, NullLogger<PlatformAccountMapService>.Instance), ds);
+            stub, new FreeSqlEntityDAC<PlatformAccountMapEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
+        return (new PlatformAccountMapService(stub, NullLogger<PlatformAccountMapService>.Instance), ds);
     }
 
     [Fact]

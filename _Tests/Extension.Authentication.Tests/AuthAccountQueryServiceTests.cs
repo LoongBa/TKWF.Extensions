@@ -10,9 +10,11 @@ public class AuthAccountQueryServiceTests
     private static (AuthAccountQueryService Service, AuthAccountEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ds = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        return (new AuthAccountQueryService(ds), ds);
+            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
+        return (new AuthAccountQueryService(stub), ds);
     }
 
     /// <summary>4 账号：UId/Phone/Mp/Web 四键互不相同——逐方法验证委托正确性（各方法命中各自键对应的账号）。</summary>

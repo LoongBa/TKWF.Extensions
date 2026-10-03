@@ -23,10 +23,12 @@ public class SmsVerificationServiceTests
     private static (SmsVerificationService Service, FakeSmsSender Sender, SmsRecordEntityDataService Ds) CreateService(AuthCenterOptions options, bool withSender = true)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ds = new SmsRecordEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<SmsRecordEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<SmsRecordEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
         var sender = withSender ? new FakeSmsSender() : null;
-        return (new SmsVerificationService(sender, Options.Create(options), ds, NullLogger<SmsVerificationService>.Instance), sender!, ds);
+        return (new SmsVerificationService(sender, Options.Create(options), stub, NullLogger<SmsVerificationService>.Instance), sender!, ds);
     }
 
     [Fact]
@@ -76,8 +78,10 @@ public class SmsVerificationServiceTests
     public async Task VerifyCode_Expired_Rejected()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = new StubDomainUser();
         var ds = new SmsRecordEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<SmsRecordEntity>(new UnitOfWorkManager(fsql)));
+            stub, new FreeSqlEntityDAC<SmsRecordEntity>(new UnitOfWorkManager(fsql)));
+        stub.Register(ds);
         // 过期记录（ExpireAt 已过——AddDays(-1) 容错 SQLite DateTime 本地化 +8h 存取）
         await ds.CreateAsync(new SmsRecordEntity
         {
@@ -87,7 +91,7 @@ public class SmsVerificationServiceTests
             ExpireAt = DateTime.UtcNow.AddDays(-1),
             CreateTime = DateTime.UtcNow.AddMinutes(-6)
         });
-        var service = new SmsVerificationService(null, Options.Create(AuthenticationTestHost.CreateOptions()), ds, NullLogger<SmsVerificationService>.Instance);
+        var service = new SmsVerificationService(null, Options.Create(AuthenticationTestHost.CreateOptions()), stub, NullLogger<SmsVerificationService>.Instance);
 
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.VerifyCodeAsync("13800138000", "123456", SmsScenes.Login));
         Assert.Equal("SMS_CODE_EXPIRED", ex.Message);

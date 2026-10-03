@@ -32,8 +32,8 @@ public sealed class FeatureManager : IFeatureManager
 {
     private const string NotFoundSentinel = "\x02NOTFOUND\x02";
 
-    private readonly IFeatureValueStore _store;
-    private readonly IFeatureDefinitionRepository _definitionRepository;
+    private IFeatureValueStore? _store;
+    private IFeatureDefinitionRepository? _definitionRepository;
     private readonly IReadOnlyList<IFeatureValueProvider> _providers;
     private readonly FeatureCacheVersionRegistry _versionRegistry;
     private readonly IDomainUser _domainUser;
@@ -43,12 +43,14 @@ public sealed class FeatureManager : IFeatureManager
     private readonly ILocalEventBus _eventBus;
     private readonly ILogger<FeatureManager> _logger;
 
+    // ADR88/DI004：域服务（IFeatureValueStore/IFeatureDefinitionRepository）懒加载经 IDomainUser.Use<T>()
+    private IFeatureValueStore Store => _store ??= _domainUser.Use<IFeatureValueStore>();
+    private IFeatureDefinitionRepository DefinitionRepository => _definitionRepository ??= _domainUser.Use<IFeatureDefinitionRepository>();
+
     // Provider 链缓存（Name 冲突懒校验结果 + 排序后顺序——首次解析构建，防重复检测，C4）
     private IReadOnlyList<IFeatureValueProvider>? _orderedProvidersCache;
 
     internal FeatureManager(
-        IFeatureValueStore store,
-        IFeatureDefinitionRepository definitionRepository,
         IEnumerable<IFeatureValueProvider> providers,
         FeatureCacheVersionRegistry versionRegistry,
         IDomainUser domainUser,
@@ -58,8 +60,6 @@ public sealed class FeatureManager : IFeatureManager
         ILocalEventBus eventBus,
         ILogger<FeatureManager> logger)
     {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
-        _definitionRepository = definitionRepository ?? throw new ArgumentNullException(nameof(definitionRepository));
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
         _versionRegistry = versionRegistry ?? throw new ArgumentNullException(nameof(versionRegistry));
         _domainUser = domainUser ?? throw new ArgumentNullException(nameof(domainUser));
@@ -79,7 +79,7 @@ public sealed class FeatureManager : IFeatureManager
         if (value != null) return value;
 
         // 默认值语义：显式参数优先 → 定义默认（FeatureDefinition.DefaultValue）
-        return defaultValue ?? _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name)?.DefaultValue ?? string.Empty;
+        return defaultValue ?? DefinitionRepository.GetAll().FirstOrDefault(d => d.Name == name)?.DefaultValue ?? string.Empty;
     }
 
     /// <inheritdoc />
@@ -117,17 +117,17 @@ public sealed class FeatureManager : IFeatureManager
             using var scope = await _transactionManager.BeginAsync(ct: ct);
             try
             {
-                var existing = await _store.GetAsync(name, FeatureProviders.Global, null, ct);
+                var existing = await Store.GetAsync(name, FeatureProviders.Global, null, ct);
                 oldValue = existing?.Value;
                 if (existing != null)
                 {
                     existing.Value = value;
                     existing.UpdateTime = DateTime.UtcNow;
-                    await _store.SetAsync(existing, ct);
+                    await Store.SetAsync(existing, ct);
                 }
                 else
                 {
-                    await _store.SetAsync(new FeatureValueEntity
+                    await Store.SetAsync(new FeatureValueEntity
                     {
                         Name = name,
                         Value = value,
@@ -149,11 +149,11 @@ public sealed class FeatureManager : IFeatureManager
         {
             // 非 Global：UX_FeatureValue_Name_Provider 数据库唯一约束兜底（冲突转业务异常）
             // OldValue 记录（P4：额外一次读——事件通知性语义，并发写为读取时快照）
-            var existing = await _store.GetAsync(name, providerName, providerKey, ct);
+            var existing = await Store.GetAsync(name, providerName, providerKey, ct);
             oldValue = existing?.Value;
             try
             {
-                await _store.SetAsync(new FeatureValueEntity
+                await Store.SetAsync(new FeatureValueEntity
                 {
                     Name = name,
                     Value = value,
@@ -182,10 +182,10 @@ public sealed class FeatureManager : IFeatureManager
         string? normalizedKey = providerName == FeatureProviders.Global ? null : providerKey;
 
         // OldValue 记录（P4）
-        var existing = await _store.GetAsync(name, providerName, normalizedKey, ct);
+        var existing = await Store.GetAsync(name, providerName, normalizedKey, ct);
         string? oldValue = existing?.Value;
 
-        await _store.DeleteAsync(name, providerName, normalizedKey, ct);
+        await Store.DeleteAsync(name, providerName, normalizedKey, ct);
 
         InvalidateCacheForName(name);
         await PublishChangedAsync(name, providerName, normalizedKey, oldValue, null, ct);
@@ -193,12 +193,12 @@ public sealed class FeatureManager : IFeatureManager
 
     /// <inheritdoc />
     public Task<IReadOnlyList<FeatureDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
-        => Task.FromResult(_definitionRepository.GetAll());
+        => Task.FromResult(DefinitionRepository.GetAll());
 
     /// <inheritdoc />
     public Task<IReadOnlyList<FeatureValueEntity>> GetFeatureValuesAsync(
         string? providerName = null, string? providerKey = null, CancellationToken ct = default)
-        => _store.GetListAsync(providerName, providerKey, ct);   // 读路径静默降级（Store 语义）
+        => Store.GetListAsync(providerName, providerKey, ct);   // 读路径静默降级（Store 语义）
 
     /// <inheritdoc />
     public async Task<(string? Value, string ProviderName)> GetEffectiveValueAsync(
@@ -215,7 +215,7 @@ public sealed class FeatureManager : IFeatureManager
         // 无存储值：定义 DefaultValue 优先（P6：与字符串入口回退链相反——字符串入口为参数优先 defaultValue ?? definition.DefaultValue；
         // 类型化入口因签名 default! 区分不了 default(T) 与显式默认，故让定义默认（Feature 设计者声明的规范回退值）优先）；
         // 不可解析/无定义默认 → defaultValue
-        var definition = _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
+        var definition = DefinitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
         if (definition?.DefaultValue is { Length: > 0 } definitionDefault)
             return DeserializeValue(definitionDefault, defaultValue, _logger);
 
@@ -235,7 +235,7 @@ public sealed class FeatureManager : IFeatureManager
     {
         var ordered = GetOrderedProviders();
         bool isAnonymous = user == null || !user.IsAuthenticated;
-        var definition = _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
+        var definition = DefinitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
         var allowed = definition?.AllowedProviders;
 
         foreach (var provider in ordered)
@@ -398,7 +398,7 @@ public sealed class FeatureManager : IFeatureManager
     /// <b>未定义 Feature → 跳过校验</b>（v0.2.0 无定义可写语义向后兼容）。违反 → <see cref="ArgumentException"/>。</summary>
     private void ValidateValueForDefinition(string name, string value)
     {
-        var definition = _definitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
+        var definition = DefinitionRepository.GetAll().FirstOrDefault(d => d.Name == name);
         if (definition == null)
             return;
 

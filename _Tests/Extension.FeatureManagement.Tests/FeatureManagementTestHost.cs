@@ -102,7 +102,7 @@ internal sealed class FeatureManagementTestHost : IDisposable
             new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
 
         var user = new TestDomainUser();
-        services.AddSingleton<IDomainUser>(user);
+        services.AddSingleton<IDomainUser>(sp => { user.Provider = sp; return user; });
 
         // v4.10.8 (ADR61) 迁移：模拟生产 DataService 自动注册——测试容器不走消费方 SG 聚合，
         // 用与生产同构的 DI 兜底工厂（镜像 AddConstructibleDataService：ActivatorUtilities.CreateInstance
@@ -237,6 +237,12 @@ internal sealed class NoopTransactionScope : ITransactionScope
 /// </summary>
 internal sealed class TestDomainUser : IDomainUser
 {
+    private readonly object _gate = new();
+    private readonly Dictionary<Type, object?> _cache = new();
+
+    /// <summary>ServiceProvider（懒加载 Use&lt;T&gt; 解析源——宿主工厂注入，构建后可用）。</summary>
+    public IServiceProvider? Provider { get; set; }
+
     public string SessionKey { get; set; } = "test-session";
 
     public bool IsAuthenticated { get; set; } = false;
@@ -267,10 +273,22 @@ internal sealed class TestDomainUser : IDomainUser
     }
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        var provider = Provider ?? throw new NotSupportedException("Stub: Provider 未注入");
+        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+            return svc;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                return svc2;
+            var resolved = provider.GetRequiredService<TDomainService>();
+            _cache[typeof(TDomainService)] = resolved;
+            return resolved;
+        }
+    }
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        => (Provider ?? throw new NotSupportedException("Stub: Provider 未注入")).GetRequiredService<TService>();
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];

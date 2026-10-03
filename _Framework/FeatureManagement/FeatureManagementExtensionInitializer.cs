@@ -78,8 +78,6 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, GlobalFeatureValueProvider>());
 
         services.TryAddScoped<IFeatureManager>(sp => new FeatureManager(
-            sp.GetRequiredService<IFeatureValueStore>(),
-            sp.GetRequiredService<IFeatureDefinitionRepository>(),
             sp.GetServices<IFeatureValueProvider>(),
             sp.GetRequiredService<FeatureCacheVersionRegistry>(),
             sp.GetRequiredService<IDomainUser>(),

@@ -18,12 +18,16 @@ namespace TKWF.Ext.FeatureManagement;
 public sealed class FeatureChecker<TUserInfo> : IFeatureChecker
     where TUserInfo : class, IUserInfo, new()
 {
-    private readonly IFeatureManager _manager;
+    private readonly IDomainUser _user;
     private readonly ILogger<FeatureChecker<TUserInfo>> _logger;
+    private IFeatureManager? _manager;
 
-    public FeatureChecker(IFeatureManager manager, ILogger<FeatureChecker<TUserInfo>> logger)
+    // ADR88/DI004：IFeatureManager 懒加载经 IDomainUser.Use<T>()
+    private IFeatureManager Manager => _manager ??= _user.Use<IFeatureManager>();
+
+    public FeatureChecker(IDomainUser user, ILogger<FeatureChecker<TUserInfo>> logger)
     {
-        _manager = manager ?? throw new ArgumentNullException(nameof(manager));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -33,6 +37,6 @@ public sealed class FeatureChecker<TUserInfo> : IFeatureChecker
         // ambient 用户解析（对齐 PermissionChecker——经 DomainUserContext 取当前 AOP 用户；
         // cast IDomainUser 而非 DomainUser<TUserInfo>——兼容任意 IDomainUser 实现，测试桩亦可注入）
         IDomainUser? ambient = DomainUserContext.CurrentAopUser as IDomainUser;
-        return await _manager.IsEnabledAsync(featureName, ambient, ct);
+        return await Manager.IsEnabledAsync(featureName, ambient, ct);
     }
 }

@@ -17,30 +17,31 @@ namespace TKWF.Ext.FeatureManagement;
 [GenerateController]
 public partial class FeatureManagementApiService : DomainServiceBase
 {
-    private readonly IFeatureManager _manager;
+    // ADR88/DI004：IFeatureManager 懒加载经基类 IDomainUser.Use<T>()
+    private IFeatureManager? _manager;
+    private IFeatureManager Manager => _manager ??= User.Use<IFeatureManager>();
 
-    public FeatureManagementApiService(IDomainUser user, IFeatureManager manager)
+    public FeatureManagementApiService(IDomainUser user)
         : base(user)
     {
-        _manager = manager ?? throw new ArgumentNullException(nameof(manager));
     }
 
     /// <summary>设置 Feature 值（管理写路径——经 Manager：Global 唯一性 + 缓存失效 + 写异常传播）。</summary>
     public Task SetFeatureValueAsync(string name, string value, string providerName, string providerKey,
         CancellationToken ct = default)
-        => _manager.SetValueAsync(name, value, providerName, providerKey, ct);
+        => Manager.SetValueAsync(name, value, providerName, providerKey, ct);
 
     /// <summary>删除 Feature 值（经 Manager：缓存失效）。</summary>
     public Task DeleteFeatureValueAsync(string name, string providerName, string providerKey,
         CancellationToken ct = default)
-        => _manager.DeleteValueAsync(name, providerName, providerKey, ct);
+        => Manager.DeleteValueAsync(name, providerName, providerKey, ct);
 
     /// <summary>查询 Feature 值列表（管理浏览；按 Provider 层/键可空过滤——读路径，Manager 门面静默降级）。</summary>
     public Task<IReadOnlyList<FeatureValueEntity>> GetFeatureValuesAsync(
         string? providerName = null, string? providerKey = null, CancellationToken ct = default)
-        => _manager.GetFeatureValuesAsync(providerName, providerKey, ct);
+        => Manager.GetFeatureValuesAsync(providerName, providerKey, ct);
 
     /// <summary>全部 Feature 定义（管理展示）。</summary>
     public Task<IReadOnlyList<FeatureDefinition>> GetFeatureDefinitionsAsync(CancellationToken ct = default)
-        => _manager.GetDefinitionsAsync(ct);
+        => Manager.GetDefinitionsAsync(ct);
 }

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
 
@@ -29,27 +30,28 @@ internal sealed class MfaService : IMfaService
     /// <summary>恢复码长度（Oracle P9——熵量级对齐 Google/ABP）。</summary>
     private const int RecoveryCodeLength = 8;
 
-    private readonly MfaSecretEntityDataService _secrets;
-    private readonly MfaChallengeEntityDataService _challenges;
-    private readonly MfaRecoveryCodeEntityDataService _recoveryCodes;
+    private readonly IDomainUser _user;
+    private MfaSecretEntityDataService? _secrets;
+    private MfaChallengeEntityDataService? _challenges;
+    private MfaRecoveryCodeEntityDataService? _recoveryCodes;
     private readonly IEnumerable<IMfaMethod> _methods;
     private readonly IOptions<MfaOptions> _options;
     private readonly ILogger<MfaService> _logger;
+
+    private MfaSecretEntityDataService Secrets => _secrets ??= _user.Use<MfaSecretEntityDataService>();
+    private MfaChallengeEntityDataService Challenges => _challenges ??= _user.Use<MfaChallengeEntityDataService>();
+    private MfaRecoveryCodeEntityDataService RecoveryCodes => _recoveryCodes ??= _user.Use<MfaRecoveryCodeEntityDataService>();
 
     /// <summary>验证尝试频控器（进程级静态——频控须跨请求生效，不随 scope 重建；单实例语义 Oracle C4/Q3）。</summary>
     private static readonly MfaRateLimiter VerifyLimiter = new();
 
     public MfaService(
-        MfaSecretEntityDataService secrets,
-        MfaChallengeEntityDataService challenges,
-        MfaRecoveryCodeEntityDataService recoveryCodes,
+        IDomainUser user,
         IEnumerable<IMfaMethod> methods,
         IOptions<MfaOptions> options,
         ILogger<MfaService> logger)
     {
-        _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
-        _challenges = challenges ?? throw new ArgumentNullException(nameof(challenges));
-        _recoveryCodes = recoveryCodes ?? throw new ArgumentNullException(nameof(recoveryCodes));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _methods = methods ?? throw new ArgumentNullException(nameof(methods));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -63,7 +65,7 @@ internal sealed class MfaService : IMfaService
     /// <inheritdoc />
     public async Task<bool> IsMfaEnabledAsync(string userId, CancellationToken ct = default)
     {
-        var secrets = await _secrets.GetByUserAsync(userId, ct);
+        var secrets = await Secrets.GetByUserAsync(userId, ct);
         return secrets.Any(s => s.IsConfirmed); // 启用 = 任一方法有已激活绑定
     }
 
@@ -73,7 +75,7 @@ internal sealed class MfaService : IMfaService
         var result = new List<MfaMethodInfo>();
         foreach (var method in _methods)
         {
-            var secret = await _secrets.GetActiveSecretAsync(userId, method.Method, ct);
+            var secret = await Secrets.GetActiveSecretAsync(userId, method.Method, ct);
             result.Add(new MfaMethodInfo(method.Method, secret is not null, GetDisplayName(method.Method)));
         }
         return result;
@@ -85,7 +87,7 @@ internal sealed class MfaService : IMfaService
         var m = GetMethod(method);
 
         // 已启用 → 统一响应（Oracle Q6 防绑定状态探测——不抛，消费方可据此跳绑定 UI）
-        if (await _secrets.GetActiveSecretAsync(userId, m.Method, ct) is not null)
+        if (await Secrets.GetActiveSecretAsync(userId, m.Method, ct) is not null)
             return new MfaEnrollResult(m.Method, EnrollToken: "");
 
         var request = await m.EnrollAsync(new MfaUser(userId), context ?? new MfaEnrollContext(), ct);
@@ -117,18 +119,18 @@ internal sealed class MfaService : IMfaService
         var m = GetMethod(method);
 
         // ① 删绑定（含 pending/active 统一物理删除）
-        var secrets = await _secrets.GetByUserAsync(userId, ct);
+        var secrets = await Secrets.GetByUserAsync(userId, ct);
         var secret = secrets.FirstOrDefault(s => s.Method == m.Method);
         if (secret is not null)
-            await _secrets.DeleteAsync(secret.Id, ct);
+            await Secrets.DeleteAsync(secret.Id, ct);
 
         // ② 删该用户该方法未消费挑战（Oracle Q8-2 级联）
-        var challenges = await _challenges.GetActiveByUserMethodAsync(userId, m.Method, ct);
+        var challenges = await Challenges.GetActiveByUserMethodAsync(userId, m.Method, ct);
         foreach (var challenge in challenges)
-            await _challenges.DeleteAsync(challenge.Id, ct);
+            await Challenges.DeleteAsync(challenge.Id, ct);
 
         // ③ 删该用户全部恢复码（Oracle Q8-2 级联——任意方法解绑即清空，防跨方法复用）
-        await _recoveryCodes.DeleteByUserAsync(userId, ct);
+        await RecoveryCodes.DeleteByUserAsync(userId, ct);
     }
 
     // ── 挑战-验证 ──
@@ -139,7 +141,7 @@ internal sealed class MfaService : IMfaService
         var m = GetMethod(method);
 
         // 未启用 → 统一"已发起"（防用户存在性/绑定状态探测；随机假 challengeId 验证必败，Oracle Q6）
-        if (await _secrets.GetActiveSecretAsync(userId, m.Method, ct) is null)
+        if (await Secrets.GetActiveSecretAsync(userId, m.Method, ct) is null)
             return new MfaChallengeResult(Guid.NewGuid().ToString("N"), m.Method);
 
         var request = await m.RequestChallengeAsync(new MfaUser(userId), context, ct);
@@ -183,10 +185,10 @@ internal sealed class MfaService : IMfaService
 
         // 全量替换——删旧（含已消费）插新；明文不落库（仅 CodeHash=SHA256 hex 落库，Oracle C1）
         var now = DateTime.UtcNow;
-        await _recoveryCodes.DeleteByUserAsync(userId, ct);
+        await RecoveryCodes.DeleteByUserAsync(userId, ct);
         foreach (var code in codes)
         {
-            await _recoveryCodes.CreateAsync(new MfaRecoveryCodeEntity
+            await RecoveryCodes.CreateAsync(new MfaRecoveryCodeEntity
             {
                 UserId = userId,
                 CodeHash = Sha256Hex(code),
@@ -213,7 +215,7 @@ internal sealed class MfaService : IMfaService
         }
 
         var codeHash = Sha256Hex(code);
-        var record = await _recoveryCodes.GetByCodeHashAsync(userId, codeHash, ct);
+        var record = await RecoveryCodes.GetByCodeHashAsync(userId, codeHash, ct);
         if (record is null)
         {
             // 统一失败防枚举（码不存在/已消费/无效均 false）
@@ -222,7 +224,7 @@ internal sealed class MfaService : IMfaService
         }
 
         // 原子单次消费（WHERE IsConsumed=false 守卫——并发同码验证恰一成功，Oracle C1；败者 0 行 → 统一 false 防枚举 Q6）
-        var affected = await _recoveryCodes.MarkConsumedIfActiveAsync(record.Id, ct);
+        var affected = await RecoveryCodes.MarkConsumedIfActiveAsync(record.Id, ct);
         if (affected != 1)
         {
             _logger.LogWarning("恢复码并发消费竞态——已由其他请求消费 UserId={UserId}", userId);

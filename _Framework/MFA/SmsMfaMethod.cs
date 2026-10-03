@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
 
@@ -24,22 +25,24 @@ internal sealed class SmsMfaMethod : IMfaMethod
     /// <summary>方法标识（"sms"）。</summary>
     public const string MethodName = "sms";
 
-    private readonly MfaSecretEntityDataService _secrets;
-    private readonly MfaChallengeEntityDataService _challenges;
+    private readonly IDomainUser _user;
+    private MfaSecretEntityDataService? _secrets;
+    private MfaChallengeEntityDataService? _challenges;
     private readonly IOptions<MfaOptions> _options;
     private readonly IServiceProvider _serviceProvider;
+
+    private MfaSecretEntityDataService Secrets => _secrets ??= _user.Use<MfaSecretEntityDataService>();
+    private MfaChallengeEntityDataService Challenges => _challenges ??= _user.Use<MfaChallengeEntityDataService>();
 
     /// <summary>发送频控器（进程级静态——频控须跨请求生效，不随 scope 重建；单实例语义 Oracle C8）。</summary>
     private static readonly MfaRateLimiter SendLimiter = new();
 
     public SmsMfaMethod(
-        MfaSecretEntityDataService secrets,
-        MfaChallengeEntityDataService challenges,
+        IDomainUser user,
         IOptions<MfaOptions> options,
         IServiceProvider serviceProvider)
     {
-        _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
-        _challenges = challenges ?? throw new ArgumentNullException(nameof(challenges));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     }
@@ -71,7 +74,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
             CreateTime = now,
             UpdateTime = now,
         };
-        await _secrets.CreateAsync(entity, ct);
+        await Secrets.CreateAsync(entity, ct);
 
         // 确认绑定码：生成 6 位码 → 落挑战行 → 经 IMfaSmsSender 发送（发送失败清理挑战行 + 异常自然传播——
         // pending 行滞留，消费方可 Disable 后重绑；频控计数已含本次发送）
@@ -83,7 +86,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
     /// <inheritdoc />
     public async Task<MfaVerifyResult> ConfirmEnrollAsync(MfaUser user, string enrollToken, string code, CancellationToken ct)
     {
-        var pending = await _secrets.GetPendingSecretAsync(user.UserId, MethodName, ct);
+        var pending = await Secrets.GetPendingSecretAsync(user.UserId, MethodName, ct);
         if (pending is null)
             return new MfaVerifyResult(false, 0, "待激活绑定不存在（已激活/未发起绑定）");
 
@@ -97,7 +100,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
             return new MfaVerifyResult(false, 0, "EnrollToken 无效或已过期");
 
         // 取最新活动挑战码比对（SHA256 恒定时间——统一失败不区分原因）
-        var challenges = await _challenges.GetActiveByUserMethodAsync(user.UserId, MethodName, ct);
+        var challenges = await Challenges.GetActiveByUserMethodAsync(user.UserId, MethodName, ct);
         var challenge = challenges.FirstOrDefault();
         if (challenge?.CodeHash is null
             || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(Sha256Hex(code)), Encoding.UTF8.GetBytes(challenge.CodeHash)))
@@ -108,10 +111,10 @@ internal sealed class SmsMfaMethod : IMfaMethod
         pending.EnrollTokenHash = null;
         pending.EnrollExpireAt = null;
         pending.UpdateTime = now;
-        await _secrets.UpdateAsync(pending, ct);
+        await Secrets.UpdateAsync(pending, ct);
 
         // 确认码原子单次消费（WHERE IsConsumed=false 守卫——并发 ConfirmEnroll 恰一成功，Oracle C1）
-        var affected = await _challenges.MarkConsumedIfActiveAsync(challenge.Id, DateTime.UtcNow, ct);
+        var affected = await Challenges.MarkConsumedIfActiveAsync(challenge.Id, DateTime.UtcNow, ct);
         if (affected != 1)
             return new MfaVerifyResult(false, 0, "ChallengeAlreadyConsumed");
 
@@ -121,7 +124,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
     /// <inheritdoc />
     public async Task<MfaChallengeRequest?> RequestChallengeAsync(MfaUser user, MfaChallengeContext? context, CancellationToken ct)
     {
-        var active = await _secrets.GetActiveSecretAsync(user.UserId, MethodName, ct);
+        var active = await Secrets.GetActiveSecretAsync(user.UserId, MethodName, ct);
         if (active is null)
             return null; // 未启用——服务层统一"已发起"防枚举（Oracle Q6）
 
@@ -141,7 +144,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
         if (string.IsNullOrWhiteSpace(challengeId) || !long.TryParse(challengeId, out var id))
             return new MfaVerifyResult(false, 0, "挑战句柄非法（服务层统一假句柄验证必败）");
 
-        var challenge = await _challenges.GetActiveByIdAsync(id, ct);
+        var challenge = await Challenges.GetActiveByIdAsync(id, ct);
         if (challenge is null || challenge.UserId != user.UserId || challenge.Method != MethodName)
             return new MfaVerifyResult(false, 0, "挑战不存在/已消费/已过期");
 
@@ -151,7 +154,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
             return new MfaVerifyResult(false, 0, "短信验证码不匹配");
 
         // 成功——原子单次消费（WHERE IsConsumed=false 守卫——并发验证恰一成功，Oracle C1；败者 0 行 → 统一失败）
-        var affected = await _challenges.MarkConsumedIfActiveAsync(challenge.Id, DateTime.UtcNow, ct);
+        var affected = await Challenges.MarkConsumedIfActiveAsync(challenge.Id, DateTime.UtcNow, ct);
         if (affected != 1)
             return new MfaVerifyResult(false, 0, "ChallengeAlreadyConsumed");
         return new MfaVerifyResult(true, 0);
@@ -169,7 +172,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
         var now = DateTime.UtcNow;
 
         // ① TTL 内重发拒绝——用户该方法存在活动（未消费 + 未过期）挑战 → 拒绝重发（对齐方案"沿用挑战 TTL 5min"）
-        var activeChallenges = await _challenges.GetActiveByUserMethodAsync(userId, MethodName, ct);
+        var activeChallenges = await Challenges.GetActiveByUserMethodAsync(userId, MethodName, ct);
         if (activeChallenges.Count > 0)
             throw new InvalidOperationException("短信验证码已发送——请等待当前验证码过期或消费后重试");
 
@@ -192,7 +195,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
             ExpireAt = now.AddSeconds(opt.ChallengeTtlSeconds),
             CreateTime = now,
         };
-        var created = await _challenges.CreateAsync(challenge, ct);
+        var created = await Challenges.CreateAsync(challenge, ct);
 
         // 经 IMfaSmsSender 发送——发送失败清理孤儿挑战行（码未发出，挑战无意义；阻塞重发至 TTL 属体验缺陷，Oracle7 C1）
         try
@@ -207,7 +210,7 @@ internal sealed class SmsMfaMethod : IMfaMethod
         catch
         {
             // 发送失败——清理孤儿挑战行（码未发出，挑战无意义；阻塞重发至 TTL 属体验缺陷，Oracle7 C1）
-            await _challenges.DeleteAsync(created.Id, ct);
+            await Challenges.DeleteAsync(created.Id, ct);
             throw; // 异常自然传播（消费方可感知失败并重试）
         }
         return created;

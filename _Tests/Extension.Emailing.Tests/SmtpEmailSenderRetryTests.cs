@@ -34,13 +34,13 @@ public class SmtpEmailSenderRetryTests
             RetryCount = retryCount,
             RetryBaseDelayMilliseconds = retryBaseDelayMilliseconds
         });
-        // ADR88/DI004：SmtpEmailSender 不再注入 IEmailRecordStore——经 _user.Use<IEmailRecordStore>() 懒加载。
-        // 测试桩注册 FakeEmailRecordStore（接口 key——Use<接口> 经 GetRequiredService 精确匹配）。
+        // ADR88/DI004：SmtpEmailSender 不再注入 IEmailRecordStore——V4.10.53 改内部接线型
+        // （ctor(IServiceProvider)，经 GetRequiredService 懒加载 Store——接口 key 精确匹配）。
         var stub = new StubDomainUser();
         var services = new ServiceCollection();
         services.AddSingleton<IEmailRecordStore>(store);
         stub.ServiceProvider = services.BuildServiceProvider();
-        var sender = new SmtpEmailSender(stub, options, logger);
+        var sender = new SmtpEmailSender(stub.ServiceProvider!, options, logger);
         return (sender, store, logger);
     }
 
@@ -151,6 +151,7 @@ public class SmtpEmailSenderRetryTests
         public IServiceProvider ServiceProvider
         {
             set { lock (_gate) _provider = value; }
+            get { lock (_gate) return _provider!; }
         }
 
         public string SessionKey => "test-session";

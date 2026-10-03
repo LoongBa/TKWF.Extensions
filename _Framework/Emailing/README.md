@@ -1,6 +1,6 @@
 # TKWF.Ext.Emailing 邮件发送扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (邮件发送与记录存储) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0（v4.10.53 领域自治整改：EmailRecordStore 继承 DomainServiceBase + AddConstructibleService；SmtpEmailSender 内部接线型） | **框架**: .NET 10
 
 **核心约束**: SMTP 邮件发送、FreeSql 记录持久化、异常静默处理、SG1 声明式实体
 

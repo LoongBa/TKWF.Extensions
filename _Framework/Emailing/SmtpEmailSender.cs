@@ -3,10 +3,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MailKit.Net.Smtp;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
-using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing
 {
@@ -17,22 +17,28 @@ namespace TKWF.Ext.Emailing
     /// <para>V0.2.0：配置化发送重试（指数退避）——<see cref="EmailingOptions.RetryCount"/> 次额外重试，
     /// 每次失败按 <see cref="EmailingOptions.RetryBaseDelayMilliseconds"/> 指数退避；取消时不再重试，
     /// 最终失败仍异常静默（记录 Failed + ErrorMessage + 保存 + Warning，不抛给调用方）。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90）：**内部接线型**（skill §4.2/§4.8 #7）——<see cref="IEmailSender"/>
+    /// 契约属 Emailing.Abstractions（非 IDomainService，不可修改），消费方经普通 DI 注入本实现；
+    /// <see cref="IEmailRecordStore"/>（AddConstructibleService 守卫门面）经 <see cref="IServiceProvider"/>
+    /// C1 延迟解析（<c>GetRequiredService</c>——消费链在域作用域内调用，守卫工厂经 CurrentAopUser 解析；
+    /// 对齐 FeatureChecker 接线型先例）。旧 ctor(IDomainUser) 在普通 DI 构造时 IDomainUser 永不注册
+    /// 生产必失败（真实故障：发送记录静默丢失）。</para>
     /// </summary>
     internal sealed class SmtpEmailSender : IEmailSender
     {
-        private readonly IDomainUser _user;
+        private readonly IServiceProvider _serviceProvider;
         private IEmailRecordStore? _recordStore;
         private readonly IOptions<EmailingOptions> _options;
         private readonly ILogger<SmtpEmailSender> _logger;
 
-        private IEmailRecordStore RecordStore => _recordStore ??= _user.Use<IEmailRecordStore>();
+        private IEmailRecordStore RecordStore => _recordStore ??= _serviceProvider.GetRequiredService<IEmailRecordStore>();
 
         public SmtpEmailSender(
-            IDomainUser user,
+            IServiceProvider serviceProvider,
             IOptions<EmailingOptions> options,
             ILogger<SmtpEmailSender> logger)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }

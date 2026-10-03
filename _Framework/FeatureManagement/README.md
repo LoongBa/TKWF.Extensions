@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.FeatureManagement` |
-| 版本 | v0.3.0（增量——复杂 ValueType + 外部总线适配 + Store 可见性修复） |
+| 版本 | **V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线）**：Store/Manager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；FeatureChecker 改接线型（ctor `IServiceProvider` + C1 延迟解析）修复真实生产故障；测试宿主走生产路径 |
 | 依赖 | `TKWF.Domain`（含框架 `IFeatureChecker`/`RequireFeature`/`AddFeatureCheck`/`ILocalEventBus`/`IDistributedEventBus` 基座）+ SG1（接口判定收集，v4.10.31 A+ 阶段 3） |
 | 数据 | 表 `FeatureValue`（框架 `SyncTables` 统一建表；`Value` 列 v0.3.0 起无界） |
 
@@ -18,12 +18,12 @@
 FeatureDefinition / FeatureDefinitionContext / IFeatureDefinitionContributor   # 定义层（接口判定编译期收集，v4.10.31 A+ 阶段 3）
 IFeatureDefinitionRepository / InMemoryFeatureDefinitionRepository             # 定义仓库
 FeatureValueEntity（SG1 声明式） → FeatureValueEntityDataService（SG1 骨架）    # 存储层（仅内部，不直通控制器）
-IFeatureValueStore / FeatureValueStore（读静默/写传播）                        # Store（v0.3.0 接口 public）
+IFeatureValueStore / FeatureValueStore（读静默/写传播）                        # Store（v0.3.0 接口 public；V0.4.0 继承 DomainServiceBase + AddConstructibleService）
 IFeatureValueProvider（v0.2.0 扩展点——内置四层 + 消费方自定义插入 ProviderOrder 链）  # Provider 层
 FeatureCacheVersionRegistry（v0.2.0 版本号缓存表——写后全层即时失效；v0.3.0 public）  # 缓存版本
-IFeatureManager / FeatureManager（Provider 链解析 + 版本号缓存 + 管理写路径 + 类型化读写（v0.3.0）+ 变更事件发布） # 门面
+IFeatureManager / FeatureManager（Provider 链解析 + 版本号缓存 + 管理写路径 + 类型化读写（v0.3.0）+ 变更事件发布） # 门面（V0.4.0 继承 DomainServiceBase + AddConstructibleService）
 DistributedFeatureChangedHandler（v0.3.0 跨实例失效——[DomainEventHandler] + IDistributedEventHandler，SG4 自动注册） # 分布式 handler
-FeatureChecker<TUserInfo>（实现框架 IFeatureChecker + ambient 用户解析）       # 检查器
+FeatureChecker<TUserInfo>（实现框架 IFeatureChecker + ambient 用户解析）       # 检查器（V0.4.0 接线型：ctor IServiceProvider + TryAddScoped 普通 DI）
 FeatureManagementApiService（[GenerateController] 管理 API——写路径委托 Manager） # 管理接口
 ```
 
@@ -34,6 +34,10 @@ FeatureManagementApiService（[GenerateController] 管理 API——写路径委�
 - **类型化读写（v0.3.0）**：`GetValueAsync<T>`/`SetValueAsync<T>`——序列化/反序列化映射集中于 `FeatureManager`（bool/数字/DateTime 规范字符串 + 其他类型 JSON）+ 写时校验（对齐定义 `ValueType`，违反 → `ArgumentException`；未定义 Feature 跳过校验向后兼容）。
 - **SG1 收集（C1）**：主框架 V4.9.114 起编译期收集——业务模块实现 `IFeatureDefinitionContributor` + `Define` 声明定义（v4.10.31 A+ 阶段 3 起纯接口判定，不再用 `[FeatureContributor]` 特性）。
 - **用户契约（C2）**：`IFeatureManager` 接收 `IDomainUser`；`FeatureChecker` 解析 ambient 用户（`DomainUserContext.CurrentAopUser as IDomainUser`）。
+- **注册形态（V0.4.0 领域自治根治，ADR90——正确路线三态）**：
+  - **门面（AddConstructibleService）**——`IFeatureValueStore` / `IFeatureManager`（接口 `: IDomainService`）：接口可构造守卫工厂（`CurrentAopUser` 守卫）+ 实现类 throw-factory；实现继承 `DomainServiceBase`（经基类 `User` 取上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败，v0.3.3 同根缺陷）+ `[DiContractIgnore]` 豁免 DI001；消费方统一经 `User.Use<IFeatureValueStore>()` / `User.Use<IFeatureManager>()` 解析。
+  - **接线型（TryAddScoped 普通 DI）**——`IFeatureChecker`（主框架 Core 契约非 IDomainService 不可修改）：框架 `FeatureFilterAttribute` 经 `context.ServiceProvider.GetService<IFeatureChecker>()` 普通 DI 解析；实现 ctor(`IServiceProvider`, ILogger) + C1 延迟解析 `IFeatureManager`（`GetRequiredService`）——修复真实生产故障（旧 ctor(IDomainUser) 在过滤器 GetService 解析时构造失败 → 特性检查静默失效）。
+  - **多 Provider（TryAddEnumerable）**——`IFeatureValueProvider` 内置四层：多实现集合（按实现类型去重），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase（ctor 需 IDomainUser）。⚠️ **框架机制边界（T3 转达候选）**：多实现集合中 DomainServiceBase 派生实现经普通 DI GetServices 构造时 IDomainUser 永不注册 → 生产解析失败（`FeatureManager` 构造注入 `IEnumerable<IFeatureValueProvider>` 触发）——本批保留 + 记录（对齐 Authentication Provider 处理）。
 - **管理 API（C3）**：`FeatureManagementApiService`（`[GenerateController]`）写路径委托 `IFeatureManager`——缓存失效 + Global 唯一性 + 写时校验在门面处理；DataService 仅内部存储（裸 CRUD 禁直通）。
 
 ## 核心能力
@@ -142,7 +146,16 @@ using TKWF.Ext.FeatureManagement;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-三钩子自动接线（含 `AddFeatureCheck` 过滤器）。DI 一律 `TryAddScoped`——消费方可自定义 `IFeatureManager`/`IFeatureValueStore` 实现优先。跨实例失效 handler（`DistributedFeatureChangedHandler`）由消费方 SG4 编译期自动注册（`[DomainEventHandler]`）——零手动接线。
+三钩子自动接线（含 `AddFeatureCheck` 过滤器）。自动注册（V0.4.0 领域自治根治，ADR90——按"正确路线"注册形态）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IFeatureValueStore` | `FeatureValueStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IFeatureValueStore>()` |
+| `IFeatureManager` | `FeatureManager`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IFeatureManager>()` |
+| `IFeatureChecker` | `FeatureChecker<TUserInfo>` | **接线型普通 DI**（TryAddScoped，ctor IServiceProvider + C1 延迟解析 Manager——无 IDomainUser） | 框架 `FeatureFilterAttribute` 经 `GetService` 解析 |
+| `IFeatureValueProvider` ×4 | User/Role/Tenant/Global | **TryAddEnumerable**（多实现集合，边界保留） | `FeatureManager` 构造注入集合 |
+
+跨实例失效 handler（`DistributedFeatureChangedHandler`）由消费方 SG4 编译期自动注册（`[DomainEventHandler]`）——零手动接线。
 
 ## 数据模型
 
@@ -156,6 +169,16 @@ FeatureValue(id BIGINT PK, name VARCHAR(128), value TEXT NULL, provider_name VAR
 
 - 物理删除（不声明 `IsDeleted`，`hasSoftDelete:false`）。
 - 生产建表：框架 `SyncTables` 统一托管（ADR49），**无手工 DDL 前置**（存量库加宽依赖 SyncTables 自动 ALTER，若未自动需 DBA 手动变更——见使用指南 §6）。
+
+## 版本演进
+
+### V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线，2026-10-04）
+
+- **`FeatureValueStore` / `FeatureManager` 继承 `DomainServiceBase`**（经基类 `User` 获取用户上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser / 工厂 lambda `sp.GetRequiredService<IDomainUser>()` 生产解析必失败——v0.3.3 同根缺陷）+ `[DiContractIgnore]` 豁免 DI001；DataService/Store 仍经 `User.Use<T>()` 懒加载（DI004 零豁免）
+- **注册形态改 `AddConstructibleService`**（IFeatureValueStore / IFeatureManager）——接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方统一 `User.Use<IFeatureValueStore>()` / `User.Use<IFeatureManager>()` 解析（AOP 路径设 CurrentAopUser → GetRequiredService）
+- **`FeatureChecker<TUserInfo>` 改接线型**（skill §4.2/§4.8 #7）——`IFeatureChecker` 为主框架 Core 契约（非 IDomainService 不可修改），框架 `FeatureFilterAttribute` 经 `context.ServiceProvider.GetService<IFeatureChecker>()` 普通 DI 解析；ctor 改 `IServiceProvider` + C1 延迟解析 `IFeatureManager`（GetRequiredService）；注册保持 TryAddScoped。**修复真实生产故障**：旧 ctor(IDomainUser)（永不注册 DI）在框架过滤器 GetService 解析时构造失败 → 特性检查静默失效
+- **4 Provider 边界保留**（User/Role/Tenant/Global，TryAddEnumerable 多实现集合）——ctor 需 IDomainUser 经普通 DI GetServices 构造时 IDomainUser 永不注册 → 生产解析失败（**框架机制缺口 T3 转达候选**，本批不改，对齐 Authentication Provider 处理）
+- 测试宿主走生产路径：真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 接线型 GetRequiredService 可解析哨兵 + Initializer 注册形态断言（守卫工厂/throw-factory/域外抛/4 Provider TryAddEnumerable）；**134 用例全绿**（127→134：+5 Initializer 形态断言 +2 Checker 接线型哨兵；禁止 slnx 构建，仅本扩展项目 + 测试项目）
 
 ## 后续演进（v0.4.0+ 候选）
 

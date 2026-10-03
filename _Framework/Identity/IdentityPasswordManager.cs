@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.Hosting;
+using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Account;
 
 namespace TKWF.Ext.Identity;
@@ -20,23 +21,26 @@ namespace TKWF.Ext.Identity;
 /// </summary>
 public sealed class IdentityPasswordManager : IAccountPasswordManager
 {
-    private readonly IUserManager _userManager;
+    private readonly IDomainUser _user;
     private readonly int _iterations;
+    private IUserManager? _userManager;
 
-    public IdentityPasswordManager(IUserManager userManager, IOptions<DomainOptions> options)
+    private IUserManager UserManager => _userManager ??= _user.Use<IUserManager>();
+
+    public IdentityPasswordManager(IDomainUser user, IOptions<DomainOptions> options)
     {
-        _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _iterations = options?.Value.Auth.Pbkdf2Iterations ?? 600000;
     }
 
     /// <summary>用户是否存在（防用户枚举）。</summary>
     public async Task<bool> UserExistsAsync(string userName, CancellationToken ct = default)
-        => await _userManager.FindByNameAsync(userName, ct) is not null;
+        => await UserManager.FindByNameAsync(userName, ct) is not null;
 
     /// <summary>设置用户密码——SecurePassword 语义 clientHash+salt 组装为 PasswordHasher 格式直存。</summary>
     public async Task<bool> SetPasswordAsync(string userName, string newClientHash, string salt, CancellationToken ct = default)
     {
-        var user = await _userManager.FindByNameAsync(userName, ct);
+        var user = await UserManager.FindByNameAsync(userName, ct);
         if (user is null) return false;
         try
         {
@@ -45,7 +49,7 @@ public sealed class IdentityPasswordManager : IAccountPasswordManager
             if (hashBytes.Length != 32) return false;      // 组装前提：客户端 PBKDF2 keysize = 32 bytes（PasswordHasher.KeySize）
             user.PasswordHash = $"{_iterations}.{Convert.ToBase64String(saltBytes)}.{Convert.ToBase64String(hashBytes)}";
             user.UpdateTime = DateTimeOffset.Now;
-            await _userManager.UpdateUserAsync(user, ct);
+            await UserManager.UpdateUserAsync(user, ct);
             return true;
         }
         catch (FormatException) { return false; }              // hex 解析失败（非 hex 字符/奇数长度）

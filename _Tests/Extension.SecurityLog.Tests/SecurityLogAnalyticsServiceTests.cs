@@ -216,8 +216,12 @@ public class SecurityLogAnalyticsServiceTests
         // Dispose 后操作 → 异常静默（Warning + 空结果/0，不抛异常、不阻断消费方）
         var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var logger = new FakeLogger<SecurityLogAnalyticsService>();
+        var stub = new StubDomainUser();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton(SecurityLogTestHost.CreateDataService(fsql, stub));
+        stub.ServiceProvider = services.BuildServiceProvider();
         var analytics = new SecurityLogAnalyticsService(
-            SecurityLogTestHost.CreateDataService(fsql),
+            stub,
             new Microsoft.Extensions.Options.OptionsWrapper<SecurityLoggingOptions>(new SecurityLoggingOptions()),
             logger);
 

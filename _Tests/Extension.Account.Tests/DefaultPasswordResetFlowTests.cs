@@ -28,11 +28,14 @@ public class DefaultPasswordResetFlowTests
         var services = new ServiceCollection();
         if (passwordManager != null)
             services.AddSingleton(passwordManager);
+        // ADR88/DI004：Flow 构造不再注入 IPasswordResetStore——经 IDomainUser.Use<IPasswordResetStore>() 懒加载
+        services.AddSingleton<IPasswordResetStore>(AccountTestHost.CreatePasswordResetStore(fsql));
         var sp = services.BuildServiceProvider();
 
-        var store = AccountTestHost.CreatePasswordResetStore(fsql);
+        var user = new StubDomainUser();
+        user.ServiceProvider = sp;
         return new DefaultPasswordResetFlow(
-            store,
+            user,
             sp,
             Options.Create(new AccountOptions()),
             NullLogger<DefaultPasswordResetFlow>.Instance);

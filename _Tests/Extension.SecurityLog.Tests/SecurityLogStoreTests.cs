@@ -89,8 +89,11 @@ public class SecurityLogStoreTests
         // Dispose 后写入 → 落库失败；Store 异常静默（不阻断认证流程）
         var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var logger = new FakeLogger<SecurityLogStore>();
-        var store = new SecurityLogStore(
-            SecurityLogTestHost.CreateDataService(fsql), logger);
+        var stub = new StubDomainUser();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton(SecurityLogTestHost.CreateDataService(fsql, stub));
+        stub.ServiceProvider = services.BuildServiceProvider();
+        var store = new SecurityLogStore(stub, logger);
 
         fsql.Dispose();
 
@@ -135,7 +138,7 @@ public class SecurityLogStoreTests
     }
 
     [Fact]
-    public void Constructor_NullDataService_Throws()
+    public void Constructor_NullUser_Throws()
     {
         var logger = new FakeLogger<SecurityLogStore>();
         Assert.Throws<ArgumentNullException>(() => new SecurityLogStore(null!, logger));
@@ -146,6 +149,6 @@ public class SecurityLogStoreTests
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         Assert.Throws<ArgumentNullException>(
-            () => new SecurityLogStore(SecurityLogTestHost.CreateDataService(fsql), null!));
+            () => new SecurityLogStore(new StubDomainUser(), null!));
     }
 }

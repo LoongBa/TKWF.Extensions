@@ -112,7 +112,12 @@ public class IdentityExtensionInitializerTests
         // v4.10.8 (ADR61) 迁移：DataService 注册改为测试版可构造工厂（镜像生产 AddConstructibleDataService）
         AddTestConstructibleDataService<RoleEntityDataService>(services);
         AddTestConstructibleDataService<UserRoleEntityDataService>(services);
-        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
+        services.AddScoped<IDomainUser>(sp =>
+        {
+            var u = new StubDomainUser();
+            u.ServiceProvider = sp;
+            return u;
+        });
         services.TryAddScoped<IRoleStore, RoleStore>();
         var sp = services.BuildServiceProvider();
 

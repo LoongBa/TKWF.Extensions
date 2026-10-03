@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.AuthController;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
@@ -11,19 +12,24 @@ namespace TKWF.Ext.Account
     /// 账户锁定策略默认实现——<see cref="IAccountLockoutPolicy"/>（主框架 V4.9.45 扩展点）。
     /// <para>基于 <see cref="IAccountLockoutStore"/>（FreeSql）持久化失败计数与锁定截止时间；
     /// 框架 AuthController<typeparamref name="TUserInfo"/>.LoginByContext 已注册时自动调用。</para>
+    /// <para>ADR88/DI004（A 批整改）：<see cref="IAccountLockoutStore"/> 不再构造注入——经
+    /// <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class FreeSqlAccountLockoutPolicy : IAccountLockoutPolicy
     {
-        private readonly IAccountLockoutStore _store;
+        private readonly IDomainUser _user;
         private readonly AccountOptions _options;
         private readonly ILogger<FreeSqlAccountLockoutPolicy> _logger;
 
+        private IAccountLockoutStore? _store;
+        private IAccountLockoutStore Store => _store ??= _user.Use<IAccountLockoutStore>();
+
         public FreeSqlAccountLockoutPolicy(
-            IAccountLockoutStore store,
+            IDomainUser user,
             IOptions<AccountOptions> options,
             ILogger<FreeSqlAccountLockoutPolicy> logger)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? new AccountOptions();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -37,7 +43,7 @@ namespace TKWF.Ext.Account
         {
             try
             {
-                var record = await _store.GetAsync(userName, ct);
+                var record = await Store.GetAsync(userName, ct);
                 return record?.LockoutEnd is { } end && end > DateTime.Now;
             }
             catch (Exception ex)
@@ -52,7 +58,7 @@ namespace TKWF.Ext.Account
         {
             try
             {
-                var record = await _store.GetAsync(userName, ct)
+                var record = await Store.GetAsync(userName, ct)
                     ?? new AccountLockoutEntity { UserName = userName };
 
                 record.FailedCount = record.FailedCount + 1;
@@ -65,7 +71,7 @@ namespace TKWF.Ext.Account
                         userName, record.FailedCount, record.LockoutEnd);
                 }
 
-                await _store.SaveAsync(record, ct);
+                await Store.SaveAsync(record, ct);
             }
             catch (Exception ex)
             {
@@ -78,7 +84,7 @@ namespace TKWF.Ext.Account
         {
             try
             {
-                await _store.DeleteAsync(userName, ct);
+                await Store.DeleteAsync(userName, ct);
             }
             catch (Exception ex)
             {
@@ -91,7 +97,7 @@ namespace TKWF.Ext.Account
         {
             try
             {
-                await _store.DeleteAsync(userName, ct);
+                await Store.DeleteAsync(userName, ct);
             }
             catch (Exception ex)
             {

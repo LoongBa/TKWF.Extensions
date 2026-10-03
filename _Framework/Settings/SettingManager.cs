@@ -14,6 +14,8 @@ namespace TKWF.Ext.Settings
     /// 设置管理器实现——分层读写（User → Tenant → Global → 默认值）+ 内存缓存。
     /// <para>V0.2.0：完整分层（User → Tenant → Global → 默认值逐层回退）+ IMemoryCache 读缓存。
     /// 匿名用户（IsAuthenticated == false）跳过 User/Tenant 层，直接查 Global。</para>
+    /// <para>ADR88/DI004（A 批整改）：<see cref="ISettingStore"/> 不再构造注入——经
+    /// <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析（IDomainUser 字段沿用既有注入）。</para>
     /// </summary>
     internal sealed class SettingManager : ISettingManager
     {
@@ -23,20 +25,20 @@ namespace TKWF.Ext.Settings
         private const string CacheKeyPrefix = "Setting:";
         private const string NotFoundSentinel = "\x02NOTFOUND\x02";
 
-        private readonly ISettingStore _store;
         private readonly IDomainUser _user;
         private readonly SettingsOptions _options;
         private readonly IMemoryCache _cache;
         private readonly ILogger<SettingManager> _logger;
 
+        private ISettingStore? _store;
+        private ISettingStore Store => _store ??= _user.Use<ISettingStore>();
+
         public SettingManager(
-            ISettingStore store,
             IDomainUser user,
             IOptions<SettingsOptions> options,
             IMemoryCache cache,
             ILogger<SettingManager> logger)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
             _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? new SettingsOptions();
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
@@ -107,7 +109,7 @@ namespace TKWF.Ext.Settings
                 providerKey = null;
             }
 
-            await _store.SetAsync(name, value, providerName, providerKey, description: null, ct);
+            await Store.SetAsync(name, value, providerName, providerKey, description: null, ct);
             InvalidateCacheForName(name);
         }
 
@@ -134,7 +136,7 @@ namespace TKWF.Ext.Settings
                 return (true, cached!);
             }
 
-            var entity = await _store.GetAsync(name, providerName, providerKey, ct);
+            var entity = await Store.GetAsync(name, providerName, providerKey, ct);
 
             var cacheOptions = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(TimeSpan.FromSeconds(_options.CacheExpirationSeconds));
@@ -161,7 +163,7 @@ namespace TKWF.Ext.Settings
                 return cached == NotFoundSentinel ? defaultValue : cached!;
             }
 
-            var entity = await _store.GetAsync(name, GlobalProvider, providerKey: null, ct);
+            var entity = await Store.GetAsync(name, GlobalProvider, providerKey: null, ct);
 
             var result = entity?.Value;
 

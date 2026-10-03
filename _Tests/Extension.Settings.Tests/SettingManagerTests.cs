@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
@@ -25,31 +26,37 @@ public class SettingManagerTests
             .Build();
     }
 
-    private static SettingEntityDataService CreateDataService(IFreeSql fsql)
+    private static SettingEntityDataService CreateDataService(IFreeSql fsql, IDomainUser? user = null)
     {
         var uowManager = new UnitOfWorkManager(fsql);
         var dac = new FreeSqlEntityDAC<SettingEntity>(uowManager);
-        return new SettingEntityDataService(new StubDomainUser(), dac);
+        return new SettingEntityDataService(user ?? new StubDomainUser(), dac);
     }
 
     private static SettingManager CreateManager(
         ISettingStore? store = null,
-        IDomainUser? user = null,
+        StubDomainUser? user = null,
         string provider = "Global",
         IMemoryCache? cache = null,
         int cacheExpirationSeconds = 300)
     {
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<SettingEntity>();
-        store ??= new SettingStore(CreateDataService(fsql), new FakeLogger<SettingStore>());
         user ??= new StubDomainUser();
+        // ADR88/DI004：ISettingStore 不再构造注入——经 user.Use<ISettingStore>() 懒加载。
+        // 默认 store 依赖 SettingEntityDataService（同容器注册）；自定义 store 直接注册接口。
+        store ??= new SettingStore(user, new FakeLogger<SettingStore>());
+        var services = new ServiceCollection();
+        services.AddSingleton(CreateDataService(fsql, user));
+        services.AddSingleton<ISettingStore>(store);
+        user.ServiceProvider = services.BuildServiceProvider();
         var options = Options.Create(new SettingsOptions
         {
             DefaultSettingValueProvider = provider,
             CacheExpirationSeconds = cacheExpirationSeconds
         });
         cache ??= new MemoryCache(new MemoryCacheOptions());
-        return new SettingManager(store, user, options, cache, new FakeLogger<SettingManager>());
+        return new SettingManager(user, options, cache, new FakeLogger<SettingManager>());
     }
 
     // ── V0.1.0 原有测试（保持向后兼容） ──
@@ -482,6 +489,9 @@ public class SettingManagerTests
         private readonly string? _userId;
         private readonly long? _tenantId;
         private readonly bool _isAuthenticated;
+        private IServiceProvider? _provider;
+        private readonly object _gate = new();
+        private readonly Dictionary<Type, object?> _cache = new();
 
         public StubDomainUser(
             string? userId = "test-user",
@@ -491,6 +501,12 @@ public class SettingManagerTests
             _userId = userId;
             _tenantId = tenantId;
             _isAuthenticated = isAuthenticated;
+        }
+
+        /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
+        public IServiceProvider ServiceProvider
+        {
+            set { lock (_gate) _provider = value; }
         }
 
         public string SessionKey => "test-session";
@@ -503,9 +519,26 @@ public class SettingManagerTests
         public string? UserName => "test";
         public bool IsInRole(string role) => false;
         public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-            => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+        {
+            IServiceProvider provider;
+            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+            if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+                return svc;
+            lock (_gate)
+            {
+                if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                    return svc2;
+                var resolved = provider.GetRequiredService<TDomainService>();
+                _cache[typeof(TDomainService)] = resolved;
+                return resolved;
+            }
+        }
         public TService GetService<TService>() where TService : notnull
-            => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+        {
+            IServiceProvider provider;
+            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
+            return provider.GetRequiredService<TService>();
+        }
         public TService GetOptionalService<TService>() where TService : class => null!;
         public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
     }

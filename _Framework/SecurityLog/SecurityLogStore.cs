@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.SecurityLog
 {
@@ -11,15 +12,19 @@ namespace TKWF.Ext.SecurityLog
     /// <para><b>只增不改（Oracle C2）</b>：本实现仅调用 <c>EntityCreateAsync</c>（追加写），
     /// 无任何 Update/Delete 路径——安全日志不可篡改语义。</para>
     /// <para>异常静默处理：落库失败时记录 Warning 日志，不抛出异常（审计不阻断认证流程）。</para>
+    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class SecurityLogStore : ISecurityLogStore
     {
-        private readonly SecurityLogEntityDataService _dataService;
+        private readonly IDomainUser _user;
         private readonly ILogger<SecurityLogStore> _logger;
 
-        public SecurityLogStore(SecurityLogEntityDataService dataService, ILogger<SecurityLogStore> logger)
+        private SecurityLogEntityDataService? _dataService;
+        private SecurityLogEntityDataService DataService => _dataService ??= _user.Use<SecurityLogEntityDataService>();
+
+        public SecurityLogStore(IDomainUser user, ILogger<SecurityLogStore> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -31,7 +36,7 @@ namespace TKWF.Ext.SecurityLog
             try
             {
                 var entity = MapToEntity(entry);
-                await _dataService.EntityCreateAsync(entity, ct);
+                await DataService.EntityCreateAsync(entity, ct);
             }
             catch (Exception ex)
             {

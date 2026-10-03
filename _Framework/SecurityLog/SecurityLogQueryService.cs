@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.SecurityLog
 {
@@ -12,18 +13,22 @@ namespace TKWF.Ext.SecurityLog
     /// 安全日志查询服务实现（internal sealed）——经 <see cref="SecurityLogEntityDataService"/>（SG1 DataService）委托查询。
     /// <para>异常静默处理：查询失败时记录 Warning 日志并返回空结果（不抛出异常，不阻塞消费方）。</para>
     /// <para>数据访问红线合规（2026-09-07）：不直接注入 IFreeSql / IEntityDAC，动态 Where 用 Expression API 拼 predicate。</para>
+    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class SecurityLogQueryService : ISecurityLogQueryService
     {
         private const int DefaultTake = 50;
         private const int MaxTake = 200;
 
-        private readonly SecurityLogEntityDataService _dataService;
+        private readonly IDomainUser _user;
         private readonly ILogger<SecurityLogQueryService> _logger;
 
-        public SecurityLogQueryService(SecurityLogEntityDataService dataService, ILogger<SecurityLogQueryService> logger)
+        private SecurityLogEntityDataService? _dataService;
+        private SecurityLogEntityDataService DataService => _dataService ??= _user.Use<SecurityLogEntityDataService>();
+
+        public SecurityLogQueryService(IDomainUser user, ILogger<SecurityLogQueryService> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -38,8 +43,8 @@ namespace TKWF.Ext.SecurityLog
                 var predicate = BuildPredicate(input);
 
                 // DataService 转发方法——Count + List 并行避免重复构建 IQueryable
-                var countTask = _dataService.CountAsync(predicate, ct);
-                var listTask = _dataService.EntitySelectAsync(
+                var countTask = DataService.CountAsync(predicate, ct);
+                var listTask = DataService.EntitySelectAsync(
                     predicate, skip, take,
                     q => q.OrderByDescending(e => e.CreateTime).ThenByDescending(e => e.Id),  // 时间倒序 + Id 决胜（同时间戳确定性）
                     ct);
@@ -64,7 +69,7 @@ namespace TKWF.Ext.SecurityLog
         {
             try
             {
-                var entity = await _dataService.EntityGetAsync(e => e.Id == id, ct);
+                var entity = await DataService.EntityGetAsync(e => e.Id == id, ct);
                 return entity == null ? null : MapToDetailDto(entity);
             }
             catch (Exception ex)
@@ -82,7 +87,7 @@ namespace TKWF.Ext.SecurityLog
             try
             {
                 var predicate = BuildPredicate(input);
-                return await _dataService.CountAsync(predicate, ct);
+                return await DataService.CountAsync(predicate, ct);
             }
             catch (Exception ex)
             {

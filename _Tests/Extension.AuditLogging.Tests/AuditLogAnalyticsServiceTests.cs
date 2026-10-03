@@ -302,8 +302,12 @@ public class AuditLogAnalyticsServiceTests
         // Dispose 后操作 → 异常静默（Warning + 空结果/0，不抛异常、不阻断消费方）
         var fsql = CreateInMemoryFreeSql();
         var logger = new FakeLogger<AuditLogAnalyticsService>();
+        var stub = new StubDomainUser();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton(AuditLoggingTestHost.CreateDataService(fsql, stub));
+        stub.ServiceProvider = services.BuildServiceProvider();
         var analytics = new AuditLogAnalyticsService(
-            AuditLoggingTestHost.CreateDataService(fsql),
+            stub,
             new OptionsWrapper<AuditLoggingOptions>(new AuditLoggingOptions()),
             logger);
 

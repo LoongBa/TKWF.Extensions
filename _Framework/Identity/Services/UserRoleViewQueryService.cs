@@ -19,9 +19,10 @@ namespace TKWF.Ext.Identity;
 /// 不信任客户端传参（防 IDOR 水平越权）；管理员全量查询另设 <c>[RequirePermission]</c> 守卫端点（v0.1.0 不做，留待管理需求）。</para>
 /// <para>注册：消费方 SG1b 自动注册（MetaType.Service → AddService，经 <c>User.Use&lt;T&gt;()</c> AOP 解析）——
 /// 对齐 <see cref="IdentityAuthService"/> 先例（V0.3.0），Initializer 不补 TryAddScoped。</para>
+/// <para>ADR88/DI004（A 批整改）：<see cref="UserRoleViewDataService"/> 不再构造注入——经基类 <c>User.Use&lt;T&gt;()</c> 懒加载解析。</para>
 /// </summary>
 [GenerateController]
-public partial class UserRoleViewQueryService(IDomainUser user, UserRoleViewDataService viewDataService)
+public partial class UserRoleViewQueryService(IDomainUser user)
     : DomainServiceBase(user)
 {
     /// <summary>取当前用户角色视图（VEntity DTO 一等公民——含 DisplayName/IsSystemRole 完整字段）。
@@ -30,7 +31,7 @@ public partial class UserRoleViewQueryService(IDomainUser user, UserRoleViewData
     public async Task<List<UserRoleViewDto>> GetMyRolesAsync(CancellationToken ct = default)
     {
         var userId = ResolveCurrentUserId();
-        var views = await viewDataService.GetRolesByUserIdAsync(userId, ct);
+        var views = await User.Use<UserRoleViewDataService>().GetRolesByUserIdAsync(userId, ct);
         return views.Select(UserRoleViewDto.FromEntity).ToList();
     }
 

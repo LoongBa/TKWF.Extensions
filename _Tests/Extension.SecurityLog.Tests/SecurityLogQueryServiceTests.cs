@@ -230,7 +230,11 @@ public class SecurityLogQueryServiceTests
         // Dispose 后查询 → 异常静默（Warning + 空结果，不阻断消费方）
         var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var logger = new FakeLogger<SecurityLogQueryService>();
-        var query = new SecurityLogQueryService(SecurityLogTestHost.CreateDataService(fsql), logger);
+        var stub = new StubDomainUser();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton(SecurityLogTestHost.CreateDataService(fsql, stub));
+        stub.ServiceProvider = services.BuildServiceProvider();
+        var query = new SecurityLogQueryService(stub, logger);
 
         fsql.Dispose();
 

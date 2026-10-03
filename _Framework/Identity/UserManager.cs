@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.Cryptography;
 
 namespace TKWF.Ext.Identity
@@ -12,29 +13,34 @@ namespace TKWF.Ext.Identity
     /// <summary>
     /// 用户管理实现——组合 <see cref="IUserStore"/>（用户）+ <see cref="IRoleStore"/>（角色）。
     /// <para>密码用主框架 <see cref="PasswordHasher"/> 散列/校验（PBKDF2，不引第三方库）；异常静默处理。</para>
+    /// <para>ADR88/DI004（A 批整改）：IUserStore/IRoleStore 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class UserManager : IUserManager
     {
-        private readonly IUserStore _userStore;
-        private readonly IRoleStore _roleStore;
+        private readonly IDomainUser _user;
         private readonly IdentityOptions _options;
         private readonly ILogger<UserManager> _logger;
 
-        public UserManager(IUserStore userStore, IRoleStore roleStore, IOptions<IdentityOptions> options, ILogger<UserManager> logger)
+        private IUserStore? _userStore;
+        private IRoleStore? _roleStore;
+
+        private IUserStore UserStore => _userStore ??= _user.Use<IUserStore>();
+        private IRoleStore RoleStore => _roleStore ??= _user.Use<IRoleStore>();
+
+        public UserManager(IDomainUser user, IOptions<IdentityOptions> options, ILogger<UserManager> logger)
         {
-            _userStore = userStore ?? throw new ArgumentNullException(nameof(userStore));
-            _roleStore = roleStore ?? throw new ArgumentNullException(nameof(roleStore));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? new IdentityOptions();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<UserEntity?> GetByIdAsync(long id, CancellationToken ct = default)
-            => await _userStore.GetByIdAsync(id, ct);
+            => await UserStore.GetByIdAsync(id, ct);
 
         public async Task<UserEntity?> FindByNameAsync(string userName, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(userName)) return null;
-            return await _userStore.GetByUserNameAsync(NormalizeUserName(userName), ct);
+            return await UserStore.GetByUserNameAsync(NormalizeUserName(userName), ct);
         }
 
         public async Task<UserEntity?> CreateUserAsync(string userName, string password, string displayName, CancellationToken ct = default)
@@ -56,7 +62,7 @@ namespace TKWF.Ext.Identity
                     PasswordHash = PasswordHasher.HashPassword(password),
                     IsActive = true
                 };
-                await _userStore.CreateAsync(user, ct);
+                await UserStore.CreateAsync(user, ct);
                 return user.Id > 0 ? user : null;
             }
             catch (Exception ex)
@@ -67,10 +73,10 @@ namespace TKWF.Ext.Identity
         }
 
         public async Task UpdateUserAsync(UserEntity user, CancellationToken ct = default)
-            => await _userStore.UpdateAsync(user, ct);
+            => await UserStore.UpdateAsync(user, ct);
 
         public async Task DeleteUserAsync(long id, CancellationToken ct = default)
-            => await _userStore.DeleteAsync(id, ct);
+            => await UserStore.DeleteAsync(id, ct);
 
         public async Task ChangePasswordAsync(long userId, string newPassword, CancellationToken ct = default)
         {
@@ -80,14 +86,14 @@ namespace TKWF.Ext.Identity
                 return;
             }
 
-            var user = await _userStore.GetByIdAsync(userId, ct);
+            var user = await UserStore.GetByIdAsync(userId, ct);
             if (user == null) return;
 
             try
             {
                 user.PasswordHash = PasswordHasher.HashPassword(newPassword);
                 user.UpdateTime = DateTimeOffset.Now;
-                await _userStore.UpdateAsync(user, ct);
+                await UserStore.UpdateAsync(user, ct);
             }
             catch (Exception ex)
             {
@@ -111,7 +117,7 @@ namespace TKWF.Ext.Identity
         }
 
         public async Task<IReadOnlyList<RoleEntity>> GetUserRolesAsync(long userId, CancellationToken ct = default)
-            => await _userStore.GetRolesAsync(userId, ct);
+            => await UserStore.GetRolesAsync(userId, ct);
 
         public async Task AssignRolesAsync(long userId, IEnumerable<long> roleIds, CancellationToken ct = default)
         {
@@ -124,15 +130,15 @@ namespace TKWF.Ext.Identity
                 // 先分配目标角色（幂等）——中途失败时旧角色仍保留，避免角色丢失（V0.1.1 原子性修复）
                 foreach (var roleId in desired)
                 {
-                    await _userStore.AssignRoleAsync(userId, roleId, ct);
+                    await UserStore.AssignRoleAsync(userId, roleId, ct);
                 }
 
                 // 再清理不在目标集的旧角色
-                var existing = await _userStore.GetRolesAsync(userId, ct);
+                var existing = await UserStore.GetRolesAsync(userId, ct);
                 foreach (var role in existing)
                 {
                     if (!desired.Contains(role.Id))
-                        await _userStore.RemoveRoleAsync(userId, role.Id, ct);
+                        await UserStore.RemoveRoleAsync(userId, role.Id, ct);
                 }
             }
             catch (Exception ex)
@@ -142,7 +148,7 @@ namespace TKWF.Ext.Identity
         }
 
         public async Task RemoveRoleAsync(long userId, long roleId, CancellationToken ct = default)
-            => await _userStore.RemoveRoleAsync(userId, roleId, ct);
+            => await UserStore.RemoveRoleAsync(userId, roleId, ct);
 
         public async Task<RoleEntity?> CreateRoleAsync(string name, string displayName, bool isSystemRole = false, CancellationToken ct = default)
         {
@@ -156,7 +162,7 @@ namespace TKWF.Ext.Identity
                     DisplayName = string.IsNullOrWhiteSpace(displayName) ? name.Trim() : displayName,
                     IsSystemRole = isSystemRole
                 };
-                await _roleStore.CreateAsync(role, ct);
+                await RoleStore.CreateAsync(role, ct);
                 return role.Id > 0 ? role : null;
             }
             catch (Exception ex)
@@ -167,7 +173,7 @@ namespace TKWF.Ext.Identity
         }
 
         public async Task<bool> DeleteRoleAsync(long id, CancellationToken ct = default)
-            => await _roleStore.DeleteAsync(id, ct);
+            => await RoleStore.DeleteAsync(id, ct);
 
         /// <summary>用户名规范化（大写，供大小写无关查询）。</summary>
         private static string NormalizeUserName(string userName) => userName.Trim().ToUpperInvariant();

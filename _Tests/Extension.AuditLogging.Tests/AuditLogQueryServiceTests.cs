@@ -29,10 +29,13 @@ public class AuditLogQueryServiceTests
     {
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var dataService = AuditLoggingTestHost.CreateDataService(fsql);
+        var stub = new StubDomainUser();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton(AuditLoggingTestHost.CreateDataService(fsql, stub));
+        stub.ServiceProvider = services.BuildServiceProvider();
         var logger = new FakeLogger<AuditLogQueryService>();
-        var service = new AuditLogQueryService(dataService, logger);
-        return (service, fsql, dataService);
+        var service = new AuditLogQueryService(stub, logger);
+        return (service, fsql, stub.Use<AuditLogEntityDataService>());
     }
 
     /// <summary>插入测试数据并返回。</summary>
@@ -535,7 +538,7 @@ public class AuditLogQueryServiceTests
     // ── 构造器参数校验 ──
 
     [Fact]
-    public void Constructor_NullFreeSql_Throws()
+    public void Constructor_NullUser_Throws()
     {
         var logger = new FakeLogger<AuditLogQueryService>();
         Assert.Throws<ArgumentNullException>(() => new AuditLogQueryService(null!, logger));
@@ -546,9 +549,7 @@ public class AuditLogQueryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var dac = new FreeSqlEntityDAC<AuditLogEntity>(new UnitOfWorkManager(fsql));
-        var dataService = new AuditLogEntityDataService(new StubDomainUser(), dac);
-        Assert.Throws<ArgumentNullException>(() => new AuditLogQueryService(dataService, null!));
+        Assert.Throws<ArgumentNullException>(() => new AuditLogQueryService(new StubDomainUser(), null!));
     }
 
     // ── null 输入校验 ──

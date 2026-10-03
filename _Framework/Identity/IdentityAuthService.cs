@@ -20,11 +20,8 @@ namespace TKWF.Ext.Identity;
 [GenerateController]
 public partial class IdentityAuthService : DomainServiceBase
 {
-    private readonly IUserManager _userManager;
-
-    public IdentityAuthService(IDomainUser user, IUserManager userManager) : base(user)
+    public IdentityAuthService(IDomainUser user) : base(user)
     {
-        _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
     }
 
     /// <summary>明文注册（服务端 PasswordHasher 散列）——用户名已存在或密码不满足策略返回 false。</summary>
@@ -37,10 +34,10 @@ public partial class IdentityAuthService : DomainServiceBase
             return new RegisterResult(false, "用户名或密码不能为空");
 
         // 重名预检（CreateUserAsync 不检查重名——UserStore 静默插入）
-        if (await _userManager.FindByNameAsync(userName, ct) is not null)
+        if (await User.Use<IUserManager>().FindByNameAsync(userName, ct) is not null)
             return new RegisterResult(false, "用户名已存在");
 
-        var created = await _userManager.CreateUserAsync(userName, password, displayName ?? userName, ct);
+        var created = await User.Use<IUserManager>().CreateUserAsync(userName, password, displayName ?? userName, ct);
         return created is null
             ? new RegisterResult(false, "密码不满足策略")
             : new RegisterResult(true);
@@ -53,9 +50,9 @@ public partial class IdentityAuthService : DomainServiceBase
     [AllowAnonymousFlag]
     public async Task<LoginPayload?> LoginAsync(string userName, string password, CancellationToken ct = default)
     {
-        var idUser = await _userManager.VerifyCredentialsAsync(userName, password, ct);
+        var idUser = await User.Use<IUserManager>().VerifyCredentialsAsync(userName, password, ct);
         if (idUser is null) return null;                     // 凭据无效（用户不存在/密码错/禁用）
-        var roles = await _userManager.GetUserRolesAsync(idUser.Id, ct);
+        var roles = await User.Use<IUserManager>().GetUserRolesAsync(idUser.Id, ct);
         return new LoginPayload(true, idUser.UserName, idUser.DisplayName, SessionKey: null,
             Extensions: roles.Select(r => new ExtensionEntry("Role", r.Name)).ToList());
     }

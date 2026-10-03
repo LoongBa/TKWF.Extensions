@@ -45,7 +45,12 @@ public class LoginHistoryServiceTests
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddSingleton(fsql);
-        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
+        services.AddScoped<IDomainUser>(sp =>
+        {
+            var u = new StubDomainUser();
+            u.ServiceProvider = sp;
+            return u;
+        });
         services.AddScoped<IEntityDAC<SecurityLogEntity>>(_ =>
             new FreeSqlEntityDAC<SecurityLogEntity>(new UnitOfWorkManager(fsql)));
 

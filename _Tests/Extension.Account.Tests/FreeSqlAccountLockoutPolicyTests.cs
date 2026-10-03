@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.AuthController;
@@ -24,9 +25,14 @@ public class FreeSqlAccountLockoutPolicyTests
 
     private static FreeSqlAccountLockoutPolicy CreatePolicy(IFreeSql fsql, AccountOptions? options = null)
     {
-        var store = AccountTestHost.CreateLockoutStore(fsql);
+        // ADR88/DI004：Policy 构造不再注入 IAccountLockoutStore——经 IDomainUser.Use<IAccountLockoutStore>() 懒加载
+        var services = new ServiceCollection();
+        services.AddSingleton<IAccountLockoutStore>(AccountTestHost.CreateLockoutStore(fsql));
+        var sp = services.BuildServiceProvider();
+        var user = new StubDomainUser();
+        user.ServiceProvider = sp;
         return new FreeSqlAccountLockoutPolicy(
-            store,
+            user,
             Options.Create(options ?? new AccountOptions()),
             NullLogger<FreeSqlAccountLockoutPolicy>.Instance);
     }

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
@@ -9,15 +10,19 @@ namespace TKWF.Ext.Account
     /// 密码重置码存储实现——经 <see cref="PasswordResetCodeEntityDataService"/>（SG1/xCodeGen 生成的 DataService）
     /// 委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
+    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class PasswordResetStore : IPasswordResetStore
     {
-        private readonly PasswordResetCodeEntityDataService _dataService;
+        private readonly IDomainUser _user;
         private readonly ILogger<PasswordResetStore> _logger;
 
-        public PasswordResetStore(PasswordResetCodeEntityDataService dataService, ILogger<PasswordResetStore> logger)
+        private PasswordResetCodeEntityDataService? _dataService;
+        private PasswordResetCodeEntityDataService DataService => _dataService ??= _user.Use<PasswordResetCodeEntityDataService>();
+
+        public PasswordResetStore(IDomainUser user, ILogger<PasswordResetStore> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -25,7 +30,7 @@ namespace TKWF.Ext.Account
         {
             try
             {
-                return await _dataService.GetByUserNameAndCodeAsync(userName, resetCode, ct);
+                return await DataService.GetByUserNameAndCodeAsync(userName, resetCode, ct);
             }
             catch (Exception ex)
             {
@@ -40,7 +45,7 @@ namespace TKWF.Ext.Account
 
             try
             {
-                await _dataService.SaveAsync(record, ct);
+                await DataService.SaveAsync(record, ct);
             }
             catch (Exception ex)
             {
@@ -52,7 +57,7 @@ namespace TKWF.Ext.Account
         {
             try
             {
-                await _dataService.MarkUsedAsync(id, ct);
+                await DataService.MarkUsedAsync(id, ct);
             }
             catch (Exception ex)
             {

@@ -158,7 +158,7 @@ public class AuditLogStoreTests
     }
 
     [Fact]
-    public void Constructor_NullDataService_Throws()
+    public void Constructor_NullUser_Throws()
     {
         var logger = new FakeLogger<AuditLogStore>();
         Assert.Throws<ArgumentNullException>(() => new AuditLogStore(null!, logger));
@@ -169,9 +169,7 @@ public class AuditLogStoreTests
     {
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var dac = new FreeSqlEntityDAC<AuditLogEntity>(new UnitOfWorkManager(fsql));
-        var dataService = new AuditLogEntityDataService(new StubDomainUser(), dac);
-        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(dataService, null!));
+        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(new StubDomainUser(), null!));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.SecurityLog
 {
@@ -13,6 +14,7 @@ namespace TKWF.Ext.SecurityLog
     /// 不抛出异常，不阻塞消费方）。</para>
     /// <para>数据访问红线合规（2026-09-07）：不注入 IFreeSql / IEntityDAC——只依赖 DataService + <see cref="IOptions{TOptions}"/>
     /// + <see cref="ILogger{TCategoryName}"/>。</para>
+    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class SecurityLogAnalyticsService : ISecurityLogAnalyticsService
     {
@@ -22,16 +24,19 @@ namespace TKWF.Ext.SecurityLog
         /// <summary>TopN 上限——防滥用（对齐 QueryService MaxTake=200 的防护精神）。</summary>
         private const int MaxTopN = 100;
 
-        private readonly SecurityLogEntityDataService _dataService;
+        private readonly IDomainUser _user;
         private readonly IOptions<SecurityLoggingOptions> _options;
         private readonly ILogger<SecurityLogAnalyticsService> _logger;
 
+        private SecurityLogEntityDataService? _dataService;
+        private SecurityLogEntityDataService DataService => _dataService ??= _user.Use<SecurityLogEntityDataService>();
+
         public SecurityLogAnalyticsService(
-            SecurityLogEntityDataService dataService,
+            IDomainUser user,
             IOptions<SecurityLoggingOptions> options,
             ILogger<SecurityLogAnalyticsService> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -43,7 +48,7 @@ namespace TKWF.Ext.SecurityLog
             try
             {
                 var (from, to) = ResolveWindow(window);
-                var stats = await _dataService.GetTopFailedByUserAsync(from, to, NormalizeTopN(topN), ct);
+                var stats = await DataService.GetTopFailedByUserAsync(from, to, NormalizeTopN(topN), ct);
                 return stats;
             }
             catch (Exception ex)
@@ -60,7 +65,7 @@ namespace TKWF.Ext.SecurityLog
             try
             {
                 var (from, to) = ResolveWindow(window);
-                var stats = await _dataService.GetTopFailedByIpAsync(from, to, NormalizeTopN(topN), ct);
+                var stats = await DataService.GetTopFailedByIpAsync(from, to, NormalizeTopN(topN), ct);
                 return stats;
             }
             catch (Exception ex)
@@ -84,7 +89,7 @@ namespace TKWF.Ext.SecurityLog
                 while (true)
                 {
                     // 每批独立查询 + 删除（DeleteExpiredAsync 内部各自 QueryForUser，防 FreeSql ISelect 原地可变陷阱）
-                    var deleted = await _dataService.DeleteExpiredAsync(cutoffUtc, batchSize, ct);
+                    var deleted = await DataService.DeleteExpiredAsync(cutoffUtc, batchSize, ct);
                     if (deleted <= 0) break;             // 无过期记录 → 清完
                     totalDeleted += deleted;
                     if (deleted < batchSize) break;      // 不足一批 → 本批已清空剩余

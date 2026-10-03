@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Auditing;
 
 namespace TKWF.Ext.AuditLogging
@@ -10,15 +11,19 @@ namespace TKWF.Ext.AuditLogging
     /// 审计日志存储实现——经 <see cref="AuditLogEntityDataService"/>（SG1/xCodeGen 生成的 DataService）
     /// 委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：扩展不直接注入 IFreeSql / IEntityDAC，只依赖 DataService。
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
+    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
     /// </summary>
     internal sealed class AuditLogStore : IAuditLogStore
     {
-        private readonly AuditLogEntityDataService _dataService;
+        private readonly IDomainUser _user;
         private readonly ILogger<AuditLogStore> _logger;
 
-        public AuditLogStore(AuditLogEntityDataService dataService, ILogger<AuditLogStore> logger)
+        private AuditLogEntityDataService? _dataService;
+        private AuditLogEntityDataService DataService => _dataService ??= _user.Use<AuditLogEntityDataService>();
+
+        public AuditLogStore(IDomainUser user, ILogger<AuditLogStore> logger)
         {
-            _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -29,7 +34,7 @@ namespace TKWF.Ext.AuditLogging
             try
             {
                 var entity = MapToEntity(entry);
-                await _dataService.EntityCreateAsync(entity, ct);
+                await DataService.EntityCreateAsync(entity, ct);
             }
             catch (Exception ex)
             {

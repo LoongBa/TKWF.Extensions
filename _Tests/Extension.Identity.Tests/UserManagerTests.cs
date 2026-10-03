@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging.Abstractions;
 using TKW.Framework.Utility.Cryptography;
 
 namespace TKWF.Ext.Identity.Tests;
@@ -23,12 +22,7 @@ public class UserManagerTests
     }
 
     private static UserManager CreateManager(IFreeSql fsql, IdentityOptions? options = null)
-    {
-        var store = IdentityTestHost.CreateUserStore(fsql);
-        var roleStore = IdentityTestHost.CreateRoleStore(fsql);
-        var optionsWrapper = Microsoft.Extensions.Options.Options.Create(options ?? new IdentityOptions());
-        return new UserManager(store, roleStore, optionsWrapper, NullLogger<UserManager>.Instance);
-    }
+        => (UserManager)IdentityTestHost.CreateUserManager(fsql, options);
 
     [Fact]
     public async Task CreateUserAsync_HashesPassword()

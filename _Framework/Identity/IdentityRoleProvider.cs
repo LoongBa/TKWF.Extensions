@@ -21,12 +21,15 @@ namespace TKWF.Ext.Identity;
 public sealed class IdentityRoleProvider<TUserInfo> : IRoleProvider<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
-    private readonly IUserManager _userManager;
+    private readonly IDomainUser _user;
+    private IUserManager? _userManager;
     private Dictionary<string, IReadOnlyList<string>>? _cache;   // Scoped 缓存：userIdString → roles
 
-    public IdentityRoleProvider(IUserManager userManager)
+    private IUserManager UserManager => _userManager ??= _user.Use<IUserManager>();
+
+    public IdentityRoleProvider(IDomainUser user)
     {
-        _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
     }
 
     public async Task<IReadOnlyList<string>> GetRolesAsync(TUserInfo userInfo)
@@ -38,7 +41,7 @@ public sealed class IdentityRoleProvider<TUserInfo> : IRoleProvider<TUserInfo>
         _cache ??= new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         if (_cache.TryGetValue(userIdStr, out var cached)) return cached;
 
-        var roles = (await _userManager.GetUserRolesAsync(userId)).Select(r => r.Name).ToList();
+        var roles = (await UserManager.GetUserRolesAsync(userId)).Select(r => r.Name).ToList();
         _cache[userIdStr] = roles;
         return roles;
     }

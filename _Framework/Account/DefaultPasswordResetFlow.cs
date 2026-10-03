@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.AuthController;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
@@ -16,23 +17,28 @@ namespace TKWF.Ext.Account
     /// <para>新密码采用 SecurePassword 契约：客户端已计算 PBKDF2（newClientHash + salt），服务端仅存储。</para>
     /// <para><see cref="IAccountPasswordManager"/> 经 <see cref="IServiceProvider"/> 延迟解析（消费方未注册时
     /// GetService 返回 null——重置不可用但不阻断 DI 激活）。</para>
+    /// <para>ADR88/DI004（A 批整改）：<see cref="IPasswordResetStore"/> 不再构造注入——经
+    /// <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析；IServiceProvider 保留（C1 延迟解析密码管理器）。</para>
     /// </summary>
     internal sealed class DefaultPasswordResetFlow : IPasswordResetFlow
     {
         private const string AllowedChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 去混淆字符集
 
-        private readonly IPasswordResetStore _store;
+        private readonly IDomainUser _user;
         private readonly IServiceProvider _serviceProvider;
         private readonly AccountOptions _options;
         private readonly ILogger<DefaultPasswordResetFlow> _logger;
 
+        private IPasswordResetStore? _store;
+        private IPasswordResetStore Store => _store ??= _user.Use<IPasswordResetStore>();
+
         public DefaultPasswordResetFlow(
-            IPasswordResetStore store,
+            IDomainUser user,
             IServiceProvider serviceProvider,
             IOptions<AccountOptions> options,
             ILogger<DefaultPasswordResetFlow> logger)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
+            _user = user ?? throw new ArgumentNullException(nameof(user));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _options = options?.Value ?? new AccountOptions();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -59,7 +65,7 @@ namespace TKWF.Ext.Account
                 if (!exists) return true;
 
                 var code = GenerateResetCode();
-                await _store.SaveAsync(new PasswordResetCodeEntity
+                await Store.SaveAsync(new PasswordResetCodeEntity
                 {
                     UserName = userName,
                     ResetCode = code,
@@ -99,12 +105,12 @@ namespace TKWF.Ext.Account
 
             try
             {
-                var record = await _store.GetAsync(userName, resetCode, ct);
+                var record = await Store.GetAsync(userName, resetCode, ct);
                 if (record == null || record.IsUsed || record.ExpireTime < DateTime.Now)
                     return new ResetResult(false, "无效或已过期的重置码");
 
                 // 先标记已用（幂等消费）——确保码一次性，即使后续改密失败也不可重用
-                await _store.MarkUsedAsync(record.Id, ct);
+                await Store.MarkUsedAsync(record.Id, ct);
 
                 var ok = await passwordManager.SetPasswordAsync(userName, newClientHash, salt, ct);
                 if (!ok) return new ResetResult(false, "密码更新失败");

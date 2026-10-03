@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.Calendar` |
-| 版本 | v0.1.2（日历+事件 CRUD + occurrence 查询/合并 + UTC 契约）+ **V0.2.0（V4.10.53 领域自治根治，ADR90——正确路线：CalendarStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ CalendarManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径）** |
+| 版本 | v0.1.2（日历+事件 CRUD + occurrence 查询/合并 + UTC 契约）+ **V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线：CalendarStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ CalendarManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径；V0.2.0 已为既有 tag，整改发布版升 V0.4.0）** |
 | 依赖 | `TKWF.Domain` + `TKWF.Utility`（重复规则算法）+ SG1（框架既有） |
 | 数据 | 表 `Calendar` + `CalendarEvent`（框架 `SyncTables` 统一建表） |
 

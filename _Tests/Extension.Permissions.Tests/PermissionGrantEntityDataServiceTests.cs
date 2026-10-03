@@ -8,6 +8,10 @@ namespace TKWF.Ext.Permissions.Tests;
 /// <para>用内存桩 <see cref="InMemoryEntityDac"/> 模拟 <c>IEntityDAC&lt;PermissionGrantEntity&gt;</c>，
 /// 最小桩 <see cref="StubDomainUser"/> 模拟 <see cref="IDomainUser"/>，
 /// 验证 DataService CRUD + 自定义查询 + upsert + revoke。</para>
+/// <para><b>V4.10.53 领域自治判定（2026-10-04）</b>：本文件属 <b>DataService 层单测</b>（SG1/xCodeGen 生成
+/// DataService 业务方法直测）——其 ctor(IDomainUser, IEntityDAC&lt;T&gt;) 为 SG1 骨架固定形态（非领域服务门面，
+/// 不受"IDomainUser 永不注册 DI + AddConstructibleService"整改影响）；直构为 DataService 层单测的合理形态
+/// （领域服务门面测试才需走生产路径 BindScope + user.Use&lt;接口&gt;()）。保留直构，零改动。</para>
 /// </summary>
 public class PermissionGrantEntityDataServiceTests
 {

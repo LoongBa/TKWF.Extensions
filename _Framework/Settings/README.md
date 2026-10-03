@@ -1,6 +1,6 @@
 # TKWF.Ext.Settings 设置管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (分层读写 + 内存缓存 + Options 绑定修复) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 (分层读写 + 内存缓存 + Options 绑定修复 + **V0.3.0 领域自治根治 ADR90——删 ISettingStore/SettingStore，SettingManager 继承 DomainServiceBase + AddConstructibleService**) | **框架**: .NET 10
 
 **核心约束**: 分层键值对存储、FreeSql 持久化、异常静默处理、SG1 声明式实体、内存缓存
 

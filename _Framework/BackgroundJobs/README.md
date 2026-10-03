@@ -1,6 +1,6 @@
 # TKWF.Ext.BackgroundJobs 后台任务持久化增强技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地；**V0.3.0（V4.10.53 领域自治根治，ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径）**） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地；**V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.4.0）**） | **框架**: .NET 10
 
 **定位**（ADR-BackgroundJobs-持久化增强与执行追踪架构）：补齐主框架三实现（内置 `TKWF.BackgroundJobs` / `TKWF.BackgroundJobs.Hangfire` / `TKWF.BackgroundJobs.Quartz`）的持久化缺口：
 - **执行历史审计**：`JobExecution` 实体——每次执行一行（耗时/重试/异常归档），经统一 `IBackgroundJobExecutionListener` 同步回调自动落库

@@ -1,6 +1,6 @@
 # TKWF.Ext.BlobStoring 二进制存储扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.3 (本地文件系统 + FreeSql 记录持久化 + 下载 FileStream 流式) + **V0.2.4（V4.10.53 ADR90 领域自治根治——标准门面）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.3 (本地文件系统 + FreeSql 记录持久化 + 下载 FileStream 流式) + **V0.3.0（V4.10.53 ADR90 领域自治根治——标准门面；V0.2.4 已为既有 tag，整改发布版升 V0.3.0）** | **框架**: .NET 10
 
 **核心约束**: 本地文件系统 Blob 存储、FreeSql 元数据持久化、异常静默处理、SG1 声明式实体、不引入外部存储 SDK
 

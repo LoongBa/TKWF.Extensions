@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.OrganizationUnit` |
-| 版本 | v0.2.0（VEntity 下推）+ **V0.3.0（V4.10.53 领域自治根治，ADR90——正确路线：OrganizationUnitStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ OrganizationUnitManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径）** |
+| 版本 | v0.2.0（VEntity 下推）+ **V0.5.0（V4.10.53 领域自治根治，ADR90——正确路线：OrganizationUnitStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ OrganizationUnitManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.5.0）** |
 | 依赖 | `TKWF.Domain` + SG1（框架既有） |
 | 数据 | 表 `OrganizationUnit` + `OrganizationUnitUser`（框架 `SyncTables` 统一建表） |
 

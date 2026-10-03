@@ -1,6 +1,6 @@
 # TKWF.Ext.Tagging 标签存储扩展技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.3（聚合 SQL 下推）+ **V0.4.4（领域自治根治，ADR90）** | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.3（聚合 SQL 下推）+ **V0.4.5（领域自治根治，ADR90——V0.4.4 已为既有 tag，整改发布版升 V0.4.5）** | **框架**: .NET 10
 
 **定位**（ADR52 V0.2.0 瘦身）：标签算法已回归 `TKW.Framework.Utility.Tags`（主框架）；本扩展为**标签存储扩展**——V0.3.0 落地 `ITagRuleStore`/`ITagHitStore`/`ITagAnalysisService` 三接口持久化（SG1 实体 + FreeSql，Store 委托 DataService 红线合规）；V0.4.0 落地匹配器演进（AC 自动机 `DictMatch` 批量匹配）+ `TaggingOptions` 配置接入（`[Options("TKWF:Tagging")]`）。
 

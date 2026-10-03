@@ -1,6 +1,6 @@
 # TKWF.Ext.Notifications 通知中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0 + **V0.5.1（领域自治根治，ADR90——4 门面继承 `DomainServiceBase` + `AddConstructibleService` 注册，消费方统一 `User.Use<接口>()` 解析）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0 + **V0.6.0（领域自治根治，ADR90——V0.5.1/V0.5.2 为既有 tag，整改发布版升 V0.6.0：4 门面继承 `DomainServiceBase` + `AddConstructibleService` 注册，消费方统一 `User.Use<接口>()` 解析）** | **框架**: .NET 10
 
 **核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SignalR 实时推送通道（v0.4.0 独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）、REST 直接暴露（v0.5.0 已实施：VEntity DTO 一等公民）、SG1 声明式实体、**领域自治根治（V0.5.1：门面 `AddConstructibleService` + `User.Use<接口>()`）**
 

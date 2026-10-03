@@ -61,6 +61,8 @@ public class ProductionDataServiceResolutionTests
         services.AddScoped<IAuditLogStore, AuditLogStore>();
 
         // 3. 基础设施：IDomainUser + IEntityDAC + ILogger（空日志）
+        // ⚠️ IDomainUser 为测试内部桩（DataService 可构造解析链需要）——生产 DataService 经 User.Use<具体类>() NoAop 直建
+        // 不注册 IDomainUser（D01 铁律）；T3 候选：DataService 可构造工厂形态待框架统一。
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.AddScoped<IEntityDAC<AuditLogEntity>>(_ => new InMemoryEntityDac());
         services.AddScoped<ILogger<AuditLogStore>>(_ => NullLogger<AuditLogStore>.Instance);

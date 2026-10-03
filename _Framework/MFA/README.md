@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（独立起点）+ **V4.10.53（ADR90 领域自治根治）：`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析** |
+| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析** |
 | 依赖 | `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖** |
 | 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 

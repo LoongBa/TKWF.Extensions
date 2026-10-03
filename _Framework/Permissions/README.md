@@ -1,6 +1,6 @@
 # TKWF.Ext.Permissions 权限扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.7.0 (建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.3 (建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化 + **V0.9.1 领域自治根治 ADR90——删 EntityDACPermissionStore，PermissionChecker 继承 DomainServiceBase<TUserInfo> + AddConstructibleService**；V0.9.3 = 既有 v0.9.2 tag 后的整改发布版) | **框架**: .NET 10
 
 **核心约束**: 细粒度权限、fail-closed 安全语义、ORM 无关持久化、SG1 声明式实体
 

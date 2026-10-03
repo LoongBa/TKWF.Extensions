@@ -17,6 +17,9 @@ namespace TKWF.Ext.Notifications.Tests;
     public class UserNotificationViewQueryServiceTests
     {
         private static NotificationTestHost BuildWithUser(long userId, IFreeSql fsql)
+            // ⚠️ IDomainUser 测试内部桩——UserNotificationViewQueryService（[GenerateController] 管理 API 服务，V0.5.0
+            // 未整改）直接解析 IDomainUser；生产 DataService/领域服务经 User.Use<T>() AOP/NoAop 路径，IDomainUser 永不注册 DI（D01）。
+            // T3 候选：管理 API 服务（[GenerateController]）的 IDomainUser 供给形态待框架统一（对齐 FeatureManagementApiService）。
             => NotificationTestHost.Build(fsql, s =>
                 s.AddScoped<IDomainUser>(sp => { var u = new AuthenticatedStubUser(userId.ToString()); u.ServiceProvider = sp; return u; }));
 

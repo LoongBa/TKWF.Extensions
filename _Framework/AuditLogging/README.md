@@ -1,6 +1,6 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.2（管理 API + 聚合 SQL 下推）+ **V0.4.3（领域自治根治，ADR90）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.2（管理 API + 聚合 SQL 下推）+ **V0.5.0（领域自治根治，ADR90——V0.4.3 为既有 tag，整改发布版升 V0.5.0）** | **框架**: .NET 10
 
 **核心约束**: 方法级审计日志持久化、查询 API、统计聚合 + 保留天数清理、**管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD）**、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 

@@ -50,6 +50,9 @@ internal static class AuditLoggingTestHost
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();
         services.AddSingleton<IEntityDAC<AuditLogEntity>, FreeSqlEntityDAC<AuditLogEntity>>();
+        // ⚠️ 测试内部接线桩：接线型 Store 的 DataService C1 延迟解析链需要 IDomainUser 可解析（测试模拟消费方 DataService
+        // 聚合可构造工厂形态——DataService ctor 有 IDomainUser 参数）；生产环境 DataService 经 User.Use<具体类>() NoAop
+        // 直建不注册 IDomainUser（D01 铁律）。此桩仅测试宿主，非生产注册（T3 候选：DataService 可构造工厂形态待框架统一）。
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.AddScoped<AuditLogEntityDataService>();
         return services.BuildServiceProvider();

@@ -49,7 +49,9 @@ public class AuditLogProductionPathTests
         services.AddSingleton<UnitOfWorkManager>();
         services.AddSingleton<IEntityDAC<AuditLogEntity>, FreeSqlEntityDAC<AuditLogEntity>>();
 
-        // 接线型 Store 的 DataService 解析源（普通 DI 可构造——wiring 边界测试镜像；DataService ctor 需 IDomainUser + IEntityDAC）
+        // 接线型 Store 的 DataService 解析源（普通 DI 可构造——wiring 边界测试镜像；DataService ctor 需 IDomainUser + IEntityDAC；
+        // ⚠️ 测试内部桩非生产注册——生产 DataService 经 User.Use<具体类>() NoAop 直建，IDomainUser 永不注册 DI（D01）。
+        // T3 候选：DataService 可构造工厂形态待框架统一。）
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.AddScoped<AuditLogEntityDataService>();
 

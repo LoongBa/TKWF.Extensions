@@ -27,11 +27,15 @@ public abstract class IdentityUserHelperBase<TUserInfo> : DomainUserHelperBase<T
     /// 签名已解耦（UserEntity + roleNames）——DMP-Lite 不用 Roles 的消费方忽略 roleNames 即可。</summary>
     protected abstract TUserInfo CreateUserInfoFromEntity(UserEntity entity, IEnumerable<string> roleNames);
 
-    /// <summary>预实现密码登录（DMP-Lite 先例：user.Use&lt;TDomainService&gt;() 运行时解析）。</summary>
+    /// <summary>预实现密码登录（DMP-Lite 先例：user.Use&lt;TDomainService&gt;() 运行时解析）。
+    /// V4.10.53（领域自治根治，ADR90）：IUserManager 注册形态改 <c>AddConstructibleService</c>（接口守卫工厂）——
+    /// <c>GetService&lt;IUserManager&gt;()</c>（裸 GetRequiredService，不设 CurrentAopUser）触「CurrentAopUser 为空」守卫
+    /// 生产必抛——改 <c>user.Use&lt;IUserManager&gt;()</c>（AOP 路径：设 CurrentAopUser=this 再解析，守卫工厂经
+    /// ActivatorUtilities 直建实现并以 this 注入基类 User）。</summary>
     protected override async Task<TUserInfo> OnLoginByPasswordAsync(
         DomainUser<TUserInfo> user, string userName, string credential, EnumLoginFrom loginFrom)
     {
-        var userManager = user.GetService<IUserManager>();             // 运行时解析（UserHelper 宿主级，IUserManager Scoped；Use<T> 需 IDomainService 约束，GetService<T> 无约束）
+        var userManager = user.Use<IUserManager>();                    // 运行时解析（UserHelper 宿主级，IUserManager Scoped；Use<T> 设 CurrentAopUser，守卫工厂经此直建实现）
         var idUser = await userManager.VerifyCredentialsAsync(userName, credential);
         if (idUser == null) throw new AuthenticationException("用户名或密码错误");   // 对齐框架 AuthController 登录失败语义
         var roles = await userManager.GetUserRolesAsync(idUser.Id);

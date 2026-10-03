@@ -7,7 +7,8 @@ namespace TKWF.Ext.Identity
 {
     /// <summary>
     /// 角色存储抽象——角色实体的 CRUD 与查询。
-    /// <para>由扩展默认 FreeSql 实现（<see cref="FreeSqlRoleStore"/>），消费方可自定义（TryAdd 语义）。</para>
+    /// <para>由扩展默认实现（<see cref="RoleStore"/>，继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>，
+    /// <c>AddConstructibleService</c> 注册），消费方可自定义（V0.5.0 起经 AddScoped 覆盖）。</para>
     /// </summary>
     public interface IRoleStore : IDomainService
     {

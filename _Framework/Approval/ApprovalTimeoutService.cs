@@ -3,6 +3,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.Interfaces;
 
@@ -13,18 +15,23 @@ namespace TKWF.Ext.Approval;
 /// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——扫描/占位走 <see cref="ApprovalTaskEntityDataService"/>（条件查询 + ClaimTimeoutAsync），
 /// 动作走 <see cref="ApprovalManager"/> internal 系统方法（同程序集访问）。</para>
 /// <para>ADR88/DI004：DataService/ApprovalManager 不再构造注入——经 User.Use&lt;T&gt;() 懒加载。</para>
+/// <para>V0.3.0（V4.10.53 ADR90 领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+/// 获取用户上下文（IDomainUser 永不注册 DI）。<c>[DiContractIgnore]</c> 豁免 DI001（AddConstructibleService
+/// 运行时手写注册非 SG DI 契约目标）。注册形态改
+/// <c>AddConstructibleService&lt;IApprovalTimeoutService, ApprovalTimeoutService&gt;</c>（接口可构造守卫工厂 + 实现类 throw-factory）。</para>
 /// </summary>
+[DiContractIgnore]
 internal sealed class ApprovalTimeoutService(
     IDomainUser user,
     ILocalEventBus localEventBus,
-    ILogger<ApprovalTimeoutService> logger) : IApprovalTimeoutService
+    ILogger<ApprovalTimeoutService> logger) : DomainServiceBase(user), IApprovalTimeoutService
 {
     private ApprovalTaskEntityDataService? _taskDataService;
-    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= user.Use<ApprovalTaskEntityDataService>();
+    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= User.Use<ApprovalTaskEntityDataService>();
     private ApprovalInstanceEntityDataService? _instanceDataService;
-    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= user.Use<ApprovalInstanceEntityDataService>();
+    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= User.Use<ApprovalInstanceEntityDataService>();
     private ApprovalManager? _approvalManager;
-    private ApprovalManager ApprovalManager => _approvalManager ??= user.Use<ApprovalManager>();
+    private ApprovalManager ApprovalManager => _approvalManager ??= User.Use<ApprovalManager>();
     /// <inheritdoc />
     public async Task<int> ProcessTimeoutTasksAsync(CancellationToken ct = default)
     {

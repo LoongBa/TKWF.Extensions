@@ -1,6 +1,6 @@
 # TKWF.Ext.Approval 轻量审批引擎扩展技术规范
 
-**状态**: P1 差异化模块 (Differentiation Module) | **版本**: V0.3.0 | **框架**: .NET 10
+**状态**: P1 差异化模块 (Differentiation Module) | **版本**: V0.3.0（VEntity 化）+ **V0.4.0（领域自治根治，ADR90——正确路线）** | **框架**: .NET 10
 
 **核心约束**: 三实体模型（流程定义/审批实例/审批任务）+ 内置自建状态机（Draft→Pending→Approved/Rejected/Withdrawn）+ 审批人解析抽象（User 内置 + Role 消费方）+ 完成事件回调（ILocalEventBus post-commit）+ 顺序步骤链 + 或签/会签 + **v0.2.0 深化：委派（Flowable 两阶段）/加签（运行时追加）/抄送（仅通知）/超时自动处理（5 动作）** + **v0.3.0 VEntity 化：任务链查询经 `vw_ApprovalTaskView` JOIN 下推 DB（敏感视图经门面暴露）**；不依赖外部工作流引擎（Elsa/WorkflowCore）。
 
@@ -61,6 +61,17 @@ Pending ──Approve──▶ Approved（本任务通过）
 
 ## 四、安装接线
 
+> **V0.4.0（V4.10.53 ADR90 领域自治根治——正确路线注册形态三态）**：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IApprovalService` | `ApprovalManager`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IApprovalService>()` |
+| `IApprovalQueryService` | `ApprovalQueryService`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IApprovalQueryService>()` |
+| `IApprovalTimeoutService` | `ApprovalTimeoutService`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IApprovalTimeoutService>()` |
+| `IApprovalAssigneeResolver` | `DefaultApprovalAssigneeResolver`（纯逻辑，ctor 无 IDomainUser） | **`TryAddEnumerable`**（多实现集合——消费方可追加自定义 resolver 扩展 Role→用户解析） | `User.Use<IApprovalAssigneeResolver>()`（接口 AOP 解析，多实现集合取注册序——T3 边界保留） |
+
+> **V0.4.0（V4.10.53 ADR90 领域自治根治）**：三标准门面（`IApprovalService`/`IApprovalQueryService`/`IApprovalTimeoutService`，接口已标 `: IDomainService` 勿改）继承 `DomainServiceBase`（经基类 `User` 取上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败，v0.3.3 同根缺陷）+ `[DiContractIgnore]` 豁免 DI001（AddConstructibleService 运行时手写注册非 SG DI 契约目标）；DataService/Manager 仍经 `User.Use<具体类>()` NoAop 懒加载（DI004 零豁免）；注册由 `TryAddScoped` 改 **`AddConstructibleService`**（接口可构造守卫工厂——CurrentAopUser 域作用域外解析即抛 + 实现类 throw-factory），消费方统一经 `User.Use<接口>()` 解析。Resolver（`IApprovalAssigneeResolver`/`DefaultApprovalAssigneeResolver`）ctor 无 IDomainUser（纯逻辑）→ 保持 TryAddEnumerable 接线型注册 + 记录"接线型保留"（多实现集合语义 T3 候选，本批不动）；DataService/VEntity（`ApprovalTaskViewDataService` + 敏感视图经门面暴露 ADR）合规未动。
+
 ### 1. 白名单启用（消费方 DomainInitializer）
 
 ```csharp
@@ -73,7 +84,9 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ### 2. 流程定义（一次性配置）
 
 ```csharp
-var approval = serviceProvider.GetRequiredService<IApprovalService>();
+// V0.4.0：领域服务门面经 User.Use<IApprovalService>() 解析（AOP 路径——AddConstructibleService 接口守卫工厂；
+// 禁 GetRequiredService/构造注入——DI004 编译期门控零豁免）
+var approval = User.Use<IApprovalService>();
 
 await approval.CreateFlowAsync("expense", "报销审批",
 [
@@ -204,6 +217,8 @@ await approval.CreateFlowAsync("expense", "报销审批",
      { TimeoutMinutes = 72, TimeoutAction = ApprovalTimeoutAction.Transfer, TimeoutTransferToUserId = "u_finance2" }]);
 
 // 消费方后台周期调用（扩展不内建调度器——BackgroundJobs 扩展可观察执行历史）：
+// V0.4.0：经 User.Use<IApprovalTimeoutService>() 解析（AddConstructibleService 守卫工厂）
+var timeoutService = User.Use<IApprovalTimeoutService>();
 var processed = await timeoutService.ProcessTimeoutTasksAsync();
 ```
 - 5 动作：Remind/Transfer/Jump/Approve/Reject；系统身份审计 `system:timeout`；扫描占位防重（条件更新影响行数 0/1）。

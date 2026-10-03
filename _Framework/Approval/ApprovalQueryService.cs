@@ -4,6 +4,8 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
@@ -13,15 +15,20 @@ namespace TKWF.Ext.Approval;
 /// <para>Scoped 生命周期。列表 DTO 剔除 BusinessDataJson 大字段（查询性能）；
 /// 详情 GetInstanceDetailAsync 取全量 BusinessDataJson + 任务链。</para>
 /// <para>ADR88/DI004：DataService 不再构造注入——经 User.Use&lt;T&gt;() 懒加载。</para>
+/// <para>V0.3.0（V4.10.53 ADR90 领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+/// 获取用户上下文（IDomainUser 永不注册 DI）。<c>[DiContractIgnore]</c> 豁免 DI001（AddConstructibleService
+/// 运行时手写注册非 SG DI 契约目标）。注册形态改
+/// <c>AddConstructibleService&lt;IApprovalQueryService, ApprovalQueryService&gt;</c>（接口可构造守卫工厂 + 实现类 throw-factory）。</para>
 /// </summary>
-internal sealed class ApprovalQueryService(IDomainUser user) : IApprovalQueryService
+[DiContractIgnore]
+internal sealed class ApprovalQueryService(IDomainUser user) : DomainServiceBase(user), IApprovalQueryService
 {
     private ApprovalInstanceEntityDataService? _instanceDataService;
-    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= user.Use<ApprovalInstanceEntityDataService>();
+    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= User.Use<ApprovalInstanceEntityDataService>();
     private ApprovalTaskEntityDataService? _taskDataService;
-    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= user.Use<ApprovalTaskEntityDataService>();
+    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= User.Use<ApprovalTaskEntityDataService>();
     private ApprovalTaskViewDataService? _taskViewDataService;
-    private ApprovalTaskViewDataService TaskViewDataService => _taskViewDataService ??= user.Use<ApprovalTaskViewDataService>();
+    private ApprovalTaskViewDataService TaskViewDataService => _taskViewDataService ??= User.Use<ApprovalTaskViewDataService>();
     /// <inheritdoc />
     public async Task<ApprovalInstancePagedResult> GetInstancesAsync(ApprovalInstanceQueryInput input, CancellationToken ct = default)
     {

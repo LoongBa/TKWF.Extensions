@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -14,10 +15,12 @@ using TKWF.Ext.Approval;
 namespace TKWF.Ext.Approval.Tests;
 
 /// <summary>
-/// 测试共享支撑——SQLite 内存库 + DataService 构造 + StubDomainUser + 完整 ApprovalTestHost。
-/// <para>ApprovalManager 经三个 DataService（FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化。
-/// NoopTransactionManager 用于事件派发路径测试（CommitAsync 空操作）。
-/// </para>
+/// 测试共享支撑——SQLite 内存库 + 完整 ApprovalTestHost（V0.3.0 走生产路径）。
+/// <para>V0.3.0（V4.10.53 ADR90 领域自治根治，正确路线）：测试宿主弃 StubDomainUser + 手写 DataService 单例注册
+/// （旧形态掩盖 IDomainUser 永不注册 DI 的生产失败）——真实 DI（Initializer <c>ConfigureServices</c> + FreeSql
+/// SQLite 基础设施 + AddLogging）+ <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> +
+/// <c>User.Use&lt;接口&gt;()</c> AOP 路径解析（设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂）；
+/// DataService 经基类 <c>User.Use&lt;具体类&gt;()</c> NoAop 路径直建（ActivatorUtilities，IEntityDAC 从 DI 解析）。</para>
 /// </summary>
 internal static class ApprovalTestSupport
 {
@@ -50,94 +53,78 @@ FROM ""ApprovalTask"" t
 INNER JOIN ""ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""");
     }
 
-    /// <summary>构造 ApprovalTestHost（完整 DI 容器 + 真实 DataService + NoopTransactionManager + 事件收集）。</summary>
+    /// <summary>构造 ApprovalTestHost（V0.3.0 生产路径——真实 DI + BindScope + User.Use 解析）。</summary>
     public static ApprovalTestHost Build(IFreeSql fsql, Action<IServiceCollection>? configure = null)
         => new(fsql, configure);
 }
 
 /// <summary>
-/// 完整测试宿主——构建 DI 容器，注册 DataService 链 + ApprovalManager + NoopTransactionManager + EventCollector。
+/// 完整测试宿主（V0.3.0 生产路径）——真实 DI 容器（扩展 ConfigureServices + FreeSql 基础设施 +
+/// NoopTransactionManager + EventCollector）+ <see cref="DomainUser{TUserInfo}"/> 域作用域绑定。
 /// </summary>
 internal sealed class ApprovalTestHost : IDisposable
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly IFreeSql _fsql;
+    private readonly DomainUser<TestUserInfo> _user;
 
-    public IApprovalService ApprovalService => _serviceProvider.GetRequiredService<IApprovalService>();
-    public IApprovalQueryService QueryService => _serviceProvider.GetRequiredService<IApprovalQueryService>();
-    public IApprovalAssigneeResolver Resolver => _serviceProvider.GetRequiredService<IApprovalAssigneeResolver>();
-    public ApprovalFlowEntityDataService FlowDataService => _serviceProvider.GetRequiredService<ApprovalFlowEntityDataService>();
-    public ApprovalInstanceEntityDataService InstanceDataService => _serviceProvider.GetRequiredService<ApprovalInstanceEntityDataService>();
-    public ApprovalTaskEntityDataService TaskDataService => _serviceProvider.GetRequiredService<ApprovalTaskEntityDataService>();
-    public ApprovalAppendEntityDataService AppendDataService => _serviceProvider.GetRequiredService<ApprovalAppendEntityDataService>();
-    public ApprovalCCEntityDataService CcDataService => _serviceProvider.GetRequiredService<ApprovalCCEntityDataService>();
-    public ApprovalTaskViewDataService TaskViewDataService => _serviceProvider.GetRequiredService<ApprovalTaskViewDataService>();
-    public IApprovalTimeoutService TimeoutService => _serviceProvider.GetRequiredService<IApprovalTimeoutService>();
+    // 门面/Resolver/DataService 全部经 User.Use<T>() 解析（生产路径）：
+    // 接口 → AOP 路径（设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 / TryAddEnumerable 集合）；
+    // 具体类 DataService → NoAop 路径（ActivatorUtilities 直建，IEntityDAC 从 DI 解析）。
+    public IApprovalService ApprovalService => _user.Use<IApprovalService>();
+    public IApprovalQueryService QueryService => _user.Use<IApprovalQueryService>();
+    public IApprovalAssigneeResolver Resolver => _user.Use<IApprovalAssigneeResolver>();
+    public IApprovalTimeoutService TimeoutService => _user.Use<IApprovalTimeoutService>();
+    public ApprovalFlowEntityDataService FlowDataService => _user.Use<ApprovalFlowEntityDataService>();
+    public ApprovalInstanceEntityDataService InstanceDataService => _user.Use<ApprovalInstanceEntityDataService>();
+    public ApprovalTaskEntityDataService TaskDataService => _user.Use<ApprovalTaskEntityDataService>();
+    public ApprovalAppendEntityDataService AppendDataService => _user.Use<ApprovalAppendEntityDataService>();
+    public ApprovalCCEntityDataService CcDataService => _user.Use<ApprovalCCEntityDataService>();
+    public ApprovalTaskViewDataService TaskViewDataService => _user.Use<ApprovalTaskViewDataService>();
     public EventCollector Events => _serviceProvider.GetRequiredService<EventCollector>();
 
     public ApprovalTestHost(IFreeSql fsql, Action<IServiceCollection>? configure = null)
     {
-        _fsql = fsql;
         var services = new ServiceCollection();
 
-        // 日志
+        // 1. 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices）
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // 2. 日志
         services.AddLogging();
 
-        // FreeSql 单例
+        // 3. FreeSql 基础设施（消费方 DomainHost 等价注册）
         services.AddSingleton(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<ApprovalFlowEntity>, FreeSqlEntityDAC<ApprovalFlowEntity>>();
+        services.AddSingleton<IEntityDAC<ApprovalInstanceEntity>, FreeSqlEntityDAC<ApprovalInstanceEntity>>();
+        services.AddSingleton<IEntityDAC<ApprovalTaskEntity>, FreeSqlEntityDAC<ApprovalTaskEntity>>();
+        services.AddSingleton<IEntityDAC<ApprovalAppendEntity>, FreeSqlEntityDAC<ApprovalAppendEntity>>();
+        services.AddSingleton<IEntityDAC<ApprovalCCEntity>, FreeSqlEntityDAC<ApprovalCCEntity>>();
+        // V0.3.0 VEntity：只读 DAC（DI 严格按请求类型匹配，IEntityDAC 子接口不自动匹配父接口——显式注册）
+        services.AddSingleton<IEntityReadOnlyDAC<ApprovalTaskView>, FreeSqlEntityDAC<ApprovalTaskView>>();
 
-        // 事件收集器（替代真实 ILocalEventBus——收集已派发事件供断言）
+        // 4. 事件收集器（替代真实 ILocalEventBus——收集已派发事件供断言）+ Noop 事务管理器（CommitAsync 空操作）
         services.AddSingleton<EventCollector>();
         services.AddSingleton<ILocalEventBus>(sp => sp.GetRequiredService<EventCollector>());
-
-        // NoopTransactionManager（CommitAsync 空操作——不回滚即可）
         services.AddSingleton<ITransactionManager, NoopTransactionManager>();
-
-        // DataService 链（真实 FreeSql DAC）
-        var stubUser = new StubDomainUser();
-        services.AddSingleton<IDomainUser>(stubUser);
-        services.AddSingleton(sp =>
-            new ApprovalFlowEntityDataService(
-                stubUser, new FreeSqlEntityDAC<ApprovalFlowEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(sp =>
-            new ApprovalInstanceEntityDataService(
-                stubUser, new FreeSqlEntityDAC<ApprovalInstanceEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(sp =>
-            new ApprovalTaskEntityDataService(
-                stubUser, new FreeSqlEntityDAC<ApprovalTaskEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(sp =>
-            new ApprovalAppendEntityDataService(
-                stubUser, new FreeSqlEntityDAC<ApprovalAppendEntity>(new UnitOfWorkManager(fsql))));
-        services.AddSingleton(sp =>
-            new ApprovalCCEntityDataService(
-                stubUser, new FreeSqlEntityDAC<ApprovalCCEntity>(new UnitOfWorkManager(fsql))));
-        // V0.3.0 VEntity：只读 DataService（IEntityReadOnlyDAC 驱动，红线合规）
-        services.AddSingleton(sp =>
-            new ApprovalTaskViewDataService(
-                stubUser, new FreeSqlEntityDAC<ApprovalTaskView>(new UnitOfWorkManager(fsql))));
-
-        // 默认审批人解析器
-        services.TryAddScoped<IApprovalAssigneeResolver, DefaultApprovalAssigneeResolver>();
-
-        // ApprovalManager + ApprovalQueryService + ApprovalTimeoutService
-        services.TryAddScoped<ApprovalManager>();
-        services.TryAddScoped<IApprovalService>(sp => sp.GetRequiredService<ApprovalManager>());
-        services.TryAddScoped<ApprovalQueryService>();
-        services.TryAddScoped<IApprovalQueryService>(sp => sp.GetRequiredService<ApprovalQueryService>());
-        services.TryAddScoped<IApprovalTimeoutService, ApprovalTimeoutService>();
 
         configure?.Invoke(services);
 
         _serviceProvider = services.BuildServiceProvider();
-        // ADR88/DI004：懒加载 Use<T> 经注入的 ServiceProvider 从容器解析
-        stubUser.Provider = _serviceProvider;
+        // 5. 解析作用域绑定（生产经 DomainHost.NewDomainContext 绑定 AsyncLocal——测试等价 BindScope）
+        DomainUser<TestUserInfo>.BindScope(_serviceProvider);
+        _user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("test-user", "测试用户") };
     }
 
-    /// <summary>解析 Scoped 服务。</summary>
+    /// <summary>解析 Scoped 服务（基础设施/事件收集器——域服务一律经 User.Use&lt;T&gt;()）。</summary>
     public T GetRequiredService<T>() where T : notnull
         => _serviceProvider.GetRequiredService<T>();
 
-    public void Dispose() => (_serviceProvider as IDisposable)?.Dispose();
+    public void Dispose()
+    {
+        DomainUser<TestUserInfo>.UnBindScope();
+        (_serviceProvider as IDisposable)?.Dispose();
+    }
 }
 
 /// <summary>
@@ -193,43 +180,3 @@ internal sealed class NoopTransactionScope : ITransactionScope
 
 /// <summary>Noop IDisposable。</summary>
 internal sealed class NoopDisposable : IDisposable { public void Dispose() { } }
-
-/// <summary>最小 IDomainUser 桩。
-/// <para>ADR88/DI004：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-/// （测试宿主 BuildServiceProvider 后注入 <see cref="Provider"/>）。</para></summary>
-internal sealed class StubDomainUser : IDomainUser
-{
-    private readonly object _gate = new();
-    private readonly Dictionary<Type, object?> _cache = new();
-
-    /// <summary>ServiceProvider（懒加载 Use&lt;T&gt; 解析源，宿主构建后注入）。</summary>
-    public IServiceProvider? Provider { get; set; }
-
-    public string SessionKey => "test-session";
-    public bool IsAuthenticated => false;
-    public bool IsSystemActor => false;
-    public IUserInfo? UserInfo => null;
-    public long? TenantId => null;
-    public bool IsNoAuditActive => false;
-    public string? UserId => null;
-    public string? UserName => null;
-    public bool IsInRole(string role) => false;
-    public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-    {
-        var provider = Provider ?? throw new NotSupportedException("Stub: Provider 未注入");
-        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-            return svc;
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
-            _cache[typeof(TDomainService)] = resolved;
-            return resolved;
-        }
-    }
-    public TService GetService<TService>() where TService : notnull
-        => (Provider ?? throw new NotSupportedException("Stub: Provider 未注入")).GetRequiredService<TService>();
-    public TService GetOptionalService<TService>() where TService : class => null!;
-    public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
-}

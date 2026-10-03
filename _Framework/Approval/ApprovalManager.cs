@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -18,29 +20,35 @@ namespace TKWF.Ext.Approval;
 /// 事务原子提交（C3）：ITransactionManager.BeginAsync → 业务 → CommitAsync → ILocalEventBus.PublishAsync。</para>
 /// <para>v0.2.0：委派（两阶段）+ 加签（步骤内并行）+ 抄送（独立实体 + 事件）+ 超时系统动作（internal——同程序集
 /// ApprovalTimeoutService 调用，跳过 C1 身份校验但保留状态机校验，审计 "system:timeout" 标识，C1/P4）。</para>
+/// <para>V0.3.0（V4.10.53 ADR90 领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>（非泛型主实现）——
+/// 经基类 <c>User</c> 获取用户上下文（IDomainUser 永不注册 DI——D01；旧 TryAddScoped 构造注入 IDomainUser
+/// 生产解析必失败）。<c>[DiContractIgnore]</c> 豁免 DI001（AddConstructibleService 运行时手写注册非 SG DI 契约目标）。
+/// DataService/Resolver 仍经 <c>User.Use&lt;T&gt;()</c> 懒加载（DI004 零豁免——接口 AOP / 具体类 NoAop）。
+/// 注册形态改 <c>AddConstructibleService&lt;IApprovalService, ApprovalManager&gt;</c>（接口可构造守卫工厂 + 实现类 throw-factory）。</para>
 /// </summary>
+[DiContractIgnore]
 internal sealed class ApprovalManager(
     IDomainUser user,
     ITransactionManager transactionManager,
     ILocalEventBus localEventBus,
-    ILogger<ApprovalManager> logger) : IApprovalService
+    ILogger<ApprovalManager> logger) : DomainServiceBase(user), IApprovalService
 {
     /// <summary>系统超时动作审计标识（D15——不冒充审批人）。</summary>
     internal const string SystemTimeoutActor = "system:timeout";
 
     // ── 域服务懒加载（ADR88/DI004——构造注入改 User.Use<T>() 懒加载）──
     private ApprovalFlowEntityDataService? _flowDataService;
-    private ApprovalFlowEntityDataService FlowDataService => _flowDataService ??= user.Use<ApprovalFlowEntityDataService>();
+    private ApprovalFlowEntityDataService FlowDataService => _flowDataService ??= User.Use<ApprovalFlowEntityDataService>();
     private ApprovalInstanceEntityDataService? _instanceDataService;
-    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= user.Use<ApprovalInstanceEntityDataService>();
+    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= User.Use<ApprovalInstanceEntityDataService>();
     private ApprovalTaskEntityDataService? _taskDataService;
-    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= user.Use<ApprovalTaskEntityDataService>();
+    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= User.Use<ApprovalTaskEntityDataService>();
     private ApprovalAppendEntityDataService? _appendDataService;
-    private ApprovalAppendEntityDataService AppendDataService => _appendDataService ??= user.Use<ApprovalAppendEntityDataService>();
+    private ApprovalAppendEntityDataService AppendDataService => _appendDataService ??= User.Use<ApprovalAppendEntityDataService>();
     private ApprovalCCEntityDataService? _ccDataService;
-    private ApprovalCCEntityDataService CCDataService => _ccDataService ??= user.Use<ApprovalCCEntityDataService>();
+    private ApprovalCCEntityDataService CCDataService => _ccDataService ??= User.Use<ApprovalCCEntityDataService>();
     private IApprovalAssigneeResolver? _assigneeResolver;
-    private IApprovalAssigneeResolver AssigneeResolver => _assigneeResolver ??= user.Use<IApprovalAssigneeResolver>();
+    private IApprovalAssigneeResolver AssigneeResolver => _assigneeResolver ??= User.Use<IApprovalAssigneeResolver>();
 
     // ── 流程定义 ──
 

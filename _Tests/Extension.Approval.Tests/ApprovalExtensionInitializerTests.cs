@@ -1,18 +1,22 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
-using TKW.Framework.Domain.FreeSql;
 using TKWF.Ext.Approval;
 
 namespace TKWF.Ext.Approval.Tests;
 
 /// <summary>
-/// D11：Initializer DI 注册测试——验证 [TKWFExtension] 属性 + ConfigureServices 注册正确 + TryAddScoped 语义。
+/// D11：Initializer DI 注册测试（V0.3.0 领域自治根治重写）——覆盖 [TKWFExtension] 特性声明 +
+/// <c>AddConstructibleService</c> 注册形态（接口可构造守卫工厂 + 实现类 throw-factory）+
+/// CurrentAopUser 域作用域守卫（域作用域外解析即抛）+ Resolver TryAddEnumerable 多实现集合语义。
+/// <para>V0.3.0（ADR90 正确路线）：三标准门面（IApprovalService/ApprovalManager、IApprovalQueryService/ApprovalQueryService、
+/// IApprovalTimeoutService/ApprovalTimeoutService）注册形态由 TryAddScoped 改 <c>AddConstructibleService</c>——
+/// 消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（AOP 路径先设 CurrentAopUser 再 GetRequiredService）。
+/// Resolver（IApprovalAssigneeResolver/DefaultApprovalAssigneeResolver）保持 TryAddEnumerable（多实现集合——消费方可追加自定义）。</para>
 /// </summary>
 public class ApprovalExtensionInitializerTests
 {
@@ -27,118 +31,168 @@ public class ApprovalExtensionInitializerTests
         Assert.Equal("Approval", attr!.Name);
     }
 
+    // ── AddConstructibleService 注册形态：接口可构造守卫工厂（非实现映射）──
+
     [Fact]
-    public void ConfigureServices_ShouldRegisterServices()
+    public void ConfigureServices_Registers_IApprovalService_GuardFactoryDescriptor()
     {
         var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        // DataServices + 基础设施由消费者注册（Initializer 不注册）
-        var fsql = ApprovalTestSupport.CreateInMemoryFreeSql();
-        ApprovalTestSupport.SyncStructure(fsql);
-        var stubUser = new StubDomainUser();
-        services.AddSingleton(fsql);
-        services.AddSingleton<TKW.Framework.Domain.Interfaces.IDomainUser>(stubUser);
-        // v4.10.8 (ADR61) 迁移：DataService 经 DI 兜底工厂注册（镜像生产 AddConstructibleDataService，
-        // 用户源 = DI IDomainUser，免域作用域）；IEntityDAC<T> 基础设施注册同生产 Host
-        services.AddScoped<UnitOfWorkManager>();
-        services.AddScoped<IEntityDAC<ApprovalFlowEntity>>(sp => new FreeSqlEntityDAC<ApprovalFlowEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<ApprovalInstanceEntity>>(sp => new FreeSqlEntityDAC<ApprovalInstanceEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<ApprovalTaskEntity>>(sp => new FreeSqlEntityDAC<ApprovalTaskEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<ApprovalAppendEntity>>(sp => new FreeSqlEntityDAC<ApprovalAppendEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<ApprovalCCEntity>>(sp => new FreeSqlEntityDAC<ApprovalCCEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        // V0.3.0 VEntity：ApprovalTaskViewDataService（ADR61 自动注册镜像——只读 DAC 驱动；
-        // 显式注册 IEntityReadOnlyDAC 接口（DI 严格按请求类型匹配，IEntityDAC 子接口不自动匹配父接口））
-        services.AddScoped<IEntityReadOnlyDAC<ApprovalTaskView>>(sp => new FreeSqlEntityDAC<ApprovalTaskView>(sp.GetRequiredService<UnitOfWorkManager>()));
-        AddTestConstructibleDataService<ApprovalFlowEntityDataService>(services);
-        AddTestConstructibleDataService<ApprovalInstanceEntityDataService>(services);
-        AddTestConstructibleDataService<ApprovalTaskEntityDataService>(services);
-        AddTestConstructibleDataService<ApprovalAppendEntityDataService>(services);
-        AddTestConstructibleDataService<ApprovalCCEntityDataService>(services);
-        AddTestConstructibleDataService<ApprovalTaskViewDataService>(services);
-        services.AddSingleton<TKW.Framework.Domain.Transactions.ITransactionManager>(
-            new NoopTransactionManager());
-        services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus>(
-            new EventCollector());
-        services.AddLogging();
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IApprovalService));
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
 
-        var initializer = new ApprovalExtensionInitializer<TestUserInfo>();
-        initializer.ConfigureServices(services);
+    [Fact]
+    public void ConfigureServices_Registers_IApprovalQueryService_GuardFactoryDescriptor()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IApprovalQueryService));
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_IApprovalTimeoutService_GuardFactoryDescriptor()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IApprovalTimeoutService));
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    // ── AddConstructibleService 注册形态：实现类 throw-factory（禁直接 DI 解析）──
+
+    [Fact]
+    public void ConfigureServices_Registers_ApprovalManager_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ApprovalManager));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ApprovalManager>());
+        Assert.Contains("领域架构守卫", ex.Message);
+    }
 
-        // IApprovalService / ApprovalManager
-        var approvalService = provider.GetService<IApprovalService>();
-        Assert.NotNull(approvalService);
-        Assert.IsType<ApprovalManager>(approvalService);
+    [Fact]
+    public void ConfigureServices_Registers_ApprovalQueryService_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        // IApprovalQueryService / ApprovalQueryService
-        var queryService = provider.GetService<IApprovalQueryService>();
-        Assert.NotNull(queryService);
-        Assert.IsType<ApprovalQueryService>(queryService);
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ApprovalQueryService));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
 
-        // IApprovalAssigneeResolver / DefaultApprovalAssigneeResolver
+        var provider = services.BuildServiceProvider();
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ApprovalQueryService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_ApprovalTimeoutService_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ApprovalTimeoutService));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ApprovalTimeoutService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+    }
+
+    // ── CurrentAopUser 域作用域守卫：域作用域外解析接口即抛（DI004 运行期兜底）──
+
+    [Fact]
+    public void InterfaceFactory_OutsideUseScope_Throws_ForIApprovalService()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IApprovalService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IApprovalService", ex.Message);
+    }
+
+    [Fact]
+    public void InterfaceFactory_OutsideUseScope_Throws_ForIApprovalQueryService()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IApprovalQueryService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IApprovalQueryService", ex.Message);
+    }
+
+    [Fact]
+    public void InterfaceFactory_OutsideUseScope_Throws_ForIApprovalTimeoutService()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IApprovalTimeoutService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IApprovalTimeoutService", ex.Message);
+    }
+
+    // ── Resolver：TryAddEnumerable 多实现集合（消费方可追加自定义 resolver，默认不被覆盖）──
+
+    [Fact]
+    public void ConfigureServices_Registers_DefaultApprovalAssigneeResolver_Enumerable()
+    {
+        var services = new ServiceCollection();
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // TryAddEnumerable 注册形态：DefaultApprovalAssigneeResolver 作为多实现集合元素
+        var provider = services.BuildServiceProvider();
         var resolvers = provider.GetServices<IApprovalAssigneeResolver>().ToList();
         Assert.Contains(resolvers, r => r is DefaultApprovalAssigneeResolver);
-
-        // v0.2.0：IApprovalTimeoutService / ApprovalTimeoutService（P10）
-        var timeoutService = provider.GetService<IApprovalTimeoutService>();
-        Assert.NotNull(timeoutService);
-        Assert.IsType<ApprovalTimeoutService>(timeoutService);
-    }
-
-    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产 AddConstructibleDataService
-    ///（ActivatorUtilities.CreateInstance + 域用户），用户源 = DI IDomainUser（免域作用域、xUnit 并行安全）。</summary>
-    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
-        where T : class
-    {
-        services.AddScoped<T>(sp =>
-        {
-            var user = sp.GetRequiredService<TKW.Framework.Domain.Interfaces.IDomainUser>();
-            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
-        });
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_ShouldNotOverrideConsumerRegistration()
+    public void ConfigureServices_TryAddEnumerable_DoesNotOverrideConsumerCustomResolver()
     {
+        // 消费方先注册自定义 resolver（TryAddEnumerable——多实现集合语义：追加而非覆盖）
         var services = new ServiceCollection();
-        // 先注册消费者自定义实现
-        services.TryAddScoped<IApprovalService, CustomApprovalService>();
-        services.TryAddScoped<IApprovalQueryService, CustomApprovalQueryService>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IApprovalAssigneeResolver, CustomApprovalAssigneeResolver>());
 
-        var initializer = new ApprovalExtensionInitializer<TestUserInfo>();
-        initializer.ConfigureServices(services);
+        new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         var provider = services.BuildServiceProvider();
-
-        // TryAddScoped 不覆盖消费者注册
-        Assert.IsType<CustomApprovalService>(provider.GetRequiredService<IApprovalService>());
-        Assert.IsType<CustomApprovalQueryService>(provider.GetRequiredService<IApprovalQueryService>());
+        var resolvers = provider.GetServices<IApprovalAssigneeResolver>().ToList();
+        // 自定义 resolver 保留（多实现集合：消费方可追加自定义 Resolver——Role→用户解析扩展点）
+        Assert.Contains(resolvers, r => r is CustomApprovalAssigneeResolver);
+        Assert.Contains(resolvers, r => r is DefaultApprovalAssigneeResolver);
     }
 
-    // 消费者自定义实现桩
-    private sealed class CustomApprovalService : IApprovalService
-    {
-        public Task<long> CreateFlowAsync(string code, string name, System.Collections.Generic.IReadOnlyList<ApprovalStepDefinition> steps, string? description = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task UpdateFlowAsync(long flowId, string name, System.Collections.Generic.IReadOnlyList<ApprovalStepDefinition> steps, string? description = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task EnableFlowAsync(long flowId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task DisableFlowAsync(long flowId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<long> StartAsync(string businessType, string businessId, string flowCode, string submitter, string? businessDataJson = null, CancellationToken ct = default, string[]? ccUserIds = null) => throw new NotImplementedException();
-        public Task SubmitAsync(long instanceId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task ApproveAsync(long taskId, string approverUserId, string? comment = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task RejectAsync(long taskId, string approverUserId, string reason, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task TransferAsync(long taskId, string fromUserId, string toUserId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task WithdrawAsync(long instanceId, string userId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task DelegateTaskAsync(long taskId, string fromUserId, string toUserId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task ResolveTaskAsync(long taskId, string delegateUserId, string? comment = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task AppendApproverAsync(long taskId, string operatedByUserId, string[] appenderUserIds, ApprovalAppendMode mode = ApprovalAppendMode.Participate, string? remark = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task AddCCAsync(long instanceId, string[] userIds, CancellationToken ct = default) => throw new NotImplementedException();
-    }
+    // ── 消费者自定义 resolver 桩（Role→用户解析扩展点示例）──
 
-    private sealed class CustomApprovalQueryService : IApprovalQueryService
+    private sealed class CustomApprovalAssigneeResolver : IApprovalAssigneeResolver
     {
-        public Task<ApprovalInstancePagedResult> GetInstancesAsync(ApprovalInstanceQueryInput input, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<ApprovalTaskPagedResult> GetPendingTasksAsync(ApprovalTaskQueryInput input, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<ApprovalInstanceDetailDto?> GetInstanceDetailAsync(long instanceId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<string>> ResolveUserIdsAsync(ApprovalStepDefinition step, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<string>>(["custom-user"]);
     }
 }

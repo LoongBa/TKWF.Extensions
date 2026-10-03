@@ -17,7 +17,11 @@
     </PackageReference>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="FreeSql" />
   <PackageReference Include="FreeSql.Extensions.Linq" />
   <PackageReference Include="FreeSql.DbContext" />

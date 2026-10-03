@@ -1,6 +1,6 @@
 # TKWF.Ext.BackgroundJobs 后台任务持久化增强技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.2.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地；**V0.3.0（V4.10.53 领域自治根治，ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径）**） | **框架**: .NET 10
 
 **定位**（ADR-BackgroundJobs-持久化增强与执行追踪架构）：补齐主框架三实现（内置 `TKWF.BackgroundJobs` / `TKWF.BackgroundJobs.Hangfire` / `TKWF.BackgroundJobs.Quartz`）的持久化缺口：
 - **执行历史审计**：`JobExecution` 实体——每次执行一行（耗时/重试/异常归档），经统一 `IBackgroundJobExecutionListener` 同步回调自动落库
@@ -27,7 +27,7 @@ _Framework/BackgroundJobs/
 ├── IJobHistoryCleanupService.cs          # 历史清理接口 + 结果记录（v0.2.0）
 ├── JobHistoryCleanupService.cs           # 历史清理服务（v0.2.0，分批 + 异常静默）
 ├── BackgroundJobsPersistenceOptions.cs   # TKWF:BackgroundJobs 配置（RetentionDays 已启用 + CleanupBatchSize）
-├── BackgroundJobsExtensionInitializer.cs # [TKWFExtension] + TryAddScoped 三钩子
+├── BackgroundJobsExtensionInitializer.cs # [TKWFExtension] + AddConstructibleService 三钩子（V0.3.0）
 ├── DataServices/
 │   ├── JobExecutionEntityDataService.cs  # partial 业务方法（分页过滤 + SQL 级聚合 + DeleteExpiredAsync）
 │   └── JobResultEntityDataService.cs     # partial 业务方法（分页 + 按 JobId 查最新 + DeleteExpiredAsync）
@@ -54,19 +54,32 @@ _Framework/BackgroundJobs/
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
+> **自动注册（V0.3.0 领域自治根治，ADR90——正确路线三态）**：
+> - **门面（AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory，消费方 `User.Use<接口>()` 解析）**：
+>   `IJobResultRecorder` / `IJobExecutionQueryService` / `IJobResultQueryService` / `IJobHistoryCleanupService`
+> - **边界保留（TryAddEnumerable 多实现集合）**：`IBackgroundJobExecutionListener` → `JobExecutionRecorder`
+>   （主框架 Core 契约非 IDomainService，可叠加；JobExecutionRecorder ctor 有 IDomainUser——运行期经框架三桥
+>   GetServices + SystemActor 通道供给 Use&lt;T&gt; 懒加载窗口，ADR88 方案 i 已收敛）
+> - **零 DataService 手动注册**（ADR61/D17 铁律）——JobExecution/JobResult DataService 经 SG1 消费方聚合自动注册
+>   （throw-factory）+ Options 绑定（`TKWF:BackgroundJobs`，[Options] SG 自动绑定 + Initializer 显式 BindConfiguration 双通道）
+
+> **V0.3.0 消费方式**：4 门面经 `User.Use<接口>()` 解析（AOP 路径），**禁构造注入**（DI004 零豁免）——
+> IDomainUser 永不注册 DI，领域服务继承 `DomainServiceBase` 后经基类 `User` 拉取。见下各节示例。
+
 ### 2. 作业内记录业务产出
 
 ```csharp
-public class MyJob : IBackgroundJob
+public class OrderJobHandler : DomainServiceBase   // V0.3.0：领域服务继承 DomainServiceBase（IDomainUser 永不注册 DI）
 {
-    private readonly IJobResultRecorder _recorder;
+    public OrderJobHandler(IDomainUser user, ...) : base(user) { }
 
-    public async Task ExecuteAsync(IDictionary<string, string> args, CancellationToken ct)
+    public async Task HandleAsync(...)
     {
         // ... 业务逻辑 ...
 
-        // 记录业务产出（JobId 从 BackgroundJobContext.Current 自动读取）
-        await _recorder.RecordAsync("success", JsonSerializer.Serialize(result), "处理完成", ct);
+        // 记录业务产出（JobId 从 BackgroundJobContext.Current 自动读取）——经 User.Use<IJobResultRecorder>() 解析（AddConstructibleService）
+        var recorder = User.Use<IJobResultRecorder>();
+        await recorder.RecordAsync("success", JsonSerializer.Serialize(result), "处理完成", ct);
     }
 }
 ```
@@ -74,30 +87,36 @@ public class MyJob : IBackgroundJob
 ### 3. 查询执行历史
 
 ```csharp
-public class ExecutionHistoryService(IJobExecutionQueryService queryService)
+public class ExecutionHistoryService : DomainServiceBase   // V0.3.0：继承 DomainServiceBase，经 User.Use<接口>() 解析
 {
+    public ExecutionHistoryService(IDomainUser user) : base(user) { }
+
     public async Task<JobExecutionStats> GetDailyStatsAsync()
-        => await queryService.GetStatsAsync(TimeSpan.FromHours(24));
+    {
+        var queryService = User.Use<IJobExecutionQueryService>();
+        return await queryService.GetStatsAsync(TimeSpan.FromHours(24));
+    }
 
     public async Task<JobExecutionPagedResult> SearchAsync(string? provider, bool? isSuccess)
-        => await queryService.GetListAsync(new JobExecutionQueryInput(
+    {
+        var queryService = User.Use<IJobExecutionQueryService>();
+        return await queryService.GetListAsync(new JobExecutionQueryInput(
             Provider: provider, IsSuccess: isSuccess, Take: 50));
+    }
 }
 ```
 
 ### 4. 历史清理（V0.2.0）
 
-`IJobHistoryCleanupService` 按 `RetentionDays`（默认 180 天）分批物理删除过期的执行历史（`JobExecution`，锚点 `StartedAtUtc`）与业务结果（`JobResult`，锚点 `CreateTime`）。扩展**不内建调度器**——由消费方经 BackgroundJob/Quartz/Hangfire 定时调用：
+`IJobHistoryCleanupService` 按 `RetentionDays`（默认 180 天）分批物理删除过期的执行历史（`JobExecution`，锚点 `StartedAtUtc`）与业务结果（`JobResult`，锚点 `CreateTime`）。扩展**不内建调度器**——由消费方经 BackgroundJob/Quartz/Hangfire 定时调用；V0.3.0 起经 `User.Use<IJobHistoryCleanupService>()` 解析（AddConstructibleService）：
 
 ```csharp
-public class HistoryCleanupTask : IBackgroundJob
+public class HistoryCleanupTask : DomainServiceBase   // V0.3.0：继承 DomainServiceBase，经 User.Use<接口>() 解析
 {
-    private readonly IJobHistoryCleanupService _cleanupService;
+    public HistoryCleanupTask(IDomainUser user) : base(user) { }
 
-    public HistoryCleanupTask(IJobHistoryCleanupService cleanupService) => _cleanupService = cleanupService;
-
-    public async Task ExecuteAsync(IDictionary<string, string> args, CancellationToken ct)
-        => await _cleanupService.CleanupAsync(ct);
+    public async Task CleanupAsync(CancellationToken ct)
+        => await User.Use<IJobHistoryCleanupService>().CleanupAsync(ct);
 }
 ```
 
@@ -145,6 +164,7 @@ public class HistoryCleanupTask : IBackgroundJob
 - **列表 DTO 不含 ErrorText**（安全决策，对齐 AuditLogging 先例）——详情按 Id 取全量
 - **统计 SQL 级聚合**（Oracle C1）——`Dac.CountAsync`（SQL COUNT(*) 分区计数）+ `FreeSqlQueryableExtensions.AvgAsync/MaxAsync`（SQL AVG/MAX 下推，ADR15 聚合 API 分层：IQueryable 桥接不支持 GroupBy 翻译，走 FreeSql ISelect 原生聚合）——**禁 Dac.ToListAsync + 内存 GroupBy**
 - **TryAddEnumerable 注册监听器**（Oracle C3）——多监听器可叠加，无注册时零开销
+- **V0.3.0 领域自治根治（ADR90）**——4 门面（`IJobResultRecorder`/`IJobExecutionQueryService`/`IJobResultQueryService`/`IJobHistoryCleanupService`）实现继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）+ `[DiContractIgnore]` 豁免 DI001；注册由 TryAddScoped 改 **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory，消费方统一 `User.Use<接口>()` 解析）；`JobExecutionRecorder` 属**边界保留组**（实现主框架 `IBackgroundJobExecutionListener` 契约非 IDomainService——多实现集合 TryAddEnumerable 保持，ADR88 方案 i 懒加载窗口已收敛，本批不改代码）；测试宿主重写走生产路径（真实 DI + `DomainUser<TUserInfo>.BindScope` + `User.Use<接口>()` AOP）
 - **v0.1.0 无 ExecutionId**（Oracle C4）——JobExecution 后置写入，执行中不可得（YAGNI）
 - **异常静默**——监听器/记录器异常不阻断作业执行，ILogger.Warning 记录
 - **历史清理经 DataService 物理删**（v0.2.0）——`DeleteExpiredAsync` 先查过期 Id 列表（Take batchSize）再 `EntityDeleteBatchAsync`（hasSoftDelete:false，绝不用 `EntitySoftDeleteAsync`——会抛 InvalidOperationException）；`JobHistoryCleanupService` 只依赖 2 个 DataService + IOptions + ILogger，红线合规

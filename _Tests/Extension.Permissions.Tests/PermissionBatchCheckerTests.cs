@@ -87,7 +87,10 @@ public class PermissionBatchCheckerTests
         repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
         var s = store ?? new StubPermissionStore();
         var rp = new TestRoleProvider();
-        return (new PermissionChecker<SimpleUserInfo>(repository, s, rp), s, rp);
+        // ADR88/DI004：IPermissionStore 经 IDomainUser.Use<T>() 懒加载——StubDomainUser 注册能力
+        var user = new StubDomainUser();
+        user.Register<IPermissionStore>(s);
+        return (new PermissionChecker<SimpleUserInfo>(user, repository, rp), s, rp);
     }
 
     [Fact]

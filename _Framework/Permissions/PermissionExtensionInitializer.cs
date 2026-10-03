@@ -156,12 +156,16 @@ namespace TKWF.Ext.Permissions
     /// fail-closed：用户未授权 + 角色未授权 → 拒绝。</para>
     /// <para>providers 约定：用户权限 <c>("User", UserIdString)</c>；角色权限 <c>("Role", roleName)</c>。</para>
     /// </summary>
-    internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermissionBatchChecker
+internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermissionBatchChecker
         where TUserInfo : class, IUserInfo, new()
     {
+        private readonly IDomainUser _user;
         private readonly IPermissionDefinitionRepository _repository;
-        private readonly IPermissionStore _store;
         private readonly IRoleProvider<TUserInfo> _roleProvider;
+        private IPermissionStore? _store;
+
+        // ADR88/DI004：IPermissionStore 懒加载经 IDomainUser.Use<T>()（其余二接口非 IDomainService——保留构造注入）
+        private IPermissionStore Store => _store ??= _user.Use<IPermissionStore>();
 
         // V0.8.1 N+1 优化：授权集懒加载缓存（Scoped）——首次检查按 provider 批量加载已授予权限名，
         // 后续检查内存判定（HashSet.Contains），消除"逐权限名 × 逐角色"单条查询放大。
@@ -169,11 +173,11 @@ namespace TKWF.Ext.Permissions
         private HashSet<string>? _userGrantedCache;
         private HashSet<string>? _roleGrantedCache;
 
-        public PermissionChecker(IPermissionDefinitionRepository repository, IPermissionStore store, IRoleProvider<TUserInfo> roleProvider)
+        public PermissionChecker(IDomainUser user, IPermissionDefinitionRepository repository, IRoleProvider<TUserInfo> roleProvider)
         {
-            _repository = repository;
-            _store = store;
-            _roleProvider = roleProvider;
+            _user = user ?? throw new System.ArgumentNullException(nameof(user));
+            _repository = repository ?? throw new System.ArgumentNullException(nameof(repository));
+            _roleProvider = roleProvider ?? throw new System.ArgumentNullException(nameof(roleProvider));
         }
 
         public async Task<bool> IsGrantedAsync(string permissionName)
@@ -235,7 +239,7 @@ namespace TKWF.Ext.Permissions
             var userIdStrings = userIds.Select(id => id.ToString()).ToList();
 
             // 1. 用户级授权集分组批量查询（1 次查询，按 userId 归因）
-            var userGrantedMap = await _store.GetGrantedPermissionsByProviderKeyAsync("User", userIdStrings).ConfigureAwait(false);
+            var userGrantedMap = await Store.GetGrantedPermissionsByProviderKeyAsync("User", userIdStrings).ConfigureAwait(false);
 
             // 2. 角色解析（N 次——IdentityRoleProvider Scoped 缓存去重）+ 角色级授权集分组批量查询（1 次）
             var allRoles = new HashSet<string>(StringComparer.Ordinal);
@@ -247,7 +251,7 @@ namespace TKWF.Ext.Permissions
                 userRolesMap[uid] = roles;
                 foreach (var r in roles) allRoles.Add(r);
             }
-            var roleGrantedMap = await _store.GetGrantedPermissionsByProviderKeyAsync("Role", allRoles).ConfigureAwait(false);
+            var roleGrantedMap = await Store.GetGrantedPermissionsByProviderKeyAsync("Role", allRoles).ConfigureAwait(false);
 
             // 3. 每用户评估（逐字复用 EvaluatePermission——Admin.All + fail-closed + 用户→角色回退）
             foreach (var uid in userIds)
@@ -282,12 +286,12 @@ namespace TKWF.Ext.Permissions
             string userId, TUserInfo userInfo)
         {
             if (_userGrantedCache == null)
-                _userGrantedCache = await _store.GetGrantedPermissionNamesAsync("User", [userId]).ConfigureAwait(false);
+                _userGrantedCache = await Store.GetGrantedPermissionNamesAsync("User", [userId]).ConfigureAwait(false);
 
             if (_roleGrantedCache == null)
             {
                 var roles = await _roleProvider.GetRolesAsync(userInfo).ConfigureAwait(false);
-                _roleGrantedCache = await _store.GetGrantedPermissionNamesAsync("Role", roles).ConfigureAwait(false);
+                _roleGrantedCache = await Store.GetGrantedPermissionNamesAsync("Role", roles).ConfigureAwait(false);
             }
 
             return (_userGrantedCache, _roleGrantedCache);

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions
@@ -11,33 +12,37 @@ namespace TKWF.Ext.Permissions
     /// <para>委托 <see cref="PermissionGrantEntityDataService.GetGrantAsync"/> + <see cref="PermissionGrantEntityDataService.SetGrantAsync"/>
     /// （按三列业务键查询/upsert——逻辑与原 EntityDAC 直用重复，此处收敛）。</para>
     /// <para><b>生命周期</b>：Scoped（依赖 Scoped DataService，自动参与当前请求 UoW 事务）。</para>
+    /// <para>ADR88/DI004：DataService 不再构造注入——经 IDomainUser.Use&lt;T&gt;() 懒加载。</para>
     /// </summary>
     public sealed class EntityDACPermissionStore : IPermissionStore
     {
-        private readonly PermissionGrantEntityDataService _dataService;
+        private readonly IDomainUser _user;
+        private PermissionGrantEntityDataService? _dataService;
 
-        public EntityDACPermissionStore(PermissionGrantEntityDataService dataService)
+        private PermissionGrantEntityDataService DataService => _dataService ??= _user.Use<PermissionGrantEntityDataService>();
+
+        public EntityDACPermissionStore(IDomainUser user)
         {
-            _dataService = dataService;
+            _user = user ?? throw new System.ArgumentNullException(nameof(user));
         }
 
         public async Task<PermissionGrantResult> GetAsync(string permissionName, string providerName, string providerKey)
         {
-            var dto = await _dataService.GetGrantAsync(permissionName, providerName, providerKey, CancellationToken.None);
+            var dto = await DataService.GetGrantAsync(permissionName, providerName, providerKey, CancellationToken.None);
             return dto?.IsGranted == true ? PermissionGrantResult.Granted : PermissionGrantResult.Denied;
         }
 
         public async Task SetAsync(string permissionName, string providerName, string providerKey, bool isGranted)
         {
             // upsert：DataService.SetGrantAsync 内部按三列业务键查存在 → 更新 IsGranted / 插入
-            await _dataService.SetGrantAsync(permissionName, providerName, providerKey, isGranted, CancellationToken.None);
+            await DataService.SetGrantAsync(permissionName, providerName, providerKey, isGranted, CancellationToken.None);
         }
 
         /// <summary>按 provider 批量读取已授予权限名集合（N+1 优化 V0.8.1）——委托 DataService 一次查询。</summary>
         public async Task<HashSet<string>> GetGrantedPermissionNamesAsync(
             string providerName, IEnumerable<string>? providerKeys = null)
         {
-            var names = await _dataService.GetGrantedNamesByProviderAsync(
+            var names = await DataService.GetGrantedNamesByProviderAsync(
                 providerName, providerKeys, CancellationToken.None);
             return names;
         }
@@ -46,7 +51,7 @@ namespace TKWF.Ext.Permissions
         public async Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
             string providerName, IEnumerable<string>? providerKeys = null)
         {
-            var map = await _dataService.GetGrantedNamesByProviderKeyAsync(
+            var map = await DataService.GetGrantedNamesByProviderKeyAsync(
                 providerName, providerKeys, CancellationToken.None);
             return map;
         }

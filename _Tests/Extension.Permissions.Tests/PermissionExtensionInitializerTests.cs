@@ -30,6 +30,8 @@ public class PermissionExtensionInitializerTests
     public void ConfigureServices_Registers_DefaultServices()
     {
         var services = new ServiceCollection();
+        // ADR88/DI004：PermissionChecker 构造注入 IDomainUser（Use<T> 懒加载能力）——裸容器补注册测试用户桩
+        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();

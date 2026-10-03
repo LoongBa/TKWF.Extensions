@@ -73,13 +73,16 @@ public class PermissionCheckerTests
         }
     }
 
-    /// <summary>构造含权限定义的 checker（默认仓库含 DefinedPermission）。</summary>
+    /// <summary>构造含权限定义的 checker（默认仓库含 DefinedPermission）。
+    /// <para>ADR88/DI004：IPermissionStore 经 IDomainUser.Use&lt;T&gt;() 懒加载——StubDomainUser 注册能力。</para></summary>
     private static PermissionChecker<SimpleUserInfo> CreateChecker(IPermissionStore? store = null, bool withDefinedPermission = true, IRoleProvider<SimpleUserInfo>? roleProvider = null)
     {
         var repository = new InMemoryPermissionDefinitionRepository();
         if (withDefinedPermission)
             repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
-        return new PermissionChecker<SimpleUserInfo>(repository, store ?? new StubPermissionStore(), roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
+        var user = new StubDomainUser();
+        user.Register<IPermissionStore>(store ?? new StubPermissionStore());
+        return new PermissionChecker<SimpleUserInfo>(user, repository, roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }
 
     private static IDisposable SetAmbientUser(string? userId)

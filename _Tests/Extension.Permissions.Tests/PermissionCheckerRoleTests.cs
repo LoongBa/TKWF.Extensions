@@ -103,9 +103,12 @@ public class PermissionCheckerRoleTests
     {
         var repository = new InMemoryPermissionDefinitionRepository();
         repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
+        // ADR88/DI004：IPermissionStore 经 IDomainUser.Use<T>() 懒加载——StubDomainUser 注册能力
+        var user = new StubDomainUser();
+        user.Register<IPermissionStore>(store ?? new StubPermissionStore());
         return new PermissionChecker<SimpleUserInfo>(
+            user,
             repository,
-            store ?? new StubPermissionStore(),
             roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }
 

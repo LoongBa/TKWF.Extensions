@@ -17,9 +17,16 @@ internal static class PermissionsTestHost
         => new(new StubDomainUser(), dac);
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
+/// <para>ADR88/DI004：生产经 IDomainUser.Use&lt;T&gt;() 懒加载能力——StubDomainUser 增
+/// 能力注册表（Register&lt;TService&gt; 按类型键）+ ServiceProvider 兜底双通道解析。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly Dictionary<Type, object> _manual = new();
+
+    /// <summary>可选 IServiceProvider 兜底——未注册能力时经 DI GetRequiredService 解析。</summary>
+    public IServiceProvider? ServiceProvider { get; set; }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -30,8 +37,24 @@ internal sealed class StubDomainUser : IDomainUser
     public string? UserName => null;
     public bool IsInRole(string role) => false;
 
+    /// <summary>注册能力实例（按 typeof(TService) 键）——测试为 Use&lt;T&gt;() 提供显式解析。</summary>
+    public void Register<TService>(TService instance)
+    {
+        if (instance is null) throw new ArgumentNullException(nameof(instance));
+        lock (_manual) _manual[typeof(TService)] = instance;
+    }
+
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
+    {
+        lock (_manual)
+        {
+            if (_manual.TryGetValue(typeof(TDomainService), out var instance))
+                return (TDomainService)instance;
+        }
+        if (ServiceProvider is not null)
+            return ServiceProvider.GetRequiredService<TDomainService>();
+        throw new NotSupportedException($"Stub: Use<{typeof(TDomainService).Name}> 未注册——测试须经 Register<TService> 或 ServiceProvider 提供能力");
+    }
 
     public TService GetService<TService>() where TService : notnull
         => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");

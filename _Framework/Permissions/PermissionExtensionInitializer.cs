@@ -66,9 +66,12 @@ namespace TKWF.Ext.Permissions
             services.TryAddScoped<IPermissionDefinitionRepository>(_ => repository);
             // V0.6.0：角色提供者——TryAddScoped（消费方可自定义覆盖，如从角色服务/外部身份提供商解析）
             services.TryAddScoped<IRoleProvider<TUserInfo>, DefaultRoleProvider<TUserInfo>>();
-            services.TryAddScoped<IPermissionChecker, PermissionChecker<TUserInfo>>();
+            // V4.10.53（领域自治根治）：门面注册改 AddConstructibleService——接口可构造守卫工厂
+            // （CurrentAopUser 守卫）+ 实现类 throw-factory。旧 TryAddScoped 构造注入 IDomainUser
+            // （永不注册 DI——D01）→ 生产解析必失败（v0.3.3 同根缺陷）。
+            services.AddConstructibleService<IPermissionChecker, PermissionChecker<TUserInfo>>();
             // V0.9.0：多用户批量检查器——与 IPermissionChecker 同实例（PermissionChecker<TUserInfo> 实现两者）
-            services.TryAddScoped<IPermissionBatchChecker, PermissionChecker<TUserInfo>>();
+            services.AddConstructibleService<IPermissionBatchChecker, PermissionChecker<TUserInfo>>();
 
             // V0.3.0：权限管理 Service——v4.10.8 (ADR61) 起经 SG 聚合自动注册（可构造工厂），不再手动 TryAddScoped
         }
@@ -104,21 +107,31 @@ namespace TKWF.Ext.Permissions
             // 进入 SyncTables 统一遍历建表（开发环境）；生产仍走 scripts\PermissionGrant.sql 迁移脚本。
             // 弃用 V0.7.0 W1 的 synchronizer 手动调用（扩展不再自建表）。
 
-            // 真实持久化未接线（未注册 IEntityDAC）→ 跳过种子（NoOp 模式下无意义）
-            // ⚠️ 已知缺陷登记（2026-10-02，Oracle 评审确认，独立修复不阻塞）：真实消费方经
-            // GetExtensionMetaContexts 聚合 + AddConstructibleDataService 注册后，此处 GetService 会执行
-            // 可构造工厂 → 启动期无 CurrentAopUser 域作用域 → 抛「解析需处于域作用域」守卫（与
-            // Authentication V0.3.1 同根缺陷，被测试宿主空 MetaContext 的 null 短路掩盖）。修复方向：
-            // 对齐 Authentication V0.3.1（Oracle 方案 A'）——种子逻辑若需 DataService，改经
-            // BeginSystemScopeAsync + scope.System.Use<T>() 系统作用域解析，避免裸 GetService 可构造工厂。
-            var dataService = scoped.GetService<PermissionGrantEntityDataService>();
-            if (dataService is null) return;
+            // 真实持久化未接线（未注册 IEntityDAC<PermissionGrantEntity>）→ 跳过种子（NoOp fail-closed 语义下无意义）
+            if (scoped.GetService<IEntityDAC<PermissionGrantEntity>>() is null) return;
 
             var options = scoped.GetService<IOptions<PermissionOptions>>()?.Value;
             var seedRole = options?.SeedAdminRoleName;
             if (string.IsNullOrWhiteSpace(seedRole)) return;
 
+            // V4.10.53（领域自治根治，修复既有已知缺陷——对齐 Authentication V0.3.1 方案 A'）：
+            // 裸 GetService<PermissionGrantEntityDataService>() 在 throw-factory（V4.10.53 起 DataService
+            // 由 AddConstructibleDataService 改 AddService）下必抛「禁止直接 DI 解析」——经 System 作用域
+            // + scope.System.Use<T>() 解析（Use<T> 内设 CurrentAopUser=SystemUser，领域自治铁律零妥协）。
+            var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
+            await using var sysScope = await host.BeginSystemScopeAsync(sp);
+
             // ── V0.7.0 W3：种子高级化——预置 admin 角色 Admin.All 系统权限（替代逐权限授予）──
+            var dataService = sysScope.System.Use<PermissionGrantEntityDataService>();
+            await SeedAdminAllAsync(dataService, seedRole);
+        }
+
+        /// <summary>
+        /// 种子核心（供 InitializeAsync 经 System 作用域解析 DataService 后调用；测试直测本方法，免宿主）。
+        /// 幂等预置 admin 角色 <see cref="PermissionNames.AdminAll"/> 系统权限——仅插入缺失记录，不覆盖既有授予/撤销。
+        /// </summary>
+        internal static async Task SeedAdminAllAsync(PermissionGrantEntityDataService dataService, string seedRole)
+        {
             var existingSystem = await dataService.GetGrantAsync(PermissionNames.AdminAll, "Role", seedRole);
             if (existingSystem is null)
                 await dataService.SetGrantAsync(PermissionNames.AdminAll, "Role", seedRole, isGranted: true);
@@ -155,17 +168,21 @@ namespace TKWF.Ext.Permissions
     /// 支持用户+角色双重检查——用户级显式授予优先；未授予时回退角色级判定（任一角色授予即通过）。
     /// fail-closed：用户未授权 + 角色未授权 → 拒绝。</para>
     /// <para>providers 约定：用户权限 <c>("User", UserIdString)</c>；角色权限 <c>("Role", roleName)</c>。</para>
+    /// <para>V4.10.53（领域自治根治）：继承 <see cref="DomainServiceBase{TUserInfo}"/>——经基类 <c>User</c> 获取
+    /// 用户上下文（IDomainUser 永不注册 DI）；注册形态改 <c>AddConstructibleService</c>（接口可构造守卫工厂）。
+    /// <c>[DiContractIgnore]</c>：运行时手写注册（非 SG 管理 DI 契约），ctor 的 IPermissionDefinitionRepository /
+    /// IRoleProvider 为合法 DI 依赖（TryAddScoped 注册）——豁免 SG1a DI001 误报。</para>
     /// </summary>
-internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermissionBatchChecker
+    [DiContractIgnore]
+    internal sealed class PermissionChecker<TUserInfo> : DomainServiceBase<TUserInfo>, IPermissionChecker, IPermissionBatchChecker
         where TUserInfo : class, IUserInfo, new()
     {
-        private readonly IDomainUser _user;
         private readonly IPermissionDefinitionRepository _repository;
         private readonly IRoleProvider<TUserInfo> _roleProvider;
         private IPermissionStore? _store;
 
-        // ADR88/DI004：IPermissionStore 懒加载经 IDomainUser.Use<T>()（其余二接口非 IDomainService——保留构造注入）
-        private IPermissionStore Store => _store ??= _user.Use<IPermissionStore>();
+        // V4.10.53（领域自治根治）：IPermissionStore 经基类 User.Use<T>() 懒加载（IDomainUser 永不注册 DI——D01）
+        private IPermissionStore Store => _store ??= User.Use<IPermissionStore>();
 
         // V0.8.1 N+1 优化：授权集懒加载缓存（Scoped）——首次检查按 provider 批量加载已授予权限名，
         // 后续检查内存判定（HashSet.Contains），消除"逐权限名 × 逐角色"单条查询放大。
@@ -173,9 +190,9 @@ internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermis
         private HashSet<string>? _userGrantedCache;
         private HashSet<string>? _roleGrantedCache;
 
-        public PermissionChecker(IDomainUser user, IPermissionDefinitionRepository repository, IRoleProvider<TUserInfo> roleProvider)
+        public PermissionChecker(DomainUser<TUserInfo> user, IPermissionDefinitionRepository repository, IRoleProvider<TUserInfo> roleProvider)
+            : base(user)
         {
-            _user = user ?? throw new System.ArgumentNullException(nameof(user));
             _repository = repository ?? throw new System.ArgumentNullException(nameof(repository));
             _roleProvider = roleProvider ?? throw new System.ArgumentNullException(nameof(roleProvider));
         }
@@ -185,9 +202,8 @@ internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermis
 
         public async Task<Dictionary<string, bool>> IsGrantedAsync(params string[] permissionNames)
         {
-            // 批量检查先解析一次用户上下文 + 加载授权集缓存——N 个权限名共享一轮查询（N+1 优化）
-            var current = DomainUserContext.CurrentAopUser as DomainUser<TUserInfo>;
-            var user = current?.UserInfo;
+            // 批量检查先解析用户上下文 + 加载授权集缓存——N 个权限名共享一轮查询（N+1 优化）
+            var user = User.UserInfo;
             var userId = user?.UserIdString;
             if (string.IsNullOrEmpty(userId))
             {
@@ -210,9 +226,9 @@ internal sealed class PermissionChecker<TUserInfo> : IPermissionChecker, IPermis
             if (string.IsNullOrWhiteSpace(permissionName))
                 return false;
 
-            // 解析当前用户（ambient AOP 上下文——PermissionFilter 触发时 StaticDomainInterceptor 已 push）
-            var current = DomainUserContext.CurrentAopUser as DomainUser<TUserInfo>;
-            var user = current?.UserInfo;
+            // 解析当前用户——经基类 User（构造工厂注入的调用方用户；V4.10.53 起不读 ambient：
+            // DomainUserContext.CurrentAopUser 仅 Use<T>() 窗口内设置，过滤器路径恒 null → 旧代码过滤器路径恒拒绝）
+            var user = User.UserInfo;
             var userId = user?.UserIdString;
             if (string.IsNullOrEmpty(userId))
                 return false; // 未认证/无用户上下文 → 拒绝（与 AuthorityFilter 未认证拦截一致）

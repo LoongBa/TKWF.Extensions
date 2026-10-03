@@ -2,48 +2,30 @@ using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions;
 using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions.Tests;
 
 /// <summary>
-/// V0.4.0（G3）+ V0.7.0（W3）：PermissionExtensionInitializer.InitializeAsync 种子初始化测试。
-/// <para>覆盖要点：IServiceProviderAware 注入；V0.7.0 起预置 admin 角色 Admin.All 系统权限
-/// （替代 V0.4.0 的逐权限授予）；仅插入缺失记录（不覆盖既有授予/撤销）；空角色名禁用种子；
-/// 未注册 IEntityDAC（真实持久化未接线）时跳过。</para>
+/// V0.4.0（G3）+ V0.7.0（W3）+ V4.10.53（领域自治根治）：PermissionExtensionInitializer 种子测试。
+/// <para>覆盖要点：预置 admin 角色 Admin.All 系统权限（V0.7.0 起替代逐权限授予）；仅插入缺失记录
+/// （不覆盖既有授予/撤销）；幂等；空角色名禁用种子；未注册 IEntityDAC（真实持久化未接线）时跳过。</para>
+/// <para>V4.10.53：种子核心提取为 <see cref="PermissionExtensionInitializer{TUserInfo}.SeedAdminAllAsync"/>
+/// 供直测（免 DomainHost/System 作用域）；<see cref="PermissionExtensionInitializer{TUserInfo}.InitializeAsync"/>
+/// 的守卫跳过路径（无 IEntityDAC / 空角色名）不经宿主，仍直测 InitializeAsync。</para>
 /// </summary>
 public class PermissionSeedInitializerTests
 {
     private const string RoleProvider = "Role";
 
-    private sealed record Def(string Name);
-
-    /// <summary>构建带 InMemory 持久化的 DI 容器 + 注入权限定义仓库。</summary>
-    private static ServiceProvider BuildSvcProvider(
-        bool registerDac, string? seedRole, params string[] permissionNames)
+    /// <summary>构建仅含种子守卫所需注册的 DI 容器（IEntityDAC + Options——跳过路径不经宿主）。</summary>
+    private static ServiceProvider BuildSvcProvider(bool registerDac, string? seedRole)
     {
         var services = new ServiceCollection();
 
-        // 权限定义仓库（注入两个已定义权限）
-        var repository = new InMemoryPermissionDefinitionRepository();
-        foreach (var name in permissionNames)
-        {
-            repository.AddRange(new[]
-            {
-                new PermissionDefinition { Name = name, DisplayName = name, Group = "Test" }
-            });
-        }
-        services.AddScoped<IPermissionDefinitionRepository>(_ => repository);
-
         if (registerDac)
-        {
-            var dac = new InMemoryEntityDac();
-            services.AddScoped<IEntityDAC<PermissionGrantEntity>>(_ => dac);
-            services.AddScoped<IDomainUser, StubDomainUser>();
-            // v4.10.8 (ADR61) 迁移：DataService 注册改为测试版可构造工厂（镜像生产 AddConstructibleDataService）——
-            // 测试项目不走消费方 SG 聚合，此注册是唯一注册路径；DI 兜底工厂正好补上（勿依赖扩展 Initializer）。
-            AddTestConstructibleDataService<PermissionGrantEntityDataService>(services);
-        }
+            services.AddScoped<IEntityDAC<PermissionGrantEntity>>(_ => new InMemoryEntityDac());
 
         if (seedRole is not null)
             services.AddSingleton<IOptions<PermissionOptions>>(
@@ -52,59 +34,52 @@ public class PermissionSeedInitializerTests
         return services.BuildServiceProvider();
     }
 
+    /// <summary>经内存桩 DAC 构造 DataService（种子核心直测载体）。</summary>
+    private static PermissionGrantEntityDataService CreateDataService(InMemoryEntityDac dac)
+        => new(new StubDomainUser(), dac);
+
     [Fact]
-    public async Task InitializeAsync_SeedsAdminRole_AdminAllSystemPermission()
+    public async Task SeedAdminAll_SeedsAdminRole_AdminAllSystemPermission()
     {
-        var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create", "Order.Delete");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
+        var dac = new InMemoryEntityDac();
+        var dataService = CreateDataService(dac);
 
-        await initializer.InitializeAsync(sp);
+        await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
 
-        using var scope = sp.CreateScope();
-        var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-        var adminAll = await svc.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
+        var adminAll = await dataService.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
         Assert.NotNull(adminAll);
         Assert.True(adminAll!.IsGranted);
 
         // V0.7.0：种子只预置 Admin.All 系统权限，不再逐权限授予
-        var grants = await svc.GetByProviderAsync(RoleProvider, "admin");
+        var grants = await dataService.GetByProviderAsync(RoleProvider, "admin");
         Assert.Single(grants);
         Assert.Equal(PermissionNames.AdminAll, grants[0].PermissionName);
     }
 
     [Fact]
-    public async Task InitializeAsync_Idempotent_DoesNotDuplicate()
+    public async Task SeedAdminAll_Idempotent_DoesNotDuplicate()
     {
-        var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
+        var dac = new InMemoryEntityDac();
+        var dataService = CreateDataService(dac);
 
-        await initializer.InitializeAsync(sp);
-        await initializer.InitializeAsync(sp);
+        await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
+        await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
 
-        using var scope = sp.CreateScope();
-        var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-        var grants = await svc.GetByProviderAsync(RoleProvider, "admin");
+        var grants = await dataService.GetByProviderAsync(RoleProvider, "admin");
         Assert.Single(grants);
     }
 
     [Fact]
-    public async Task InitializeAsync_DoesNotOverwriteExistingRevoke()
+    public async Task SeedAdminAll_DoesNotOverwriteExistingRevoke()
     {
-        var sp = BuildSvcProvider(registerDac: true, seedRole: "admin", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
+        var dac = new InMemoryEntityDac();
+        var dataService = CreateDataService(dac);
+        // 消费方先显式撤销 Admin.All（记录已存在，IsGranted=false）
+        await dataService.SetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", isGranted: false);
 
-        using (var scope = sp.CreateScope())
-        {
-            var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-            // 消费方先显式撤销 Admin.All（记录已存在，IsGranted=false）
-            await svc.SetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", isGranted: false);
-        }
+        await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
 
-        await initializer.InitializeAsync(sp);
-
-        using var verifyScope = sp.CreateScope();
-        var verifySvc = verifyScope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-        var grant = await verifySvc.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
+        var grant = await dataService.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
         Assert.NotNull(grant);
         Assert.False(grant!.IsGranted); // 未被种子覆盖
     }
@@ -112,39 +87,21 @@ public class PermissionSeedInitializerTests
     [Fact]
     public async Task InitializeAsync_EmptySeedRole_DisablesSeeding()
     {
-        var sp = BuildSvcProvider(registerDac: true, seedRole: "", "Order.Create");
-        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
-
-        await initializer.InitializeAsync(sp);
-
-        using var scope = sp.CreateScope();
-        var svc = scope.ServiceProvider.GetRequiredService<PermissionGrantEntityDataService>();
-        var grants = await svc.GetByProviderAsync(RoleProvider, "admin");
-        Assert.Empty(grants);
-    }
-
-    [Fact]
-    public async Task InitializeAsync_NoDacRegistered_SkipsSeeding()
-    {
-        // 未注册 IEntityDAC（真实持久化未接线）→ 无 DataService → 跳过种子
-        var sp = BuildSvcProvider(registerDac: false, seedRole: "admin", "Order.Create");
+        // 空角色名 → 种子守卫返回（不经 DomainHost/System 作用域——无宿主也安全）
+        var sp = BuildSvcProvider(registerDac: true, seedRole: "");
         var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
 
         await initializer.InitializeAsync(sp); // 不应抛异常
     }
 
-    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
-    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
-    /// 用户源改为 DI <c>IDomainUser</c>（StubDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
-    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
-    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
-        where T : class
+    [Fact]
+    public async Task InitializeAsync_NoDacRegistered_SkipsSeeding()
     {
-        services.AddScoped<T>(sp =>
-        {
-            var user = sp.GetRequiredService<IDomainUser>();
-            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
-        });
+        // 未注册 IEntityDAC（真实持久化未接线）→ 种子守卫返回（不经 DomainHost/System 作用域）
+        var sp = BuildSvcProvider(registerDac: false, seedRole: "admin");
+        var initializer = new PermissionExtensionInitializer<SimpleUserInfo>();
+
+        await initializer.InitializeAsync(sp); // 不应抛异常
     }
 
     /// <summary>最小 IDomainUser 桩——仅满足 DataService 构造。</summary>

@@ -43,8 +43,6 @@ public class ConsumerIntegrationTests
             FakeConsumerMetaContext.Install();
 
             var services = new ServiceCollection();
-            // ADR88/DI004：PermissionChecker 构造注入 IDomainUser（Use<T> 懒加载能力）——裸容器补注册测试用户桩
-            services.AddScoped<IDomainUser>(_ => new StubDomainUser());
             new PermissionExtensionInitializer<ConsumerUserInfo>().ConfigureServices(services);
 
             var sp = services.BuildServiceProvider();
@@ -55,31 +53,13 @@ public class ConsumerIntegrationTests
             Assert.Contains("Order.Create", names);
             Assert.Contains("Order.Delete", names);
 
-            // 服务已注册（默认 NoOp store + PermissionChecker + RoleProvider）
-            Assert.NotNull(sp.GetService<IPermissionChecker>());
+            // 服务已注册：IPermissionChecker 为 AddConstructibleService 门面（接口工厂描述符 + Scoped）；
+            // NoOp store + RoleProvider 普通 DI（TryAdd）
+            Assert.NotNull(sp.GetService<IPermissionStore>());
             Assert.NotNull(sp.GetService<IRoleProvider<ConsumerUserInfo>>());
-        }
-        finally
-        {
-            FakeConsumerMetaContext.Restore(original);
-        }
-    }
-
-    [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerChecker()
-    {
-        var original = ProjectMetaContextBase.Instance;
-        try
-        {
-            FakeConsumerMetaContext.Install();
-
-            var services = new ServiceCollection();
-            // 消费方先注册自定义 IPermissionChecker → TryAddScoped 不应覆盖
-            services.AddScoped<IPermissionChecker, ConsumerGrantAllChecker>();
-            new PermissionExtensionInitializer<ConsumerUserInfo>().ConfigureServices(services);
-
-            var sp = services.BuildServiceProvider();
-            Assert.IsType<ConsumerGrantAllChecker>(sp.GetRequiredService<IPermissionChecker>());
+            var checkerDesc = services.First(d => d.ServiceType == typeof(IPermissionChecker));
+            Assert.Null(checkerDesc.ImplementationType);
+            Assert.NotNull(checkerDesc.ImplementationFactory);
         }
         finally
         {
@@ -136,34 +116,6 @@ public class ConsumerIntegrationTests
         public override MetadataChangeLog ChangeLog => null!;
         public override string MetadataSchemaVersion => "test";
     }
-
-    /// <summary>测试专用 IPermissionChecker：标记消费方自定义实现（TryAdd 不被覆盖）。</summary>
-    private sealed class ConsumerGrantAllChecker : IPermissionChecker
-    {
-        public Task<bool> IsGrantedAsync(string permissionName) => Task.FromResult(true);
-
-        public Task<Dictionary<string, bool>> IsGrantedAsync(params string[] permissionNames)
-            => Task.FromResult(permissionNames.ToDictionary(n => n, _ => true));
-    }
-
-    /// <summary>最小 IDomainUser 桩——ADR88/DI004 后 PermissionChecker 构造注入用（裸容器无 ambient 用户）。</summary>
-    private sealed class StubDomainUser : IDomainUser
-    {
-        public string SessionKey => "test-session";
-        public bool IsAuthenticated => false;
-        public bool IsSystemActor => false;
-        public IUserInfo? UserInfo => null;
-        public long? TenantId => null;
-        public bool IsNoAuditActive => false;
-        public string? UserId => null;
-        public string? UserName => null;
-        public bool IsInRole(string role) => false;
-        public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-            => throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-        public TService GetService<TService>() where TService : notnull
-            => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-        public TService GetOptionalService<TService>() where TService : class => null!;
-        public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
-    }
 }
+
 

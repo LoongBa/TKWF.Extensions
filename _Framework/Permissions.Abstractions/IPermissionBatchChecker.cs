@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Permissions.Abstractions
 {
@@ -12,8 +13,10 @@ namespace TKWF.Ext.Permissions.Abstractions
     /// （<c>EvaluatePermission</c>：Admin.All 放行 + fail-closed + 用户级优先/角色级回退），
     /// 角色经 <c>IRoleProvider&lt;TUserInfo&gt;</c> 按 userId 解析（IdentityRoleProvider 已支持）。
     /// 供 Notifications v0.3.0 逐用户权限门控消费（发布通知时过滤无权限收件人）。</para>
+    /// <para>V4.10.53（领域自治根治）：补标 <see cref="IDomainService"/>——扩展注册形态改为
+    /// <c>AddConstructibleService</c>（接口可构造守卫工厂 + 实现类 throw-factory）。</para>
     /// </summary>
-    public interface IPermissionBatchChecker
+    public interface IPermissionBatchChecker : IDomainService
     {
         /// <summary>
         /// 多用户批量检查——返回 用户ID → 是否授予 字典（单权限 × 多用户）。

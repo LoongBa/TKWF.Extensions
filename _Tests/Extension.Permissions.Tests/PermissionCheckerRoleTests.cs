@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
@@ -7,6 +8,8 @@ namespace TKWF.Ext.Permissions.Tests;
 /// <summary>
 /// V0.6.0：PermissionChecker 角色→权限映射测试。
 /// <para>覆盖用户+角色双重检查逻辑：用户显式授予优先 → 角色级兜底 → fail-closed。</para>
+/// <para>V4.10.53（领域自治根治）：角色经 checker 自身 <c>User.UserInfo.Roles</c>（构造注入的 DomainUser，
+/// 非 ambient 上下文）+ 真实 DomainUser + BindScope（User.Use&lt;IPermissionStore&gt;() 经 DI 解析 store）。</para>
 /// </summary>
 public class PermissionCheckerRoleTests
 {
@@ -72,44 +75,30 @@ public class PermissionCheckerRoleTests
         }
     }
 
-    /// <summary>创建带指定角色的 ambient 用户上下文。</summary>
-    private static IDisposable SetAmbientUserWithRoles(string userId, params string[] roles)
-    {
-        var current = DomainUserContext.CurrentAopUser;
-        var user = new DomainUser<SimpleUserInfo>
-        {
-            UserInfo = new SimpleUserInfo(userId, $"用户-{userId}") { Roles = roles.ToList() }
-        };
-        DomainUserContext.CurrentAopUser = user;
-        return new RestoreAmbientUser(current);
-    }
-
-    /// <summary>无用户上下文。</summary>
-    private static IDisposable SetNoAmbientUser()
-    {
-        var current = DomainUserContext.CurrentAopUser;
-        DomainUserContext.CurrentAopUser = null;
-        return new RestoreAmbientUser(current);
-    }
-
-    private sealed class RestoreAmbientUser(object? previous) : IDisposable
-    {
-        public void Dispose() => DomainUserContext.CurrentAopUser = previous;
-    }
+    /// <summary>构造带指定角色的用户信息（经 DomainUser.UserInfo 传入 checker——非 ambient）。</summary>
+    private static SimpleUserInfo NewUserWithRoles(params string[] roles)
+        => new(UserId, $"用户-{UserId}") { Roles = roles.ToList() };
 
     private static PermissionChecker<SimpleUserInfo> CreateChecker(
         StubPermissionStore? store = null,
-        IRoleProvider<SimpleUserInfo>? roleProvider = null)
+        IRoleProvider<SimpleUserInfo>? roleProvider = null,
+        SimpleUserInfo? userInfo = null,
+        bool anonymous = false)
     {
         var repository = new InMemoryPermissionDefinitionRepository();
         repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
-        // ADR88/DI004：IPermissionStore 经 IDomainUser.Use<T>() 懒加载——StubDomainUser 注册能力
-        var user = new StubDomainUser();
-        user.Register<IPermissionStore>(store ?? new StubPermissionStore());
-        return new PermissionChecker<SimpleUserInfo>(
-            user,
-            repository,
-            roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
+
+        // 生产路径：store 经 DI 注册（User.Use<IPermissionStore>() AOP 路径 GetRequiredService 解析）
+        var services = new ServiceCollection();
+        services.AddSingleton<IPermissionStore>(store ?? new StubPermissionStore());
+        var provider = services.BuildServiceProvider();
+        DomainUser<SimpleUserInfo>.BindScope(provider);
+
+        var user = new DomainUser<SimpleUserInfo>
+        {
+            UserInfo = anonymous ? null : userInfo
+        };
+        return new PermissionChecker<SimpleUserInfo>(user, repository, roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }
 
     // ────────────────────── 8 角色级测试 ──────────────────────
@@ -118,10 +107,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task RoleGranted_NoUserGrant_ReturnsTrue()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, RoleProvider, RoleAdmin, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -130,10 +118,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task UserGranted_NoRoleGrant_ReturnsTrue()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -142,11 +129,10 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task UserAndRoleBothGranted_ReturnsTrue()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, isGranted: true);
         store.Grant(DefinedPermission, RoleProvider, RoleAdmin, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -155,9 +141,8 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task UserAndRoleBothNotGranted_ReturnsFalse()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore(); // 无任何授权
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -166,11 +151,10 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task MultipleRoles_OneGranted_ReturnsTrue()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin, RoleEditor);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, RoleProvider, RoleEditor, isGranted: true);
         // admin 角色未授权，仅 editor 授权
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin, RoleEditor));
 
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -179,10 +163,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task MultipleRoles_NoneGranted_ReturnsFalse()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin, RoleEditor);
         var store = new StubPermissionStore();
         // admin 和 editor 均未授权
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin, RoleEditor));
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -191,9 +174,8 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task NullRoles_NoUserGrant_ReturnsFalse()
     {
-        using var restore = SetAmbientUserWithRoles(UserId); // 空角色
         var store = new StubPermissionStore();
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles()); // 空角色
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -202,10 +184,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task NoUserContext_FailClosed_ReturnsFalse()
     {
-        using var restore = SetNoAmbientUser();
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, RoleProvider, RoleAdmin, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, anonymous: true);
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -216,10 +197,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task RoleHasAdminAll_GrantsAnyDefinedPermission()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore();
         store.Grant(PermissionNames.AdminAll, RoleProvider, RoleAdmin, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         // 权限已定义但未单独授权——Admin.All 拥有者放行
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
@@ -229,10 +209,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task UserHasAdminAll_GrantsAnyDefinedPermission()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore();
         store.Grant(PermissionNames.AdminAll, UserProvider, UserId, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -241,10 +220,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task MultipleRoles_OneHasAdminAll_Grants()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin, RoleEditor);
         var store = new StubPermissionStore();
         store.Grant(PermissionNames.AdminAll, RoleProvider, RoleEditor, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin, RoleEditor));
 
         Assert.True(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -253,9 +231,8 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task NoAdminAll_NoGrant_FailClosed()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore(); // 无 Admin.All，无授权
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -264,10 +241,9 @@ public class PermissionCheckerRoleTests
     [Fact]
     public async Task AdminAll_GrantsUndefinedPermissionName()
     {
-        using var restore = SetAmbientUserWithRoles(UserId, RoleAdmin);
         var store = new StubPermissionStore();
         store.Grant(PermissionNames.AdminAll, RoleProvider, RoleAdmin, isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: NewUserWithRoles(RoleAdmin));
 
         // 未在仓库定义的权限名——Admin.All 拥有者仍放行
         Assert.True(await checker.IsGrantedAsync("System.UndefinedPermission"));

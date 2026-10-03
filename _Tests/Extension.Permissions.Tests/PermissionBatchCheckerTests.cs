@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
@@ -87,9 +88,12 @@ public class PermissionBatchCheckerTests
         repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
         var s = store ?? new StubPermissionStore();
         var rp = new TestRoleProvider();
-        // ADR88/DI004：IPermissionStore 经 IDomainUser.Use<T>() 懒加载——StubDomainUser 注册能力
-        var user = new StubDomainUser();
-        user.Register<IPermissionStore>(s);
+        // V4.10.53（领域自治根治）：真实 DomainUser + BindScope——User.Use<IPermissionStore>() AOP 路径经 DI 解析 store
+        var services = new ServiceCollection();
+        services.AddSingleton<IPermissionStore>(s);
+        var provider = services.BuildServiceProvider();
+        DomainUser<SimpleUserInfo>.BindScope(provider);
+        var user = new DomainUser<SimpleUserInfo> { UserInfo = new SimpleUserInfo("sys", "系统") };
         return (new PermissionChecker<SimpleUserInfo>(user, repository, rp), s, rp);
     }
 

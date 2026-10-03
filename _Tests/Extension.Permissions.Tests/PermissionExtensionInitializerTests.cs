@@ -1,16 +1,20 @@
 using System;
 using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.CodeGeneration;
-using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions.Tests;
 
 /// <summary>
 /// V0.2.0（W7 先行）：Permissions 扩展初始化器测试——[TKWFExtension] 特性声明 + ConfigureServices 注册语义。
-/// <para>覆盖要点：SG1 发现前提（特性声明）；TryAddScoped 默认实现注册；
-/// 消费方自定义实现优先（TryAdd 不覆盖已注册项——fail-closed 回退契约）。</para>
+/// <para>覆盖要点：SG1 发现前提（特性声明）；AddConstructibleService 门面注册形态（接口构造工厂 + 实现类
+/// throw-factory + CurrentAopUser 守卫）；消费方自定义 store 优先（TryAdd 不覆盖）；域作用域内解析。</para>
+/// <para>V4.10.53（领域自治根治）：IPermissionChecker/IPermissionBatchChecker 注册由 TryAddScoped 改为
+/// AddConstructibleService——旧形态构造注入 IDomainUser（永不注册 DI）生产必失败（v0.3.3 同根缺陷）。</para>
 /// </summary>
 public class PermissionExtensionInitializerTests
 {
@@ -30,8 +34,6 @@ public class PermissionExtensionInitializerTests
     public void ConfigureServices_Registers_DefaultServices()
     {
         var services = new ServiceCollection();
-        // ADR88/DI004：PermissionChecker 构造注入 IDomainUser（Use<T> 懒加载能力）——裸容器补注册测试用户桩
-        services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
@@ -46,17 +48,49 @@ public class PermissionExtensionInitializerTests
         Assert.NotNull(repository);
         Assert.IsType<InMemoryPermissionDefinitionRepository>(repository);
 
-        // 权限检查器：PermissionChecker（fail-closed 默认实现）
-        var checker = sp.GetService<IPermissionChecker>();
-        Assert.NotNull(checker);
-        Assert.IsType<PermissionChecker<SimpleUserInfo>>(checker);
+        // 权限检查器：AddConstructibleService 门面注册——接口为可构造守卫工厂（非实现映射）
+        var checkerDesc = services.First(d => d.ServiceType == typeof(IPermissionChecker));
+        Assert.Null(checkerDesc.ImplementationType);
+        Assert.NotNull(checkerDesc.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, checkerDesc.Lifetime);
+
+        // 实现类注册为 throw-factory——禁止直接 DI 解析
+        var implDesc = services.First(d => d.ServiceType == typeof(PermissionChecker<SimpleUserInfo>));
+        Assert.NotNull(implDesc.ImplementationFactory);
+    }
+
+    [Fact]
+    public void InterfaceFactory_OutsideUseScope_Throws()
+    {
+        // V4.10.53：接口构造工厂的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
+        var sp = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IPermissionChecker>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IPermissionChecker", ex.Message);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_IPermissionBatchChecker_FactoryDescriptor()
+    {
+        var services = new ServiceCollection();
+        new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
+
+        // V0.9.0 多用户批量检查器——同实例 AddConstructibleService 注册（接口工厂 + 实现 throw-factory）
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IPermissionBatchChecker));
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
     public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
     {
         var services = new ServiceCollection();
-        // 消费方先注册自定义 IPermissionStore → TryAddScoped 不应覆盖
+        // 消费方先注册自定义 IPermissionStore → TryAddScoped 不应覆盖（store 仍为普通 DI 注册）
         services.AddScoped<IPermissionStore, ConsumerPermissionStore>();
         new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
 
@@ -67,30 +101,18 @@ public class PermissionExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerChecker()
-    {
-        var services = new ServiceCollection();
-        // 消费方先注册自定义 IPermissionChecker → TryAddScoped 不应覆盖
-        services.AddScoped<IPermissionChecker, ConsumerPermissionChecker>();
-        new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
-
-        var sp = services.BuildServiceProvider();
-
-        var checker = sp.GetRequiredService<IPermissionChecker>();
-        Assert.IsType<ConsumerPermissionChecker>(checker);
-    }
-
-    [Fact]
     public void ConfigureServices_Registers_ScopedLifecycle()
     {
         var services = new ServiceCollection();
         new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
 
-        var descriptor = services.First(d => d.ServiceType == typeof(IPermissionStore));
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+        var storeDesc = services.First(d => d.ServiceType == typeof(IPermissionStore));
+        var checkerDesc = services.First(d => d.ServiceType == typeof(IPermissionChecker));
+        Assert.Equal(ServiceLifetime.Scoped, storeDesc.Lifetime);
+        Assert.Equal(ServiceLifetime.Scoped, checkerDesc.Lifetime);
     }
 
-    /// <summary>测试专用 IPermissionStore：标记消费方自定义实现。 </summary>
+    /// <summary>测试专用 IPermissionStore：标记消费方自定义实现。</summary>
     private sealed class ConsumerPermissionStore : IPermissionStore
     {
         public Task<PermissionGrantResult> GetAsync(string permissionName, string providerName, string providerKey)
@@ -106,14 +128,5 @@ public class PermissionExtensionInitializerTests
         public Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
             string providerName, IEnumerable<string>? providerKeys = null)
             => Task.FromResult(new Dictionary<string, HashSet<string>>(StringComparer.Ordinal));
-    }
-
-    /// <summary>测试专用 IPermissionChecker：标记消费方自定义实现。 </summary>
-    private sealed class ConsumerPermissionChecker : IPermissionChecker
-    {
-        public Task<bool> IsGrantedAsync(string permissionName) => Task.FromResult(true);
-
-        public Task<Dictionary<string, bool>> IsGrantedAsync(params string[] permissionNames)
-            => Task.FromResult(permissionNames.ToDictionary(n => n, _ => true));
     }
 }

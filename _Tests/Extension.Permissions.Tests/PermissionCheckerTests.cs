@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
@@ -7,9 +12,10 @@ namespace TKWF.Ext.Permissions.Tests;
 /// <summary>
 /// V0.2.0（W7 先行）：PermissionChecker fail-closed 测试。
 /// <para>fail-closed 语义（Oracle 评审缺口回补）：权限名未定义 → 拒绝；
-/// 无 ambient 用户上下文 → 拒绝；store 判定 Denied → 拒绝；仅定义 + 用户 + store Granted → 放行。</para>
-/// <para><see cref="PermissionChecker{TUserInfo}"/> 为 internal（IVT 访问）；
-/// ambient 用户经 <see cref="DomainUserContext.CurrentAopUser"/>（internal，框架 IVT 授权）设置。</para>
+/// 无用户上下文 → 拒绝；store 判定 Denied → 拒绝；仅定义 + 用户 + store Granted → 放行。</para>
+/// <para>V4.10.53（领域自治根治）：checker 继承 <see cref="DomainServiceBase{TUserInfo}"/>——经真实
+/// <see cref="DomainUser{TUserInfo}"/> 注入（构造工厂显式传域用户）+ <c>BindScope</c>（<c>User.Use&lt;IPermissionStore&gt;()</c>
+/// AOP 路径经 DI 解析 store）——生产路径等价。用户上下文经 checker 自身 <c>User</c>（非 ambient）。</para>
 /// </summary>
 public class PermissionCheckerTests
 {
@@ -74,38 +80,30 @@ public class PermissionCheckerTests
     }
 
     /// <summary>构造含权限定义的 checker（默认仓库含 DefinedPermission）。
-    /// <para>ADR88/DI004：IPermissionStore 经 IDomainUser.Use&lt;T&gt;() 懒加载——StubDomainUser 注册能力。</para></summary>
-    private static PermissionChecker<SimpleUserInfo> CreateChecker(IPermissionStore? store = null, bool withDefinedPermission = true, IRoleProvider<SimpleUserInfo>? roleProvider = null)
+    /// <para>V4.10.53（领域自治根治）：真实 <see cref="DomainUser{TUserInfo}"/> + BindScope——checker 经基类
+    /// <c>User</c> 获取用户上下文，<c>User.Use&lt;IPermissionStore&gt;()</c> AOP 路径经 DI 解析 store。</para></summary>
+    private static PermissionChecker<SimpleUserInfo> CreateChecker(
+        IPermissionStore? store = null,
+        bool withDefinedPermission = true,
+        IRoleProvider<SimpleUserInfo>? roleProvider = null,
+        SimpleUserInfo? userInfo = null,
+        bool anonymous = false)
     {
         var repository = new InMemoryPermissionDefinitionRepository();
         if (withDefinedPermission)
             repository.AddRange([new PermissionDefinition { Name = DefinedPermission }]);
-        var user = new StubDomainUser();
-        user.Register<IPermissionStore>(store ?? new StubPermissionStore());
-        return new PermissionChecker<SimpleUserInfo>(user, repository, roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
-    }
 
-    private static IDisposable SetAmbientUser(string? userId)
-    {
-        var current = DomainUserContext.CurrentAopUser;
-        // 无用户场景：标记 null 而非清除——需显式恢复原值
-        if (userId == null)
-        {
-            DomainUserContext.CurrentAopUser = null;
-            return new RestoreAmbientUser(current);
-        }
+        // 生产路径：store 经 DI 注册（User.Use<IPermissionStore>() AOP 路径 GetRequiredService 解析）
+        var services = new ServiceCollection();
+        services.AddSingleton<IPermissionStore>(store ?? new StubPermissionStore());
+        var provider = services.BuildServiceProvider();
+        DomainUser<SimpleUserInfo>.BindScope(provider);
+
         var user = new DomainUser<SimpleUserInfo>
         {
-            UserInfo = new SimpleUserInfo(userId, $"用户-{userId}")
+            UserInfo = anonymous ? null : (userInfo ?? new SimpleUserInfo(UserId, $"用户-{UserId}"))
         };
-        DomainUserContext.CurrentAopUser = user;
-        return new RestoreAmbientUser(current);
-    }
-
-    /// <summary>测试后恢复原 ambient 用户（AsyncLocal 线程流，xunit.v3 每测试独立上下文但仍显式清理）。</summary>
-    private sealed class RestoreAmbientUser(object? previous) : IDisposable
-    {
-        public void Dispose() => DomainUserContext.CurrentAopUser = previous;
+        return new PermissionChecker<SimpleUserInfo>(user, repository, roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }
 
     [Fact]
@@ -126,17 +124,16 @@ public class PermissionCheckerTests
     }
 
     [Fact]
-    public async Task DefinedPermission_NoAmbientUserContext_FailClosed_ReturnsFalse()
+    public async Task DefinedPermission_AnonymousUser_FailClosed_ReturnsFalse()
     {
-        using var restore = SetAmbientUser(null);
-        var checker = CreateChecker();
+        // 匿名用户（UserInfo null）→ 拒绝（fail-closed；V4.10.53 起用户上下文经基类 User，不读 ambient）
+        var checker = CreateChecker(anonymous: true);
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
 
     [Fact]
     public async Task DefinedPermission_UserStoreDenied_ReturnsFalse()
     {
-        using var restore = SetAmbientUser(UserId);
         var store = new StubPermissionStore(); // 未授予任何权限
         var checker = CreateChecker(store);
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
@@ -145,7 +142,6 @@ public class PermissionCheckerTests
     [Fact]
     public async Task DefinedPermission_UserStoreGranted_ReturnsTrue()
     {
-        using var restore = SetAmbientUser(UserId);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, isGranted: true);
         var checker = CreateChecker(store);
@@ -156,7 +152,6 @@ public class PermissionCheckerTests
     [Fact]
     public async Task Accessibility_QueriesUserProviderAndKey()
     {
-        using var restore = SetAmbientUser(UserId);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, isGranted: true);
         var checker = CreateChecker(store);
@@ -173,7 +168,6 @@ public class PermissionCheckerTests
     [Fact]
     public async Task BatchCheck_ReturnsPerPermissionMap()
     {
-        using var restore = SetAmbientUser(UserId);
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, isGranted: true);
         var checker = CreateChecker(store);
@@ -188,10 +182,9 @@ public class PermissionCheckerTests
     public async Task UserWithoutUserIdString_FailClosed_ReturnsFalse()
     {
         // 已认证但 UserInfo 无 UserIdString（空）→ 拒绝（未认证/无用户上下文等价）
-        using var restore = SetAmbientUser("");
         var store = new StubPermissionStore();
         store.Grant(DefinedPermission, UserProvider, "", isGranted: true);
-        var checker = CreateChecker(store);
+        var checker = CreateChecker(store, userInfo: new SimpleUserInfo("", "匿名"));
 
         Assert.False(await checker.IsGrantedAsync(DefinedPermission));
     }
@@ -231,7 +224,6 @@ public class PermissionCheckerTests
     [Fact]
     public async Task N1Optimization_BatchCheck_FewBatchQueriesRegardlessOfPermissionCount()
     {
-        using var restore = SetAmbientUser(UserId);
         var store = new CountingPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, granted: true);
         var checker = CreateChecker(store);
@@ -248,7 +240,6 @@ public class PermissionCheckerTests
     [Fact]
     public async Task N1Optimization_ScopedCache_SecondCheckNoExtraQuery()
     {
-        using var restore = SetAmbientUser(UserId);
         var store = new CountingPermissionStore();
         store.Grant(DefinedPermission, UserProvider, UserId, granted: true);
         var checker = CreateChecker(store);

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interception;
@@ -44,9 +43,11 @@ namespace TKWF.Ext.Permissions
                 .OfType<RequirePermissionAttribute>().ToList();
             if (flags.Count == 0) return;
 
-            var checker = context.ServiceProvider.GetService<IPermissionChecker>()
-                ?? throw new InvalidOperationException(
-                    "IPermissionChecker 未注册，但方法标记了 [RequirePermission]。请先注册 IPermissionChecker 到 DI 容器（UsePermissions() 默认注册）。");
+            // V4.10.53（领域自治根治）：经调用方用户解析 checker——context.DomainUser 由 AOP 拦截器从目标
+            // DomainServiceBase.User 提取（NewDomainContext）；过滤器路径 DomainUserContext.CurrentAopUser
+            // 已恢复不可用（仅 Use<T>() 窗口内设置）。Use<T>() AOP 路径设 CurrentAopUser 再 GetRequiredService，
+            // AddConstructibleService 工厂据此创建绑定该用户的 checker。
+            var checker = context.DomainUser.Use<IPermissionChecker>();
 
             foreach (var flag in flags)
             {

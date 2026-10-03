@@ -30,7 +30,7 @@
 
 - **检查级 (`IPermissionChecker`)**：运行时判断当前用户是否拥有指定权限。默认 `PermissionChecker<TUserInfo>` 经 `DomainUserContext.CurrentAopUser` 解析当前用户，调 `IPermissionStore.GetAsync` 真实判定。fail-closed：未知权限名 → 拒绝。
 
-- **持久化级 (`IPermissionStore`)**：权限授予的 CRUD 抽象。扩展自带 `EntityDACPermissionStore`（基于 `IEntityDAC<T>`，ORM 无关）+ `NoOpPermissionStore`（默认回退，读恒拒绝）。
+- **持久化级 (`IPermissionStore`)**：权限授予的 CRUD 抽象。扩展自带 `NoOpPermissionStore`（默认回退，读恒拒绝）——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store 层，职责与 `PermissionGrantEntityDataService` 重叠）；真实持久化由消费方实现 `IPermissionStore`（继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4）或自定义 `IEntityDAC<T>`。
 
 - **过滤器级 (`PermissionFilterAttribute`)**：`[RequirePermission]` 标记方法/控制器，PreProceed 阶段调 checker 检查。无标记 → 短路跳过（零开销）。
 
@@ -102,15 +102,25 @@ public interface IOrderService
 
 ### 4. 真实启用权限（注册持久化）
 
-默认 NoOp store 恒拒绝——注册 `EntityDACPermissionStore` 后权限检查才真正生效：
+默认 NoOp store 恒拒绝——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store——DataService 薄包装）。真实启用权限二选一：
 
 ```csharp
-// DomainInitializer / ConfigureServices 中
-services.AddScoped<IPermissionStore, EntityDACPermissionStore>();
-services.AddScoped<IEntityDAC<PermissionGrantEntity>>( /* FreeSql/EF Core DAC */ );
+// 方案 A（推荐——自定义 IPermissionStore，继承 DomainServiceBase 的领域服务）：
+public sealed class MyDbPermissionStore : DomainServiceBase, IPermissionStore
+{
+    private PermissionGrantEntityDataService? _ds;
+    private PermissionGrantEntityDataService Ds => _ds ??= User.Use<PermissionGrantEntityDataService>();
+    public MyDbPermissionStore(IDomainUser user) : base(user) { }
+    // 实现 IPermissionStore 四方法——委托 Ds（GetGrantAsync/SetGrantAsync/GetGrantedNamesByProviderAsync/GetGrantedNamesByProviderKeyAsync）
+}
+// DomainInitializer / ConfigureServices 中：
+services.AddConstructibleService<IPermissionStore, MyDbPermissionStore>();
+
+// 方案 B（自定义存储缝——SG1 DataService 是 DAC 驱动的 ORM 无关缝）：
+services.AddScoped<IEntityDAC<PermissionGrantEntity>>( /* FreeSql/EF Core 自定义 DAC */ );
 ```
 
-消费方调用 `UseFreeSqlEntityDAC()` 注册 `FreeSqlEntityDAC<PermissionGrantEntity>` 即可自动接线。
+消费方调用 `UseFreeSqlEntityDAC()` 注册 `FreeSqlEntityDAC<PermissionGrantEntity>` 后，方案 A 的 store 经 `Use<DataService>()` 自动接线真实持久化。
 
 ### 5. 权限检查 API
 
@@ -144,7 +154,7 @@ public class MyService
 | **`IPermissionDefinitionContributor`** | 业务模块声明权限定义的接口 | 消费方实现接口（v4.10.31 A+ 阶段 3 起纯接口判定，无特性） |
 | **`IPermissionDefinitionRepository`** | 权限定义仓库（查询/校验） | `InMemoryPermissionDefinitionRepository`（内部） |
 | **`IPermissionChecker`** | 运行时权限检查（fail-closed） | `PermissionChecker<TUserInfo>`（内部，泛型化） |
-| **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ `EntityDACPermissionStore`（扩展自带，ORM 无关） |
+| **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ **消费方自定义实现**（V0.9.1 起 `EntityDACPermissionStore` 已删除——继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4） |
 | **`PermissionFilterAttribute<TUserInfo>`** | 方法级权限门（`[RequirePermission]`） | 内置，注册到 Tier-S |
 | **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 | **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]`（SubDomain=Permissions） |
@@ -166,12 +176,12 @@ public class MyService
 2. 在 `Define()` 中调用 `context.Add(new PermissionDefinition { ... })`。
 3. SG1 编译期自动发现（源码 + 引用程序集）。
 
-### 2. 自定义权限存储
+### 2. 自定义权限存储（V0.9.1 起——EntityDACPermissionStore 已删除，此为唯一真实持久化路径）
 
-若需替换 `EntityDACPermissionStore`（如使用不同 ORM 或缓存层）：
+若需替换默认 NoOp store（使用不同 ORM 或缓存层）——**实现为领域服务**（继承 `DomainServiceBase`，经 `User.Use<PermissionGrantEntityDataService>()` 组合 DataService；禁直接 IEntityDAC/IFreeSql——数据访问红线）：
 
-1. 实现 `IPermissionStore`。
-2. 在 `ConfigureServices` 中 `services.AddScoped<IPermissionStore, MyCustomStore>()`（TryAdd 后注册，覆盖默认）。
+1. 实现 `IPermissionStore`（接口已标 `: IDomainService`）——类继承 `DomainServiceBase`（ctor `(IDomainUser user) : base(user)`）。
+2. 在 `ConfigureServices` 中 `services.AddConstructibleService<IPermissionStore, MyCustomStore>()`（接口守卫工厂 + 实现 throw-factory；消费方经 `User.Use<IPermissionStore>()` 链路由 checker 内部懒加载）。
 
 ### 3. 扩展 Provider 模型
 
@@ -312,7 +322,7 @@ CREATE TABLE [PermissionGrant] (
 
 ### 6. 测试基线
 
-- **49/49 通过**（xunit.v3）：单元测试 49（初始化器 3 + PermissionChecker 10——含 V0.8.1 N+1 专项 2 + EntityDACPermissionStore 9 + DataService 9 + SeedInitializer 5 + Role/Admin.All 13）+ 消费方集成验证 4。
+- **50/50 通过**（xunit.v3）：单元测试 50（初始化器 6 + PermissionChecker 10——含 V0.8.1 N+1 专项 2 + PermissionCheckerRoleTests 13 + BatchCheckerTests 8 + DataService 9 + Seed 5）+ 消费方集成验证 5。**V4.10.53（ADR90）：`EntityDACPermissionStore` 及其 9 测试删除；checker 继承 `DomainServiceBase<TUserInfo>`（真实 DomainUser + BindScope 生产路径测试）。**
 - 测试桩 `InMemoryEntityDac`/`StubDomainUser` 是各测试文件私有内部类——新增测试可复用但需自行内嵌。
 
 ### 7. 版本与发布

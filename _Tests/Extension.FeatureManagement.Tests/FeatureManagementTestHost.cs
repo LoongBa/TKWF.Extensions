@@ -52,7 +52,7 @@ internal static class FeatureManagementTestSupport
 ///     具体类 → ActivatorUtilities 直建（NoAop 等价）。</item>
 /// </list>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库实例（用例隔离）。
-/// <paramref name="configure"/> 回调在扩展初始化器之后执行——可覆盖 ITransactionManager/FeatureOptions
+/// <c>configure</c> 回调在扩展初始化器之后执行——可覆盖 ITransactionManager/FeatureOptions
 /// （如缓存 TTL 缩短测试：<c>services.Configure&lt;FeatureOptions&gt;(o =&gt; o.CacheExpirationSeconds = 1)</c>）。</para>
 /// <para><b>贡献者收集</b>：初始化的 <see cref="FeatureManagementExtensionInitializer{TUserInfo}.ConfigureServices"/>
 /// 从 <c>ProjectMetaContextBase.Instance.Contributors["Feature"]</c> 读取编译期清单（v4.10.31 A+ 阶段 3 起新桥）——测试经

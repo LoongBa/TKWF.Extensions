@@ -149,12 +149,10 @@ public class SmsMfaMethodTests
         var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
         var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
 
-        // 双独立 scope——每 scope 解析独立 IMfaService → 独立 ChallengeDataService/UnitOfWorkManager
+        // 双独立 MfaService 实例（分层直构——各自独立 stub 用户 + DataService/UnitOfWorkManager 链）
         //（消除根容器单一实例→串行化→假绿；生产 ASP.NET 每请求一 scope 的真实形态）
-        using var scope1 = host.ServiceProvider.CreateScope();
-        using var scope2 = host.ServiceProvider.CreateScope();
-        var mfa1 = scope1.ServiceProvider.GetRequiredService<IMfaService>();
-        var mfa2 = scope2.ServiceProvider.GetRequiredService<IMfaService>();
+        var mfa1 = MfaTestHost.BuildIsolatedMfaService(host.Fsql);
+        var mfa2 = MfaTestHost.BuildIsolatedMfaService(host.Fsql);
 
         var results = await Task.WhenAll(
             mfa1.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code, CancellationToken.None),

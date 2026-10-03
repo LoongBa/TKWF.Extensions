@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
@@ -21,8 +23,14 @@ namespace TKWF.Ext.MFA;
 /// 已启用用户 <see cref="EnrollAsync"/> 统一响应（空 EnrollToken）。</para>
 /// <para>尝试频控归本服务（per-user×method 内存滑动窗口——Oracle C4：恢复码验证同窗口原语）；发送侧频控
 /// （SmsMaxPerHour）归 <see cref="SmsMfaMethod"/>。异常自然传播（唯一约束/业务异常）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90 正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+/// 获取用户上下文（IDomainUser 永不注册 DI——D01 领域自治，构造注入 IDomainUser 生产解析必失败）；
+/// DataService 经 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 懒加载（DI004 零豁免）。注册形态由
+/// TryAddScoped 改 <c>AddConstructibleService&lt;IMfaService, MfaService&gt;</c>（接口可构造守卫工厂）——
+/// 消费方统一经 <c>User.Use&lt;IMfaService&gt;()</c> 解析（AOP 路径：设 CurrentAopUser → 守卫工厂 → 直建实现）。</para>
 /// </summary>
-internal sealed class MfaService : IMfaService
+[DiContractIgnore]
+internal sealed class MfaService : DomainServiceBase, IMfaService
 {
     /// <summary>恢复码字母表（Oracle P9：8 位字母数字去易混淆字符 0/O/1/I/l——32 字符幂等无模偏差）。</summary>
     private const string RecoveryCodeCharset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -30,7 +38,6 @@ internal sealed class MfaService : IMfaService
     /// <summary>恢复码长度（Oracle P9——熵量级对齐 Google/ABP）。</summary>
     private const int RecoveryCodeLength = 8;
 
-    private readonly IDomainUser _user;
     private MfaSecretEntityDataService? _secrets;
     private MfaChallengeEntityDataService? _challenges;
     private MfaRecoveryCodeEntityDataService? _recoveryCodes;
@@ -38,9 +45,9 @@ internal sealed class MfaService : IMfaService
     private readonly IOptions<MfaOptions> _options;
     private readonly ILogger<MfaService> _logger;
 
-    private MfaSecretEntityDataService Secrets => _secrets ??= _user.Use<MfaSecretEntityDataService>();
-    private MfaChallengeEntityDataService Challenges => _challenges ??= _user.Use<MfaChallengeEntityDataService>();
-    private MfaRecoveryCodeEntityDataService RecoveryCodes => _recoveryCodes ??= _user.Use<MfaRecoveryCodeEntityDataService>();
+    private MfaSecretEntityDataService Secrets => _secrets ??= User.Use<MfaSecretEntityDataService>();
+    private MfaChallengeEntityDataService Challenges => _challenges ??= User.Use<MfaChallengeEntityDataService>();
+    private MfaRecoveryCodeEntityDataService RecoveryCodes => _recoveryCodes ??= User.Use<MfaRecoveryCodeEntityDataService>();
 
     /// <summary>验证尝试频控器（进程级静态——频控须跨请求生效，不随 scope 重建；单实例语义 Oracle C4/Q3）。</summary>
     private static readonly MfaRateLimiter VerifyLimiter = new();
@@ -50,8 +57,8 @@ internal sealed class MfaService : IMfaService
         IEnumerable<IMfaMethod> methods,
         IOptions<MfaOptions> options,
         ILogger<MfaService> logger)
+        : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _methods = methods ?? throw new ArgumentNullException(nameof(methods));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));

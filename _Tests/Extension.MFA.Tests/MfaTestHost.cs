@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -53,38 +55,47 @@ internal static class MfaTestSupport
 }
 
 /// <summary>
-/// 完整测试宿主——构建 DI 容器：真实 DataService 链（FreeSqlEntityDAC + UnitOfWorkManager 驱动）
-/// + StubDomainUser + Noop 事务管理 + MFA Options + <c>MFAExtensionInitializer&lt;MfaUserInfo&gt;</c> 接线
-/// + 记录型 <see cref="RecordingMfaSmsSender"/>（SMS 方法经 <see cref="IServiceProvider"/> 惰性解析，必须真实注册进容器）。
+/// 完整测试宿主（V4.10.53 领域自治根治后重写——走生产路径）。
+/// <para><b>门面（MfaService）</b>经真实 AOP 路径解析：真实 DI（扩展 ConfigureServices + FreeSql 基础设施 + AddLogging）
+/// → <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> → <c>host.Mfa = user.Use&lt;IMfaService&gt;()</c>
+/// （设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 → ActivatorUtilities 直建，
+/// CurrentAopUser = 真实 DomainUser）；DataService 经基类 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 直建
+/// （IEntityDAC 从 DI 解析——与 Settings/Account 生产路径宿主同模式）。</para>
+/// <para><b>IMfaMethod 实现（Totp/Sms）</b>本批整改范围外（已裁定方案仅列 MfaService）——仍构造注入 IDomainUser；
+/// 测试宿主为其注册可配置 <see cref="StubDomainUser"/>（IDomainUser 单例——门面本身经守卫工厂走真实 DomainUser，
+/// 桩仅供未整改方法经 DI 解析）；其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价
+/// （<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，IEntityDAC 从 DI 解析）。</para>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库（用例隔离）。
 /// <paramref name="configure"/> 回调在初始化器之后执行。</para>
 /// </summary>
 internal sealed class MfaTestHost : IDisposable
 {
     private readonly ServiceProvider _serviceProvider;
+    private readonly DomainUser<TestUserInfo> _user;
     private readonly string? _dbPath;   // 文件模式 SQLite 库路径（若有，Dispose 清理）
 
     public IFreeSql Fsql { get; }
 
-    /// <summary>根 ServiceProvider（公开——并发用例经 CreateScope 解析独立 Scoped 服务实例，消除根容器单例巧合）。</summary>
+    /// <summary>根 ServiceProvider（公开——并发用例经 <see cref="BuildIsolatedMfaService"/> 构建独立实例）。</summary>
     public ServiceProvider ServiceProvider => _serviceProvider;
 
-    /// <summary>MFA 门面（public 契约——所有业务断言经此驱动）。</summary>
-    public IMfaService Mfa => _serviceProvider.GetRequiredService<IMfaService>();
+    /// <summary>MFA 门面（public 契约——生产 AOP 路径：User.Use&lt;IMfaService&gt;() 经守卫工厂创建实例）。</summary>
+    public IMfaService Mfa => _user.Use<IMfaService>();
 
     /// <summary>记录型 SMS 发送 Fake（捕获 <see cref="MfaSmsMessage"/>——测试提取验证码）。</summary>
     public RecordingMfaSmsSender SmsSender => GetRequiredService<IMfaSmsSender>() as RecordingMfaSmsSender
         ?? throw new InvalidOperationException("IMfaSmsSender 未注册为 RecordingMfaSmsSender——测试宿主必须注册记录型 Fake");
 
-    public MfaSecretEntityDataService Secrets => GetRequiredService<MfaSecretEntityDataService>();
+    public MfaSecretEntityDataService Secrets => _user.Use<MfaSecretEntityDataService>();
 
-    public MfaChallengeEntityDataService Challenges => GetRequiredService<MfaChallengeEntityDataService>();
+    public MfaChallengeEntityDataService Challenges => _user.Use<MfaChallengeEntityDataService>();
 
-    public MfaRecoveryCodeEntityDataService RecoveryCodes => GetRequiredService<MfaRecoveryCodeEntityDataService>();
+    public MfaRecoveryCodeEntityDataService RecoveryCodes => _user.Use<MfaRecoveryCodeEntityDataService>();
 
-    private MfaTestHost(ServiceProvider serviceProvider, IFreeSql fsql, string? dbPath = null)
+    private MfaTestHost(ServiceProvider serviceProvider, DomainUser<TestUserInfo> user, IFreeSql fsql, string? dbPath = null)
     {
         _serviceProvider = serviceProvider;
+        _user = user;
         Fsql = fsql;
         _dbPath = dbPath;
     }
@@ -142,19 +153,12 @@ internal sealed class MfaTestHost : IDisposable
         services.AddLogging();
         services.AddSingleton(fsql);
 
-        var stubUser = new StubDomainUser();
-        services.AddSingleton<IDomainUser>(sp => { stubUser.ServiceProvider = sp; return stubUser; });
-
-        // v4.10.8 (ADR61)：DataService 不再手动 new/注册——DI 兜底工厂（镜像生产 AddConstructibleDataService，
-        // 用户源 = DI IDomainUser，免域作用域）；IEntityDAC<T> 基础设施注册同生产 Host。
-        // 注：每 DataService 独立 UnitOfWorkManager（对齐 FileManagement 旧 Host 语义——并发用例依赖
-        // 各 DataService 事务隔离，共享 UoW 会改变竞态时序）。
-        services.AddScoped<IEntityDAC<MfaSecretEntity>>(sp => new FreeSqlEntityDAC<MfaSecretEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
-        services.AddScoped<IEntityDAC<MfaChallengeEntity>>(sp => new FreeSqlEntityDAC<MfaChallengeEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
-        services.AddScoped<IEntityDAC<MfaRecoveryCodeEntity>>(sp => new FreeSqlEntityDAC<MfaRecoveryCodeEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
-        AddTestConstructibleDataService<MfaSecretEntityDataService>(services);
-        AddTestConstructibleDataService<MfaChallengeEntityDataService>(services);
-        AddTestConstructibleDataService<MfaRecoveryCodeEntityDataService>(services);
+        // IEntityDAC<T> 基础设施注册（消费方 DomainHost 等价注册——Singleton + 共享 UnitOfWorkManager，
+        // 对齐 Settings/Account 生产路径宿主）
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<MfaSecretEntity>, FreeSqlEntityDAC<MfaSecretEntity>>();
+        services.AddSingleton<IEntityDAC<MfaChallengeEntity>, FreeSqlEntityDAC<MfaChallengeEntity>>();
+        services.AddSingleton<IEntityDAC<MfaRecoveryCodeEntity>, FreeSqlEntityDAC<MfaRecoveryCodeEntity>>();
 
         // ITransactionManager（默认 Noop——Create/Update/Delete 写路径事务包裹依赖空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；Recording 由 configure 覆盖）
@@ -164,7 +168,12 @@ internal sealed class MfaTestHost : IDisposable
         // 初始化器经 AddOptions/Option 绑定注册的默认配置对已存在 IOptions 实例不生效，测试以显式 options 为准）
         services.AddSingleton<IOptions<MfaOptions>>(Options.Create(options ?? new MfaOptions()));
 
-        // 扩展初始化器注册 IMfaService + 双 IMfaMethod（TryAddEnumerable——Oracle C5）
+        // ⚠️ IMfaMethod 实现（Totp/Sms）本批整改范围外——仍 ctor 注入 IDomainUser；宿主为其注册可配置 stub
+        //（门面 MfaService 经守卫工厂走真实 DomainUser，此桩仅供未整改方法经 DI 解析——过渡期记录在整改日志）
+        var stubUser = new StubDomainUser();
+        services.AddSingleton<IDomainUser>(sp => { stubUser.ServiceProvider = sp; return stubUser; });
+
+        // 扩展初始化器注册 IMfaService（AddConstructibleService——V4.10.53 领域自治）+ 双 IMfaMethod（TryAddEnumerable——Oracle C5）
         new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
 
         // 记录型 SMS 发送 Fake（TryAddScoped——SMS 方法经 IServiceProvider 惰性解析 IMfaSmsSender，
@@ -177,24 +186,44 @@ internal sealed class MfaTestHost : IDisposable
 
         configure?.Invoke(services);
 
-        return new MfaTestHost(services.BuildServiceProvider(), fsql, dbPath);
+        var provider = services.BuildServiceProvider();
+
+        // 生产路径：绑定解析作用域 + 真实 DomainUser（AOP 路径 CurrentAopUser 来源）
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("mfa-test-user", "MFA 测试用户") };
+
+        return new MfaTestHost(provider, user, fsql, dbPath);
+    }
+
+    /// <summary>
+    /// 构建独立 MfaService 实例（并发测试用——消除根容器单一实例→串行化→假绿）。
+    /// <para>生产 AOP 路径解析的并发等价：两实例各自独立 stub 用户 + 独立 IMfaMethod 实例 + 独立
+    /// DataService/UoW 链（每实例独立 UnitOfWorkManager——共享 UoW 会改变竞态时序；
+    /// 文件模式 SQLite 多连接共享库文件）。</para>
+    /// </summary>
+    public static MfaService BuildIsolatedMfaService(IFreeSql fsql, MfaOptions? options = null)
+    {
+        // 独立 stub 容器（每实例独立 IEntityDAC + UnitOfWorkManager——镜像旧宿主 per-scope 隔离语义）
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddScoped<IEntityDAC<MfaSecretEntity>>(_ => new FreeSqlEntityDAC<MfaSecretEntity>(new UnitOfWorkManager(fsql)));
+        services.AddScoped<IEntityDAC<MfaChallengeEntity>>(_ => new FreeSqlEntityDAC<MfaChallengeEntity>(new UnitOfWorkManager(fsql)));
+        services.AddScoped<IEntityDAC<MfaRecoveryCodeEntity>>(_ => new FreeSqlEntityDAC<MfaRecoveryCodeEntity>(new UnitOfWorkManager(fsql)));
+        var stub = new StubDomainUser { ServiceProvider = services.BuildServiceProvider() };
+        var opt = Options.Create(options ?? new MfaOptions());
+
+        // 独立方法实例（stub 用户直构——方法与 DataService 同链隔离）
+        IEnumerable<IMfaMethod> methods =
+        [
+            new TotpMfaMethod(stub, opt),
+            new SmsMfaMethod(stub, opt, stub.ServiceProvider!),
+        ];
+        return new MfaService(stub, methods, opt, NullLogger<MfaService>.Instance);
     }
 
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
     public T GetRequiredService<T>() where T : notnull
         => _serviceProvider.GetRequiredService<T>();
-
-    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产 AddConstructibleDataService
-    ///（ActivatorUtilities.CreateInstance + 域用户），用户源 = DI IDomainUser（免域作用域、xUnit 并行安全）。</summary>
-    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
-        where T : class
-    {
-        services.AddScoped<T>(sp =>
-        {
-            var user = sp.GetRequiredService<IDomainUser>();
-            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
-        });
-    }
 
     /// <summary>释放宿主 + 清理文件模式 SQLite 库（宿主释放后连接池已归还，可安全删除）。</summary>
     public void Dispose()
@@ -268,19 +297,23 @@ internal sealed class NoopTransactionScope : ITransactionScope
     public void Rollback() { }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（默认匿名——MFA 按传入 userId 操作，不依赖当前用户）。
-/// <para>Use&lt;T&gt;() 懒加载解析：从 DI 容器取 DataService（测试宿主经 AddTestConstructibleDataService
-/// 注册——镜像生产 AddConstructibleDataService，用户源 = DI IDomainUser 免域作用域）。</para></summary>
+/// <summary>
+/// 测试用户桩——实现 <see cref="IDomainUser"/> 最小契约（默认匿名——MFA 按传入 userId 操作，不依赖当前用户）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现——具体类经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Tagging 测试桩）。</para>
+/// <para>⚠️ 本桩供未整改的 <see cref="IMfaMethod"/> 实现（Totp/Sms 仍 ctor 注入 IDomainUser）经 DI 解析；
+/// 门面 <see cref="IMfaService"/> 经真实 <see cref="DomainUser{TUserInfo}"/> + 守卫工厂 AOP 路径解析（不触此桩）。</para>
+/// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {
     private IServiceProvider? _provider;
-    private readonly object _gate = new();
-    private readonly Dictionary<Type, object? > _cache = new();
 
     /// <summary>ServiceProvider（宿主注册时注入——懒加载 Use&lt;T&gt; 解析源）。</summary>
-    public IServiceProvider ServiceProvider
+    public IServiceProvider? ServiceProvider
     {
-        set { lock (_gate) _provider = value; }
+        set { _provider = value; }
+        get => _provider;
     }
 
     public string SessionKey => "test-session";
@@ -295,25 +328,17 @@ internal sealed class StubDomainUser : IDomainUser
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new InvalidOperationException("Stub: ServiceProvider 未注入——Use<T> 解析不可用");
-        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-            return svc;
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
-            _cache[typeof(TDomainService)] = resolved;
-            return resolved;
-        }
+        if (_provider is null)
+            throw new InvalidOperationException("Stub: ServiceProvider 未注入——Use<T> 解析不可用");
+        // 生产 NoAop 路径等价：ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析
+        return (TDomainService)ActivatorUtilities.CreateInstance(_provider, typeof(TDomainService), this);
     }
 
     public TService GetService<TService>() where TService : notnull
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new InvalidOperationException("Stub: ServiceProvider 未注入——GetService<T> 解析不可用");
-        return provider.GetRequiredService<TService>();
+        if (_provider is null)
+            throw new InvalidOperationException("Stub: GetService<T> 未注入 ServiceProvider");
+        return _provider.GetRequiredService<TService>();
     }
 
     public TService GetOptionalService<TService>() where TService : class => null!;

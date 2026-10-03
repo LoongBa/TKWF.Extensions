@@ -10,8 +10,10 @@ namespace TKWF.Ext.MFA.Tests;
 
 /// <summary>
 /// MFAExtensionInitializer 接线测试——[TKWFExtension("MFA")] 特性声明、DI 注册完整
-/// （IMfaService TryAddScoped + 双 IMfaMethod TryAddEnumerable——Oracle C5 防 SMS 静默丢失、
-/// Options 绑定）、白名单声明（V4.9.85 ADR47）。
+/// （IMfaService AddConstructibleService 守卫工厂 + 实现类 throw-factory + 域外解析抛、
+/// 双 IMfaMethod TryAddEnumerable——Oracle C5 防 SMS 静默丢失、Options 绑定）、白名单声明（V4.9.85 ADR47）。
+/// <para>V4.10.53（领域自治根治）：注册形态由 TryAddScoped 改为 <c>AddConstructibleService</c>——
+/// 消费方统一经 <c>User.Use&lt;IMfaService&gt;()</c> 解析（AOP 路径先设 CurrentAopUser 再 GetRequiredService）。</para>
 /// </summary>
 public class MfaInitializerTests
 {
@@ -28,16 +30,47 @@ public class MfaInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_Registers_MfaService_Descriptor()
+    public void ConfigureServices_Registers_IMfaService_FactoryDescriptor()
     {
         var services = new ServiceCollection();
         new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
 
+        // V4.10.53：AddConstructibleService——接口注册为构造工厂（非实现映射），Scoped 生命周期
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IMfaService));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(MfaService), descriptor!.ImplementationType);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_MfaService_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
+
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IMfaService>() 创建
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(MfaService));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<MfaService>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_OutsideUseScope_Throws()
+    {
+        // V4.10.53：接口构造工厂的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IMfaService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IMfaService", ex.Message);
     }
 
     [Fact]
@@ -90,7 +123,7 @@ public class MfaInitializerTests
     {
         using var host = MfaTestHost.Create();
 
-        // IMfaService 可解析（scoped 根容器）
+        // IMfaService 可经生产 AOP 路径解析（守卫工厂——CurrentAopUser = 真实 DomainUser）
         Assert.NotNull(host.Mfa);
 
         // IEnumerable<IMfaMethod> 恰 2 实现（TryAddEnumerable——C5 防 SMS 静默丢失）；注册序 totp → sms

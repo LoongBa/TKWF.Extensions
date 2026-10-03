@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FeatureManagement;
 
@@ -11,7 +12,7 @@ namespace TKWF.Ext.FeatureManagement;
 /// <paramref name="providerKey"/> 由 Manager 按 Provider.Name 约定传入（内置四层已解析）——
 /// 自定义 Provider 如需特殊 key 提取（Edition/Device 等），注入上下文自行处理。</para>
 /// </summary>
-public interface IFeatureValueProvider
+public interface IFeatureValueProvider : IDomainService
 {
     /// <summary>Provider 唯一标识（对应 <see cref="FeatureProviders"/> 常量；全仓库唯一，冲突懒校验）。</summary>
     string Name { get; }

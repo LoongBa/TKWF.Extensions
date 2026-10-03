@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
 
@@ -9,7 +10,7 @@ namespace TKWF.Ext.Approval;
 /// 审批引擎门面——流程定义管理 + 实例生命周期 + 审批/驳回/转交/撤回 + 事件派发。
 /// <para>Scoped 生命周期（按请求）。注入 SG1 DataService 委托 + ITransactionManager + ILocalEventBus + IApprovalAssigneeResolver。</para>
 /// </summary>
-public interface IApprovalService
+public interface IApprovalService : IDomainService
 {
     // ── 流程定义 ──
 

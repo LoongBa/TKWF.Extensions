@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.PrintTemplates
     /// 模板管理门面——版本生命周期（Draft→Active→Archived）+ 渲染入口 + 发布版本自动递增。
     /// <para>Scoped 生命周期（按请求）。</para>
     /// </summary>
-    public interface ITemplateManager
+    public interface ITemplateManager : IDomainService
     {
         /// <summary>按模板键查询模板。</summary>
         Task<PrintTemplateEntity?> GetTemplateAsync(string key, CancellationToken ct = default);

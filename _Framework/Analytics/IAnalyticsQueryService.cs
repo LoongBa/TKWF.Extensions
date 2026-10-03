@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Analytics;
 
@@ -12,7 +13,7 @@ namespace TKWF.Ext.Analytics;
 /// 组合核心层 <see cref="TKW.Framework.Utility.Analytics.AnalyticsSpecLoader"/> + <see cref="TKW.Framework.Utility.Analytics.AnalyticsSpecValidator"/>。</para>
 /// <para>扩展层（非 Utility 核心）：可经 DI 注入 <see cref="Microsoft.Extensions.Options.IOptions{T}"/>（对齐 Metrics 集成层先例）。</para>
 /// </summary>
-public interface IAnalyticsQueryService
+public interface IAnalyticsQueryService : IDomainService
 {
     /// <summary>读取 specKey 的 semantic_types（JSON 原样透传，不镜像强类型；stale → SpecStaleException）</summary>
     Task<JsonDocument> GetSemanticTypesAsync(string domain, string specKey, CancellationToken ct = default);

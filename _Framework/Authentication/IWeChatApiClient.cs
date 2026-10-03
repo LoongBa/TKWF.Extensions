@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -15,7 +16,7 @@ public sealed record WeChatUserInfo(string OpenId, string? Nickname, string? Ava
 /// <para>方案 §5.10——凭证经 <see cref="IPlatformCredentialService"/> 解析（不再直注入裸 DB）；</para>
 /// <para>access_token L1 缓存（ConcurrentDictionary + SemaphoreSlim 并发锁 + 提前 5 分钟过期刷新）；公众号网页授权/开放平台扫码双形态。</para>
 /// </summary>
-public interface IWeChatApiClient
+public interface IWeChatApiClient : IDomainService
 {
     /// <summary>获取 access_token（L1 缓存 + 并发锁 + 提前 5 分钟过期刷新；凭证经 PlatformCredentialService 解析）。</summary>
     Task<string> GetAccessTokenAsync(string appId, string appType, CancellationToken ct = default);

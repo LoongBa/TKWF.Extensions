@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Dashboard
 {
@@ -10,7 +11,7 @@ namespace TKWF.Ext.Dashboard
     /// （可选）Metrics 计算（<c>metricRef</c> → <see cref="TKW.Framework.Utility.Metrics.IMetricCalculator"/>）→
     /// 组装 <see cref="WidgetDataResult"/> 响应。</para>
     /// </summary>
-    public interface IDashboardDataService
+    public interface IDashboardDataService : IDomainService
     {
         /// <summary>按 dashKey 查询 Dashboard 定义（JSON 描述符反序列化）。</summary>
         /// <exception cref="DashboardDefinitionException">定义文件缺失/损坏/契约校验失败。</exception>

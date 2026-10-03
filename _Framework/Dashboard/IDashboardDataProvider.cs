@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Dashboard
 {
@@ -11,7 +12,7 @@ namespace TKWF.Ext.Dashboard
     /// （Dashboard 直接消费 <see cref="TKW.Framework.Utility.Metrics.IMetricCalculator"/> 时用 accessor 构造
     /// <see cref="TKW.Framework.Utility.Metrics.MetricRow"/>，绕过引擎按 T 编译访问器的限制）。</para>
     /// </summary>
-    public interface IDashboardDataProvider
+    public interface IDashboardDataProvider : IDomainService
     {
         /// <summary>数据源名（与 <see cref="DashboardWidgetDefinition.DataSource"/> 匹配）。</summary>
         string Name { get; }

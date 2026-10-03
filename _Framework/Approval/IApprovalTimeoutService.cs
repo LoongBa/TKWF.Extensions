@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
 
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Approval;
 /// <para>不内建调度器——由消费方经框架 IBackgroundJob/ITimerService 周期调用 <see cref="ProcessTimeoutTasksAsync"/>
 /// （BackgroundJobs 扩展可观察执行历史）。v0.2.0 扩展不依赖后台线程。</para>
 /// </summary>
-public interface IApprovalTimeoutService
+public interface IApprovalTimeoutService : IDomainService
 {
     /// <summary>
     /// 处理全部超期任务（Pending &amp;&amp; TimeoutAt&lt;=now &amp;&amp; !TimeoutProcessed）。

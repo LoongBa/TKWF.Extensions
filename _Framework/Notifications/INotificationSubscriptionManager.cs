@@ -1,12 +1,13 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
 /// <summary>
 /// 通知订阅管理——用户按通知名订阅（定义级或实体级）。
 /// </summary>
-public interface INotificationSubscriptionManager
+public interface INotificationSubscriptionManager : IDomainService
 {
     /// <summary>定义级订阅——关注该通知全部发布（幂等）。</summary>
     Task SubscribeAsync(long userId, string notificationName, CancellationToken ct = default);

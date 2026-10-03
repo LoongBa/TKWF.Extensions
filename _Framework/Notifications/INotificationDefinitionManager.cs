@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
@@ -6,7 +7,7 @@ namespace TKWF.Ext.Notifications;
 /// 通知定义管理器——维护已注册的通知定义（启动时从 Provider 收集，不可变）。
 /// <para>发布前经 <see cref="Get"/> 校验定义存在性（快速失败）。</para>
 /// </summary>
-public interface INotificationDefinitionManager
+public interface INotificationDefinitionManager : IDomainService
 {
     /// <summary>获取定义（不存在 → <see cref="KeyNotFoundException"/>）。</summary>
     NotificationDefinition Get(string name);

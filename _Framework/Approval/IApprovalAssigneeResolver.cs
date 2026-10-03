@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
 
@@ -10,7 +11,7 @@ namespace TKWF.Ext.Approval;
 /// <para>User 类型直接返回 [ApproverValue]（内置）；Role 类型由消费方注册自定义 resolver 实现。
 /// 不跨模块引用实体（数据关联立场）——使用指南提供 Identity UserRoleEntity 实现示例。</para>
 /// </summary>
-public interface IApprovalAssigneeResolver
+public interface IApprovalAssigneeResolver : IDomainService
 {
     /// <summary>
     /// 将步骤审批人定义解析为用户 ID 列表。

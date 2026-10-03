@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.Interception.Filters;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
@@ -35,7 +36,7 @@ public sealed record ProviderAuthenticateResult(
 /// <para>方案 §5.5——<c>AuthCenterOptions.EnabledAuthTypes</c> 启用集合之外 Provider 不接线；</para>
 /// <para>内置：<c>SmsAuthenticationProvider</c>（短信验证码）+ <c>WeChatAuthenticationProvider</c>（微信双形态）；密码/抖音为扩展点。</para>
 /// </summary>
-public interface IAuthenticationProvider
+public interface IAuthenticationProvider : IDomainService
 {
     /// <summary>认证方式标识（AuthTypes 常量）。</summary>
     string AuthType { get; }

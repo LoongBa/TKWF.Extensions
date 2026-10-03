@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.PrintTemplates
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.PrintTemplates
     /// 模板存储抽象——模板/版本 CRUD + 按 Key/Key@Version/Active 查询。
     /// <para>异常传播：所有存储层异常向上传递（审计关键，不静默）。</para>
     /// </summary>
-    public interface ITemplateStore
+    public interface ITemplateStore : IDomainService
     {
         /// <summary>按模板键查询模板。</summary>
         Task<PrintTemplateEntity?> GetByKeyAsync(string key, CancellationToken ct = default);

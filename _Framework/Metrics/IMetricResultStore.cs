@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Metrics
 {
@@ -12,7 +13,7 @@ namespace TKWF.Ext.Metrics
     /// <para>红线合规：消费方实现必须委托自己的 SG 生成 DataService（public 委托方法），
     /// 不注入 IFreeSql / IEntityDAC 裸写数据访问（数据访问红线 2026-09-07 裁定）。</para>
     /// </summary>
-    public interface IMetricResultStore
+    public interface IMetricResultStore : IDomainService
     {
         /// <summary>
         /// 保存指标结果（标准化行批量落库）。返回影响行数。

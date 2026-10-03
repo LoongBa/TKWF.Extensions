@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
 
@@ -12,7 +13,7 @@ namespace TKWF.Ext.MFA;
 /// <para>防枚举（Oracle Q6）：<see cref="VerifyChallengeAsync"/> 失败统一 false（不区分挑战不存在/码错/过期）；
 /// <see cref="RequestChallengeAsync"/> 对未启用用户返回统一"已发起"；<see cref="EnrollAsync"/> 对已启用用户返回统一响应。</para>
 /// </summary>
-public interface IMfaService
+public interface IMfaService : IDomainService
 {
     // ── 绑定管理 ──
 

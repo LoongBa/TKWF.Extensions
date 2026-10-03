@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
 
@@ -10,7 +11,7 @@ namespace TKWF.Ext.MFA;
 /// <see cref="ConfirmEnrollAsync"/> 绑定待激活。</para>
 /// <para>⚠️ 多实现必须 <c>TryAddEnumerable</c> 注册（TryAddScoped 同 ServiceType 仅注册首个——Oracle C5）。</para>
 /// </summary>
-public interface IMfaMethod
+public interface IMfaMethod : IDomainService
 {
     /// <summary>方法标识（"totp" / "sms"——服务层按名分派）。</summary>
     string Method { get; }

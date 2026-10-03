@@ -10,7 +10,7 @@ namespace TKWF.Ext.FeatureManagement;
 /// <para>用户契约（C2 评审裁定）：接收 <see cref="IDomainUser"/>（IsAuthenticated/UserId/TenantId/UserInfo.Roles 均在其上），
 /// 不降级 IUserInfo——租户/认证信息在 IDomainUser。</para>
 /// </summary>
-public interface IFeatureManager
+public interface IFeatureManager : IDomainService
 {
     /// <summary>分层解析 Feature 值（User→Role(遍历序首个命中)→Tenant(仅 TenantId.HasValue)→Global→defaultValue）；匿名直查 Global。</summary>
     Task<string> GetValueAsync(string name, IDomainUser? user, string? defaultValue = null, CancellationToken ct = default);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account
 {
@@ -14,7 +15,7 @@ namespace TKWF.Ext.Account
     /// <see cref="InvalidOperationException"/>（提示须启用 SecurityLog 扩展）；查询/聚合失败 → 委托方
     /// 已静默返回空（本服务外层兜底 Warning + 空结果，不抛异常）。</para>
     /// </summary>
-    public interface ILoginHistoryService
+    public interface ILoginHistoryService : IDomainService
     {
         /// <summary>
         /// 分页查询登录历史（EventType 固定 "Login"）。

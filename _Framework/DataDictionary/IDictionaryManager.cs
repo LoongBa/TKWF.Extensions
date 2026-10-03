@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary
 {
@@ -15,7 +16,7 @@ namespace TKWF.Ext.DataDictionary
     /// 数据字典管理门面——按编码读取定义/项/完整集合，屏蔽 Store 细节。
     /// <para>由扩展默认实现（<see cref="DictionaryManager"/>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
-    public interface IDictionaryManager
+    public interface IDictionaryManager : IDomainService
     {
         /// <summary>按编码读取字典定义（不存在返回 null）。</summary>
         Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default);

@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Utility.DataPort;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataPort
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.DataPort
     /// 数据导入任务服务——封装导入执行 + 批次记录落库 + FileHash 幂等检查 + 状态跟踪。
     /// <para>消费方自管业务数据持久化与回滚钩子（R2/R3）。</para>
     /// </summary>
-    public interface IDataImportTaskService
+    public interface IDataImportTaskService : IDomainService
     {
         /// <summary>
         /// 执行导入并记录批次信息。

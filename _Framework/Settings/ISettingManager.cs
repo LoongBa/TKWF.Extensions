@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Settings
 {
@@ -7,7 +8,7 @@ namespace TKWF.Ext.Settings
     /// 设置管理器——分层读写（User → Tenant → Global → 默认值）。
     /// <para>消费方通过此接口进行设置的读写，无需关心底层 Provider 分层逻辑。</para>
     /// </summary>
-    public interface ISettingManager
+    public interface ISettingManager : IDomainService
     {
         /// <summary>读取设置值（分层查找，返回字符串或默认值）。</summary>
         Task<string> GetAsync(string name, string defaultValue = "", CancellationToken ct = default);

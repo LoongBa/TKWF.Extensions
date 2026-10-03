@@ -1,12 +1,13 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
 /// <summary>
 /// 通知发布器——发布通知（定义校验 + 发布方权限门控 + 收件人解析 + 事务写入 + 通道投递）。
 /// </summary>
-public interface INotificationPublisher
+public interface INotificationPublisher : IDomainService
 {
     /// <summary>
     /// 发布通知。

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.OrganizationUnit
 {
@@ -9,7 +10,7 @@ namespace TKWF.Ext.OrganizationUnit
     /// <para>业务规则：Code 白名单（C3）、Path 长度守卫（C3）、删除保护（D5）、移动循环防护（D4）、
     /// 物理删除语义（C2）、Create/Move/Delete 写路径事务包裹（C1）。</para>
     /// </summary>
-    public interface IOrganizationUnitManager
+    public interface IOrganizationUnitManager : IDomainService
     {
         /// <summary>创建组织单元（根 ParentId=null → Level=0, Path="/Code/"；子节点 → 父+1 且 Path 继承父前缀）。</summary>
         Task<OrganizationUnitEntity> CreateAsync(string code, string name, long? parentId, int? sortOrder = null, CancellationToken ct = default);

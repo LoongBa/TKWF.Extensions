@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FileManagement
 {
@@ -13,7 +14,7 @@ namespace TKWF.Ext.FileManagement
     /// 目录删除保护（F2/D17）、目录重命名只改 Name（F3/C3）、ContentType 服务端推导（C5）、
     /// 唯一约束冲突转业务异常（P3）。</para>
     /// </summary>
-    public interface IFileManager
+    public interface IFileManager : IDomainService
     {
         // ── 目录 ──
 

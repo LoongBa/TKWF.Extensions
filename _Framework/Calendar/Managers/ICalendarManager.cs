@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Calendar
 {
@@ -10,7 +11,7 @@ namespace TKWF.Ext.Calendar
     /// <para>业务规则：删除保护（D17）、EndUtc ≥ StartUtc 校验（P3）、RecurrenceRule.Parse fail-fast（C3/D5）、
     /// RecurrenceEndUtc 同源推导（C2/D4）、IsEnabled=false 日历排除（P3/D18）、展开上限截断 + Truncated 标志（C4/D16）。</para>
     /// </summary>
-    public interface ICalendarManager
+    public interface ICalendarManager : IDomainService
     {
         // ── 日历 ──
 

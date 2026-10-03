@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Navigation
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Navigation
     /// 实例化全部贡献者、调用 <c>ConfigureMenu(context)</c> 后填充；供 <see cref="IMenuManager"/>
     /// 查询组装树形菜单。经 <c>TryAddSingleton</c> 注册，消费方自定义实现优先。</para>
     /// </summary>
-    public interface IMenuDefinitionRepository
+    public interface IMenuDefinitionRepository : IDomainService
     {
         /// <summary>全部菜单项（只读快照）。</summary>
         IReadOnlyList<MenuItemDefinition> GetAll();

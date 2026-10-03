@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Notifications;
 /// V0.3.0：通知偏好管理——用户对特定通知的通道偏好（覆盖定义级 UseChannels）。
 /// <para>偏好语义：有偏好 → 用偏好 Channels（可为空=不接收该通知）；无偏好 → 回退定义级 Channels。</para>
 /// </summary>
-public interface INotificationPreferenceManager
+public interface INotificationPreferenceManager : IDomainService
 {
     /// <summary>查询用户某通知的偏好通道（无偏好返回 null——回退定义级；偏好为空列表 = 不接收该通知）。</summary>
     Task<IReadOnlyList<string>?> GetChannelsAsync(long userId, string notificationName, CancellationToken ct = default);

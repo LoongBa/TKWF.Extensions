@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary
 {
@@ -8,7 +9,7 @@ namespace TKWF.Ext.DataDictionary
     /// 数据字典存储抽象——字典定义与字典项的 CRUD 与查询。
     /// <para>由扩展默认 FreeSql 实现（<see cref="DictionaryStore"/>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
-    public interface IDictionaryStore
+    public interface IDictionaryStore : IDomainService
     {
         /// <summary>按编码读取字典定义（不存在返回 null）。</summary>
         Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default);

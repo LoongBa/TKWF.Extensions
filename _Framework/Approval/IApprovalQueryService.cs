@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
 
@@ -8,7 +9,7 @@ namespace TKWF.Ext.Approval;
 /// 审批查询门面——实例分页/待办分页/详情含任务链。
 /// <para>列表 DTO 剔除 BusinessDataJson 大字段；详情 GetInstanceDetailAsync 取全量。</para>
 /// </summary>
-public interface IApprovalQueryService
+public interface IApprovalQueryService : IDomainService
 {
     /// <summary>审批实例分页查询（BusinessType/BusinessId/Status/Submitter/时间过滤 + Skip/Take）。</summary>
     Task<ApprovalInstancePagedResult> GetInstancesAsync(ApprovalInstanceQueryInput input, CancellationToken ct = default);

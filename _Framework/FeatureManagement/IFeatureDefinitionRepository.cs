@@ -1,9 +1,10 @@
 using System.Collections.Generic;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>Feature 定义仓库（对齐 <c>IPermissionDefinitionRepository</c>）。</summary>
-public interface IFeatureDefinitionRepository
+public interface IFeatureDefinitionRepository : IDomainService
 {
     /// <summary>全部定义。</summary>
     IReadOnlyList<FeatureDefinition> GetAll();

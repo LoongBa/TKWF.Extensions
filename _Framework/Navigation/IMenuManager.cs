@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Navigation
 {
@@ -7,7 +8,7 @@ namespace TKWF.Ext.Navigation
     /// <para>方法保持异步（运行时调 <c>IPermissionChecker.IsGrantedAsync</c>）；菜单定义在
     /// ConfigureServices 阶段静态收集，权限过滤每次调用基于 ambient 当前用户。</para>
     /// </summary>
-    public interface IMenuManager
+    public interface IMenuManager : IDomainService
     {
         /// <summary>获取指定菜单的树形菜单项（含权限过滤）。</summary>
         Task<MenuItemDefinition[]> GetMenuAsync(string menuName);

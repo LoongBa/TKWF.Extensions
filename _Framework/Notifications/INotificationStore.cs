@@ -1,13 +1,14 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
 
 /// <summary>
 /// 通知收件箱存储——查询/管理用户的站内通知（读侧 + 已读状态写）。
 /// </summary>
-public interface INotificationStore
+public interface INotificationStore : IDomainService
 {
     /// <summary>获取用户的未读通知（按创建时间倒序）。</summary>
     Task<IReadOnlyList<UserNotificationEntity>> GetUnreadAsync(long userId, CancellationToken ct = default);

@@ -28,7 +28,7 @@ partial class AuthRefreshTokenEntityDataService(IDomainUser user, IEntityDAC<Aut
     }
 
     /// <summary>
-    /// 条件标记撤销（Oracle M1 修复——防 TOCTOU 竞态）：条件 select <c>Id == id && !IsRevoked</c>，
+    /// 条件标记撤销（Oracle M1 修复——防 TOCTOU 竞态）：条件 select <c>Id == id &amp;&amp; !IsRevoked</c>，
     /// 并发刷新同 token 时输者返回 false（未找到/已被撤销）→ 调用方（TokenService.RefreshTokenAsync）将其视为
     /// 重用检测触发（RevokeAllByUserIdAsync + REFRESH_REUSED）——恢复"新旧不可复用"保障的重用检测兜底。
     /// </summary>

@@ -34,7 +34,7 @@ namespace TKWF.Ext.Authentication;
          return await EntityGetAsync(e => e.Ticket == ticket, ct);
      }
 
-     /// <summary>条件标记已消费（Oracle M2 修复——防 TOCTOU 竞态）：条件 select <c>Id == id && !IsConsumed</c>，
+     /// <summary>条件标记已消费（Oracle M2 修复——防 TOCTOU 竞态）：条件 select <c>Id == id &amp;&amp; !IsConsumed</c>，
      /// 并发换取同票据时输者返回 false → 调用方（OAuthTicketService.ExchangeAsync）抛 TICKET_CONSUMED——恢复"单次消费"保障。</summary>
      public async Task<bool> MarkConsumedAsync(long id, DateTime consumedAt, CancellationToken ct = default)
      {

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -128,6 +129,8 @@ internal sealed class ApprovalTestHost : IDisposable
         configure?.Invoke(services);
 
         _serviceProvider = services.BuildServiceProvider();
+        // ADR88/DI004：懒加载 Use<T> 经注入的 ServiceProvider 从容器解析
+        stubUser.Provider = _serviceProvider;
     }
 
     /// <summary>解析 Scoped 服务。</summary>
@@ -191,9 +194,17 @@ internal sealed class NoopTransactionScope : ITransactionScope
 /// <summary>Noop IDisposable。</summary>
 internal sealed class NoopDisposable : IDisposable { public void Dispose() { } }
 
-/// <summary>最小 IDomainUser 桩。</summary>
+/// <summary>最小 IDomainUser 桩。
+/// <para>ADR88/DI004：Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
+/// （测试宿主 BuildServiceProvider 后注入 <see cref="Provider"/>）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly object _gate = new();
+    private readonly Dictionary<Type, object?> _cache = new();
+
+    /// <summary>ServiceProvider（懒加载 Use&lt;T&gt; 解析源，宿主构建后注入）。</summary>
+    public IServiceProvider? Provider { get; set; }
+
     public string SessionKey => "test-session";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -204,9 +215,21 @@ internal sealed class StubDomainUser : IDomainUser
     public string? UserName => null;
     public bool IsInRole(string role) => false;
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
-        => throw new NotSupportedException("Stub: Use<T> not supported");
+    {
+        var provider = Provider ?? throw new NotSupportedException("Stub: Provider 未注入");
+        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
+            return svc;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
+                return svc2;
+            var resolved = provider.GetRequiredService<TDomainService>();
+            _cache[typeof(TDomainService)] = resolved;
+            return resolved;
+        }
+    }
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported");
+        => (Provider ?? throw new NotSupportedException("Stub: Provider 未注入")).GetRequiredService<TService>();
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

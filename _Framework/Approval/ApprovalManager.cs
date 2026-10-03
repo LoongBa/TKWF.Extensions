@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.Events;
+using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 
 namespace TKWF.Ext.Approval;
@@ -19,18 +20,27 @@ namespace TKWF.Ext.Approval;
 /// ApprovalTimeoutService 调用，跳过 C1 身份校验但保留状态机校验，审计 "system:timeout" 标识，C1/P4）。</para>
 /// </summary>
 internal sealed class ApprovalManager(
-    ApprovalFlowEntityDataService flowDataService,
-    ApprovalInstanceEntityDataService instanceDataService,
-    ApprovalTaskEntityDataService taskDataService,
-    ApprovalAppendEntityDataService appendDataService,
-    ApprovalCCEntityDataService ccDataService,
+    IDomainUser user,
     ITransactionManager transactionManager,
     ILocalEventBus localEventBus,
-    IApprovalAssigneeResolver assigneeResolver,
     ILogger<ApprovalManager> logger) : IApprovalService
 {
     /// <summary>系统超时动作审计标识（D15——不冒充审批人）。</summary>
     internal const string SystemTimeoutActor = "system:timeout";
+
+    // ── 域服务懒加载（ADR88/DI004——构造注入改 User.Use<T>() 懒加载）──
+    private ApprovalFlowEntityDataService? _flowDataService;
+    private ApprovalFlowEntityDataService FlowDataService => _flowDataService ??= user.Use<ApprovalFlowEntityDataService>();
+    private ApprovalInstanceEntityDataService? _instanceDataService;
+    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= user.Use<ApprovalInstanceEntityDataService>();
+    private ApprovalTaskEntityDataService? _taskDataService;
+    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= user.Use<ApprovalTaskEntityDataService>();
+    private ApprovalAppendEntityDataService? _appendDataService;
+    private ApprovalAppendEntityDataService AppendDataService => _appendDataService ??= user.Use<ApprovalAppendEntityDataService>();
+    private ApprovalCCEntityDataService? _ccDataService;
+    private ApprovalCCEntityDataService CCDataService => _ccDataService ??= user.Use<ApprovalCCEntityDataService>();
+    private IApprovalAssigneeResolver? _assigneeResolver;
+    private IApprovalAssigneeResolver AssigneeResolver => _assigneeResolver ??= user.Use<IApprovalAssigneeResolver>();
 
     // ── 流程定义 ──
 
@@ -55,7 +65,7 @@ internal sealed class ApprovalManager(
         };
 
         // 唯一索引 UX_ApprovalFlow_Code 并发冲突由数据库异常自然传播（败者显式异常）
-        await flowDataService.EntityCreateAsync(entity, ct);
+        await FlowDataService.EntityCreateAsync(entity, ct);
         return entity.Id;
     }
 
@@ -67,7 +77,7 @@ internal sealed class ApprovalManager(
         if (steps == null || steps.Count == 0)
             throw new ArgumentException("审批步骤不能为空", nameof(steps));
 
-        var entity = await flowDataService.EntityGetAsync(f => f.Id == flowId, ct)
+        var entity = await FlowDataService.EntityGetAsync(f => f.Id == flowId, ct)
             ?? throw new InvalidApprovalOperationException($"审批流 {flowId} 不存在");
 
         entity.Name = name;
@@ -75,27 +85,27 @@ internal sealed class ApprovalManager(
         entity.StepsJson = ApprovalStepDefinitionSerializer.Serialize(steps);
         entity.UpdateTime = DateTime.UtcNow;
 
-        await flowDataService.EntityUpdateAsync(entity, ct);
+        await FlowDataService.EntityUpdateAsync(entity, ct);
     }
 
     /// <inheritdoc />
     public async Task EnableFlowAsync(long flowId, CancellationToken ct = default)
     {
-        var entity = await flowDataService.EntityGetAsync(f => f.Id == flowId, ct)
+        var entity = await FlowDataService.EntityGetAsync(f => f.Id == flowId, ct)
             ?? throw new InvalidApprovalOperationException($"审批流 {flowId} 不存在");
         entity.IsEnabled = true;
         entity.UpdateTime = DateTime.UtcNow;
-        await flowDataService.EntityUpdateAsync(entity, ct);
+        await FlowDataService.EntityUpdateAsync(entity, ct);
     }
 
     /// <inheritdoc />
     public async Task DisableFlowAsync(long flowId, CancellationToken ct = default)
     {
-        var entity = await flowDataService.EntityGetAsync(f => f.Id == flowId, ct)
+        var entity = await FlowDataService.EntityGetAsync(f => f.Id == flowId, ct)
             ?? throw new InvalidApprovalOperationException($"审批流 {flowId} 不存在");
         entity.IsEnabled = false;
         entity.UpdateTime = DateTime.UtcNow;
-        await flowDataService.EntityUpdateAsync(entity, ct);
+        await FlowDataService.EntityUpdateAsync(entity, ct);
     }
 
     // ── 实例 ──
@@ -110,13 +120,13 @@ internal sealed class ApprovalManager(
         ArgumentException.ThrowIfNullOrWhiteSpace(submitter);
 
         // P1-3：校验流程启用
-        var flow = await flowDataService.EntityGetAsync(f => f.Code == flowCode, ct)
+        var flow = await FlowDataService.EntityGetAsync(f => f.Code == flowCode, ct)
             ?? throw new InvalidApprovalOperationException($"审批流 '{flowCode}' 不存在");
         if (!flow.IsEnabled)
             throw new InvalidApprovalOperationException($"审批流 '{flowCode}' 已禁用，无法启动");
 
         // C2：前置检查同业务是否有活动实例
-        var existingActive = await instanceDataService.EntityGetAsync(
+        var existingActive = await InstanceDataService.EntityGetAsync(
             i => i.BusinessType == businessType && i.BusinessId == businessId && i.IsActive, ct);
         if (existingActive != null)
             throw new InvalidApprovalOperationException(
@@ -136,7 +146,7 @@ internal sealed class ApprovalManager(
             CreateTime = DateTime.UtcNow
         };
 
-        await instanceDataService.EntityCreateAsync(instance, ct);
+        await InstanceDataService.EntityCreateAsync(instance, ct);
 
         // v0.2.0：抄送（Position=Start）——StartAsync 带 ccUserIds 记录；通知事件于 SubmitAsync 提交后派发
         if (ccUserIds is { Length: > 0 })
@@ -144,7 +154,7 @@ internal sealed class ApprovalManager(
             var now = DateTime.UtcNow;
             foreach (var userId in ccUserIds.Distinct(StringComparer.Ordinal))
             {
-                await ccDataService.EntityCreateAsync(new ApprovalCCEntity
+                await CCDataService.EntityCreateAsync(new ApprovalCCEntity
                 {
                     InstanceId = instance.Id,
                     UserId = userId,
@@ -160,7 +170,7 @@ internal sealed class ApprovalManager(
     /// <inheritdoc />
     public async Task SubmitAsync(long instanceId, CancellationToken ct = default)
     {
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == instanceId, ct)
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct)
             ?? throw new InvalidApprovalOperationException($"审批实例 {instanceId} 不存在");
 
         // 状态机：Draft→Pending
@@ -168,7 +178,7 @@ internal sealed class ApprovalManager(
 
         // 解析首步（事务外读取流程定义——只读数据）
         var steps = ApprovalStepDefinitionSerializer.Deserialize(
-            (await flowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
+            (await FlowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
         if (steps.Count == 0)
             throw new InvalidApprovalOperationException("审批流无步骤定义");
 
@@ -178,7 +188,7 @@ internal sealed class ApprovalManager(
         {
             instance.Status = ApprovalInstanceStatus.Pending;
             instance.SubmittedAt = DateTime.UtcNow;
-            await instanceDataService.EntityUpdateAsync(instance, ct);
+            await InstanceDataService.EntityUpdateAsync(instance, ct);
 
             await CreateTasksForStepAsync(instance, steps[0], ct);
 
@@ -201,7 +211,7 @@ internal sealed class ApprovalManager(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(approverUserId);
 
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // C1：审批人身份硬校验
@@ -223,7 +233,7 @@ internal sealed class ApprovalManager(
         ArgumentException.ThrowIfNullOrWhiteSpace(approverUserId);
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
 
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // C1：审批人身份硬校验
@@ -238,7 +248,7 @@ internal sealed class ApprovalManager(
         ArgumentException.ThrowIfNullOrWhiteSpace(fromUserId);
         ArgumentException.ThrowIfNullOrWhiteSpace(toUserId);
 
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // C1+C4：仅任务审批人可转交
@@ -252,7 +262,7 @@ internal sealed class ApprovalManager(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
 
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == instanceId, ct)
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct)
             ?? throw new InvalidApprovalOperationException($"审批实例 {instanceId} 不存在");
 
         // P1-1：仅提交人可撤回
@@ -272,13 +282,13 @@ internal sealed class ApprovalManager(
             {
                 instance.Status = ApprovalInstanceStatus.Withdrawn;
                 // 将所有 Pending 任务标记 Completed
-                var tasks = await taskDataService.EntitySelectAsync(
+                var tasks = await TaskDataService.EntitySelectAsync(
                     t => t.InstanceId == instanceId && t.Status == ApprovalTaskStatus.Pending,
                     0, int.MaxValue, q => q, ct);
                 foreach (var task in tasks)
                 {
                     task.Status = ApprovalTaskStatus.Completed;
-                    await taskDataService.EntityUpdateAsync(task, ct);
+                    await TaskDataService.EntityUpdateAsync(task, ct);
                 }
             }
             else
@@ -289,7 +299,7 @@ internal sealed class ApprovalManager(
 
             // 终态：IsActive=false 释放约束
             instance.IsActive = false;
-            await instanceDataService.EntityUpdateAsync(instance, ct);
+            await InstanceDataService.EntityUpdateAsync(instance, ct);
 
             await scope.CommitAsync(ct);
         }
@@ -308,7 +318,7 @@ internal sealed class ApprovalManager(
         ArgumentException.ThrowIfNullOrWhiteSpace(fromUserId);
         ArgumentException.ThrowIfNullOrWhiteSpace(toUserId);
 
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // C1：仅当前审批人可委派
@@ -334,7 +344,7 @@ internal sealed class ApprovalManager(
             task.DelegatedToUserId = toUserId;
             task.ApproverUserId = toUserId; // 委派人成为当前处理人
             task.DelegatedAt = DateTime.UtcNow;
-            await taskDataService.EntityUpdateAsync(task, ct);
+            await TaskDataService.EntityUpdateAsync(task, ct);
 
             await scope.CommitAsync(ct);
         }
@@ -350,7 +360,7 @@ internal sealed class ApprovalManager(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(delegateUserId);
 
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // C1：仅当前处理人（委派人）可 Resolve
@@ -371,7 +381,7 @@ internal sealed class ApprovalManager(
             task.DelegationState = ApprovalDelegationState.Resolved;
             task.ApproverUserId = task.OriginalAssigneeId; // 回到原审批人
             task.Comment = comment;
-            await taskDataService.EntityUpdateAsync(task, ct);
+            await TaskDataService.EntityUpdateAsync(task, ct);
 
             await scope.CommitAsync(ct);
         }
@@ -392,7 +402,7 @@ internal sealed class ApprovalManager(
         ArgumentException.ThrowIfNullOrWhiteSpace(operatedByUserId);
         ArgumentNullException.ThrowIfNull(appenderUserIds);
 
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // C1：仅当前审批人可加签
@@ -406,7 +416,7 @@ internal sealed class ApprovalManager(
         if (distinctAppenders.Count == 0)
             throw new ArgumentException("加签用户列表不能为空", nameof(appenderUserIds));
 
-        var pendingApproverIds = (await taskDataService.EntitySelectAsync(
+        var pendingApproverIds = (await TaskDataService.EntitySelectAsync(
             t => t.InstanceId == task.InstanceId && t.StepIndex == task.StepIndex
                  && t.Status == ApprovalTaskStatus.Pending,
             0, int.MaxValue, q => q, ct))
@@ -419,10 +429,10 @@ internal sealed class ApprovalManager(
             throw new InvalidApprovalOperationException($"用户 {duplicate} 已是本步骤审批人，不可重复加签");
 
         // 获取当前步骤定义（StepName 快照 + 超时配置派生 P4）
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
             ?? throw new InvalidApprovalOperationException($"审批实例 {task.InstanceId} 不存在");
         var steps = ApprovalStepDefinitionSerializer.Deserialize(
-            (await flowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
+            (await FlowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
         var currentStep = steps[task.StepIndex];
         var now = DateTime.UtcNow;
 
@@ -433,7 +443,7 @@ internal sealed class ApprovalManager(
             foreach (var userId in distinctAppenders)
             {
                 // 每加签人一行记录（Participate/Notify 均记录）
-                await appendDataService.EntityCreateAsync(new ApprovalAppendEntity
+                await AppendDataService.EntityCreateAsync(new ApprovalAppendEntity
                 {
                     InstanceId = task.InstanceId,
                     TaskId = task.Id,
@@ -461,7 +471,7 @@ internal sealed class ApprovalManager(
                         CreateTime = now
                     };
                     ApplyStepTimeout(newTask, currentStep, now);
-                    await taskDataService.EntityCreateAsync(newTask, ct);
+                    await TaskDataService.EntityCreateAsync(newTask, ct);
                 }
             }
 
@@ -498,7 +508,7 @@ internal sealed class ApprovalManager(
     {
         ArgumentNullException.ThrowIfNull(userIds);
 
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == instanceId, ct)
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct)
             ?? throw new InvalidApprovalOperationException($"审批实例 {instanceId} 不存在");
 
         if (instance.Status is ApprovalInstanceStatus.Approved
@@ -510,7 +520,7 @@ internal sealed class ApprovalManager(
         var now = DateTime.UtcNow;
         foreach (var userId in userIds.Distinct(StringComparer.Ordinal))
         {
-            await ccDataService.EntityCreateAsync(new ApprovalCCEntity
+            await CCDataService.EntityCreateAsync(new ApprovalCCEntity
             {
                 InstanceId = instanceId,
                 UserId = userId,
@@ -550,16 +560,16 @@ internal sealed class ApprovalManager(
     /// </summary>
     internal async Task JumpAsSystemAsync(long taskId, CancellationToken ct)
     {
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // 状态机：Pending 才可跳转
         ValidateTaskTransition(task.Status, ApprovalTaskStatus.Completed);
 
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
             ?? throw new InvalidApprovalOperationException($"审批实例 {task.InstanceId} 不存在");
         var steps = ApprovalStepDefinitionSerializer.Deserialize(
-            (await flowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
+            (await FlowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
 
         // P2：目标步骤校验（越界/向后/等于当前拒绝）
         var targetIndex = task.TimeoutJumpToStepIndex;
@@ -576,19 +586,19 @@ internal sealed class ApprovalManager(
         try
         {
             // 当前步骤所有 Pending 任务标记 Completed
-            var pendingTasks = await taskDataService.EntitySelectAsync(
+            var pendingTasks = await TaskDataService.EntitySelectAsync(
                 t => t.InstanceId == instance.Id && t.StepIndex == task.StepIndex
                      && t.Status == ApprovalTaskStatus.Pending,
                 0, int.MaxValue, q => q, ct);
             foreach (var pendingTask in pendingTasks)
             {
                 pendingTask.Status = ApprovalTaskStatus.Completed;
-                await taskDataService.EntityUpdateAsync(pendingTask, ct);
+                await TaskDataService.EntityUpdateAsync(pendingTask, ct);
             }
 
             // 实例推进到目标步骤 + 创建目标步骤任务
             instance.CurrentStepIndex = jumpIndex;
-            await instanceDataService.EntityUpdateAsync(instance, ct);
+            await InstanceDataService.EntityUpdateAsync(instance, ct);
             await CreateTasksForStepAsync(instance, steps[jumpIndex], ct);
 
             await scope.CommitAsync(ct);
@@ -608,7 +618,7 @@ internal sealed class ApprovalManager(
     /// </summary>
     private async Task ApproveCoreAsync(long taskId, string approverUserId, string? comment, CancellationToken ct)
     {
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // 状态机：Pending→Approved
@@ -625,19 +635,19 @@ internal sealed class ApprovalManager(
             task.ApprovedAt = DateTime.UtcNow;
             task.ApprovedBy = approverUserId;
             task.Comment = comment;
-            await taskDataService.EntityUpdateAsync(task, ct);
+            await TaskDataService.EntityUpdateAsync(task, ct);
 
             // 获取实例
-            var instance = await instanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
+            var instance = await InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
                 ?? throw new InvalidApprovalOperationException($"审批实例 {task.InstanceId} 不存在");
 
             // 步骤判定
             var steps = ApprovalStepDefinitionSerializer.Deserialize(
-                (await flowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
+                (await FlowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
             var currentStep = steps[task.StepIndex];
 
             // 查同步骤全部任务（P2-2：int.MaxValue 去 1000 上限——加签后同步骤任务数可超 1000，All 模式漏算风险）
-            var allTasksForStep = await taskDataService.EntitySelectAsync(
+            var allTasksForStep = await TaskDataService.EntitySelectAsync(
                 t => t.InstanceId == instance.Id && t.StepIndex == task.StepIndex,
                 0, int.MaxValue, q => q.OrderBy(t => t.Id), ct);
 
@@ -655,7 +665,7 @@ internal sealed class ApprovalManager(
                     t.Id != taskId && t.Status == ApprovalTaskStatus.Pending))
                 {
                     otherTask.Status = ApprovalTaskStatus.Completed;
-                    await taskDataService.EntityUpdateAsync(otherTask, ct);
+                    await TaskDataService.EntityUpdateAsync(otherTask, ct);
                 }
 
                 // 下一步？
@@ -664,14 +674,14 @@ internal sealed class ApprovalManager(
                 {
                     // 还有下一步——更新 CurrentStepIndex + 创建下一步任务
                     instance.CurrentStepIndex = nextStepIndex;
-                    await instanceDataService.EntityUpdateAsync(instance, ct);
+                    await InstanceDataService.EntityUpdateAsync(instance, ct);
                     await CreateTasksForStepAsync(instance, steps[nextStepIndex], ct);
                 }
                 else
                 {
                     // 全步骤通过→实例 Approved（终态 + IsActive=false 释放约束）
                     ApplyTerminalStatus(instance, ApprovalInstanceStatus.Approved, null);
-                    await instanceDataService.EntityUpdateAsync(instance, ct);
+                    await InstanceDataService.EntityUpdateAsync(instance, ct);
                     terminalStatus = ApprovalInstanceStatus.Approved;
                     terminalInstance = instance;
                 }
@@ -697,7 +707,7 @@ internal sealed class ApprovalManager(
     /// </summary>
     private async Task RejectCoreAsync(long taskId, string approverUserId, string reason, CancellationToken ct)
     {
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // 状态机：Pending→Rejected
@@ -713,26 +723,26 @@ internal sealed class ApprovalManager(
             task.ApprovedAt = DateTime.UtcNow; // 命名沿用 v0.1.0（P2-3 P 级可选优化，行为不变）
             task.ApprovedBy = approverUserId;
             task.Comment = reason;
-            await taskDataService.EntityUpdateAsync(task, ct);
+            await TaskDataService.EntityUpdateAsync(task, ct);
 
             // 获取实例
-            var instance = await instanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
+            var instance = await InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
                 ?? throw new InvalidApprovalOperationException($"审批实例 {task.InstanceId} 不存在");
 
             // 将同步骤其余 Pending 任务标记 Completed
-            var allTasksForStep = await taskDataService.EntitySelectAsync(
+            var allTasksForStep = await TaskDataService.EntitySelectAsync(
                 t => t.InstanceId == instance.Id && t.StepIndex == task.StepIndex,
                 0, int.MaxValue, q => q.OrderBy(t => t.Id), ct);
             foreach (var otherTask in allTasksForStep.Where(t =>
                 t.Id != taskId && t.Status == ApprovalTaskStatus.Pending))
             {
                 otherTask.Status = ApprovalTaskStatus.Completed;
-                await taskDataService.EntityUpdateAsync(otherTask, ct);
+                await TaskDataService.EntityUpdateAsync(otherTask, ct);
             }
 
             // 实例 Rejected（终态 + IsActive=false 释放约束）
             ApplyTerminalStatus(instance, ApprovalInstanceStatus.Rejected, reason);
-            await instanceDataService.EntityUpdateAsync(instance, ct);
+            await InstanceDataService.EntityUpdateAsync(instance, ct);
             terminalInstance = instance;
 
             await scope.CommitAsync(ct);
@@ -756,7 +766,7 @@ internal sealed class ApprovalManager(
     /// </summary>
     private async Task TransferCoreAsync(long taskId, string toUserId, CancellationToken ct)
     {
-        var task = await taskDataService.EntityGetAsync(t => t.Id == taskId, ct)
+        var task = await TaskDataService.EntityGetAsync(t => t.Id == taskId, ct)
             ?? throw new InvalidApprovalOperationException($"审批任务 {taskId} 不存在");
 
         // 状态机：Pending→Transferred
@@ -768,13 +778,13 @@ internal sealed class ApprovalManager(
         {
             task.Status = ApprovalTaskStatus.Transferred;
             task.TransferredTo = toUserId;
-            await taskDataService.EntityUpdateAsync(task, ct);
+            await TaskDataService.EntityUpdateAsync(task, ct);
 
             // 获取实例（获取当前步骤名 + 超时配置）
-            var instance = await instanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
+            var instance = await InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct)
                 ?? throw new InvalidApprovalOperationException($"审批实例 {task.InstanceId} 不存在");
             var steps = ApprovalStepDefinitionSerializer.Deserialize(
-                (await flowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
+                (await FlowDataService.EntityGetAsync(f => f.Id == instance.FlowId, ct))?.StepsJson ?? "[]");
             var currentStep = steps[task.StepIndex];
 
             // 创建新任务给 toUserId（ApproverType=User，ApproverValue=toUserId，ApproverUserId=toUserId）
@@ -791,7 +801,7 @@ internal sealed class ApprovalManager(
                 CreateTime = now
             };
             ApplyStepTimeout(newTask, currentStep, now); // P4：转交新任务继承步骤超时配置
-            await taskDataService.EntityCreateAsync(newTask, ct);
+            await TaskDataService.EntityCreateAsync(newTask, ct);
 
             await scope.CommitAsync(ct);
         }
@@ -853,7 +863,7 @@ internal sealed class ApprovalManager(
     private async Task RaiseCcEventAsync(ApprovalInstanceEntity instance, ApprovalInstanceStatus? result,
         ApprovalCCPosition position, CancellationToken ct)
     {
-        var ccs = await ccDataService.EntitySelectAsync(
+        var ccs = await CCDataService.EntitySelectAsync(
             c => c.InstanceId == instance.Id
                  && (position == ApprovalCCPosition.Start
                      ? (c.Position == ApprovalCCPosition.Start || c.Position == ApprovalCCPosition.StartFinish)
@@ -885,7 +895,7 @@ internal sealed class ApprovalManager(
     private async Task CreateTasksForStepAsync(ApprovalInstanceEntity instance,
         ApprovalStepDefinition step, CancellationToken ct)
     {
-        var assigneeIds = await assigneeResolver.ResolveUserIdsAsync(step, ct);
+        var assigneeIds = await AssigneeResolver.ResolveUserIdsAsync(step, ct);
         if (assigneeIds.Count == 0)
         {
             logger.LogWarning("审批步骤 {StepIndex}({StepName}) 无审批人，跳过", step.Index, step.Name);
@@ -907,7 +917,7 @@ internal sealed class ApprovalManager(
                 CreateTime = now
             };
             ApplyStepTimeout(task, step, now);
-            await taskDataService.EntityCreateAsync(task, ct);
+            await TaskDataService.EntityCreateAsync(task, ct);
         }
     }
 

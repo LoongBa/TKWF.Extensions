@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.Events;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
 
@@ -11,21 +12,26 @@ namespace TKWF.Ext.Approval;
 /// 审批超时处理服务实现——经 SG1 DataService 委托查询/占位 + ApprovalManager internal 系统动作方法。
 /// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——扫描/占位走 <see cref="ApprovalTaskEntityDataService"/>（条件查询 + ClaimTimeoutAsync），
 /// 动作走 <see cref="ApprovalManager"/> internal 系统方法（同程序集访问）。</para>
+/// <para>ADR88/DI004：DataService/ApprovalManager 不再构造注入——经 User.Use&lt;T&gt;() 懒加载。</para>
 /// </summary>
 internal sealed class ApprovalTimeoutService(
-    ApprovalTaskEntityDataService taskDataService,
-    ApprovalInstanceEntityDataService instanceDataService,
-    ApprovalManager approvalManager,
+    IDomainUser user,
     ILocalEventBus localEventBus,
     ILogger<ApprovalTimeoutService> logger) : IApprovalTimeoutService
 {
+    private ApprovalTaskEntityDataService? _taskDataService;
+    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= user.Use<ApprovalTaskEntityDataService>();
+    private ApprovalInstanceEntityDataService? _instanceDataService;
+    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= user.Use<ApprovalInstanceEntityDataService>();
+    private ApprovalManager? _approvalManager;
+    private ApprovalManager ApprovalManager => _approvalManager ??= user.Use<ApprovalManager>();
     /// <inheritdoc />
     public async Task<int> ProcessTimeoutTasksAsync(CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
 
         // 扫描超期任务（Pending && TimeoutAt<=now && !TimeoutProcessed）
-        var overdue = await taskDataService.EntitySelectAsync(
+        var overdue = await TaskDataService.EntitySelectAsync(
             t => t.Status == ApprovalTaskStatus.Pending
                  && t.TimeoutAt <= now
                  && !t.TimeoutProcessed,
@@ -37,7 +43,7 @@ internal sealed class ApprovalTimeoutService(
             ct.ThrowIfCancellationRequested();
 
             // P3 扫描即占位——条件更新影响行数=0 跳过（他者已处理 / 任务已非 Pending）
-            var claimed = await taskDataService.ClaimTimeoutAsync(task.Id, ct);
+            var claimed = await TaskDataService.ClaimTimeoutAsync(task.Id, ct);
             if (claimed == 0)
             {
                 logger.LogDebug("超时任务 {TaskId} 已被他者处理，跳过", task.Id);
@@ -77,19 +83,19 @@ internal sealed class ApprovalTimeoutService(
             case ApprovalTimeoutAction.Transfer:
                 if (string.IsNullOrWhiteSpace(task.TimeoutTransferToUserId))
                     throw new InvalidApprovalOperationException($"任务 {task.Id} 超时 Transfer 未配置 TimeoutTransferToUserId");
-                await approvalManager.TransferAsSystemAsync(task.Id, task.TimeoutTransferToUserId, ct);
+                await ApprovalManager.TransferAsSystemAsync(task.Id, task.TimeoutTransferToUserId, ct);
                 break;
 
             case ApprovalTimeoutAction.Jump:
-                await approvalManager.JumpAsSystemAsync(task.Id, ct);
+                await ApprovalManager.JumpAsSystemAsync(task.Id, ct);
                 break;
 
             case ApprovalTimeoutAction.Approve:
-                await approvalManager.ApproveAsSystemAsync(task.Id, null, ct);
+                await ApprovalManager.ApproveAsSystemAsync(task.Id, null, ct);
                 break;
 
             case ApprovalTimeoutAction.Reject:
-                await approvalManager.RejectAsSystemAsync(task.Id, "审批超时自动驳回", ct);
+                await ApprovalManager.RejectAsSystemAsync(task.Id, "审批超时自动驳回", ct);
                 break;
 
             default:
@@ -101,7 +107,7 @@ internal sealed class ApprovalTimeoutService(
     private async Task PublishTimeoutEventAsync(ApprovalTaskEntity task, ApprovalTimeoutAction action,
         string? transferToUserId, CancellationToken ct)
     {
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct);
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct);
         if (instance == null)
         {
             logger.LogWarning("超时任务 {TaskId} 关联实例 {InstanceId} 不存在，跳过事件", task.Id, task.InstanceId);

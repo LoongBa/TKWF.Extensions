@@ -4,6 +4,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Approval;
 
@@ -11,12 +12,16 @@ namespace TKWF.Ext.Approval;
 /// 审批查询服务实现——经 SG1 DataService 委托查询，不注入 IFreeSql/IEntityDAC。
 /// <para>Scoped 生命周期。列表 DTO 剔除 BusinessDataJson 大字段（查询性能）；
 /// 详情 GetInstanceDetailAsync 取全量 BusinessDataJson + 任务链。</para>
+/// <para>ADR88/DI004：DataService 不再构造注入——经 User.Use&lt;T&gt;() 懒加载。</para>
 /// </summary>
-internal sealed class ApprovalQueryService(
-    ApprovalInstanceEntityDataService instanceDataService,
-    ApprovalTaskEntityDataService taskDataService,
-    ApprovalTaskViewDataService taskViewDataService) : IApprovalQueryService
+internal sealed class ApprovalQueryService(IDomainUser user) : IApprovalQueryService
 {
+    private ApprovalInstanceEntityDataService? _instanceDataService;
+    private ApprovalInstanceEntityDataService InstanceDataService => _instanceDataService ??= user.Use<ApprovalInstanceEntityDataService>();
+    private ApprovalTaskEntityDataService? _taskDataService;
+    private ApprovalTaskEntityDataService TaskDataService => _taskDataService ??= user.Use<ApprovalTaskEntityDataService>();
+    private ApprovalTaskViewDataService? _taskViewDataService;
+    private ApprovalTaskViewDataService TaskViewDataService => _taskViewDataService ??= user.Use<ApprovalTaskViewDataService>();
     /// <inheritdoc />
     public async Task<ApprovalInstancePagedResult> GetInstancesAsync(ApprovalInstanceQueryInput input, CancellationToken ct = default)
     {
@@ -34,8 +39,8 @@ internal sealed class ApprovalQueryService(
             && (input.ToTime == null || i.CreateTime <= input.ToTime.Value);
 
         // P2-1/P5：DB 级分页——total 独立 count + 页数据 skip/take 下推（不再 100k 全量内存分页）
-        var total = await instanceDataService.CountAsync(predicate, ct);
-        var pageItems = await instanceDataService.EntitySelectAsync(
+        var total = await InstanceDataService.CountAsync(predicate, ct);
+        var pageItems = await InstanceDataService.EntitySelectAsync(
             predicate, skip, take, q => q.OrderByDescending(i => i.Id), ct);
 
         var dtos = pageItems.Select(MapToListItemDto).ToList();
@@ -53,8 +58,8 @@ internal sealed class ApprovalQueryService(
             t => t.ApproverUserId == input.ApproverUserId && t.Status == status;
 
         // P2-1/P5：DB 级分页——total 独立 count + 页数据 skip/take 下推
-        var total = await taskDataService.CountAsync(predicate, ct);
-        var pageItems = await taskDataService.EntitySelectAsync(
+        var total = await TaskDataService.CountAsync(predicate, ct);
+        var pageItems = await TaskDataService.EntitySelectAsync(
             predicate, skip, take, q => q.OrderByDescending(t => t.Id), ct);
 
         var dtos = pageItems.Select(MapToTaskListItemDto).ToList();
@@ -64,11 +69,11 @@ internal sealed class ApprovalQueryService(
     /// <inheritdoc />
     public async Task<ApprovalInstanceDetailDto?> GetInstanceDetailAsync(long instanceId, CancellationToken ct = default)
     {
-        var instance = await instanceDataService.EntityGetAsync(i => i.Id == instanceId, ct);
+        var instance = await InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct);
         if (instance == null) return null;
 
         // 查询任务链（V0.3.0 VEntity：vw_ApprovalTaskView JOIN 下推 DB，携带 Instance 列，替代任务链两步查询）
-        var tasks = await taskViewDataService.GetTasksByInstanceIdAsync(instanceId, ct);
+        var tasks = await TaskViewDataService.GetTasksByInstanceIdAsync(instanceId, ct);
 
         return new ApprovalInstanceDetailDto
         {

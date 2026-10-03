@@ -15,8 +15,8 @@ public class NotificationDefinitionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationDefinitionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.DefinitionManager;
 
         var all = manager.GetAll();
 
@@ -32,8 +32,8 @@ public class NotificationDefinitionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationDefinitionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.DefinitionManager;
 
         var def = manager.Get(TestNotificationDefinitions.OrderShipped);
 
@@ -47,8 +47,8 @@ public class NotificationDefinitionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationDefinitionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.DefinitionManager;
 
         // 实现约定：未注册定义抛 KeyNotFoundException
         Assert.Throws<KeyNotFoundException>(() => manager.Get("NoSuchNotification"));
@@ -59,8 +59,8 @@ public class NotificationDefinitionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationDefinitionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.DefinitionManager;
 
         Assert.True(manager.Exists(TestNotificationDefinitions.OrderShipped));
         Assert.False(manager.Exists("NoSuchNotification"));

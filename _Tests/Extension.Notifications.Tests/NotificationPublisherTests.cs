@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Threading;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,9 +22,9 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
 
@@ -49,9 +49,9 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: Array.Empty<long>());
 
@@ -64,9 +64,9 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 1, 2 });
 
@@ -82,9 +82,9 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(
             TestNotificationDefinitions.OrderShipped,
@@ -104,10 +104,10 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
+        var subManager = host.SubscriptionManager;
 
         // 用户 1、2 订阅定义级通知；用户 3 未订阅
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
@@ -127,10 +127,10 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
+        var subManager = host.SubscriptionManager;
 
         // 用户 1 订阅实体 o-100；用户 2 订阅实体 o-200
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100");
@@ -159,9 +159,9 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => publisher.PublishAsync("NoSuchNotification", userIds: new long[] { 1 }));
@@ -178,13 +178,13 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<INotificationDefinitionProvider, PermissionGatedDefinitions>();
             services.AddSingleton<IPermissionChecker>(new FakePermissionChecker(
                 new Dictionary<string, bool> { ["Notifications.Restricted"] = false }));
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var publisher = host.Publisher;
 
         // 发布方无权限 → InvalidOperationException（实现约定：发布方权限门控失败）
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -198,14 +198,14 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<INotificationDefinitionProvider, PermissionGatedDefinitions>();
             services.AddSingleton<IPermissionChecker>(new FakePermissionChecker(
                 new Dictionary<string, bool> { ["Notifications.Restricted"] = true }));
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 });
 
@@ -220,8 +220,8 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
 
         var data = new NotificationData(new Dictionary<string, object?>
         {
@@ -247,10 +247,10 @@ public class NotificationPublisherTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
+        var subManager = host.SubscriptionManager;
 
         // 用户 1：定义级订阅（收全部）；用户 2：实体级订阅 o-100；用户 3：实体级订阅 o-200
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
@@ -280,13 +280,13 @@ public class NotificationPublisherTests
         var recordingTx = new RecordingTransactionManager();
 
         // 注入：记录型事务管理器 + 首次 inbox 写入抛异常的 Notifier 桩（替换 InboxNotifier）
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<ITransactionManager>(recordingTx);
             services.RemoveAll<INotificationNotifier>();
             services.AddScoped<INotificationNotifier, ThrowingInboxNotifier>();
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var publisher = host.Publisher;
 
         // Inbox 写入抛异常 → 异常传播 → 发布器 catch → 事务回滚被调用（C4）
         // 注：测试事务管理器为桩（不包物理事务），DB 行无法真正撤销——只验证"异常传播触发 RollbackAsync 调用"。

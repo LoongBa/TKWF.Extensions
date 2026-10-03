@@ -3,6 +3,7 @@ using System.Threading;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -13,13 +14,49 @@ namespace TKWF.Ext.Notifications.Tests;
 
 /// <summary>
 /// Notifications 测试公共基础设施——SQLite 内存库 + 测试 DI 宿主构建器 + 默认通知定义 Provider + 权限 mock。
-/// <para>对齐 DataPort（DataImportTaskServiceTests）与 AuditLogging（FreeSqlAuditLogStoreTests）测试模式：
-/// 每测试类独立 fsql（using 释放）；经 DI 容器解析扩展服务（Publisher/Store/SubscriptionManager/DefinitionManager）。
-/// 通知定义 Provider 以 DI 注册方式接入（<c>INotificationDefinitionProvider</c>），由初始化的
-/// <see cref="INotificationDefinitionManager"/> 收集——发布/订阅/收件箱测试共用同一组注册定义。</para>
+/// <para>V4.10.53（领域自治根治）宿主重写——走生产路径（对齐 MFA/Settings/Account 生产路径宿主）：
+/// 真实 DI（扩展 ConfigureServices + FreeSql 基础设施 + AddLogging + <c>IEntityDAC&lt;T&gt;</c> Singleton）
+/// → <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> → 门面经 <c>user.Use&lt;接口&gt;()</c> AOP 路径解析
+/// （设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 → ActivatorUtilities 直建）；
+/// DataService 经基类 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 直建（IEntityDAC 从 DI 解析）。</para>
+/// <para>⚠️ 边界保留组（本批不改，对齐 MFA IMfaMethod 处理）：<see cref="InboxNotifier"/> 仍构造注入 IDomainUser
+/// （多实现集合 TryAddEnumerable——普通 DI 解析 ctor(IDomainUser) 时 IDomainUser 永不注册 → 生产解析失败，框架缺口候选 T3）；
+/// 测试宿主为其注册可配置 <see cref="StubDomainUser"/>（IDomainUser 单例——门面经守卫工厂走真实 DomainUser，
+/// 桩仅供未整改的 InboxNotifier / V0.5.0 <see cref="UserNotificationViewQueryService"/> 测试经 DI 解析）。
+/// 其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价（<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>）。</para>
 /// </summary>
-internal static class NotificationTestHost
+internal sealed class NotificationTestHost : IDisposable
 {
+    private readonly ServiceProvider _serviceProvider;
+    private readonly DomainUser<TestUserInfo> _user;
+
+    /// <summary>根 ServiceProvider（供直解非门面服务——EmailNotifier/QueryService/事件 handler 等）。</summary>
+    public ServiceProvider Provider => _serviceProvider;
+
+    /// <summary>发布器门面（生产 AOP 路径：User.Use&lt;INotificationPublisher&gt;() 经守卫工厂创建实例）。</summary>
+    public INotificationPublisher Publisher => _user.Use<INotificationPublisher>();
+
+    /// <summary>真实绑定用户（V4.10.53——事件 handler 等消费方示例经此设 AOP 帧解析守卫门面）。</summary>
+    public DomainUser<TestUserInfo> User => _user;
+
+    /// <summary>收件箱门面（生产 AOP 路径）。</summary>
+    public INotificationStore Store => _user.Use<INotificationStore>();
+
+    /// <summary>订阅管理门面（生产 AOP 路径）。</summary>
+    public INotificationSubscriptionManager SubscriptionManager => _user.Use<INotificationSubscriptionManager>();
+
+    /// <summary>偏好管理门面（生产 AOP 路径）。</summary>
+    public INotificationPreferenceManager PreferenceManager => _user.Use<INotificationPreferenceManager>();
+
+    /// <summary>定义管理器（接线型 Singleton——普通 DI 解析）。</summary>
+    public INotificationDefinitionManager DefinitionManager => _serviceProvider.GetRequiredService<INotificationDefinitionManager>();
+
+    private NotificationTestHost(ServiceProvider serviceProvider, DomainUser<TestUserInfo> user)
+    {
+        _serviceProvider = serviceProvider;
+        _user = user;
+    }
+
     /// <summary>创建使用 SQLite 内存库的 IFreeSql 实例（每次调用新连接 = 独立内存库）。
     /// 注意：连接需在测试生命周期内保持打开（using），关闭即清空数据库。</summary>
     public static IFreeSql CreateInMemoryFreeSql()
@@ -47,54 +84,59 @@ INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
     }
 
     /// <summary>
-    /// 构建测试 DI 宿主：注册日志 + 内存 fsql + 默认通知定义 Provider，然后执行
-    /// <see cref="NotificationsExtensionInitializer{TUserInfo}.ConfigureServices"/>（扩展默认实现注册）。
-    /// <para><paramref name="configure"/> 可在初始化器之前追加额外注册（如权限 mock、额外定义 Provider）。</para>
+    /// 构建测试 DI 宿主（生产路径，V4.10.53 领域自治根治）：
+    /// 注册日志 + 内存 fsql + IEntityDAC 基础设施（Singleton + 共享 UnitOfWorkManager——消费方 DomainHost 等价注册）
+    /// + 默认通知定义 Provider + <see cref="NotificationsExtensionInitializer{TUserInfo}.ConfigureServices"/>（扩展默认实现注册），
+    /// 然后 <c>DomainUser&lt;TestUserInfo&gt;.BindScope</c> 绑定解析作用域 + 创建真实 DomainUser。
+    /// <para><paramref name="configure"/> 可在初始化器之前追加额外注册（如权限 mock、额外定义 Provider、事务管理器覆盖）。</para>
     /// </summary>
-    public static ServiceProvider Build(IFreeSql fsql, Action<IServiceCollection>? configure = null)
+    public static NotificationTestHost Build(IFreeSql fsql, Action<IServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(fsql);
-        services.AddSingleton<ITransactionManager>(new NoopTransactionManager());
+        // IEntityDAC<T> 基础设施注册（消费方 DomainHost 等价注册——Singleton + 共享 UnitOfWorkManager，
+        // 对齐 Settings/Account/MFA 生产路径宿主）
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<NotificationEntity>, FreeSqlEntityDAC<NotificationEntity>>();
+        services.AddSingleton<IEntityDAC<UserNotificationEntity>, FreeSqlEntityDAC<UserNotificationEntity>>();
+        services.AddSingleton<IEntityDAC<NotificationSubscriptionEntity>, FreeSqlEntityDAC<NotificationSubscriptionEntity>>();
+        services.AddSingleton<IEntityDAC<NotificationPreferenceEntity>, FreeSqlEntityDAC<NotificationPreferenceEntity>>();
+        // V0.2.0 VEntity：IEntityReadOnlyDAC 只读契约（手写只读 DataService 经基类 User.Use 直建时从 DI 解析）
+        services.AddSingleton<IEntityReadOnlyDAC<UserNotificationView>, FreeSqlEntityDAC<UserNotificationView>>();
+        services.AddSingleton<ITransactionManager, NoopTransactionManager>();
         services.AddSingleton<INotificationDefinitionProvider, TestNotificationDefinitions>();
-        // v4.10.8 (ADR61) 迁移：模拟生产 DataService 自动注册——测试容器不走消费方 SG 聚合，
-        // 用与生产同构的 DI 兜底工厂（镜像 AddConstructibleDataService：ActivatorUtilities.CreateInstance
-        // + 域用户；测试用户源 = DI IDomainUser 而非 AsyncLocal CurrentAopUser——免域作用域，xUnit 并行安全）。
-        services.AddScoped<UnitOfWorkManager>();
-        services.AddScoped<IEntityDAC<NotificationEntity>>(sp => new FreeSqlEntityDAC<NotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<UserNotificationEntity>>(sp => new FreeSqlEntityDAC<UserNotificationEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<NotificationSubscriptionEntity>>(sp => new FreeSqlEntityDAC<NotificationSubscriptionEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IEntityDAC<NotificationPreferenceEntity>>(sp => new FreeSqlEntityDAC<NotificationPreferenceEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddScoped<IDomainUser>(sp => { var u = new StubDomainUser(); u.ServiceProvider = sp; return u; });
-        AddTestConstructibleDataService<NotificationEntityDataService>(services);
-        AddTestConstructibleDataService<UserNotificationEntityDataService>(services);
-        AddTestConstructibleDataService<NotificationSubscriptionEntityDataService>(services);
-        AddTestConstructibleDataService<NotificationPreferenceEntityDataService>(services);   // V0.3.0：偏好 DataService
-        // V0.2.0 VEntity：IEntityReadOnlyDAC 只读契约 + 手写只读 DataService（同路径 DI 兜底工厂）
-        services.AddScoped<IEntityReadOnlyDAC<UserNotificationView>>(sp => new FreeSqlEntityDAC<UserNotificationView>(sp.GetRequiredService<UnitOfWorkManager>()));
-        AddTestConstructibleDataService<UserNotificationViewDataService>(services);
+
+        // ⚠️ 边界保留组（本批不改）：InboxNotifier 仍 ctor 注入 IDomainUser——多实现集合普通 DI 解析需此桩
+        //（门面经守卫工厂走真实 DomainUser，此桩仅供未整改的 InboxNotifier / QueryService 测试经 DI 解析——T3 候选记录）
+        var stubUser = new StubDomainUser();
+        services.AddSingleton<IDomainUser>(sp => { stubUser.ServiceProvider = sp; return stubUser; });
+
         // V0.5.0：UserNotificationViewQueryService（[GenerateController] Service 包装类）——
-        // 镜像生产 SG1b 自动注册（MetaType.Service → AddService），依赖 VEntity DataService + IDomainUser
-        AddTestConstructibleDataService<UserNotificationViewQueryService>(services);
+        // 镜像生产 SG1b 自动注册（MetaType.Service → AddService）的可构造测试版（直接 GetRequiredService 解析），
+        // 依赖 VEntity DataService + IDomainUser（经 DI 桩解析——仅本人测试经 configure 覆盖为 AuthenticatedStubUser）
+        services.AddScoped<UserNotificationViewQueryService>(sp =>
+            (UserNotificationViewQueryService)ActivatorUtilities.CreateInstance(
+                sp, typeof(UserNotificationViewQueryService), sp.GetRequiredService<IDomainUser>()));
+
         configure?.Invoke(services);
         new NotificationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-        return services.BuildServiceProvider();
+
+        var provider = services.BuildServiceProvider();
+
+        // 生产路径：绑定解析作用域 + 真实 DomainUser（AOP 路径 CurrentAopUser 来源）
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("notification-test-user", "通知测试用户") };
+
+        return new NotificationTestHost(provider, user);
     }
 
-    /// <summary>v4.10.8 (ADR61) 迁移：测试版可构造 DataService 工厂——镜像生产
-    /// <c>AddConstructibleDataService</c>（<c>ActivatorUtilities.CreateInstance</c> + 域用户），
-    /// 用户源改为 DI <c>IDomainUser</c>（StubDomainUser）而非 AsyncLocal <c>CurrentAopUser</c>——
-    /// 免域作用域、xUnit 并行隔离安全（不设 AsyncLocal）。</summary>
-    private static void AddTestConstructibleDataService<T>(IServiceCollection services)
-        where T : class
-    {
-        services.AddScoped<T>(sp =>
-        {
-            var user = sp.GetRequiredService<IDomainUser>();
-            return (T)ActivatorUtilities.CreateInstance(sp, typeof(T), user);
-        });
-    }
+    /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
+    public T GetRequiredService<T>() where T : notnull
+        => _serviceProvider.GetRequiredService<T>();
+
+    /// <summary>释放宿主。</summary>
+    public void Dispose() => _serviceProvider.Dispose();
 
     /// <summary>断言时间列与 <paramref name="reference"/>（UTC）在 1 秒容忍范围内。
     /// <para>SQLite Provider 将 DateTime.UtcNow 存为本地墙上时间（无 Kind 标识），
@@ -175,19 +217,24 @@ internal sealed class FakePermissionBatchChecker : IPermissionBatchChecker
         => Task.FromResult(userIds.Distinct().ToDictionary(id => id, id => _grantedUserIds.Contains(id)));
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户）。
-/// <para>Use&lt;T&gt;() 懒加载解析：从 DI 容器取域服务（宿主经 AddScoped 工厂注入 ServiceProvider，
-/// DataService 经测试版可构造工厂注册——镜像生产 AddConstructibleDataService）。</para></summary>
+/// <summary>
+/// 测试用户桩——实现 IDomainUser 最小契约（默认匿名，无租户）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现——具体类经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Tagging/MFA 测试桩）。</para>
+/// <para>⚠️ 本桩供未整改的 <see cref="InboxNotifier"/>（多实现集合成员仍 ctor 注入 IDomainUser——T3 候选）
+/// 与 <see cref="UserNotificationViewQueryService"/>（V0.5.0 测试直接解析）经 DI 解析；
+/// 4 标准门面经真实 <see cref="DomainUser{TUserInfo}"/> + 守卫工厂 AOP 路径解析（不触此桩）。</para>
+/// </summary>
 internal class StubDomainUser : IDomainUser
 {
     private IServiceProvider? _provider;
-    private readonly object _gate = new();
-    private readonly Dictionary<Type, object? > _cache = new();
 
     /// <summary>ServiceProvider（宿主注册工厂注入——懒加载 Use&lt;T&gt; 解析源）。</summary>
-    public IServiceProvider ServiceProvider
+    public IServiceProvider? ServiceProvider
     {
-        set { lock (_gate) _provider = value; }
+        set { _provider = value; }
+        get => _provider;
     }
 
     public string SessionKey => "test-session";
@@ -202,29 +249,21 @@ internal class StubDomainUser : IDomainUser
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new InvalidOperationException("Stub: ServiceProvider 未注入——Use<T> 解析不可用");
-        if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-            return svc;
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                return svc2;
-            var resolved = provider.GetRequiredService<TDomainService>();
-            _cache[typeof(TDomainService)] = resolved;
-            return resolved;
-        }
+        if (_provider is null)
+            throw new InvalidOperationException("Stub: ServiceProvider 未注入——Use<T> 解析不可用");
+        // 生产 NoAop 路径等价：ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析
+        return (TDomainService)ActivatorUtilities.CreateInstance(_provider, typeof(TDomainService), this);
     }
 
     public TService GetService<TService>() where TService : notnull
     {
-        IServiceProvider provider;
-        lock (_gate) provider = _provider ?? throw new InvalidOperationException("Stub: ServiceProvider 未注入——GetService<T> 解析不可用");
-        return provider.GetRequiredService<TService>();
+        if (_provider is null)
+            throw new InvalidOperationException("Stub: ServiceProvider 未注入——GetService<T> 解析不可用");
+        return _provider.GetRequiredService<TService>();
     }
 
     public TService GetOptionalService<TService>() where TService : class => null!;
-    public System.Collections.Generic.IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+    public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }
 
 /// <summary>认证用户桩——具 userId 的 IDomainUser（V0.5.0 仅本人测试用）。</summary>

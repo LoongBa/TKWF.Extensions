@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKWF.Ext.Notifications;
 using TKWF.Ext.Permissions.Abstractions;
@@ -22,14 +22,14 @@ public class NotificationPermissionGateTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<INotificationDefinitionProvider, PermissionGatedDefinitions>();
             PublisherGranted()(services);
             services.AddSingleton<IPermissionBatchChecker>(new FakePermissionBatchChecker(1)); // 仅用户 1 有权限
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 });
 
@@ -42,14 +42,14 @@ public class NotificationPermissionGateTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<INotificationDefinitionProvider, PermissionGatedDefinitions>();
             PublisherGranted()(services);
             services.AddSingleton<IPermissionBatchChecker>(new FakePermissionBatchChecker()); // 无任何用户有权限
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 });
 
@@ -64,14 +64,14 @@ public class NotificationPermissionGateTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<INotificationDefinitionProvider, PermissionGatedDefinitions>();
             PublisherGranted()(services);
             // 不注册 IPermissionBatchChecker（Permissions 未启用 batch API 场景）→ 跳过门控（降级仅 C1）+ Warning
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 });
 
@@ -87,7 +87,7 @@ public class NotificationPermissionGateTests
         NotificationTestHost.SyncStructure(fsql);
         var fakeInbox = new FakeRecorderNotifier("Inbox");
         var fakeEmail = new FakeRecorderNotifier("Email");
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
@@ -96,8 +96,8 @@ public class NotificationPermissionGateTests
             PublisherGranted()(services);
             services.AddSingleton<IPermissionBatchChecker>(new FakePermissionBatchChecker(1)); // 仅用户 1 有权限
         });
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var manager = host.PreferenceManager;
+        var publisher = host.Publisher;
 
         // 定义级 UseChannels("Inbox","Email")；用户 1 有权限 + 偏好 ["Email"]；用户 2 无权限
         await manager.SetAsync(1, GatedMultiChannelDefinitions.SecureChannelNotice, new[] { "Email" });

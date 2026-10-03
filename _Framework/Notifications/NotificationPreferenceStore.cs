@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications;
@@ -16,20 +18,25 @@ namespace TKWF.Ext.Notifications;
 /// 遵循数据访问红线（2026-09-07 用户裁定）：不直接注入 IFreeSql。
 /// <para>ChannelsJson 序列化/反序列化：<c>System.Text.Json</c>（对齐 DataJson 模式，Oracle P2-3）。
 /// 异常静默对齐既有扩展（查询失败返回 null/空，写入失败记录 Warning）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90 正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+/// 获取用户上下文（IDomainUser 永不注册 DI）；注册形态改
+/// <c>AddConstructibleService&lt;INotificationPreferenceManager, NotificationPreferenceStore&gt;</c>
+/// （接口可构造守卫工厂 + 实现类 throw-factory）。
+/// <b>命名错位候选（本批不改）</b>：类名 Store、接口 Manager——命名重组留待后续批次。</para>
 /// </summary>
-internal sealed class NotificationPreferenceStore : INotificationPreferenceManager
+[DiContractIgnore]
+internal sealed class NotificationPreferenceStore : DomainServiceBase, INotificationPreferenceManager
 {
-    private readonly IDomainUser _user;
     private NotificationPreferenceEntityDataService? _dataService;
     private readonly ILogger<NotificationPreferenceStore> _logger;
 
-    private NotificationPreferenceEntityDataService DataService => _dataService ??= _user.Use<NotificationPreferenceEntityDataService>();
+    private NotificationPreferenceEntityDataService DataService => _dataService ??= User.Use<NotificationPreferenceEntityDataService>();
 
     public NotificationPreferenceStore(
         IDomainUser user,
         ILogger<NotificationPreferenceStore> logger)
+        : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 

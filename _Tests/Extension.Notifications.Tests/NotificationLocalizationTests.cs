@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Localization;
@@ -23,8 +23,8 @@ public class NotificationLocalizationTests
         // R1：未设置 DisplayNameKey → 快照与 v0.4.0 完全一致（零回归）
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
 
@@ -40,8 +40,8 @@ public class NotificationLocalizationTests
             ("Notifications/Definition_OrderShipped", "Order Shipped (zh)"));
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
+        var publisher = host.Publisher;
 
         await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
 
@@ -56,8 +56,8 @@ public class NotificationLocalizationTests
         var localizer = FakeFrameworkLocalizer.Empty; // 字典空——任何 key 解析返回 key 本身
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
+        var publisher = host.Publisher;
 
         await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
 
@@ -74,8 +74,8 @@ public class NotificationLocalizationTests
             ("Notifications/Definition_OrderShipped", "")); // 空串译文
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
+        var publisher = host.Publisher;
 
         await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
 
@@ -89,8 +89,8 @@ public class NotificationLocalizationTests
         // R4：消费方未注册 IFrameworkLocalizer（null）→ 零行为变化——定义 key 被忽略，快照 = 原文
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer: null));
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer: null));
+        var publisher = host.Publisher;
 
         await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
 

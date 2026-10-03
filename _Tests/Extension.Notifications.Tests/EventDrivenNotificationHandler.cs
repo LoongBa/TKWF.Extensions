@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Events;
 
 namespace TKWF.Ext.Notifications.Tests;
@@ -14,13 +15,20 @@ public sealed record OrderCreatedEvent(long OrderId, long BuyerId, string OrderN
 /// handler 引用消费方领域事件，故在消费方/测试项目中定义）。
 /// <para>[DomainEventHandler] 标记：SG 编译期扫描自动注册 + 静态派发表。</para>
 /// <para>D15 post-commit 语义：handler 在业务事务提交后运行；通知写库失败 → 日志记录不重抛。</para>
+/// <para>V4.10.53（领域自治根治）：<see cref="INotificationPublisher"/>（AddConstructibleService 守卫门面）
+/// **不构造注入**（DI004 编译期门控禁止）——经真实 <see cref="DomainUser{TUserInfo}"/>.Use&lt;接口&gt;() 懒加载
+/// （AOP 路径：设 CurrentAopUser → 守卫工厂解析；handler 由事件总线在请求作用域内派发——测试宿主绑定
+/// 真实 DomainUser 后经其 Use 解析）。</para>
 /// </summary>
 [DomainEventHandler]
-public sealed class OrderNotificationHandler(INotificationPublisher publisher) : ILocalEventHandler<OrderCreatedEvent>
+public sealed class OrderNotificationHandler(DomainUser<TestUserInfo> user) : ILocalEventHandler<OrderCreatedEvent>
 {
+    private INotificationPublisher? _publisher;
+    private INotificationPublisher Publisher => _publisher ??= user.Use<INotificationPublisher>();
+
     public async Task HandleEventAsync(OrderCreatedEvent eventData)
     {
-        await publisher.PublishAsync(
+        await Publisher.PublishAsync(
             "OrderCreated",
             new NotificationData(new Dictionary<string, object?>
             {

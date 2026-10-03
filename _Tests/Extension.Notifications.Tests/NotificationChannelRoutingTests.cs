@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKWF.Ext.Emailing;
@@ -52,14 +52,14 @@ public class NotificationChannelRoutingTests
         var fakeInbox = new FakeRecorderNotifier("Inbox");
         var fakeEmail = new FakeRecorderNotifier("Email");
 
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
             services.AddSingleton<INotificationNotifier>(fakeEmail);
             services.AddSingleton<INotificationDefinitionProvider, MultiChannelDefinitions>();
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var publisher = host.Publisher;
 
         await publisher.PublishAsync(MultiChannelDefinitions.MultiChannelNotice, userIds: new long[] { 1, 2 });
 
@@ -80,13 +80,13 @@ public class NotificationChannelRoutingTests
         var fakeInbox = new FakeRecorderNotifier("Inbox");
         var fakeEmail = new FakeRecorderNotifier("Email");
 
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
             services.AddSingleton<INotificationNotifier>(fakeEmail);
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var publisher = host.Publisher;
 
         // 不调 UseChannels → 默认 ["Inbox"] → 仅 Inbox 通道投递
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
@@ -103,14 +103,14 @@ public class NotificationChannelRoutingTests
         var fakeInbox = new FakeRecorderNotifier("Inbox");
         var fakeEmail = new FakeRecorderNotifier("Email");
 
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
             services.AddSingleton<INotificationNotifier>(fakeEmail);
             services.AddSingleton<INotificationDefinitionProvider, MultiChannelDefinitions>();
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var publisher = host.Publisher;
 
         // 定义 UseChannels("Inbox","Sms")——"Sms" 无匹配 notifier → 不抛异常、自然跳过
         await publisher.PublishAsync(MultiChannelDefinitions.UnknownChannelNotice, userIds: new long[] { 1, 2 });

@@ -1,4 +1,4 @@
-using FreeSql;
+﻿using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.Events;
 using TKWF.Ext.Notifications;
@@ -18,15 +18,16 @@ public class EventDrivenNotificationTests
         NotificationTestHost.SyncStructure(fsql);
 
         // 宿主注册：默认定义（Helpers）+ 事件通知定义（OrderCreated）+ 事件 handler
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.AddSingleton<INotificationDefinitionProvider, OrderNotificationDefinitions>();
-            // handler 直接解析（SG 自动注册为 Transient；测试宿主手动注册）
-            services.AddTransient<ILocalEventHandler<OrderCreatedEvent>, OrderNotificationHandler>();
         });
 
-        var handler = sp.GetRequiredService<ILocalEventHandler<OrderCreatedEvent>>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        // ⚠️ V4.10.53：门面注册改 AddConstructibleService 后，handler 经 DI 构造注入 INotificationPublisher
+        // 触 CurrentAopUser 守卫必抛（DI004 零豁免）——handler 示例改经真实 DomainUser.Use<接口>() 懒加载
+        // （AOP 路径：设 CurrentAopUser → 守卫工厂；生产由事件总线在请求作用域内派发，帧内解析）。
+        var handler = new OrderNotificationHandler(host.User);
+        var store = host.Store;
 
         // 事件 → handler.HandleEventAsync → 发布通知
         await handler.HandleEventAsync(new OrderCreatedEvent(OrderId: 42, BuyerId: 7, OrderNo: "ORD-42"));

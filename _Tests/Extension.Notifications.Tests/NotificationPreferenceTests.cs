@@ -1,4 +1,4 @@
-using FreeSql;
+﻿using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKWF.Ext.Notifications;
@@ -19,8 +19,8 @@ public class NotificationPreferenceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.PreferenceManager;
 
         var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped);
 
@@ -32,8 +32,8 @@ public class NotificationPreferenceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.PreferenceManager;
 
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
 
@@ -47,8 +47,8 @@ public class NotificationPreferenceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.PreferenceManager;
 
         // 空列表 = 显式"不接收该通知"（区别于无偏好 null）
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, Array.Empty<string>());
@@ -63,8 +63,8 @@ public class NotificationPreferenceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.PreferenceManager;
 
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Inbox" });
@@ -80,8 +80,8 @@ public class NotificationPreferenceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.PreferenceManager;
 
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
         await manager.ClearAsync(1, TestNotificationDefinitions.OrderShipped);
@@ -95,8 +95,8 @@ public class NotificationPreferenceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var manager = host.PreferenceManager;
 
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
         await manager.SetAsync(3, TestNotificationDefinitions.OrderShipped, Array.Empty<string>());
@@ -118,12 +118,12 @@ public class NotificationPreferenceTests
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
         var fakeInbox = new FakeRecorderNotifier("Inbox");
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
         });
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var publisher = host.Publisher;
 
         // 无偏好 → 回退定义级 ["Inbox"]
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
@@ -138,14 +138,14 @@ public class NotificationPreferenceTests
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
         var fakeInbox = new FakeRecorderNotifier("Inbox");
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
         });
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
-        var store = sp.GetRequiredService<INotificationStore>();
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var manager = host.PreferenceManager;
+        var store = host.Store;
+        var publisher = host.Publisher;
 
         await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, Array.Empty<string>());
 
@@ -163,15 +163,15 @@ public class NotificationPreferenceTests
         NotificationTestHost.SyncStructure(fsql);
         var fakeInbox = new FakeRecorderNotifier("Inbox");
         var fakeEmail = new FakeRecorderNotifier("Email");
-        using var sp = NotificationTestHost.Build(fsql, services =>
+        using var host = NotificationTestHost.Build(fsql, services =>
         {
             services.RemoveAll<INotificationNotifier>();
             services.AddSingleton<INotificationNotifier>(fakeInbox);
             services.AddSingleton<INotificationNotifier>(fakeEmail);
             services.AddSingleton<INotificationDefinitionProvider, MultiChannelDefinitions>();
         });
-        var manager = sp.GetRequiredService<INotificationPreferenceManager>();
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        var manager = host.PreferenceManager;
+        var publisher = host.Publisher;
 
         // 定义级 UseChannels("Inbox","Email")；用户 1 偏好 ["Email"]（排除 Inbox），用户 2 无偏好
         await manager.SetAsync(1, MultiChannelDefinitions.MultiChannelNotice, new[] { "Email" });

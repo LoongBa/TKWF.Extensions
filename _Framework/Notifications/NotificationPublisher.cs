@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Transactions;
 using TKW.Framework.Localization;
 using TKW.Framework.Domain.Interfaces;
@@ -21,10 +23,17 @@ namespace TKWF.Ext.Notifications
     /// <para>数据访问红线（2026-09-07）：经 <see cref="NotificationEntityDataService"/> +
     /// <see cref="NotificationSubscriptionEntityDataService"/>（SG1 DataService）委托持久化——不直接注入 IFreeSql；
     /// 偏好经 <see cref="INotificationPreferenceManager"/> 门面（内部委托 DataService）。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90 正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（IDomainUser 永不注册 DI）；DataService/内部门面经 <c>User.Use&lt;T&gt;()</c> 懒加载
+    /// （DI004 零豁免）。注册形态改 <c>AddConstructibleService&lt;INotificationPublisher, NotificationPublisher&gt;</c>
+    /// （接口可构造守卫工厂 + 实现类 throw-factory）。</para>
+    /// <para>⚠️ <see cref="IEnumerable{T}"/> 多通道收集（InboxNotifier/EmailNotifier 为 TryAddEnumerable 多实现集合，
+    /// 本批边界保留未改）——普通 DI 解析构造 ctor(IDomainUser) 的 InboxNotifier 时 IDomainUser 永不注册 →
+    /// 生产解析失败（框架缺口候选 T3，见整改日志），对齐 MFA IMfaMethod 处理：保留 + 记录。</para>
     /// </summary>
-    internal sealed class NotificationPublisher : INotificationPublisher
+    [DiContractIgnore]
+    internal sealed class NotificationPublisher : DomainServiceBase, INotificationPublisher
     {
-        private readonly IDomainUser _user;
         private INotificationDefinitionManager? _definitionManager;
         private NotificationEntityDataService? _notificationDataService;
         private NotificationSubscriptionEntityDataService? _subscriptionDataService;
@@ -34,10 +43,10 @@ namespace TKWF.Ext.Notifications
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<NotificationPublisher> _logger;
 
-        private INotificationDefinitionManager DefinitionManager => _definitionManager ??= _user.Use<INotificationDefinitionManager>();
-        private NotificationEntityDataService NotificationDataService => _notificationDataService ??= _user.Use<NotificationEntityDataService>();
-        private NotificationSubscriptionEntityDataService SubscriptionDataService => _subscriptionDataService ??= _user.Use<NotificationSubscriptionEntityDataService>();
-        private INotificationPreferenceManager PreferenceManager => _preferenceManager ??= _user.Use<INotificationPreferenceManager>();
+        private INotificationDefinitionManager DefinitionManager => _definitionManager ??= User.Use<INotificationDefinitionManager>();
+        private NotificationEntityDataService NotificationDataService => _notificationDataService ??= User.Use<NotificationEntityDataService>();
+        private NotificationSubscriptionEntityDataService SubscriptionDataService => _subscriptionDataService ??= User.Use<NotificationSubscriptionEntityDataService>();
+        private INotificationPreferenceManager PreferenceManager => _preferenceManager ??= User.Use<INotificationPreferenceManager>();
 
         public NotificationPublisher(
             IDomainUser user,
@@ -45,8 +54,8 @@ namespace TKWF.Ext.Notifications
             ITransactionManager transactionManager,
             IServiceProvider serviceProvider,
             ILogger<NotificationPublisher> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _notifiers = notifiers ?? throw new ArgumentNullException(nameof(notifiers));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));

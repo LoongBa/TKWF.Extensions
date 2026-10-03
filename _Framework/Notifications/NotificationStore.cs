@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Notifications
@@ -13,22 +15,28 @@ namespace TKWF.Ext.Notifications
     /// （SG1 DataService + VEntity 手写只读 DataService）委托持久化，遵循数据访问红线（2026-09-07 用户裁定）：不直接注入 IFreeSql。
     /// <para>V0.2.0：按通知名过滤改用 <see cref="UserNotificationViewDataService"/>（VEntity JOIN 单查询，替代两步查询）。</para>
     /// <para>异常静默对齐既有扩展：查询失败返回空/0，写入失败记录 Warning。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90 正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（IDomainUser 永不注册 DI——D01 领域自治，旧 TryAddScoped 构造注入 IDomainUser 生产必失败）；
+    /// DataService 经 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 懒加载（DI004 零豁免）。注册形态改
+    /// <c>AddConstructibleService&lt;INotificationStore, NotificationStore&gt;</c>（接口可构造守卫工厂 + 实现类 throw-factory）。
+    /// <b>命名重组候选（本批不改）</b>：NotificationStore 是组合门面 + 降级矩阵，命名重组
+    /// NotificationStore → NotificationInboxManager 留待后续批次。</para>
     /// </summary>
-    internal sealed class NotificationStore : INotificationStore
+    [DiContractIgnore]
+    internal sealed class NotificationStore : DomainServiceBase, INotificationStore
     {
-        private readonly IDomainUser _user;
         private UserNotificationEntityDataService? _userNotificationDataService;
         private UserNotificationViewDataService? _userNotificationViewDataService;
         private readonly ILogger<NotificationStore> _logger;
 
-        private UserNotificationEntityDataService UserNotificationDataService => _userNotificationDataService ??= _user.Use<UserNotificationEntityDataService>();
-        private UserNotificationViewDataService UserNotificationViewDataService => _userNotificationViewDataService ??= _user.Use<UserNotificationViewDataService>();
+        private UserNotificationEntityDataService UserNotificationDataService => _userNotificationDataService ??= User.Use<UserNotificationEntityDataService>();
+        private UserNotificationViewDataService UserNotificationViewDataService => _userNotificationViewDataService ??= User.Use<UserNotificationViewDataService>();
 
         public NotificationStore(
             IDomainUser user,
             ILogger<NotificationStore> logger)
+            : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

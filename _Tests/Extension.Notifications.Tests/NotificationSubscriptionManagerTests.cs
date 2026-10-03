@@ -1,4 +1,4 @@
-using FreeSql;
+﻿using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKWF.Ext.Notifications;
 
@@ -14,8 +14,8 @@ public class NotificationSubscriptionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var subManager = host.SubscriptionManager;
 
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
 
@@ -32,8 +32,8 @@ public class NotificationSubscriptionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var subManager = host.SubscriptionManager;
 
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100");
 
@@ -49,8 +49,8 @@ public class NotificationSubscriptionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var subManager = host.SubscriptionManager;
 
         // 重复订阅（定义级）→ 幂等，仅 1 行
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
@@ -65,8 +65,8 @@ public class NotificationSubscriptionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var subManager = host.SubscriptionManager;
 
         await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
@@ -83,8 +83,8 @@ public class NotificationSubscriptionManagerTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var subManager = sp.GetRequiredService<INotificationSubscriptionManager>();
+        using var host = NotificationTestHost.Build(fsql);
+        var subManager = host.SubscriptionManager;
 
         // 从未订阅 → 退订应静默（不抛异常）
         await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,16 +9,16 @@ using TKWF.Ext.Notifications;
 
 namespace TKWF.Ext.Notifications.Tests;
 
-/// <summary>
-/// Notifications V0.5.0 测试——UserNotificationViewQueryService REST 直接暴露（方案 03）：
-/// VEntity DTO 一等公民（含 Name/Severity/DisplayName JOIN 字段不再丢弃）、仅本人防护（C5/N5）、
-/// name 可空（C7/N2b——null 查全部收件箱）、DI 注册可解析（N4/C6-med）。
-/// </summary>
-public class UserNotificationViewQueryServiceTests
-{
-    private static ServiceProvider BuildWithUser(long userId, IFreeSql fsql)
-        => NotificationTestHost.Build(fsql, s =>
-            s.AddScoped<IDomainUser>(sp => { var u = new AuthenticatedStubUser(userId.ToString()); u.ServiceProvider = sp; return u; }));
+    /// <summary>
+    /// Notifications V0.5.0 测试——UserNotificationViewQueryService REST 直接暴露（方案 03）：
+    /// VEntity DTO 一等公民（含 Name/Severity/DisplayName JOIN 字段不再丢弃）、仅本人防护（C5/N5）、
+    /// name 可空（C7/N2b——null 查全部收件箱）、DI 注册可解析（N4/C6-med）。
+    /// </summary>
+    public class UserNotificationViewQueryServiceTests
+    {
+        private static NotificationTestHost BuildWithUser(long userId, IFreeSql fsql)
+            => NotificationTestHost.Build(fsql, s =>
+                s.AddScoped<IDomainUser>(sp => { var u = new AuthenticatedStubUser(userId.ToString()); u.ServiceProvider = sp; return u; }));
 
     // ── N2：REST 直接暴露——VEntity DTO 完整字段（JOIN 三列不再丢弃）+ 仅本人 ──
 
@@ -27,10 +27,10 @@ public class UserNotificationViewQueryServiceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = BuildWithUser(userId: 1, fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
+        using var host = BuildWithUser(userId: 1, fsql);
+        var publisher = host.Publisher;
         // N4：DI 注册可解析——测试宿主镜像生产自动注册，容器直接解析 Service
-        var svc = sp.GetRequiredService<UserNotificationViewQueryService>();
+        var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert,
@@ -53,9 +53,9 @@ public class UserNotificationViewQueryServiceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = BuildWithUser(userId: 1, fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var svc = sp.GetRequiredService<UserNotificationViewQueryService>();
+        using var host = BuildWithUser(userId: 1, fsql);
+        var publisher = host.Publisher;
+        var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
 
@@ -72,9 +72,9 @@ public class UserNotificationViewQueryServiceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = BuildWithUser(userId: 1, fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var svc = sp.GetRequiredService<UserNotificationViewQueryService>();
+        using var host = BuildWithUser(userId: 1, fsql);
+        var publisher = host.Publisher;
+        var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
@@ -92,9 +92,9 @@ public class UserNotificationViewQueryServiceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = BuildWithUser(userId: 1, fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var svc = sp.GetRequiredService<UserNotificationViewQueryService>();
+        using var host = BuildWithUser(userId: 1, fsql);
+        var publisher = host.Publisher;
+        var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
@@ -115,8 +115,8 @@ public class UserNotificationViewQueryServiceTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);   // StubDomainUser——无 userId
-        var svc = sp.GetRequiredService<UserNotificationViewQueryService>();
+        using var host = NotificationTestHost.Build(fsql);   // StubDomainUser——无 userId
+        var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.GetMyInboxAsync(page: 1, pageSize: 10));

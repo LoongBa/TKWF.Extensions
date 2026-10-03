@@ -1,4 +1,4 @@
-using FreeSql;
+﻿using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKWF.Ext.Notifications;
 
@@ -15,9 +15,9 @@ public class NotificationStoreTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         // 发布 2 条 → 均未读（经 Store 读取收件箱，按创建倒序）
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
@@ -39,9 +39,9 @@ public class NotificationStoreTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         for (int i = 0; i < 5; i++)
             await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
@@ -61,9 +61,9 @@ public class NotificationStoreTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
@@ -81,9 +81,9 @@ public class NotificationStoreTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         var notif = (await store.GetListAsync(1, page: 1, pageSize: 10))[0];
@@ -103,9 +103,9 @@ public class NotificationStoreTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
@@ -123,9 +123,9 @@ public class NotificationStoreTests
     {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        using var sp = NotificationTestHost.Build(fsql);
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        var store = sp.GetRequiredService<INotificationStore>();
+        using var host = NotificationTestHost.Build(fsql);
+        var publisher = host.Publisher;
+        var store = host.Store;
 
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
         await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });

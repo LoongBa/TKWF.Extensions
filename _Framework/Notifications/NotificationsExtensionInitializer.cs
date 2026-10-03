@@ -11,8 +11,12 @@ namespace TKWF.Ext.Notifications;
 /// <summary>
 /// Notifications 扩展初始化器——经 <c>[TKWFExtension]</c> 被 SG1 发现，三钩子接线：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——注册 DefinitionManager(Singleton) + Publisher/Store/SubscriptionManager/通道(Scoped)
-///       + <see cref="NotificationsOptions"/> Options 绑定（TKWF:Notifications）</item>
+/// <item><see cref="ConfigureServices"/>——注册四态服务：
+///       <b>AddConstructibleService 门面</b>（<see cref="INotificationStore"/>/<see cref="INotificationSubscriptionManager"/>/
+///       <see cref="INotificationPreferenceManager"/>/<see cref="INotificationPublisher"/>——接口可构造守卫工厂 + 实现类 throw-factory）+
+///       <b>TryAddSingleton 定义管理</b>（<see cref="INotificationDefinitionManager"/>，Singleton）+
+///       <b>TryAddScoped 接线型 + TryAddEnumerable 通道</b>（<see cref="InboxNotifier"/>/<see cref="EmailNotifier"/>——多实例收集）+
+///       <see cref="NotificationsOptions"/> Options 绑定（TKWF:Notifications）</item>
 /// <item>ConfigureFilters——不调用（V0.1.0 无过滤器）</item>
 /// <item>InitializeAsync——不调用（V0.1.0 无种子数据）</item>
 /// </list>
@@ -32,8 +36,22 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
 
     /// <summary>
     /// 注册 Notifications 服务。
-    /// <para>TryAddScoped/TryAddSingleton：消费方可自定义实现，扩展默认实现不覆盖消费方。</para>
-    /// <para>m2：DefinitionManager = Singleton（定义启动时收集后不可变）；其余 = Scoped。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90 正确路线）注册形态四态：</para>
+    /// <list type="bullet">
+    /// <item><b>AddConstructibleService 门面</b>——4 标准门面（<see cref="INotificationStore"/>/<see cref="INotificationSubscriptionManager"/>/
+    ///      <see cref="INotificationPreferenceManager"/>/<see cref="INotificationPublisher"/>）：接口可构造守卫工厂
+    ///      （CurrentAopUser 守卫——域作用域外解析即抛）+ 实现类 throw-factory；消费方统一经
+    ///      <c>User.Use&lt;接口&gt;()</c> 解析（AOP 路径）。旧 TryAddScoped 构造注入 <see cref="IDomainUser"/>
+    ///      而 IDomainUser 永不注册 DI（D01）→ 生产解析必失败（v0.3.3 同根缺陷）。</item>
+    /// <item><b>TryAddSingleton 定义管理</b>——<see cref="INotificationDefinitionManager"/>（m2：定义启动时收集后不可变）。</item>
+    /// <item><b>TryAddScoped 接线型 + TryAddEnumerable 通道</b>——<see cref="InboxNotifier"/>/<see cref="EmailNotifier"/>
+    ///      多实例收集（v0.2.0：InboxNotifier owns UserNotification 写入 C5；EmailNotifier 外部通道 best-effort M1，
+    ///      接线型 ctor(IServiceProvider,ILogger) 无 user 依赖——对齐 UserCenter 先例）。
+    ///      ⚠️ 多实现集合中 DomainServiceBase 派生实现的 user 供给依赖框架机制（普通 DI 构造 ctor(IDomainUser)
+    ///      InboxNotifier 时 IDomainUser 永不注册 → 生产解析失败）——<b>框架缺口候选（T3 转达）</b>，
+    ///      本批保留 + 记录（对齐 MFA IMfaMethod 处理，见整改日志）。</item>
+    /// </list>
+    /// <para>TryAdd* 幂等：消费方可自定义实现，扩展默认实现不覆盖消费方。</para>
     /// </summary>
     public override void ConfigureServices(IServiceCollection services)
     {
@@ -46,7 +64,7 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         // 对齐 Navigation IMenuContributor 接口判定先例——特性驱动 + DI 收集。
         RegisterNotificationDefinitionProviders(services);
 
-        // 定义管理器（Singleton：定义启动时收集后不可变，m2）
+        // ── TryAddSingleton 定义管理（m2：Singleton——定义启动时收集后不可变）──
         services.TryAddSingleton<NotificationDefinitionManager>();
         services.TryAddSingleton<INotificationDefinitionManager>(sp => sp.GetRequiredService<NotificationDefinitionManager>());
 
@@ -54,28 +72,26 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
         // v4.10.8 (ADR61) 起：SG1 基类类型判定 + 消费方聚合自动注册扩展 DataService（可构造工厂）——
         // 不再手动 TryAddScoped（含 VEntity 只读 DataService，经 DomainReadOnlyDataServiceBase 基类判定覆盖）。
 
-        // 收件箱存储（Scoped）
-        services.TryAddScoped<NotificationStore>();
-        services.TryAddScoped<INotificationStore>(sp => sp.GetRequiredService<NotificationStore>());
+        // ── AddConstructibleService 门面（V4.10.53 领域自治根治）──
+        // 收件箱存储门面：接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory
+        services.AddConstructibleService<INotificationStore, NotificationStore>();
 
-        // 订阅管理（Scoped）
-        services.TryAddScoped<NotificationSubscriptionStore>();
-        services.TryAddScoped<INotificationSubscriptionManager>(sp => sp.GetRequiredService<NotificationSubscriptionStore>());
+        // 订阅管理门面
+        services.AddConstructibleService<INotificationSubscriptionManager, NotificationSubscriptionStore>();
 
-        // V0.3.0：通知偏好（Scoped）——用户通道偏好覆盖定义级 UseChannels
-        services.TryAddScoped<NotificationPreferenceStore>();
-        services.TryAddScoped<INotificationPreferenceManager>(sp => sp.GetRequiredService<NotificationPreferenceStore>());
+        // V0.3.0：通知偏好门面——用户通道偏好覆盖定义级 UseChannels
+        services.AddConstructibleService<INotificationPreferenceManager, NotificationPreferenceStore>();
 
-        // 通道（Scoped 多实例收集 v0.2.0：TryAddEnumerable——InboxNotifier owns UserNotification 写入 C5；
-        // EmailNotifier 外部通道 best-effort M1，延迟解析 IEmailSender/IUserEmailProvider）
+        // ── TryAddScoped 接线型 + TryAddEnumerable 通道（v0.2.0 多实例收集：InboxNotifier owns UserNotification
+        //    写入 C5；EmailNotifier 外部通道 best-effort M1，延迟解析 IEmailSender/IUserEmailProvider）──
         services.TryAddScoped<InboxNotifier>();
         services.TryAddScoped<EmailNotifier>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<INotificationNotifier, InboxNotifier>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<INotificationNotifier, EmailNotifier>());
 
-        // 发布器（Scoped）
-        services.TryAddScoped<NotificationPublisher>();
-        services.TryAddScoped<INotificationPublisher>(sp => sp.GetRequiredService<NotificationPublisher>());
+        // ── AddConstructibleService 门面 ──
+        // 发布器门面
+        services.AddConstructibleService<INotificationPublisher, NotificationPublisher>();
     }
 
     /// <summary>

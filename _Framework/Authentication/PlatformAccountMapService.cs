@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -12,18 +14,21 @@ namespace TKWF.Ext.Authentication;
 /// <para>DMP V4.0 管理员走映射表、会员走外键——Ext 以映射表统一承载；DMP 迁移时会员映射迁入本表（需求 §6 约束 1）。</para>
 /// <para>数据访问红线合规：不注入 IFreeSql/IEntityDAC——全部经 <see cref="PlatformAccountMapEntityDataService"/>
 /// 内部转发访问器（Entity*，同程序集）委托查询/写入。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
+/// 注册改 <c>AddConstructibleService&lt;IPlatformAccountMapService, PlatformAccountMapService&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-public sealed class PlatformAccountMapService : IPlatformAccountMapService
+[DiContractIgnore]
+public sealed class PlatformAccountMapService : DomainServiceBase, IPlatformAccountMapService
 {
-    private readonly IDomainUser _user;
     private PlatformAccountMapEntityDataService? _dataService;
     private readonly ILogger<PlatformAccountMapService> _logger;
 
-    private PlatformAccountMapEntityDataService DataService => _dataService ??= _user.Use<PlatformAccountMapEntityDataService>();
+    private PlatformAccountMapEntityDataService DataService => _dataService ??= User.Use<PlatformAccountMapEntityDataService>();
 
-    public PlatformAccountMapService(IDomainUser user, ILogger<PlatformAccountMapService> logger)
+    public PlatformAccountMapService(IDomainUser user, ILogger<PlatformAccountMapService> logger) : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 

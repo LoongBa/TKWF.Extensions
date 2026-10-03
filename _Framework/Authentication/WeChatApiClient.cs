@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -14,25 +16,28 @@ namespace TKWF.Ext.Authentication;
 /// <para>方案 §5.10——凭证经 <see cref="IPlatformCredentialService"/> 解析（不直注入裸 DB）；</para>
 /// <para>access_token L1 缓存（ConcurrentDictionary + SemaphoreSlim 并发锁 + 提前 5 分钟过期刷新）；
 /// 网页授权 code 换 openid 走 sns/oauth2/access_token（AppSecret 服务端持有，结果不缓存——一次性 code）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；<see cref="IPlatformCredentialService"/> 经 <c>User.Use&lt;接口&gt;()</c> AOP 懒加载；
+/// 注册改 <c>AddConstructibleService&lt;IWeChatApiClient, WeChatApiClient&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class WeChatApiClient : IWeChatApiClient
+[DiContractIgnore]
+internal sealed class WeChatApiClient : DomainServiceBase, IWeChatApiClient
 {
     private const string ApiBase = "https://api.weixin.qq.com";
     private static readonly TimeSpan TokenEarlyRefresh = TimeSpan.FromMinutes(5);
 
-    private readonly IDomainUser _user;
     private IPlatformCredentialService? _credentials;
     private readonly ILogger<WeChatApiClient> _logger;
 
-    private IPlatformCredentialService Credentials => _credentials ??= _user.Use<IPlatformCredentialService>();
+    private IPlatformCredentialService Credentials => _credentials ??= User.Use<IPlatformCredentialService>();
 
     // L1 缓存：appId → (accessToken, expiresAtUtc)；SemaphoreSlim 并发锁防 stampede（对齐 DMP 语义）
     private readonly ConcurrentDictionary<string, CachedToken> _tokenCache = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
 
-    public WeChatApiClient(IDomainUser user, ILogger<WeChatApiClient> logger)
+    public WeChatApiClient(IDomainUser user, ILogger<WeChatApiClient> logger) : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 

@@ -1,10 +1,14 @@
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>N2/N3：AuthAccountUserProfileSource——映射正确性（全字段 + Phone 原始值）与微信绑定推导矩阵（不碰 DB，手写假查询服务）。</summary>
+/// <summary>N2/N3：AuthAccountUserProfileSource——映射正确性（全字段 + Phone 原始值）与微信绑定推导矩阵（不碰 DB，手写假查询服务）。
+/// <para>V4.10.53（领域自治根治后重写）：接线型（skill §4.2）——ctor(<see cref="IServiceProvider"/>)，
+/// <see cref="IAuthAccountQueryService"/> 经 C1 延迟解析（GetRequiredService）；测试直构
+/// <c>new AuthAccountUserProfileSource(sp)</c>（sp 注册 FakeAuthAccountQueryService）。业务断言语义不变。</para></summary>
 public class AuthAccountUserProfileSourceTests
 {
     /// <summary>N2：全字段账号 → UserProfileDto 映射正确；UserId 以数据源为准（非透传 userId）；Phone 返回原始值（门面负责脱敏）。</summary>
@@ -21,7 +25,7 @@ public class AuthAccountUserProfileSourceTests
             AuthLevel = 3,
             WechatMpOpenId = "mp-1",
         };
-        var source = new AuthAccountUserProfileSource(ProfileStub(account));
+        var source = CreateSource(account);
 
         var profile = await source.GetProfileAsync("u-1001");
 
@@ -39,7 +43,7 @@ public class AuthAccountUserProfileSourceTests
     [Fact]
     public async Task AccountNotFound_ReturnsNull()
     {
-        var source = new AuthAccountUserProfileSource(ProfileStub(null));
+        var source = CreateSource(null);
         Assert.Null(await source.GetProfileAsync("u-unknown"));
     }
 
@@ -59,7 +63,7 @@ public class AuthAccountUserProfileSourceTests
             WechatWebOpenId = web,
             UnionId = union,
         };
-        var source = new AuthAccountUserProfileSource(ProfileStub(account));
+        var source = CreateSource(account);
 
         var profile = await source.GetProfileAsync("u-1001");
 
@@ -67,12 +71,12 @@ public class AuthAccountUserProfileSourceTests
         Assert.Equal(expected, profile!.IsWechatBound);
     }
 
-    /// <summary>构造 StubDomainUser 并注册 FakeAuthAccountQueryService（生产 Use&lt;IAuthAccountQueryService&gt;() 懒加载接口键）。</summary>
-    private static StubDomainUser ProfileStub(AuthAccountEntity? account)
+    /// <summary>接线型直构：ctor(IServiceProvider)——C1 延迟解析 IAuthAccountQueryService（普通 DI 注册 Fake 实现）。</summary>
+    private static AuthAccountUserProfileSource CreateSource(AuthAccountEntity? account)
     {
-        var stub = new StubDomainUser();
-        stub.Register<IAuthAccountQueryService>(new FakeAuthAccountQueryService(account));
-        return stub;
+        var services = new ServiceCollection();
+        services.AddSingleton<IAuthAccountQueryService>(new FakeAuthAccountQueryService(account));
+        return new AuthAccountUserProfileSource(services.BuildServiceProvider());
     }
 
     /// <summary>手写假实现——每次查询返回固定账号（N2/N3 仅验证映射逻辑，不碰 DB）。</summary>

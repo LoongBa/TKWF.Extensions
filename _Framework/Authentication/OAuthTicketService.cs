@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -15,26 +17,30 @@ namespace TKWF.Ext.Authentication;
 /// 一次性票据服务实现——签发/消费（TTL 5min 单次 + PKCE + app_id/redirect_uri 白名单 + state 防重放）。
 /// <para>方案 §5.7——回调承载铁律（用户裁定 + Oracle B1）：URL 只带一次性票据 + redirect_uri，绝不带敏感信息；</para>
 /// <para>纯前端静态站走公网 /oauth/exchange + PKCE code_verifier；白名单经 <c>AuthCenterOptions.RedirectUriWhitelist</c>。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；DataService/<see cref="ITokenService"/> 经 <c>User.Use&lt;T&gt;()</c> 懒加载；
+/// 注册改 <c>AddConstructibleService&lt;IOAuthTicketService, OAuthTicketService&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class OAuthTicketService : IOAuthTicketService
+[DiContractIgnore]
+internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
 {
     private readonly AuthCenterOptions _options;
     private OAuthTicketEntityDataService? _dataService;
     private ITokenService? _tokenService;
-    private readonly IDomainUser _user;
     private readonly ILogger<OAuthTicketService> _logger;
 
-    private OAuthTicketEntityDataService DataService => _dataService ??= _user.Use<OAuthTicketEntityDataService>();
-    private ITokenService TokenService => _tokenService ??= _user.Use<ITokenService>();
+    private OAuthTicketEntityDataService DataService => _dataService ??= User.Use<OAuthTicketEntityDataService>();
+    private ITokenService TokenService => _tokenService ??= User.Use<ITokenService>();
 
     /// <summary>构造——注入认证中心配置、用户上下文与日志（DataService/TokenService 经 User.Use&lt;T&gt;() 懒加载）。</summary>
     public OAuthTicketService(
-        IOptions<AuthCenterOptions> options,
         IDomainUser user,
+        IOptions<AuthCenterOptions> options,
         ILogger<OAuthTicketService> logger)
+        : base(user)
     {
         _options = options.Value;
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 

@@ -4,17 +4,17 @@ using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>N1：AuthAccountQueryService——4 查询方法委托真实 DataService（SQLite 内存库 + 真实 FreeSql DAC，红线合规委托路径）。</summary>
+/// <summary>N1：AuthAccountQueryService——4 查询方法委托真实 DataService（SQLite 内存库 + 真实 FreeSql DAC，红线合规委托路径）。
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
 public class AuthAccountQueryServiceTests
 {
     private static (AuthAccountQueryService Service, AuthAccountEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var ds = new AuthAccountEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ds);
-        return (new AuthAccountQueryService(stub), ds);
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var service = new AuthAccountQueryService(stub);
+        return (service, stub.Use<AuthAccountEntityDataService>());
     }
 
     /// <summary>4 账号：UId/Phone/Mp/Web 四键互不相同——逐方法验证委托正确性（各方法命中各自键对应的账号）。</summary>

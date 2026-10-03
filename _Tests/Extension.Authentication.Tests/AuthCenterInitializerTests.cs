@@ -1,14 +1,40 @@
 using System.Linq;
 using System.Reflection;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>D14：Initializer——[TKWFExtension] 特性 / DI 描述符 / TryAdd 不覆盖 / 零 DataService 手动注册。</summary>
+/// <summary>
+/// AuthCenterExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册形态（V4.10.53 领域自治根治三态）。
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态：</para>
+/// <list type="bullet">
+/// <item>10 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
+///     （非实现映射）+ 实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
+/// <item><see cref="IUserProfileSource"/>（UserCenter.Abstractions 契约非 IDomainService）→ TryAddScoped 普通 DI（接线型）；</item>
+/// <item><see cref="IAuthenticationProvider"/> 双实现 → TryAddEnumerable（多实现集合，按实现类型去重）。</item>
+/// </list>
+/// </summary>
 public class AuthCenterInitializerTests
 {
+    /// <summary>10 个 AddConstructibleService 门面（接口 → 实现）。</summary>
+    private static readonly (System.Type Interface, System.Type Impl)[] Facades =
+    [
+        (typeof(ITokenService), typeof(TokenService)),
+        (typeof(IAuthLoginAttemptService), typeof(AuthLoginAttemptService)),
+        (typeof(IOAuthTicketService), typeof(OAuthTicketService)),
+        (typeof(ISmsVerificationService), typeof(SmsVerificationService)),
+        (typeof(IPlatformCredentialService), typeof(PlatformCredentialService)),
+        (typeof(IPlatformAccountMapService), typeof(PlatformAccountMapService)),
+        (typeof(IWeChatApiClient), typeof(WeChatApiClient)),
+        (typeof(ITokenVerifier), typeof(LocalJwtTokenVerifier)),
+        (typeof(IAuthAccountQueryService), typeof(AuthAccountQueryService)),
+        (typeof(IAuthAccountService), typeof(AuthAccountService))
+    ];
+
     [Fact]
     public void ExtensionAttribute_Declared()
     {
@@ -21,39 +47,91 @@ public class AuthCenterInitializerTests
         Assert.Equal("Authentication", attr!.Name);
     }
 
+    /// <summary>V4.10.53：10 门面接口注册为可构造守卫工厂（ImplementationFactory，非实现映射）+ Scoped。</summary>
     [Fact]
-    public void ConfigureServices_Registers_ServiceFacades()
+    public void ConfigureServices_Registers_FacadeInterfaces_GuardFactory()
     {
         var services = new ServiceCollection();
         new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(ITokenService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IAuthLoginAttemptService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IOAuthTicketService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(ISmsVerificationService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IPlatformCredentialService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IPlatformAccountMapService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IWeChatApiClient)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(ITokenVerifier)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IAuthAccountQueryService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IAuthAccountService)));
-        Assert.NotNull(services.FirstOrDefault(d => d.ServiceType == typeof(IUserProfileSource)));
-        Assert.Equal(2, services.Count(d => d.ServiceType == typeof(IAuthenticationProvider)));
+        foreach (var (interfaceType, _) in Facades)
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == interfaceType);
+            Assert.NotNull(descriptor);
+            Assert.Null(descriptor!.ImplementationType);      // 非实现映射——可构造守卫工厂
+            Assert.NotNull(descriptor.ImplementationFactory);
+            Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+        }
     }
 
+    /// <summary>V4.10.53：10 门面实现类注册为 throw-factory——禁止直接 DI 解析（必须经 User.Use&lt;接口&gt;()）。</summary>
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumer()
+    public void ConfigureServices_Registers_Implementations_ThrowFactory()
     {
         var services = new ServiceCollection();
-        services.AddScoped<ITokenService, ConsumerTokenService>();
         new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        var descriptors = services.Where(d => d.ServiceType == typeof(ITokenService)).ToList();
-        Assert.Single(descriptors);
-        Assert.Equal(typeof(ConsumerTokenService), descriptors[0].ImplementationType);
+        foreach (var (_, implType) in Facades)
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == implType);
+            Assert.NotNull(descriptor);
+            Assert.NotNull(descriptor!.ImplementationFactory);
+        }
+
+        var provider = services.BuildServiceProvider();
+        foreach (var (_, implType) in Facades)
+        {
+            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(implType));
+        }
     }
 
-    /// <summary>⚠️ D14 核心验收：零 DataService 手动注册（ADR61 铁律）——Initializer 不得 TryAddScoped 任何 *EntityDataService。</summary>
+    /// <summary>AddConstructibleService 的 CurrentAopUser 守卫——非 User.Use&lt;T&gt;() 调用链内解析接口必抛（DI004 运行期兜底）。</summary>
+    [Fact]
+    public void InterfaceFactories_OutsideUseScope_Throw()
+    {
+        var services = new ServiceCollection();
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITokenService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("ITokenService", ex.Message);
+    }
+
+    /// <summary>接线型（IUserProfileSource 非 IDomainService）——TryAddScoped 普通 DI：实现映射 + Scoped + 普通可解析。</summary>
+    [Fact]
+    public void ConfigureServices_Registers_ProfileSource_Descriptor()
+    {
+        var services = new ServiceCollection();
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserProfileSource));
+
+        Assert.NotNull(descriptor);
+        Assert.Equal(typeof(AuthAccountUserProfileSource), descriptor!.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+
+        // 接线型：ctor(IServiceProvider)——普通 DI 可直接解析（无 CurrentAopUser 守卫）
+        var provider = services.BuildServiceProvider();
+        Assert.IsType<AuthAccountUserProfileSource>(provider.GetRequiredService<IUserProfileSource>());
+    }
+
+    /// <summary>多 Provider——TryAddEnumerable（按实现类型去重）：双实现 Scoped 注册。</summary>
+    [Fact]
+    public void ConfigureServices_Registers_TwoProviders_Enumerable()
+    {
+        var services = new ServiceCollection();
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(IAuthenticationProvider)).ToList();
+        Assert.Equal(2, descriptors.Count);
+        Assert.Contains(descriptors, d => d.ImplementationType == typeof(SmsAuthenticationProvider));
+        Assert.Contains(descriptors, d => d.ImplementationType == typeof(WeChatAuthenticationProvider));
+        Assert.All(descriptors, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
+    }
+
+    /// <summary>⚠️ D14 核心验收：零 DataService 手动注册（ADR61 铁律）——Initializer 不得注册任何 *EntityDataService。</summary>
     [Fact]
     public void ConfigureServices_ZeroDataServiceManualRegistration()
     {
@@ -64,6 +142,32 @@ public class AuthCenterInitializerTests
             .Where(d => d.ServiceType.Name.EndsWith("DataService", System.StringComparison.Ordinal))
             .ToList();
         Assert.Empty(dataServiceDescriptors);
+    }
+
+    /// <summary>消费方覆盖语义（V4.10.53）：扩展钩子先于消费方 OnRegisterDomainServices——消费方 AddScoped 后注册覆盖守卫工厂（MS DI 后注册者胜）。</summary>
+    [Fact]
+    public void ConfigureServices_ConsumerRegisteredAfter_OverridesGuardFactory()
+    {
+        var services = new ServiceCollection();
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddScoped<ITokenService, ConsumerTokenService>(); // 消费方 OnRegisterDomainServices（扩展钩子之后）
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(ITokenService)).ToList();
+        // AddConstructibleService 接口守卫工厂 + 消费方 AddScoped = 2 描述符；解析取最后一个（消费方实现）
+        Assert.Equal(2, descriptors.Count);
+        Assert.Equal(typeof(ConsumerTokenService), descriptors[^1].ImplementationType);
+    }
+
+    /// <summary>Options 兜底 + IMemoryCache 兜底（AddConstructibleService 守卫工厂经 ActivatorUtilities 解析剩余参数需可解析）。</summary>
+    [Fact]
+    public void ConfigureServices_Registers_Options_And_Cache()
+    {
+        var services = new ServiceCollection();
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetRequiredService<IOptions<AuthCenterOptions>>());   // AddOptions 默认值兜底
+        Assert.NotNull(provider.GetRequiredService<IMemoryCache>());                  // TryAddSingleton<IMemoryCache, MemoryCache>
     }
 
     private sealed class ConsumerTokenService : ITokenService

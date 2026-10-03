@@ -1,24 +1,31 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using TKWF.Ext.UserCenter;
-using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
 
 /// <summary>公共档案源实现——认证中心作为 AuthAccount 属主实现 UserCenter 契约（终态路径）。
 /// ⚠️ Phone 返回原始值——UserCenter 门面强制脱敏（实现方不得自行 Mask）。
 /// ⚠️ 命名：区别于 UserCenter 文档示例的装配层桥接类（同名 AuthAccountProfileSource——
-/// 新实现类命名 AuthAccountUserProfileSource 消除碰撞）。</summary>
+/// 新实现类命名 AuthAccountUserProfileSource 消除碰撞）。
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）：**接线型**（skill §4.2）——<see cref="IUserProfileSource"/>
+/// 契约属 UserCenter.Abstractions（非 IDomainService，不可修改），被 <c>UserCenterQueryService</c> 经普通 DI
+/// （<c>GetService&lt;IUserProfileSource&gt;()</c>）解析——<c>AddConstructibleService</c> 编译约束
+/// （where TInterface : IDomainService）不满足，注册保持 <c>TryAddScoped</c> 普通 DI。旧 ctor(IDomainUser)
+/// 在 UserCenter 门面普通 DI 解析时 IDomainUser 无可解析（永不注册 DI——D01）生产必失败（真实故障）；
+/// 改 ctor(<see cref="IServiceProvider"/>)——<see cref="IAuthAccountQueryService"/> 经 C1 延迟解析
+/// （<c>GetRequiredService</c>，消费链内已注册；接线型边界不吞守卫语义）。</para></summary>
 public sealed class AuthAccountUserProfileSource : IUserProfileSource
 {
+    private readonly IServiceProvider _serviceProvider;
     private IAuthAccountQueryService? _accounts;
-    private readonly IDomainUser _user;
-    private IAuthAccountQueryService Accounts => _accounts ??= _user.Use<IAuthAccountQueryService>();
+    private IAuthAccountQueryService Accounts => _accounts ??= _serviceProvider.GetRequiredService<IAuthAccountQueryService>();
 
-    public AuthAccountUserProfileSource(IDomainUser user)
+    public AuthAccountUserProfileSource(IServiceProvider serviceProvider)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     }
 
     public async Task<UserProfileDto?> GetProfileAsync(string userId, CancellationToken ct = default)

@@ -1,46 +1,40 @@
 using System;
 using System.Security.Authentication;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>D8：OAuthTicket——TTL 5min / 单次消费 / PKCE 校验矩阵 / 白名单 / 跨应用拒绝。</summary>
+/// <summary>D8：OAuthTicket——TTL 5min / 单次消费 / PKCE 校验矩阵 / 白名单 / 跨应用拒绝。
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
+/// DataService/ITokenService 经 User.Use&lt;T&gt;() 懒加载（接口 GetRequiredService——CreateStub 注册 TokenService 实例；
+/// 具体类 NoAop 直建）。业务断言语义不变。</para></summary>
 public class OAuthTicketServiceTests
 {
     private const string RedirectUri = "https://app.example.com/callback";
 
-    private static (OAuthTicketService Service, OAuthTicketEntityDataService Ds, TokenService TokenService) CreateService(AuthCenterOptions options)
+    private static (OAuthTicketService Service, OAuthTicketEntityDataService Ds) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var ticketDs = new OAuthTicketEntityDataService(
-            stub, new FreeSqlEntityDAC<OAuthTicketEntity>(new UnitOfWorkManager(fsql)));
-        var accountDs = new AuthAccountEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        var refreshDs = new AuthRefreshTokenEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
-        var blacklistDs = new AuthTokenBlacklistEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ticketDs);
-        stub.Register(accountDs);
-        stub.Register(refreshDs);
-        stub.Register(blacklistDs);
-        var tokenService = new TokenService(
-            Options.Create(options), stub,
-            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
-            NullLogger<TokenService>.Instance);
-        stub.Register<ITokenService>(tokenService);
-        tokenService.EnsureKeysLoaded();
-        return (new OAuthTicketService(Options.Create(options), stub, NullLogger<OAuthTicketService>.Instance), ticketDs, tokenService);
+        var stub = AuthenticationTestHost.CreateStub(fsql, (services, user) =>
+        {
+            var tokenService = new TokenService(
+                user, Options.Create(options),
+                new MemoryCache(new MemoryCacheOptions()), NullLogger<TokenService>.Instance);
+            services.AddSingleton<ITokenService>(tokenService);   // OAuthTicketService.Use<ITokenService>() 接口懒加载源
+            tokenService.EnsureKeysLoaded();
+        });
+        var service = new OAuthTicketService(stub, Options.Create(options), NullLogger<OAuthTicketService>.Instance);
+        return (service, stub.Use<OAuthTicketEntityDataService>());
     }
 
     [Fact]
     public async Task Issue_Ticket_WithPkce_Exchange_Succeeds()
     {
-        var (service, ds, tokenService) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, ds) = CreateService(AuthenticationTestHost.CreateOptions());
         var codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"; // 57 位
 
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, State: "s1", CodeVerifier: codeVerifier));
@@ -64,7 +58,7 @@ public class OAuthTicketServiceTests
     [Fact]
     public async Task Exchange_PkceMatrix_HashNonNull_VerifierNull_Rejected()
     {
-        var (service, ds, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, ds) = CreateService(AuthenticationTestHost.CreateOptions());
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, CodeVerifier: "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"));
         var entity = await ds.GetByTicketAsync(ticket);
         entity!.UserId = "u-123";
@@ -79,7 +73,7 @@ public class OAuthTicketServiceTests
     [Fact]
     public async Task Exchange_WrongAppId_Rejected()
     {
-        var (service, ds, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, ds) = CreateService(AuthenticationTestHost.CreateOptions());
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri));
         var entity = await ds.GetByTicketAsync(ticket);
         entity!.UserId = "u-123";
@@ -93,7 +87,7 @@ public class OAuthTicketServiceTests
     [Fact]
     public async Task Issue_RedirectUriNotInWhitelist_Rejected()
     {
-        var (service, _, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.IssueAsync(new OAuthTicketIssueRequest("app-1", "https://evil.example.com/callback")));
     }
@@ -102,7 +96,7 @@ public class OAuthTicketServiceTests
     public async Task Exchange_PkceMatrix_ServerTrust_NullNull_Allowed()
     {
         // C4 第一行：hash null（服务端/trust 签发）+ verifier null（换取）→ 放行（信任服务端路径——依赖 AppId 白名单 + 内网信任）
-        var (service, ds, tokenService) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, ds) = CreateService(AuthenticationTestHost.CreateOptions());
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri));
         var entity = await ds.GetByTicketAsync(ticket);
         entity!.UserId = "u-123";
@@ -117,7 +111,7 @@ public class OAuthTicketServiceTests
     public async Task Exchange_PkceMatrix_VerifierMismatch_Rejected()
     {
         // C4 第三行：hash 非 null + verifier 非 null 但 SHA256 不匹配 → 拒绝
-        var (service, ds, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, ds) = CreateService(AuthenticationTestHost.CreateOptions());
         var codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz";
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, CodeVerifier: codeVerifier));
         var entity = await ds.GetByTicketAsync(ticket);
@@ -133,7 +127,7 @@ public class OAuthTicketServiceTests
     [Fact]
     public async Task Exchange_ExpiredTicket_Rejected()
     {
-        var (service, ds, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, ds) = CreateService(AuthenticationTestHost.CreateOptions());
         // 手动落过期票据
         var expired = new OAuthTicketEntity
         {

@@ -3,6 +3,8 @@ using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -11,20 +13,23 @@ namespace TKWF.Ext.Authentication;
 /// 短信验证码认证 Provider（内置，主认证路径——教育线/ DMP 通用，方案 §5.5）。
 /// <para>流程：VerifyCodeAsync 校验（SmsVerificationService）→ 查账号（手机号主键）→ 有账号登录 / 无账号建账号（AuthAccount.Phone + UId）。</para>
 /// <para>失败语义：返回 ProviderAuthenticateResult(Success=false, FailReason=异常消息)——调用方（装配层）负责 RecordAttemptAsync 落库。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；内部 <see cref="ISmsVerificationService"/> / DataService 经 <c>User.Use&lt;T&gt;()</c> 懒加载。
+/// 注册保持 <c>TryAddEnumerable(Scoped&lt;IAuthenticationProvider, SmsAuthenticationProvider&gt;)</c>——多实现集合，
+/// AddConstructibleService 单实现不适用。<c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class SmsAuthenticationProvider : IAuthenticationProvider
+[DiContractIgnore]
+internal sealed class SmsAuthenticationProvider : DomainServiceBase, IAuthenticationProvider
 {
     private ISmsVerificationService? _smsVerification;
     private AuthAccountEntityDataService? _accountDataService;
-    private readonly IDomainUser _user;
     private readonly ILogger<SmsAuthenticationProvider> _logger;
 
-    private ISmsVerificationService SmsVerification => _smsVerification ??= _user.Use<ISmsVerificationService>();
-    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= _user.Use<AuthAccountEntityDataService>();
+    private ISmsVerificationService SmsVerification => _smsVerification ??= User.Use<ISmsVerificationService>();
+    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= User.Use<AuthAccountEntityDataService>();
 
-    public SmsAuthenticationProvider(IDomainUser user, ILogger<SmsAuthenticationProvider> logger)
+    public SmsAuthenticationProvider(IDomainUser user, ILogger<SmsAuthenticationProvider> logger) : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 

@@ -3,6 +3,8 @@ using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -12,20 +14,23 @@ namespace TKWF.Ext.Authentication;
 /// <para>流程：微信授权 code → WeChatApiClient.GetOpenIdAsync → 查账号（按 openid 绑定列）→ 有账号登录 / 无账号建账号并绑定 openid。</para>
 /// <para>scope 判定绑定列：snsapi_base → WechatMpOpenId（网页授权）；snsapi_login → WechatWebOpenId（扫码）；默认扫码。</para>
 /// <para>登录 state/票据 vs 绑定 bind_token/state 隔离不复用（Oracle I6 防绑定劫持——绑定流程归装配层，本 Provider 只做登录）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；内部 <see cref="IWeChatApiClient"/> / DataService 经 <c>User.Use&lt;T&gt;()</c> 懒加载。
+/// 注册保持 <c>TryAddEnumerable(Scoped&lt;IAuthenticationProvider, WeChatAuthenticationProvider&gt;)</c>——多实现集合，
+/// AddConstructibleService 单实现不适用。<c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class WeChatAuthenticationProvider : IAuthenticationProvider
+[DiContractIgnore]
+internal sealed class WeChatAuthenticationProvider : DomainServiceBase, IAuthenticationProvider
 {
     private IWeChatApiClient? _weChatApi;
     private AuthAccountEntityDataService? _accountDataService;
-    private readonly IDomainUser _user;
     private readonly ILogger<WeChatAuthenticationProvider> _logger;
 
-    private IWeChatApiClient WeChatApi => _weChatApi ??= _user.Use<IWeChatApiClient>();
-    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= _user.Use<AuthAccountEntityDataService>();
+    private IWeChatApiClient WeChatApi => _weChatApi ??= User.Use<IWeChatApiClient>();
+    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= User.Use<AuthAccountEntityDataService>();
 
-    public WeChatAuthenticationProvider(IDomainUser user, ILogger<WeChatAuthenticationProvider> logger)
+    public WeChatAuthenticationProvider(IDomainUser user, ILogger<WeChatAuthenticationProvider> logger) : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 

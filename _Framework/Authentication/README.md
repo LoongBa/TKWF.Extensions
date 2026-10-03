@@ -1,6 +1,6 @@
 # TKWF.Ext.Authentication 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (查询契约 + UserCenter 承接) | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -54,9 +54,14 @@ using TKWF.Ext.Authentication;
 [TKWFEnabledExtension(typeof(AuthCenterExtensionInitializer<>))]
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 {
-    // 自动注册：ITokenService / IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService /
-    //           IPlatformCredentialService / IPlatformAccountMapService / IWeChatApiClient / ITokenVerifier /
-    //           IAuthenticationProvider（短信+微信） + 8 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
+    // 自动注册（V4.10.53 领域自治根治，ADR90——正确路线三态）：
+    //   门面（AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory，消费方 User.Use<接口>() 解析）：
+    //       ITokenService / IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService /
+    //       IPlatformCredentialService / IPlatformAccountMapService / IWeChatApiClient / ITokenVerifier /
+    //       IAuthAccountQueryService / IAuthAccountService
+    //   接线型（TryAddScoped 普通 DI）：IUserProfileSource（UserCenter 档案源——非 IDomainService 契约，被门面 GetService 解析）
+    //   多 Provider（TryAddEnumerable）：IAuthenticationProvider（短信 + 微信）
+    //   + 8 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
 }
 ```
 
@@ -153,7 +158,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 **`AuthAccountUserProfileSource`（UserCenter 终态承接）**——public sealed，实现 `IUserProfileSource`：
 - **映射矩阵**：UserId←UId / Phone←Phone（**原始值**——UserCenter 门面强制脱敏，实现方不得自行 Mask）/ Nickname / AvatarUrl←Avatar / IsTeacherVerified←TeacherVerified / AuthLevel←AuthLevel
 - **微信绑定推导**：`WechatMpOpenId ?? WechatWebOpenId ?? UnionId` **任一非空 = 已绑定**（AuthAccount 无显式 IsWechatBound 字段）
-- **注册**：`AuthCenterExtensionInitializer.ConfigureServices` **TryAddScoped 双注册**（`IAuthAccountQueryService` + `IUserProfileSource`）——消费方白名单声明认证中心 + UserCenter 后 `IUserCenterQueryService.GetProfileAsync` 自动获得真实档案；新装配实例**无需写桥接类**
+- **注册**：`AuthCenterExtensionInitializer.ConfigureServices`——`IAuthAccountQueryService` 经 **AddConstructibleService**（门面，`User.Use<接口>()` 解析）+ `IUserProfileSource` 经 **TryAddScoped**（接线型，UserCenter 门面 GetService 解析）——消费方白名单声明认证中心 + UserCenter 后 `IUserCenterQueryService.GetProfileAsync` 自动获得真实档案；新装配实例**无需写桥接类**
 - **依赖**：引 `TKWF.Ext.UserCenter.Abstractions`（**契约包非主包**——L2 门控合规）
 - **边界**：两契约**不可合并**——查询服务返回完整 `AuthAccountEntity`（含 TokenVersion/IsEnabled，供 TokenService/装配桥接），档案源返回 `UserProfileDto`（公共档案子集，无敏感字段，Phone 门面脱敏）
 
@@ -191,7 +196,8 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 
 - **V0.1.0（已实施）**：令牌体系 / 认证矩阵（短信 + 微信）/ 登录保护 / 票据换令牌（PKCE）/ 身份适配层 / 跨系统映射 / 平台凭证——通用内核 8 组件 + 41 测试全绿。
 - **V0.2.0（已实施：查询契约 + UserCenter 承接）**：`IAuthAccountQueryService` 查询契约（只读 4 方法委托 DataService）+ `AuthAccountUserProfileSource` 实现 `IUserProfileSource`（UserCenter 终态落地，装配实例零桥接）；N1-N5 用例全绿。**其余规划项待后续迭代**：管理端 API（账号/凭证管理端点）；按 UserId 批量黑名单撤销；黑名单过期清理任务（对齐 BackgroundJobs 清理范式）；高流量 Redis 分布式黑名单缓存。
-- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册，装配实例零桥接。
+- **V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线）**：12 个门面实现继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——v0.3.3 同根缺陷）+ `[DiContractIgnore]` 豁免 DI001；DataService/服务链仍经 `User.Use<T>()` 懒加载（DI004 零豁免）。10 门面注册改 `AddConstructibleService`（接口可构造守卫工厂 + 实现类 throw-factory，消费方统一 `User.Use<接口>()` 解析）；`AuthAccountUserProfileSource` 改**接线型**（ctor `IServiceProvider` + C1 延迟解析 `IAuthAccountQueryService`，修复 UserCenter 门面 GetService 构造失败——真实生产故障；注册保持 TryAddScoped）；两 Provider 保持 TryAddEnumerable（多实现集合）；Initializer 补 `AddOptions<AuthCenterOptions>` + `TryAddSingleton<IMemoryCache>` 兜底（守卫工厂经 ActivatorUtilities 解析剩余参数需可解析）。78 用例全绿（禁止 slnx 构建，仅 Authentication 项目 + 测试项目）。
+- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 
 <!-- EOF -->

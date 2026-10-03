@@ -8,17 +8,17 @@ namespace TKWF.Ext.Authentication.Tests;
 
 /// <summary>N-write：AuthAccountService——写契约委托真实 DataService（SQLite 内存库）。
 /// <para>DMP OI7 转达缺口闭环：公开写契约使消费端可建/维护影子 AuthAccount（成本端编译器 typeof 可引用），
-/// 解除 TokenService.RefreshTokenAsync（L196-200 ACCOUNT_NOT_FOUND/REFRESH_STALE）对 DMP P1 令牌替换的阻塞。</para></summary>
+/// 解除 TokenService.RefreshTokenAsync（L196-200 ACCOUNT_NOT_FOUND/REFRESH_STALE）对 DMP P1 令牌替换的阻塞。</para>
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
 public class AuthAccountServiceTests
 {
     private static (AuthAccountService Service, AuthAccountEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var ds = new AuthAccountEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ds);
-        return (new AuthAccountService(stub), ds);
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var service = new AuthAccountService(stub);
+        return (service, stub.Use<AuthAccountEntityDataService>());
     }
 
     [Fact]

@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -16,9 +18,13 @@ namespace TKWF.Ext.Authentication;
 /// <para>生产未装配 <see cref="ISmsSender"/> → <see cref="SmsMockForbiddenException"/>（503 语义，防 dev_code 泄露，Oracle D7）；
 /// 开发模式告警 + 日志输出验证码（dev mock，不发真实短信）。</para>
 /// <para>数据访问红线合规：仅依赖 <see cref="SmsRecordEntityDataService"/>（SG1 DataService），不注入 IFreeSql/IEntityDAC。</para>
-/// <para>internal sealed（对齐 Identity UserStore 先例——DataService 为 internal，public 构造器会 CS0051）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
+/// 注册改 <c>AddConstructibleService&lt;ISmsVerificationService, SmsVerificationService&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class SmsVerificationService : ISmsVerificationService
+[DiContractIgnore]
+internal sealed class SmsVerificationService : DomainServiceBase, ISmsVerificationService
 {
     /// <summary>验证码位数（6 位）。</summary>
     private const int CodeLength = 6;
@@ -28,21 +34,20 @@ internal sealed class SmsVerificationService : ISmsVerificationService
 
     private readonly ISmsSender? _sender;
     private readonly IOptions<AuthCenterOptions> _options;
-    private readonly IDomainUser _user;
     private SmsRecordEntityDataService? _dataService;
     private readonly ILogger<SmsVerificationService> _logger;
 
-    private SmsRecordEntityDataService DataService => _dataService ??= _user.Use<SmsRecordEntityDataService>();
+    private SmsRecordEntityDataService DataService => _dataService ??= User.Use<SmsRecordEntityDataService>();
 
     public SmsVerificationService(
+        IDomainUser user,
         ISmsSender? sender,
         IOptions<AuthCenterOptions> options,
-        IDomainUser user,
         ILogger<SmsVerificationService> logger)
+        : base(user)
     {
         _sender = sender;
         _options = options;
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 

@@ -5,7 +5,9 @@ using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>D12：PlatformCredential——AES-GCM 落库加密（DB 无明文）/ 读路径解密 / 唯一约束 / SetEnabled。</summary>
+/// <summary>D12：PlatformCredential——AES-GCM 落库加密（DB 无明文）/ 读路径解密 / 唯一约束 / SetEnabled。
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
 public class PlatformCredentialServiceTests
 {
     private static (PlatformCredentialService Service, PlatformCredentialEntityDataService Ds) CreateService()
@@ -13,11 +15,9 @@ public class PlatformCredentialServiceTests
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var options = AuthenticationTestHost.CreateOptions();
         options.SecretEncryptionKeyPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"tkwf-auth-key-{System.Guid.NewGuid():N}.key");
-        var stub = new StubDomainUser(Options.Create(options));
-        var ds = new PlatformCredentialEntityDataService(
-            stub, new FreeSqlEntityDAC<PlatformCredentialEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ds);
-        return (new PlatformCredentialService(stub, Options.Create(options), NullLogger<PlatformCredentialService>.Instance), ds);
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var service = new PlatformCredentialService(stub, Options.Create(options), NullLogger<PlatformCredentialService>.Instance);
+        return (service, stub.Use<PlatformCredentialEntityDataService>());
     }
 
     [Fact]

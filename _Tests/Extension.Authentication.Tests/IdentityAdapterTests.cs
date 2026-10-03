@@ -9,7 +9,9 @@ namespace TKWF.Ext.Authentication.Tests;
 
 /// <summary>D9：身份适配层——工厂契约（CreateUserInfoFromAccount/FromToken 填充 Roles）+ ITokenVerifier 验签链 + IAuthorizationMapper 本地角色映射。
 /// <para>登录全链路（UserHelper 钩子 → LoginAsUserAsync → 已认证 DomainUser）走消费方 Host（见使用指南 §二 第 3 步）——
-/// 对齐 IdentityV03Tests 先例（工厂方法契约验证 + 注释明示全链路归消费方 Host）。</para></summary>
+/// 对齐 IdentityV03Tests 先例（工厂方法契约验证 + 注释明示全链路归消费方 Host）。</para>
+/// <para>V4.10.53（领域自治根治后重写）：LocalJwtTokenVerifier 继承 DomainServiceBase——StubDomainUser 直构，
+/// ITokenService 经 User.Use&lt;接口&gt;() 懒加载（CreateStub 注册 TokenService 实例）；TokenService 亦继承基类（User 首参）。</para></summary>
 public class IdentityAdapterTests
 {
     // ── 工厂契约 ─────────────────────────────────────────────────────
@@ -65,28 +67,20 @@ public class IdentityAdapterTests
         // LocalJwtTokenVerifier 构造注入 ITokenService——契约接线（验签细节 TokenServiceTests 覆盖）
         var options = AuthenticationTestHost.CreateOptions();
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var accountDs = new AuthAccountEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        var refreshDs = new AuthRefreshTokenEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
-        var blacklistDs = new AuthTokenBlacklistEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(accountDs);
-        stub.Register(refreshDs);
-        stub.Register(blacklistDs);
-        var tokenService = new TokenService(
-            Microsoft.Extensions.Options.Options.Create(options), stub,
-            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenService>.Instance);
-        // ADR88/DI004：LocalJwtTokenVerifier 懒加载 ITokenService（接口）——注册接口 key
-        stub.Register<ITokenService>(tokenService);
-
+        var stub = AuthenticationTestHost.CreateStub(fsql, (services, user) =>
+        {
+            // LocalJwtTokenVerifier.Use<ITokenService>() 接口懒加载源（CreateStub 注册单例）
+            var tokenService = new TokenService(
+                user, Microsoft.Extensions.Options.Options.Create(options),
+                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenService>.Instance);
+            services.AddSingleton<ITokenService>(tokenService);
+        });
         var verifier = new LocalJwtTokenVerifier(stub);
         var account = new AuthAccountEntity { UId = "u-400", Phone = "13900139000", AuthLevel = (int)AuthLevel.Phone, TokenVersion = 0 };
-        await accountDs.CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var issued = await tokenService.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var issued = await stub.GetService<ITokenService>().IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
         var result = await verifier.VerifyAsync(issued.AccessToken);
 
         Assert.Equal(account.UId, result.UserId);

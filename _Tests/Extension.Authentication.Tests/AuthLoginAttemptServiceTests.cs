@@ -6,17 +6,17 @@ using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>D6：AuthLoginAttempt 限流窗口计数 + 策略隔离（wechat 60s / redeem 60min / sms 委托）。</summary>
+/// <summary>D6：AuthLoginAttempt 限流窗口计数 + 策略隔离（wechat 60s / redeem 60min / sms 委托）。
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
 public class AuthLoginAttemptServiceTests
 {
     private static (AuthLoginAttemptService Service, AuthLoginAttemptEntityDataService Ds) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var ds = new AuthLoginAttemptEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthLoginAttemptEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ds);
-        return (new AuthLoginAttemptService(Options.Create(options), stub, NullLogger<AuthLoginAttemptService>.Instance), ds);
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var service = new AuthLoginAttemptService(stub, Options.Create(options), NullLogger<AuthLoginAttemptService>.Instance);
+        return (service, stub.Use<AuthLoginAttemptEntityDataService>());
     }
 
     private static async Task RecordNAsync(AuthLoginAttemptService service, string identity, string authType, int n)

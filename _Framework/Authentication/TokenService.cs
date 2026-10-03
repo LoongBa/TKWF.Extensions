@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -22,37 +24,40 @@ namespace TKWF.Ext.Authentication;
 /// 内存 ConcurrentDictionary 黑名单（重启丢失）→ AuthTokenBlacklistEntity 落库 + IMemoryCache 短 TTL 前置过滤（Oracle C3）；
 /// 直注入 IEntityDAC&lt;AuthRefreshToken&gt;（红线违规）→ 委托 AuthRefreshTokenEntityDataService。</para>
 /// <para>🔒 验签安全加固清单（Oracle C1）：alg 强制 RS256 / FixedTimeEquals / RSA≥2048 / exp·iat / kid 白名单 / iss 校验 / Base64Url 边界。</para>
-/// <para>internal sealed（对齐 Identity UserStore/UserManager 先例——DataService 为 internal，public 构造器会 CS0051）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取
+/// 用户上下文（IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产必失败）；DataService 仍经
+/// <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载（DI004 零豁免）；注册改 <c>AddConstructibleService&lt;ITokenService, TokenService&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class TokenService : ITokenService
+[DiContractIgnore]
+internal sealed class TokenService : DomainServiceBase, ITokenService
 {
     private const string AlgHeader = "RS256";
     private const int RsaMinKeyBits = 2048;
     private const int BlacklistCacheSeconds = 45;
 
     private readonly IOptions<AuthCenterOptions> _options;
-    private readonly IDomainUser _user;
     private AuthAccountEntityDataService? _accountDataService;
     private AuthRefreshTokenEntityDataService? _refreshTokenDataService;
     private AuthTokenBlacklistEntityDataService? _blacklistDataService;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TokenService> _logger;
 
-    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= _user.Use<AuthAccountEntityDataService>();
-    private AuthRefreshTokenEntityDataService RefreshTokenDataService => _refreshTokenDataService ??= _user.Use<AuthRefreshTokenEntityDataService>();
-    private AuthTokenBlacklistEntityDataService BlacklistDataService => _blacklistDataService ??= _user.Use<AuthTokenBlacklistEntityDataService>();
+    private AuthAccountEntityDataService AccountDataService => _accountDataService ??= User.Use<AuthAccountEntityDataService>();
+    private AuthRefreshTokenEntityDataService RefreshTokenDataService => _refreshTokenDataService ??= User.Use<AuthRefreshTokenEntityDataService>();
+    private AuthTokenBlacklistEntityDataService BlacklistDataService => _blacklistDataService ??= User.Use<AuthTokenBlacklistEntityDataService>();
 
     // 签名密钥（懒加载——启动首个调用时加载，kid 轮换经 SigningKeys 遍历验证）
     private readonly Lazy<RsaKeySet> _keys;
 
     public TokenService(
-        IOptions<AuthCenterOptions> options,
         IDomainUser user,
+        IOptions<AuthCenterOptions> options,
         IMemoryCache cache,
         ILogger<TokenService> logger)
+        : base(user)
     {
         _options = options;
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _cache = cache;
         _logger = logger;
         // V0.3.1：Lazy 委托到静态 LoadKeysCore（单一真相源）——runtime 实例路径与 Initializer

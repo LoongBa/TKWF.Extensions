@@ -12,12 +12,35 @@ using TKWF.Ext.Authentication;
 namespace TKWF.Ext.Authentication.Tests;
 
 /// <summary>
-/// 测试公共设施——SQLite 内存库 + 8 实体 SyncStructure + RSA 测试密钥 + DataService/服务工厂。
-/// <para>红线合规测试模式：真实 <see cref="FreeSqlEntityDAC{TEntity}"/> 驱动（对齐既有扩展测试先例）；
-/// 测试 Host <b>不手动注册 DataService</b>——经 SG1 生成 ProjectMetaContext（消费方真实形态，ADR61）。</para>
+/// 测试公共设施——SQLite 内存库 + 8 实体 SyncStructure + RSA 测试密钥 + 生产路径等价测试桩。
+/// <para>V4.10.53（领域自治根治后重写）：门面现继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>，DataService 经基类
+/// <c>User</c> 懒加载（NoAop 路径）——分层单测用可配置 <see cref="StubDomainUser"/> 直构门面（经基类 User 取上下文），
+/// 其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现：具体类（DataService）经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IEntityDAC 从 DI 解析），
+/// 接口（IDomainService）经 <c>provider.GetRequiredService(t)</c> 解析（守卫工厂在集成测试经真实 DomainUser 验证，桩内不重复守卫）。</para>
+/// <para>集成测试（真实 DI + BindScope + User.Use&lt;接口&gt;()）见 <see cref="AuthenticationProductionPathTests"/>。</para>
 /// </summary>
 internal static class AuthenticationTestHost
 {
+    /// <summary>全部 8 实体类型——统一注册真实 FreeSqlEntityDAC（分层单测/生产路径 Use&lt;DataService&gt; 直建源）。</summary>
+    private static readonly Type[] AllEntityTypes =
+    [
+        typeof(AuthAccountEntity), typeof(AuthLoginAttemptEntity), typeof(SmsRecordEntity),
+        typeof(AuthRefreshTokenEntity), typeof(AuthTokenBlacklistEntity), typeof(OAuthTicketEntity),
+        typeof(PlatformAccountMapEntity), typeof(PlatformCredentialEntity)
+    ];
+
+    /// <summary>注册全部 8 实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）——CreateStub 与生产路径 Provider 共用。</summary>
+    public static void RegisterEntityDacs(IServiceCollection services)
+    {
+        foreach (var entityType in AllEntityTypes)
+        {
+            var dacType = typeof(IEntityDAC<>).MakeGenericType(entityType);
+            var implType = typeof(FreeSqlEntityDAC<>).MakeGenericType(entityType);
+            services.AddSingleton(dacType, implType);
+        }
+    }
+
     private static string? _rsaDir;
     private static readonly object RsaGate = new();
 
@@ -94,64 +117,72 @@ internal static class AuthenticationTestHost
             RedirectUriWhitelist = ["https://app.example.com/callback"]
         };
     }
+
+    /// <summary>
+    /// 构建生产路径等价测试桩——真实 FreeSqlEntityDAC（全部 8 实体）+ 可选附加服务注册。
+    /// 门面直构传本桩（经基类 User 取上下文）；桩内 Use&lt;T&gt;() 走生产 NoAop 路径等价（具体类 ActivatorUtilities 直建，
+    /// 接口 GetRequiredService——分层单测需在 <paramref name="register"/> 中注册接口实例，如 ITokenService 供
+    /// OAuthTicketService/WeChatApiClient 懒加载）。
+    /// </summary>
+    public static StubDomainUser CreateStub(IFreeSql fsql, Action<IServiceCollection, StubDomainUser>? register = null)
+    {
+        var user = new StubDomainUser();
+        var services = new ServiceCollection();
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        RegisterEntityDacs(services);
+        register?.Invoke(services, user);
+        user.ServiceProvider = services.BuildServiceProvider();
+        return user;
+    }
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约（匿名用户，无租户；对齐既有扩展测试 StubDomainUser）。
-/// <para>ADR88/DI004：生产经 IDomainUser.Use&lt;T&gt;() 懒加载能力——StubDomainUser 增能力注册表
-/// （<see cref="Register{TService}"/> 按类型键）+ ServiceProvider 兜底双通道解析（PermissionsTestHost 先例）。</para>
-/// <para>可注入 <see cref="IOptions{AuthCenterOptions}"/>（GetOptionalService 解析）——早期 PlatformCredentialEntityDataService
-/// 经 GetOptionalService 加载密钥路径所需；Oracle M4 合并后 DataService 改经 PlatformCredentialKeyStore（Service 构造初始化），
-/// 此注入仅为兼容保留（PlatformCredentialServiceTests 仍传 Options——无副作用）。</para></summary>
-internal sealed class StubDomainUser : IDomainUser
+/// <summary>
+/// 测试用户桩——实现 <see cref="IDomainUser"/> 最小契约（User/Tenant/认证可配置）。
+/// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现——具体类（DataService）经
+/// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
+/// IEntityDAC 等其余从 DI 解析——对齐 Settings/Account/Identity 测试桩）；接口（IDomainService，如
+/// <c>Use&lt;ITokenService&gt;()</c>）经 <c>provider.GetRequiredService(t)</c> 解析（测试注册的门面实例；
+/// 守卫工厂在集成测试经真实 DomainUser 验证，桩内不重复守卫）。</para>
+/// </summary>
+internal class StubDomainUser(string? userId = null, long? tenantId = null, bool isAuthenticated = false) : IDomainUser
 {
-    private readonly IOptions<AuthCenterOptions>? _options;
-    private readonly Dictionary<Type, object> _manual = new();
-
-    public StubDomainUser(IOptions<AuthCenterOptions>? options = null)
-    {
-        _options = options;
-    }
-
-    /// <summary>可选 IServiceProvider 兜底——未注册能力时经 DI GetRequiredService 解析。</summary>
+    /// <summary>ServiceProvider（测试工厂注册时注入——User.Use&lt;T&gt;() 解析源）。</summary>
     public IServiceProvider? ServiceProvider { get; set; }
 
     public string SessionKey => "test-session";
-    public bool IsAuthenticated => false;
+    public bool IsAuthenticated => isAuthenticated;
     public bool IsSystemActor => false;
     public IUserInfo? UserInfo => null;
-    public long? TenantId => null;
+    public long? TenantId => tenantId;
     public bool IsNoAuditActive => false;
-    public string? UserId => null;
-    public string? UserName => null;
+    public string? UserId => userId;
+    public string? UserName => "test";
     public bool IsInRole(string role) => false;
-
-    /// <summary>注册能力实例（按 typeof(TService) 键）——测试为 Use&lt;T&gt;() 提供显式解析。</summary>
-    public void Register<TService>(TService instance)
-    {
-        if (instance is null) throw new ArgumentNullException(nameof(instance));
-        lock (_manual) _manual[typeof(TService)] = instance;
-    }
 
     public TDomainService Use<TDomainService>() where TDomainService : IDomainService
     {
-        lock (_manual)
-        {
-            if (_manual.TryGetValue(typeof(TDomainService), out var instance))
-                return (TDomainService)instance;
-        }
-        if (ServiceProvider is not null)
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+
+        // 接口（IDomainService）：DI 解析（测试注册的门面实例——OAuthTicketService.Use<ITokenService>() 等 AOP 懒加载路径）
+        if (typeof(TDomainService).IsInterface)
             return ServiceProvider.GetRequiredService<TDomainService>();
-        throw new NotSupportedException($"Stub: Use<{typeof(TDomainService).Name}> 未注册——测试须经 Register<TService> 或 ServiceProvider 提供能力");
+
+        // 具体类：生产 NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this——IEntityDAC 从 DI 解析）
+        return (TDomainService)ActivatorUtilities.CreateInstance(ServiceProvider, typeof(TDomainService), this);
     }
 
     public TService GetService<TService>() where TService : notnull
-        => throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-
-    public TService GetOptionalService<TService>() where TService : class
     {
-        if (typeof(TService) == typeof(IOptions<AuthCenterOptions>) && _options != null)
-            return (TService)(object)_options;
-        return null!;
+        if (ServiceProvider is null)
+            throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+        return ServiceProvider.GetRequiredService<TService>();
     }
+
+    public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }
+
+/// <summary>认证用户桩——具 userId 的 IDomainUser（仅本人/上下文读取测试用）。</summary>
+internal sealed class AuthenticatedStubUser(string userId) : StubDomainUser(userId: userId, isAuthenticated: true);

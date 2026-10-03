@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -16,16 +18,19 @@ public interface IAuthAccountQueryService : IDomainService
 
 /// <summary>账号查询服务实现——委托 AuthAccountEntityDataService（红线合规）。
 /// <para>internal sealed——与 IdentityPasswordManager 先例一致（public sealed + TryAddScoped 为注册方）；
-/// 本类仅门面委托无外部扩展需求，internal 即可（AuthAccountEntityDataService 亦 internal，注入合法）。</para></summary>
-internal sealed class AuthAccountQueryService : IAuthAccountQueryService
+/// 本类仅门面委托无外部扩展需求，internal 即可（AuthAccountEntityDataService 亦 internal，注入合法）。
+/// V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文；
+/// DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；注册改
+/// <c>AddConstructibleService&lt;IAuthAccountQueryService, AuthAccountQueryService&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para></summary>
+[DiContractIgnore]
+internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService
 {
     private AuthAccountEntityDataService? _dataService;
-    private readonly IDomainUser _user;
-    private AuthAccountEntityDataService DataService => _dataService ??= _user.Use<AuthAccountEntityDataService>();
+    private AuthAccountEntityDataService DataService => _dataService ??= User.Use<AuthAccountEntityDataService>();
 
-    public AuthAccountQueryService(IDomainUser user)
+    public AuthAccountQueryService(IDomainUser user) : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
     }
 
     public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)

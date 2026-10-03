@@ -14,26 +14,20 @@ namespace TKWF.Ext.Authentication.Tests;
 
 /// <summary>
 /// TokenService 测试——D2 签发载荷契约 / D3 验签+exp+kid+黑名单 / D4 Refresh rotation+TokenVersion+重用检测 / D5 密钥 fail-fast。
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase，DataService 经基类 User 懒加载（NoAop 路径）——
+/// 测试用可配置 StubDomainUser 直构门面（经基类 User 取上下文），桩内 Use&lt;T&gt;() 按生产 NoAop 路径等价
+/// （ActivatorUtilities 直建 DataService，IEntityDAC 从 DI 解析）。业务断言语义不变。</para>
 /// </summary>
 public class TokenServiceTests
 {
-    private static (TokenService Service, IFreeSql Fsql) CreateService(AuthCenterOptions options)
+    private static (TokenService Service, StubDomainUser Stub) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var accountDs = new AuthAccountEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
-        var refreshDs = new AuthRefreshTokenEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
-        var blacklistDs = new AuthTokenBlacklistEntityDataService(
-            stub, new FreeSqlEntityDAC<AuthTokenBlacklistEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(accountDs);
-        stub.Register(refreshDs);
-        stub.Register(blacklistDs);
+        var stub = AuthenticationTestHost.CreateStub(fsql); // 全部 8 实体 DAC——Use<DataService>() NoAop 直建源
         var service = new TokenService(
-            Options.Create(options), stub,
+            stub, Options.Create(options),
             new MemoryCache(new MemoryCacheOptions()), NullLogger<TokenService>.Instance);
-        return (service, fsql);
+        return (service, stub);
     }
 
     private static AuthAccountEntity CreateAccount(string? phone = "13800138000", int authLevel = 1)
@@ -50,11 +44,9 @@ public class TokenServiceTests
     [Fact]
     public async Task IssueToken_Payload_MatchesFrozenContract()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        await new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
 
@@ -75,8 +67,7 @@ public class TokenServiceTests
         Assert.False(payload.TryGetProperty("role", out _));
 
         // Refresh 落库（SHA256——DB 无明文）
-        var refreshDs = new AuthRefreshTokenEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
+        var refreshDs = stub.Use<AuthRefreshTokenEntityDataService>();
         var row = await refreshDs.GetByTokenHashAsync(TokenService.Sha256Hex(result.RefreshToken));
         Assert.NotNull(row);
         Assert.Equal(account.UId, row!.UserId);
@@ -86,16 +77,13 @@ public class TokenServiceTests
     [Fact]
     public async Task IssueToken_RefreshToken_RawNotStoredInDb()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        await new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
 
-        var refreshDs = new AuthRefreshTokenEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
+        var refreshDs = stub.Use<AuthRefreshTokenEntityDataService>();
         // 明文 refresh 不应作为 TokenHash 出现
         var rawRow = await refreshDs.GetByTokenHashAsync(TokenService.Sha256Hex(result.RefreshToken));
         Assert.NotNull(rawRow);
@@ -107,11 +95,9 @@ public class TokenServiceTests
     [Fact]
     public async Task ValidateToken_ValidToken_Passes()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        await new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, true));
         var validation = await service.ValidateTokenAsync(result.AccessToken);
@@ -126,11 +112,9 @@ public class TokenServiceTests
     [Fact]
     public async Task ValidateToken_TamperedSignature_Rejected()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        await new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
         // ⚠️ 篡改末组第一字符（X 位）而非末位字符——末位是 base64url 对的第二字符（Y 位），其低 4 位被解码丢弃，
@@ -159,11 +143,9 @@ public class TokenServiceTests
     {
         var options = AuthenticationTestHost.CreateOptions();
         options.AccessTokenExpirationMinutes = -5; // 已过期
-        var (service, fsql) = CreateService(options);
+        var (service, stub) = CreateService(options);
         var account = CreateAccount();
-        await new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateTokenAsync(result.AccessToken));
@@ -186,11 +168,9 @@ public class TokenServiceTests
     [Fact]
     public async Task ValidateToken_Revoked_Rejected()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        await new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
         var validation = await service.ValidateTokenAsync(result.AccessToken);
@@ -205,10 +185,9 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshToken_Rotation_OldRevoked_NewPairIssued()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        var accountDs = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+        var accountDs = stub.Use<AuthAccountEntityDataService>();
         await accountDs.CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
@@ -225,10 +204,9 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshToken_TokenVersionMismatch_Rejected()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        var accountDs = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+        var accountDs = stub.Use<AuthAccountEntityDataService>();
         await accountDs.CreateAsync(account);
 
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
@@ -243,10 +221,9 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshToken_ReuseDetected_RevokesAllForUser()
     {
-        var (service, fsql) = CreateService(AuthenticationTestHost.CreateOptions());
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
         var account = CreateAccount();
-        var accountDs = new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)));
+        var accountDs = stub.Use<AuthAccountEntityDataService>();
         await accountDs.CreateAsync(account);
 
         // 签发两个 refresh（同账号）
@@ -259,8 +236,7 @@ public class TokenServiceTests
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.RefreshTokenAsync(r2.RefreshToken));
         Assert.Equal("REFRESH_REUSED", ex.Message);
 
-        var refreshDs = new AuthRefreshTokenEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthRefreshTokenEntity>(new UnitOfWorkManager(fsql)));
+        var refreshDs = stub.Use<AuthRefreshTokenEntityDataService>();
         // r1 也应被撤销（清场）
         var r1Row = await refreshDs.GetByTokenHashAsync(TokenService.Sha256Hex(r1.RefreshToken));
         Assert.NotNull(r1Row);
@@ -291,11 +267,9 @@ public class TokenServiceTests
     public void Dev_MissingSigningKey_AutoGeneratesTemporary()
     {
         var options = new AuthCenterOptions { IsProduction = false, Issuer = "auth-test" };
-        var (service, fsql) = CreateService(options);
+        var (service, stub) = CreateService(options);
         var account = CreateAccount();
-        new AuthAccountEntityDataService(
-            new StubDomainUser(), new FreeSqlEntityDAC<AuthAccountEntity>(new UnitOfWorkManager(fsql)))
-            .CreateAsync(account).GetAwaiter().GetResult();
+        stub.Use<AuthAccountEntityDataService>().CreateAsync(account).GetAwaiter().GetResult();
 
         var result = service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false))
             .GetAwaiter().GetResult();

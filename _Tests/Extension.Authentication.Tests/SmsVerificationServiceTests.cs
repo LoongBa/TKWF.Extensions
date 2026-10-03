@@ -7,7 +7,9 @@ using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.Authentication.Tests;
 
-/// <summary>D7：短信验证码——发送频控 / 校验单次消费 / 过期失效 / 生产 Mock 503 语义。</summary>
+/// <summary>D7：短信验证码——发送频控 / 校验单次消费 / 过期失效 / 生产 Mock 503 语义。
+/// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
 public class SmsVerificationServiceTests
 {
     private sealed class FakeSmsSender : ISmsSender
@@ -23,12 +25,10 @@ public class SmsVerificationServiceTests
     private static (SmsVerificationService Service, FakeSmsSender Sender, SmsRecordEntityDataService Ds) CreateService(AuthCenterOptions options, bool withSender = true)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var ds = new SmsRecordEntityDataService(
-            stub, new FreeSqlEntityDAC<SmsRecordEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ds);
+        var stub = AuthenticationTestHost.CreateStub(fsql);
         var sender = withSender ? new FakeSmsSender() : null;
-        return (new SmsVerificationService(sender, Options.Create(options), stub, NullLogger<SmsVerificationService>.Instance), sender!, ds);
+        var service = new SmsVerificationService(stub, sender, Options.Create(options), NullLogger<SmsVerificationService>.Instance);
+        return (service, sender!, stub.Use<SmsRecordEntityDataService>());
     }
 
     [Fact]
@@ -78,10 +78,8 @@ public class SmsVerificationServiceTests
     public async Task VerifyCode_Expired_Rejected()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = new StubDomainUser();
-        var ds = new SmsRecordEntityDataService(
-            stub, new FreeSqlEntityDAC<SmsRecordEntity>(new UnitOfWorkManager(fsql)));
-        stub.Register(ds);
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var ds = stub.Use<SmsRecordEntityDataService>();
         // 过期记录（ExpireAt 已过——AddDays(-1) 容错 SQLite DateTime 本地化 +8h 存取）
         await ds.CreateAsync(new SmsRecordEntity
         {
@@ -91,7 +89,7 @@ public class SmsVerificationServiceTests
             ExpireAt = DateTime.UtcNow.AddDays(-1),
             CreateTime = DateTime.UtcNow.AddMinutes(-6)
         });
-        var service = new SmsVerificationService(null, Options.Create(AuthenticationTestHost.CreateOptions()), stub, NullLogger<SmsVerificationService>.Instance);
+        var service = new SmsVerificationService(stub, null, Options.Create(AuthenticationTestHost.CreateOptions()), NullLogger<SmsVerificationService>.Instance);
 
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.VerifyCodeAsync("13800138000", "123456", SmsScenes.Login));
         Assert.Equal("SMS_CODE_EXPIRED", ex.Message);

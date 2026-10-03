@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Authentication;
@@ -17,23 +19,26 @@ namespace TKWF.Ext.Authentication;
 /// <c>LoginProtectionOptions.RedeemPerHour</c>；短信（<see cref="AuthTypes.Sms"/>）返回 false——短信频控由
 /// <see cref="SmsVerificationService"/> 经 SmsRecordEntity 拥有（重发间隔 60s/小时 5 条/天 20 条/IP 20 条/校验 5 次每小时），
 /// 此处不重复判定，避免双写源；未知 authType 返回 false（fail-open，仅审计不拦截）。</para>
-/// <para>internal sealed（对齐 Identity UserStore 先例——DataService 为 internal，public 构造器会 CS0051）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
+/// 注册改 <c>AddConstructibleService&lt;IAuthLoginAttemptService, AuthLoginAttemptService&gt;</c>。
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
-internal sealed class AuthLoginAttemptService : IAuthLoginAttemptService
+[DiContractIgnore]
+internal sealed class AuthLoginAttemptService : DomainServiceBase, IAuthLoginAttemptService
 {
     private readonly IOptions<AuthCenterOptions> _options;
     private AuthLoginAttemptEntityDataService? _dataService;
-    private readonly IDomainUser _user;
     private readonly ILogger<AuthLoginAttemptService> _logger;
-    private AuthLoginAttemptEntityDataService DataService => _dataService ??= _user.Use<AuthLoginAttemptEntityDataService>();
+    private AuthLoginAttemptEntityDataService DataService => _dataService ??= User.Use<AuthLoginAttemptEntityDataService>();
 
     public AuthLoginAttemptService(
-        IOptions<AuthCenterOptions> options,
         IDomainUser user,
+        IOptions<AuthCenterOptions> options,
         ILogger<AuthLoginAttemptService> logger)
+        : base(user)
     {
         _options = options;
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger;
     }
 

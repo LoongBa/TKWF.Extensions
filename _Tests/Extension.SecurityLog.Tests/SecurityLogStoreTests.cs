@@ -1,14 +1,15 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using TKW.Framework.Domain.FreeSql;
 
 namespace TKWF.Ext.SecurityLog.Tests;
 
 /// <summary>
-/// SecurityLogStore 测试——使用 SQLite 内存库验证真实写入 + 异常静默 + 只增不改语义。
+/// SecurityLogStore 测试——V4.10.53（领域自治根治）后走<b>生产路径</b>：
+/// 真实 DI（Initializer ConfigureServices + FreeSql 基础设施）+ <c>DomainUser&lt;TestUserInfo&gt;.BindScope</c> +
+/// <c>User.Use&lt;ISecurityLogStore&gt;()</c> AOP 路径（AddConstructibleService 守卫工厂）解析。
+/// 覆盖真实写入 + 异常静默 + 只增不改语义。
 /// </summary>
 public class SecurityLogStoreTests
 {
@@ -16,8 +17,9 @@ public class SecurityLogStoreTests
     public async Task SaveAsync_NormalInsert_PersistsAllFields()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
 
+        var store = host.User.Use<ISecurityLogStore>();
         var entry = new SecurityLogEntry(
             EventType: "Login",
             EventCategory: "Authentication",
@@ -31,8 +33,8 @@ public class SecurityLogStoreTests
 
         await store.SaveAsync(entry);
 
-        // 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）
-        var dataService = SecurityLogTestHost.CreateDataService(fsql);
+        // 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）——NoAop 直建路径
+        var dataService = host.User.Use<SecurityLogEntityDataService>();
         var saved = await dataService.EntityGetAsync(e => e.CorrelationId == "corr-1", CancellationToken.None);
         Assert.NotNull(saved);
         Assert.Equal("Login", saved!.EventType);
@@ -50,8 +52,9 @@ public class SecurityLogStoreTests
     public async Task SaveAsync_FailedEntry_DetailPersisted()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
 
+        var store = host.User.Use<ISecurityLogStore>();
         await store.SaveAsync(new SecurityLogEntry(
             EventType: "Login",
             EventCategory: "Authentication",
@@ -63,7 +66,7 @@ public class SecurityLogStoreTests
             Detail: "密码错误",
             CorrelationId: null));
 
-        var dataService = SecurityLogTestHost.CreateDataService(fsql);
+        var dataService = host.User.Use<SecurityLogEntityDataService>();
         var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
         var saved = Assert.Single(all);
         Assert.Equal("Failed", saved.Result);
@@ -74,11 +77,12 @@ public class SecurityLogStoreTests
     public async Task SaveAsync_NullEntry_DoesNotThrow_NoRows()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
 
+        var store = host.User.Use<ISecurityLogStore>();
         await store.SaveAsync(null!);
 
-        var dataService = SecurityLogTestHost.CreateDataService(fsql);
+        var dataService = host.User.Use<SecurityLogEntityDataService>();
         var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
         Assert.Empty(all);
     }
@@ -86,13 +90,10 @@ public class SecurityLogStoreTests
     [Fact]
     public async Task SaveAsync_DatabaseFailure_LogsWarning_DoesNotThrow()
     {
-        // Dispose 后写入 → 落库失败；Store 异常静默（不阻断认证流程）
+        // Dispose 后写入 → 落库失败；Store 异常静默（不阻断认证流程）——直构 + FakeLogger 捕获 Warning
         var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
+        var stub = SecurityLogTestHost.CreateStub(fsql);
         var logger = new FakeLogger<SecurityLogStore>();
-        var stub = new StubDomainUser();
-        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        services.AddSingleton(SecurityLogTestHost.CreateDataService(fsql, stub));
-        stub.ServiceProvider = services.BuildServiceProvider();
         var store = new SecurityLogStore(stub, logger);
 
         fsql.Dispose();
@@ -116,8 +117,9 @@ public class SecurityLogStoreTests
     public async Task SaveAsync_MultipleEntries_AllAppended()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
 
+        var store = host.User.Use<ISecurityLogStore>();
         for (int i = 0; i < 5; i++)
         {
             await store.SaveAsync(new SecurityLogEntry(
@@ -132,7 +134,7 @@ public class SecurityLogStoreTests
                 CorrelationId: null));
         }
 
-        var dataService = SecurityLogTestHost.CreateDataService(fsql);
+        var dataService = host.User.Use<SecurityLogEntityDataService>();
         var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
         Assert.Equal(5, all.Count);
     }
@@ -147,7 +149,6 @@ public class SecurityLogStoreTests
     [Fact]
     public void Constructor_NullLogger_Throws()
     {
-        using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         Assert.Throws<ArgumentNullException>(
             () => new SecurityLogStore(new StubDomainUser(), null!));
     }

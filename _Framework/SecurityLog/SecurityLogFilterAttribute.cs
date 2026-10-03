@@ -86,6 +86,10 @@ namespace TKWF.Ext.SecurityLog
         /// 方法执行后写安全事件。异常路径（Bag["__Exception"]）由 <see cref="IExceptionAwareFilter"/> 保证触发。
         /// <para>零开销语义：Options.Enabled=false 时直接返回（不解析 Store/不构造事件）；Store 未注册时跳过；
         /// 过滤器自身任何异常都不阻断业务（审计旁路）。</para>
+        /// <para>V4.10.53（领域自治根治）：Store 解析改 <c>context.DomainUser.Use&lt;ISecurityLogStore&gt;()</c>——
+        /// 域过滤器经 <c>Use&lt;T&gt;()</c> AOP 窗口解析域服务（对齐 <c>PermissionFilterAttribute</c> 先例，skill §4.7 心得 4）；
+        /// 旧 <c>GetOptionalService</c> 在 AddConstructibleService 守卫工厂下（CurrentAopUser 已恢复 null）必抛——
+        /// 过滤器 catch 吞掉 → 安全事件静默丢失（TryAddScoped ctor(IDomainUser) 同根缺陷）。</para>
         /// </summary>
         public override async Task PostProceedAsync(DomainInvocationWhereType where, DomainContext<TUserInfo> context)
         {
@@ -95,9 +99,8 @@ namespace TKWF.Ext.SecurityLog
                 var options = context.DomainUser.GetOptionalService<IOptions<SecurityLoggingOptions>>()?.Value;
                 if (options == null || !options.Enabled) return;
 
-                // ② Store 未注册（消费方未启用/自定义移除）→ 跳过
-                var store = context.DomainUser.GetOptionalService<ISecurityLogStore>();
-                if (store == null) return;
+                // ② Store 未注册（消费方未启用/自定义移除）→ 跳过（Use<T> 未注册抛异常 → 外层 catch 吞掉 = 审计旁路）
+                var store = context.DomainUser.Use<ISecurityLogStore>();
 
                 // ③ 构造事件（Result 判定 + Lockout 判定 + 脱敏 + 尝试用户名 + IP/UA/CorrelationId）
                 var entry = BuildEntry(context);

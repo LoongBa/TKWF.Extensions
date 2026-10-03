@@ -1,6 +1,6 @@
 # TKWF.Ext.SecurityLog 安全日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.1（契约拆包 + 聚合 SQL 下推） | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.1（契约拆包 + 聚合 SQL 下推）+ **V0.4.0（领域自治根治，ADR90）** | **框架**: .NET 10
 
 **核心约束**: 认证/授权安全事件自动记录（AOP 过滤器采集，不改主框架）+ 只增不改（append-only）+ 数据访问红线合规（全走 SG1 DataService）+ 异常静默 + 查询 API（列表 DTO 不含 Detail）
 
@@ -40,8 +40,14 @@ using TKWF.Ext.SecurityLog;
 [TKWFEnabledExtension(typeof(SecurityLogExtensionInitializer<>))]
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 {
-    // 启用后自动注册：ISecurityLogStore + ISecurityLogQueryService + ISecurityLogAnalyticsService + SecurityLogEntityDataService + Options
+    // 启用后自动注册（V0.4.0 领域自治根治，ADR90）：
+    //   AddConstructibleService 三接口——ISecurityLogStore + ISecurityLogQueryService + ISecurityLogAnalyticsService
+    //   （接口 = 可构造守卫工厂：仅 User.Use<接口>() AOP 路径可解析，域外解析抛 InvalidOperationException；
+    //    实现类 = throw-factory：禁止直接 DI 解析）+ SecurityLogEntityDataService（SG ADR61 自动注册）+ Options
 }
+```
+
+> **V0.4.0（V4.10.53 ADR90 领域自治根治）**：三领域服务（`SecurityLogStore`/`SecurityLogQueryService`/`SecurityLogAnalyticsService`）继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）+ `[DiContractIgnore]`（运行时手写注册豁免 DI001）；Initializer 注册由 `TryAddScoped` 改 **`AddConstructibleService`**（三接口守卫工厂 + 实现类 throw-factory，消费方经 `User.Use<ISecurityLogStore>()` 等解析）；`SecurityLogFilterAttribute` 的 Store 解析改 `context.DomainUser.Use<ISecurityLogStore>()`（域过滤器经 Use\<T\> AOP 窗口解析域服务，对齐 `PermissionFilterAttribute` 先例——旧 `GetOptionalService` 在守卫工厂下静默失败）。Analytics ctor 依赖 `IOptions`——Initializer `AddOptions<SecurityLoggingOptions>()` 默认值兜底。
 ```
 
 ### 2. 启用采集过滤器（opt-in，对齐 AddAuditLog 先例）
@@ -58,26 +64,34 @@ protected override void ConfigureGlobalFilters(FilterBuilder<MyUserInfo> builder
 ### 3. 查询安全事件
 
 ```csharp
-public class SecurityAuditService(ISecurityLogQueryService queryService)
+// V0.4.0（领域自治根治）：领域服务门面经 User.Use<ISecurityLogQueryService>() 解析（禁构造注入——DI004 零豁免）
+public class SecurityAuditService : DomainServiceBase
 {
-    // 按 IP + 事件类型分页查询（暴力破解分析）
-    var result = await queryService.GetListAsync(new SecurityLogQueryInput
-    {
-        IpAddress = "203.0.113.7",
-        EventType = "Login",
-        Result = "Failed",
-        Take = 50
-    });
+    public SecurityAuditService(IDomainUser user) : base(user) { }
 
-    // 详情（含 Detail 全文）
-    var detail = await queryService.GetDetailAsync(result.Items[0].Id);
-
-    // 统计失败次数
-    var failedCount = await queryService.CountAsync(new SecurityLogQueryInput
+    public async Task AnalyzeAsync()
     {
-        UserName = "alice",
-        Result = "Failed"
-    });
+        var queryService = User.Use<ISecurityLogQueryService>();
+
+        // 按 IP + 事件类型分页查询（暴力破解分析）
+        var result = await queryService.GetListAsync(new SecurityLogQueryInput
+        {
+            IpAddress = "203.0.113.7",
+            EventType = "Login",
+            Result = "Failed",
+            Take = 50
+        });
+
+        // 详情（含 Detail 全文）
+        var detail = await queryService.GetDetailAsync(result.Items[0].Id);
+
+        // 统计失败次数
+        var failedCount = await queryService.CountAsync(new SecurityLogQueryInput
+        {
+            UserName = "alice",
+            Result = "Failed"
+        });
+    }
 }
 ```
 
@@ -179,7 +193,7 @@ public class SecurityAuditService(ISecurityLogQueryService queryService)
 | **`SecurityLogEntityDataService`** | SG1 DataService——CRUD 转发 + v0.2.0 聚合（GetTopFailedByUserAsync/GetTopFailedByIpAsync）+ 清理（DeleteExpiredAsync） | xCodeGen 生成（.g.cs + 手写分部业务方法） |
 | **`SecurityLogEventTypes`** | v0.2.0 事件类型/结果/分类字符串常量（收敛字面量） | 内置静态类（契约定义于 SecurityLog.Abstractions） |
 | **`SecurityLoggingOptions`** | 配置（`TKWF:SecurityLog`）：Enabled / EventTypes / v0.2.0 RetentionDays(90) + CleanupBatchSize(500) | 内置，`[Options]` + SG1 绑定（契约定义于 SecurityLog.Abstractions） |
-| **`SecurityLogExtensionInitializer`** | 扩展初始化器（三钩子：注册 Options + DataService + Store + QueryService + AnalyticsService） | 内置，`[TKWFExtension]` SG1 发现 |
+| **`SecurityLogExtensionInitializer`** | 扩展初始化器（三钩子：Options + DataService + 三接口 AddConstructibleService 注册 + 过滤器 opt-in） | 内置，`[TKWFExtension]` SG1 发现 |
 
 ## 十、V0.3.1 简述（聚合 SQL 下推——V4.10.39 分组聚合 API）
 

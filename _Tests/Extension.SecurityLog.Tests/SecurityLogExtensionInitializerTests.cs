@@ -9,8 +9,11 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.SecurityLog.Tests;
 
 /// <summary>
-/// SecurityLogExtensionInitializer 测试——[TKWFExtension] 声明、DI 注册（Options/DataService/Store/QueryService）、
-/// TryAddScoped 语义、过滤器入口（FilterBuilder.AddSecurityLog 扩展方法）。
+/// SecurityLogExtensionInitializer 测试——[TKWFExtension] 声明、AddConstructibleService 注册形态
+/// （接口守卫工厂 + 实现类 throw-factory + 域作用域外解析抛）、Options/DataService 注册、过滤器入口
+/// （FilterBuilder.AddSecurityLog 扩展方法）。
+/// <para>V4.10.53（领域自治根治）：注册形态由 TryAddScoped 改为 <c>AddConstructibleService</c>——
+/// 消费方统一经 <c>User.Use&lt;ISecurityLogStore&gt;()</c> 等解析（AOP 路径先设 CurrentAopUser 再 GetRequiredService）。</para>
 /// </summary>
 public class SecurityLogExtensionInitializerTests
 {
@@ -26,40 +29,136 @@ public class SecurityLogExtensionInitializerTests
         Assert.Equal("SecurityLog", attr.Name);
     }
 
+    // ── ISecurityLogStore：接口守卫工厂 + 实现 throw-factory + 域外抛 ──
+
     [Fact]
-    public void ConfigureServices_Registers_Store_Descriptor()
+    public void ConfigureServices_Registers_ISecurityLogStore_FactoryDescriptor()
     {
         var services = new ServiceCollection();
         new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        var descriptor = services.First(d => d.ServiceType == typeof(ISecurityLogStore));
+        // AddConstructibleService——接口注册为构造工厂（非实现映射），Scoped 生命周期
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISecurityLogStore));
 
-        Assert.Equal(typeof(SecurityLogStore), descriptor.ImplementationType);
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
-    public void ConfigureServices_Registers_QueryService_Descriptor()
+    public void ConfigureServices_Registers_SecurityLogStore_ThrowFactory()
     {
         var services = new ServiceCollection();
         new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        var descriptor = services.First(d => d.ServiceType == typeof(ISecurityLogQueryService));
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<ISecurityLogStore>() 创建
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(SecurityLogStore));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
 
-        Assert.Equal(typeof(SecurityLogQueryService), descriptor.ImplementationType);
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SecurityLogStore>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_ISecurityLogStore_OutsideUseScope_Throws()
+    {
+        // 接口构造工厂的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecurityLogStore>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("ISecurityLogStore", ex.Message);
+    }
+
+    // ── ISecurityLogQueryService：接口守卫工厂 + 实现 throw-factory + 域外抛 ──
+
+    [Fact]
+    public void ConfigureServices_Registers_ISecurityLogQueryService_FactoryDescriptor()
+    {
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISecurityLogQueryService));
+
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
-    public void ConfigureServices_Registers_AnalyticsService_Descriptor()
+    public void ConfigureServices_Registers_SecurityLogQueryService_ThrowFactory()
     {
         var services = new ServiceCollection();
         new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        var descriptor = services.First(d => d.ServiceType == typeof(ISecurityLogAnalyticsService));
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(SecurityLogQueryService));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
 
-        Assert.Equal(typeof(SecurityLogAnalyticsService), descriptor.ImplementationType);
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SecurityLogQueryService>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_ISecurityLogQueryService_OutsideUseScope_Throws()
+    {
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecurityLogQueryService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("ISecurityLogQueryService", ex.Message);
+    }
+
+    // ── ISecurityLogAnalyticsService：接口守卫工厂 + 实现 throw-factory + 域外抛 ──
+
+    [Fact]
+    public void ConfigureServices_Registers_ISecurityLogAnalyticsService_FactoryDescriptor()
+    {
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ISecurityLogAnalyticsService));
+
+        Assert.NotNull(descriptor);
+        Assert.Null(descriptor!.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_Registers_SecurityLogAnalyticsService_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(SecurityLogAnalyticsService));
+        Assert.NotNull(descriptor);
+        Assert.NotNull(descriptor!.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SecurityLogAnalyticsService>());
+    }
+
+    [Fact]
+    public void InterfaceFactory_ISecurityLogAnalyticsService_OutsideUseScope_Throws()
+    {
+        var services = new ServiceCollection();
+        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecurityLogAnalyticsService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("ISecurityLogAnalyticsService", ex.Message);
     }
 
     [Fact]
@@ -81,31 +180,6 @@ public class SecurityLogExtensionInitializerTests
 
         Assert.Contains(services, d => d.ServiceType == typeof(Microsoft.Extensions.Options.IOptions<SecurityLoggingOptions>)
                                        || d.ServiceType == typeof(Microsoft.Extensions.Options.IConfigureOptions<SecurityLoggingOptions>));
-    }
-
-    [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
-    {
-        var services = new ServiceCollection();
-        // 消费方先注册自定义 ISecurityLogStore → TryAddScoped 不应覆盖
-        services.AddScoped<ISecurityLogStore, ConsumerSecurityLogStore>();
-        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-
-        var storeDescriptors = services.Where(d => d.ServiceType == typeof(ISecurityLogStore)).ToList();
-        Assert.Single(storeDescriptors);
-        Assert.Equal(typeof(ConsumerSecurityLogStore), storeDescriptors[0].ImplementationType);
-    }
-
-    [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerQueryService()
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<ISecurityLogQueryService, ConsumerQueryService>();
-        new SecurityLogExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-
-        var descriptors = services.Where(d => d.ServiceType == typeof(ISecurityLogQueryService)).ToList();
-        Assert.Single(descriptors);
-        Assert.Equal(typeof(ConsumerQueryService), descriptors[0].ImplementationType);
     }
 
     [Fact]
@@ -139,25 +213,5 @@ public class SecurityLogExtensionInitializerTests
         await initializer.InitializeAsync(null!);
         Assert.Equal("SecurityLog", initializer.Name);
         Assert.False(string.IsNullOrEmpty(initializer.Description));
-    }
-
-    /// <summary>测试专用 ISecurityLogStore：标记消费方自定义实现。</summary>
-    private sealed class ConsumerSecurityLogStore : ISecurityLogStore
-    {
-        public Task SaveAsync(SecurityLogEntry entry, CancellationToken ct = default)
-            => Task.CompletedTask;
-    }
-
-    /// <summary>测试专用 ISecurityLogQueryService：标记消费方自定义实现。</summary>
-    private sealed class ConsumerQueryService : ISecurityLogQueryService
-    {
-        public Task<SecurityLogPagedResult> GetListAsync(SecurityLogQueryInput input, CancellationToken ct = default)
-            => Task.FromResult(new SecurityLogPagedResult(0, Array.Empty<SecurityLogListItemDto>()));
-
-        public Task<SecurityLogDetailDto?> GetDetailAsync(long id, CancellationToken ct = default)
-            => Task.FromResult<SecurityLogDetailDto?>(null);
-
-        public Task<long> CountAsync(SecurityLogQueryInput input, CancellationToken ct = default)
-            => Task.FromResult(0L);
     }
 }

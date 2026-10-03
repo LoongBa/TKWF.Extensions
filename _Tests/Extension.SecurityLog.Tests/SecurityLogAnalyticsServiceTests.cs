@@ -2,14 +2,16 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 
 namespace TKWF.Ext.SecurityLog.Tests;
 
 /// <summary>
-/// SecurityLogAnalyticsService（v0.2.0）测试——失败次数 TopN 聚合（ByUser/ByIp + 时间窗口 + 空白维度跳过）+
-/// 保留天数清理（RetentionDays/分批循环/无过期零删除）+ 异常静默（DataService 异常 → 空结果/Warning 不抛）。
-/// <para>沿用 SecurityLogTestHost SQLite 内存 + 真实 FreeSqlEntityDAC 模式；时间断言用 Id 集合/计数相对容错
-/// （SQLite UTC 存储陷阱：UTC 12:00 存 → 可能 Unspecified 读出——勿精确比较 DateTime）。</para>
+/// SecurityLogAnalyticsService（v0.2.0）测试——V4.10.53（领域自治根治）后走<b>生产路径</b>：
+/// 真实 DI + <c>DomainUser&lt;TestUserInfo&gt;.BindScope</c> + <c>User.Use&lt;ISecurityLogAnalyticsService&gt;()</c> AOP 路径解析。
+/// 覆盖失败次数 TopN 聚合（ByUser/ByIp + 时间窗口 + 空白维度跳过）+ 保留天数清理（RetentionDays/分批循环/无过期零删除）+
+/// 异常静默（DataService 异常 → 空结果/Warning 不抛）。
+/// <para>时间断言用 Id 集合/计数相对容错（SQLite UTC 存储陷阱：UTC 12:00 存 → 可能 Unspecified 读出——勿精确比较 DateTime）。</para>
 /// </summary>
 public class SecurityLogAnalyticsServiceTests
 {
@@ -36,7 +38,8 @@ public class SecurityLogAnalyticsServiceTests
     public async Task GetTopFailedUsersAsync_ReturnsTopNByFailedCount()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var store = host.User.Use<ISecurityLogStore>();
         await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));   // alice: 3 Failed
         await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));
         await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));
@@ -48,7 +51,7 @@ public class SecurityLogAnalyticsServiceTests
         await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"));
         await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"));
 
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
 
         var top2 = await analytics.GetTopFailedUsersAsync(topN: 2);
         Assert.Equal(2, top2.Count);
@@ -67,7 +70,8 @@ public class SecurityLogAnalyticsServiceTests
     public async Task GetTopFailedUsersAsync_RespectsWindow()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var ds = SecurityLogTestHost.CreateDataService(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var ds = host.User.Use<SecurityLogEntityDataService>();
         var now = DateTime.UtcNow;
         await InsertAtAsync(ds, "alice", "10.0.0.1", "Failed", now.AddMinutes(-10));   // 窗内
         await InsertAtAsync(ds, "alice", "10.0.0.1", "Failed", now.AddMinutes(-10));
@@ -75,7 +79,7 @@ public class SecurityLogAnalyticsServiceTests
         await InsertAtAsync(ds, "bob", "10.0.0.2", "Failed", now.AddHours(-2));        // 窗外
         await InsertAtAsync(ds, "bob", "10.0.0.2", "Failed", now.AddHours(-2));
 
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
 
         // 30 分钟窗口 → 仅 alice 计入（bob 在 2 小时前被过滤）
         var windowed = await analytics.GetTopFailedUsersAsync(topN: 10, window: TimeSpan.FromMinutes(30));
@@ -94,14 +98,15 @@ public class SecurityLogAnalyticsServiceTests
     public async Task GetTopFailedUsersAsync_ExcludesNullEmptyUserName()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var store = host.User.Use<ISecurityLogStore>();
         await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null));    // alice: 2 次
         await store.SaveAsync(Login("alice", 2, "10.0.0.2", "Failed", null));
         await store.SaveAsync(Login("bob", 3, "10.0.0.3", "Failed", null));     // bob: 1 次
         await store.SaveAsync(Login("", 4, "10.0.0.4", "Failed", null));        // UserName 空串: 不应计入
         await store.SaveAsync(Login(" ", 5, "10.0.0.5", "Failed", null));       // UserName 空白: 不应计入
 
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
         var result = await analytics.GetTopFailedUsersAsync(topN: 10);
 
         Assert.Equal(2, result.Count);
@@ -117,14 +122,15 @@ public class SecurityLogAnalyticsServiceTests
     public async Task GetTopFailedIpsAsync_ExcludesNullEmptyIp()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var store = SecurityLogTestHost.CreateStore(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var store = host.User.Use<ISecurityLogStore>();
         await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null));   // IP 1: 2 次
         await store.SaveAsync(Login("bob", 2, "10.0.0.1", "Failed", null));
         await store.SaveAsync(Login("carol", 3, "10.0.0.2", "Failed", null));   // IP 2: 1 次
         await store.SaveAsync(Login("dave", 4, null, "Failed", null));          // IP null: 不应计入
         await store.SaveAsync(Login("erin", 5, "", "Failed", null));            // IP 空串: 不应计入
 
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
         var result = await analytics.GetTopFailedIpsAsync(topN: 10);
 
         Assert.Equal(2, result.Count);
@@ -140,7 +146,8 @@ public class SecurityLogAnalyticsServiceTests
     public async Task GetTopFailedUsersAsync_NoData_ReturnsEmpty()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
 
         Assert.Empty(await analytics.GetTopFailedUsersAsync());
         Assert.Empty(await analytics.GetTopFailedIpsAsync());
@@ -152,7 +159,8 @@ public class SecurityLogAnalyticsServiceTests
     public async Task CleanupExpiredAsync_DeletesExpired_KeepsRecent()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var ds = SecurityLogTestHost.CreateDataService(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var ds = host.User.Use<SecurityLogEntityDataService>();
         var now = DateTime.UtcNow;
         var expiredA = await InsertAtAsync(ds, "alice", "10.0.0.1", "Failed", now.AddDays(-100));  // 过期（RetentionDays=90）
         var expiredB = await InsertAtAsync(ds, "bob", "10.0.0.2", "Failed", now.AddDays(-200));     // 过期
@@ -160,12 +168,12 @@ public class SecurityLogAnalyticsServiceTests
         var recentB = await InsertAtAsync(ds, "dave", "10.0.0.4", "Failed", now);                   // 保留
 
         // 默认 Options（RetentionDays=90、CleanupBatchSize=500）
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
         var deleted = await analytics.CleanupExpiredAsync();
 
         Assert.Equal(2, deleted);
 
-        var query = SecurityLogTestHost.CreateQueryService(fsql);
+        var query = host.User.Use<ISecurityLogQueryService>();
         var remaining = await query.GetListAsync(new SecurityLogQueryInput());
         var remainingIds = remaining.Items.Select(i => i.Id).OrderBy(i => i).ToArray();
         Assert.Equal(new[] { recentA.Id, recentB.Id }.OrderBy(i => i), remainingIds);   // Id 集合断言（不比较 DateTime）
@@ -178,19 +186,19 @@ public class SecurityLogAnalyticsServiceTests
     public async Task CleanupExpiredAsync_BatchesUntilEmpty()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var ds = SecurityLogTestHost.CreateDataService(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql, o => o.CleanupBatchSize = 2);
+        var ds = host.User.Use<SecurityLogEntityDataService>();
         var now = DateTime.UtcNow;
         for (int i = 0; i < 5; i++)
             await InsertAtAsync(ds, $"user{i}", $"10.0.0.{i}", "Failed", now.AddDays(-100));
 
         // 单批仅 2 条 → 验证分批循环（2+2+1=5 全部清完）
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql,
-            new SecurityLoggingOptions { CleanupBatchSize = 2 });
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
         var deleted = await analytics.CleanupExpiredAsync();
 
         Assert.Equal(5, deleted);
 
-        var query = SecurityLogTestHost.CreateQueryService(fsql);
+        var query = host.User.Use<ISecurityLogQueryService>();
         Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput()));
     }
 
@@ -198,13 +206,14 @@ public class SecurityLogAnalyticsServiceTests
     public async Task CleanupExpiredAsync_NoExpired_ReturnsZero()
     {
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
-        var ds = SecurityLogTestHost.CreateDataService(fsql);
+        var host = SecurityLogTestHost.CreateProductionHost(fsql);
+        var ds = host.User.Use<SecurityLogEntityDataService>();
         await InsertAtAsync(ds, "alice", "10.0.0.1", "Success", DateTime.UtcNow);   // 仅近期记录
 
-        var analytics = SecurityLogTestHost.CreateAnalyticsService(fsql);
+        var analytics = host.User.Use<ISecurityLogAnalyticsService>();
         Assert.Equal(0, await analytics.CleanupExpiredAsync());
 
-        var query = SecurityLogTestHost.CreateQueryService(fsql);
+        var query = host.User.Use<ISecurityLogQueryService>();
         Assert.Equal(1, await query.CountAsync(new SecurityLogQueryInput()));
     }
 
@@ -213,16 +222,13 @@ public class SecurityLogAnalyticsServiceTests
     [Fact]
     public async Task AnalyticsService_ExceptionSilent()
     {
-        // Dispose 后操作 → 异常静默（Warning + 空结果/0，不抛异常、不阻断消费方）
+        // Dispose 后操作 → 异常静默（Warning + 空结果/0，不抛异常、不阻断消费方）——直构 + FakeLogger 捕获 Warning
         var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
+        var stub = SecurityLogTestHost.CreateStub(fsql);
         var logger = new FakeLogger<SecurityLogAnalyticsService>();
-        var stub = new StubDomainUser();
-        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        services.AddSingleton(SecurityLogTestHost.CreateDataService(fsql, stub));
-        stub.ServiceProvider = services.BuildServiceProvider();
         var analytics = new SecurityLogAnalyticsService(
             stub,
-            new Microsoft.Extensions.Options.OptionsWrapper<SecurityLoggingOptions>(new SecurityLoggingOptions()),
+            new OptionsWrapper<SecurityLoggingOptions>(new SecurityLoggingOptions()),
             logger);
 
         fsql.Dispose();

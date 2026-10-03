@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.SecurityLog
@@ -12,19 +14,20 @@ namespace TKWF.Ext.SecurityLog
     /// <para><b>只增不改（Oracle C2）</b>：本实现仅调用 <c>EntityCreateAsync</c>（追加写），
     /// 无任何 Update/Delete 路径——安全日志不可篡改语义。</para>
     /// <para>异常静默处理：落库失败时记录 Warning 日志，不抛出异常（审计不阻断认证流程）。</para>
-    /// <para>ADR88/DI004（A 批整改）：DataService 不再构造注入——经 <see cref="IDomainUser.Use{TDomainService}()"/> 懒加载解析。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+    /// （IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产必失败）；注册形态改
+    /// <c>AddConstructibleService&lt;ISecurityLogStore, SecurityLogStore&gt;</c>（接口可构造守卫工厂）。</para>
     /// </summary>
-    internal sealed class SecurityLogStore : ISecurityLogStore
+    [DiContractIgnore]
+    internal sealed class SecurityLogStore : DomainServiceBase, ISecurityLogStore
     {
-        private readonly IDomainUser _user;
         private readonly ILogger<SecurityLogStore> _logger;
 
         private SecurityLogEntityDataService? _dataService;
-        private SecurityLogEntityDataService DataService => _dataService ??= _user.Use<SecurityLogEntityDataService>();
+        private SecurityLogEntityDataService DataService => _dataService ??= User.Use<SecurityLogEntityDataService>();
 
-        public SecurityLogStore(IDomainUser user, ILogger<SecurityLogStore> logger)
+        public SecurityLogStore(IDomainUser user, ILogger<SecurityLogStore> logger) : base(user)
         {
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

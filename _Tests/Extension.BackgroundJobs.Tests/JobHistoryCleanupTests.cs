@@ -39,11 +39,13 @@ public class JobHistoryCleanupTests
         return (fsql, execDs, resultDs);
     }
 
-    /// <summary>构造清理服务（默认 Options：RetentionDays=180，CleanupBatchSize=500）。</summary>
+    /// <summary>构造清理服务（默认 Options：RetentionDays=180，CleanupBatchSize=500）。
+    /// <para>ADR88 改造适配：JobHistoryCleanupService 构造改 IDomainUser——经 StubDomainUser.With 注册两 DataService 懒加载源。</para></summary>
     private static JobHistoryCleanupService CreateService(
         JobExecutionEntityDataService execDs, JobResultEntityDataService resultDs,
         BackgroundJobsPersistenceOptions? options = null, ILogger<JobHistoryCleanupService>? logger = null)
-        => new(execDs, resultDs, Options.Create(options ?? new BackgroundJobsPersistenceOptions()),
+        => new(new StubDomainUser().With(execDs).With(resultDs),
+            Options.Create(options ?? new BackgroundJobsPersistenceOptions()),
             logger ?? NullLogger<JobHistoryCleanupService>.Instance);
 
     /// <summary>构造 JobExecution 测试实体（StartedAtUtc 与 CreateTime 对齐锚点）。</summary>

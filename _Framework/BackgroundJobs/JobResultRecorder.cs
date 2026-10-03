@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.BackgroundJobs;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BackgroundJobs;
 
@@ -13,12 +14,15 @@ namespace TKWF.Ext.BackgroundJobs;
 /// </summary>
 internal sealed class JobResultRecorder : IJobResultRecorder
 {
-    private readonly JobResultEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private JobResultEntityDataService? _dataService;
     private readonly ILogger<JobResultRecorder> _logger;
 
-    public JobResultRecorder(JobResultEntityDataService dataService, ILogger<JobResultRecorder> logger)
+    private JobResultEntityDataService DataService => _dataService ??= _user.Use<JobResultEntityDataService>();
+
+    public JobResultRecorder(IDomainUser user, ILogger<JobResultRecorder> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -40,7 +44,7 @@ internal sealed class JobResultRecorder : IJobResultRecorder
 
         try
         {
-            var result = await _dataService.EntityCreateAsync(entity, ct);
+            var result = await DataService.EntityCreateAsync(entity, ct);
             return result.Id;
         }
         catch (Exception ex)

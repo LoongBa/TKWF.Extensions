@@ -76,7 +76,7 @@ public class BackgroundJobsTests
     public async Task D6_Recorder_Success_CreatesExecutionRow()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
         var context = CreateTestContext(isSuccess: true);
 
         await recorder.OnExecutedAsync(context);
@@ -98,7 +98,7 @@ public class BackgroundJobsTests
     public async Task D6_Recorder_Failed_RecordsErrorText()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
         var context = CreateTestContext(
             isSuccess: false, isCancelled: false,
             error: "System.Exception: Test error\n   at Test.Method()");
@@ -115,7 +115,7 @@ public class BackgroundJobsTests
     public async Task D6_Recorder_Cancelled_SetsIsCancelled()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
         var context = CreateTestContext(
             isSuccess: false, isCancelled: true, error: null);
 
@@ -132,7 +132,7 @@ public class BackgroundJobsTests
     public async Task D6_Recorder_MultipleProviders_Recorded()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j1", provider: "builtin"));
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j2", provider: "hangfire"));
@@ -149,7 +149,7 @@ public class BackgroundJobsTests
     public async Task D6_Recorder_RetryAttempt_Recorded()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 1));
         await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 2));
@@ -168,7 +168,7 @@ public class BackgroundJobsTests
     public async Task D7_ResultRecorder_InContext_CreatesResultRow()
     {
         var (_, _, resultDs) = CreateHost();
-        var recorder = new JobResultRecorder(resultDs, NullLogger<JobResultRecorder>.Instance);
+        var recorder = new JobResultRecorder(new StubDomainUser().With(resultDs), NullLogger<JobResultRecorder>.Instance);
 
         using var ctx = BackgroundJobContext.Enter("result-job-001", "builtin", null);
         var id = await recorder.RecordAsync("success", "{\"count\":42}", "处理完成");
@@ -187,7 +187,7 @@ public class BackgroundJobsTests
     public async Task D7_ResultRecorder_NoContext_ThrowsInvalidOperationException()
     {
         var (_, _, resultDs) = CreateHost();
-        var recorder = new JobResultRecorder(resultDs, NullLogger<JobResultRecorder>.Instance);
+        var recorder = new JobResultRecorder(new StubDomainUser().With(resultDs), NullLogger<JobResultRecorder>.Instance);
 
         // BackgroundJobContext.Current 应为 null（无上下文）
         Assert.Null(BackgroundJobContext.Current);
@@ -199,7 +199,7 @@ public class BackgroundJobsTests
     public async Task D7_ResultRecorder_DefaultResultType()
     {
         var (_, _, resultDs) = CreateHost();
-        var recorder = new JobResultRecorder(resultDs, NullLogger<JobResultRecorder>.Instance);
+        var recorder = new JobResultRecorder(new StubDomainUser().With(resultDs), NullLogger<JobResultRecorder>.Instance);
 
         using var ctx = BackgroundJobContext.Enter("default-type-job", "builtin", null);
         var id = await recorder.RecordAsync("success", "{}");
@@ -217,8 +217,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_Pagination()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         // 插入 5 条记录
         for (int i = 0; i < 5; i++)
@@ -237,8 +237,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByProvider()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j1", provider: "builtin"));
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j2", provider: "hangfire"));
@@ -253,8 +253,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByIsSuccess()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: true));
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: false, error: "fail"));
@@ -269,8 +269,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByJobId()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "job-a"));
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "job-b"));
@@ -285,8 +285,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByJobType()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(jobType: "SyncJob, TestAssembly"));
         await recorder.OnExecutedAsync(CreateTestContext(jobType: "CleanupJob, TestAssembly"));
@@ -300,8 +300,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByTenantId()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "tenant-1-job", tenantId: 1));
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "tenant-2-job", tenantId: 2));
@@ -315,8 +315,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByIsCancelled()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: false, isCancelled: true));
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: true));
@@ -330,8 +330,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_FiltersByTimeRange()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
         var now = DateTime.UtcNow;
 
         // StartedAtUtc = now-1s（CreateTestContext 默认）——落在 [now-2s, now] 窗口内
@@ -352,8 +352,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetListAsync_ListDto_ExcludesErrorText()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: false, error: "secret error detail"));
 
@@ -366,8 +366,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetDetailAsync_IncludesErrorText()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: false, error: "detailed error"));
 
@@ -382,7 +382,7 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetDetailAsync_NullWhenNotFound()
     {
         var (_, execDs, _) = CreateHost();
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         var detail = await queryService.GetDetailAsync(999);
         Assert.Null(detail);
@@ -392,8 +392,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetStatsAsync_SQL_Level_Aggregation()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         // 2 成功 + 1 失败 + 1 取消
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: true));
@@ -414,8 +414,8 @@ public class BackgroundJobsTests
     public async Task D8_QueryService_GetStatsAsync_WithTimeWindow()
     {
         var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(execDs, NullLogger<JobExecutionRecorder>.Instance);
-        var queryService = new JobExecutionQueryService(execDs, NullLogger<JobExecutionQueryService>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var queryService = new JobExecutionQueryService(new StubDomainUser().With(execDs), NullLogger<JobExecutionQueryService>.Instance);
 
         await recorder.OnExecutedAsync(CreateTestContext(isSuccess: true));
 
@@ -433,8 +433,8 @@ public class BackgroundJobsTests
     public async Task D8_ResultQueryService_GetListAsync()
     {
         var (_, _, resultDs) = CreateHost();
-        var recorder = new JobResultRecorder(resultDs, NullLogger<JobResultRecorder>.Instance);
-        var queryService = new JobResultQueryService(resultDs, NullLogger<JobResultQueryService>.Instance);
+        var recorder = new JobResultRecorder(new StubDomainUser().With(resultDs), NullLogger<JobResultRecorder>.Instance);
+        var queryService = new JobResultQueryService(new StubDomainUser().With(resultDs), NullLogger<JobResultQueryService>.Instance);
 
         using (var ctx = BackgroundJobContext.Enter("q-job-1", "builtin", null))
             await recorder.RecordAsync("success", "{\"a\":1}");
@@ -453,8 +453,8 @@ public class BackgroundJobsTests
     public async Task D8_ResultQueryService_GetLatestAsync()
     {
         var (_, _, resultDs) = CreateHost();
-        var recorder = new JobResultRecorder(resultDs, NullLogger<JobResultRecorder>.Instance);
-        var queryService = new JobResultQueryService(resultDs, NullLogger<JobResultQueryService>.Instance);
+        var recorder = new JobResultRecorder(new StubDomainUser().With(resultDs), NullLogger<JobResultRecorder>.Instance);
+        var queryService = new JobResultQueryService(new StubDomainUser().With(resultDs), NullLogger<JobResultQueryService>.Instance);
 
         using (var ctx = BackgroundJobContext.Enter("latest-job", "builtin", null))
         {
@@ -582,7 +582,7 @@ public class BackgroundJobsTests
         // 不 SyncStructure——直接查会报错
         var brokenDs = new JobExecutionEntityDataService(new StubDomainUser(),
             new FreeSqlEntityDAC<JobExecutionEntity>(new UnitOfWorkManager(fsql)));
-        var recorder = new JobExecutionRecorder(brokenDs, NullLogger<JobExecutionRecorder>.Instance);
+        var recorder = new JobExecutionRecorder(new StubDomainUser().With(brokenDs), NullLogger<JobExecutionRecorder>.Instance);
 
         // 不应抛出异常（异常静默 + Warning）
         await recorder.OnExecutedAsync(CreateTestContext()); // should not throw
@@ -634,9 +634,20 @@ internal sealed class NullEntityDac<TEntity> : IEntityDAC<TEntity>
     public Task<int> UpdateWhereAsync<TColumns>(System.Linq.Expressions.Expression<Func<TEntity, bool>> where, System.Linq.Expressions.Expression<Func<TEntity, TColumns>> setColumns, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
-/// <summary>测试用户桩——实现 IDomainUser 最小契约。</summary>
+/// <summary>测试用户桩——实现 IDomainUser 最小契约。
+/// <para>ADR88（v4.10.52）改造适配：Use&lt;T&gt;() 懒加载从服务映射表解析（<see cref="With{T}"/> 注册外部
+/// DataService 实例——测试直接 new 服务的模式保持；无映射抛 NotSupportedException 提示注册）。</para></summary>
 internal sealed class StubDomainUser : IDomainUser
 {
+    private readonly Dictionary<Type, object? > _services = new();
+
+    /// <summary>注册外部服务实例（懒加载 Use&lt;T&gt;() 解析源——测试直接 new DataService 后传给服务）。</summary>
+    public StubDomainUser With<T>(T service) where T : class
+    {
+        _services[typeof(T)] = service;
+        return this;
+    }
+
     public string SessionKey => "test";
     public bool IsAuthenticated => false;
     public bool IsSystemActor => false;
@@ -646,8 +657,17 @@ internal sealed class StubDomainUser : IDomainUser
     public string? UserId => null;
     public string? UserName => null;
     public bool IsInRole(string role) => false;
-    public TDomainService Use<TDomainService>() where TDomainService : IDomainService => throw new NotSupportedException();
-    public TService GetService<TService>() where TService : notnull => throw new NotSupportedException();
+
+    public TDomainService Use<TDomainService>() where TDomainService : IDomainService
+        => _services.TryGetValue(typeof(TDomainService), out var svc) && svc is TDomainService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TDomainService).Name} 未注册——请用 With<T>() 注册（懒加载 Use<T> 解析源）");
+
+    public TService GetService<TService>() where TService : notnull
+        => _services.TryGetValue(typeof(TService), out var svc) && svc is TService s
+            ? s
+            : throw new NotSupportedException($"Stub: {typeof(TService).Name} 未注册——请用 With<T>() 注册（懒加载 GetService<T> 解析源）");
+
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
 }

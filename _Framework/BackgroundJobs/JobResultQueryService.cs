@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BackgroundJobs;
 
@@ -12,12 +13,15 @@ namespace TKWF.Ext.BackgroundJobs;
 /// </summary>
 internal sealed class JobResultQueryService : IJobResultQueryService
 {
-    private readonly JobResultEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private JobResultEntityDataService? _dataService;
     private readonly ILogger<JobResultQueryService> _logger;
 
-    public JobResultQueryService(JobResultEntityDataService dataService, ILogger<JobResultQueryService> logger)
+    private JobResultEntityDataService DataService => _dataService ??= _user.Use<JobResultEntityDataService>();
+
+    public JobResultQueryService(IDomainUser user, ILogger<JobResultQueryService> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -29,11 +33,11 @@ internal sealed class JobResultQueryService : IJobResultQueryService
             var skip = Math.Max(0, input.Skip);
             var take = Math.Clamp(input.Take, 1, 200);
 
-            var total = await _dataService.CountAsync(
+            var total = await DataService.CountAsync(
                 input.JobId, input.ResultType,
                 input.StartFromUtc, input.StartToUtc, ct);
 
-            var entities = await _dataService.GetListAsync(
+            var entities = await DataService.GetListAsync(
                 input.JobId, input.ResultType,
                 input.StartFromUtc, input.StartToUtc,
                 skip, take, ct);
@@ -62,7 +66,7 @@ internal sealed class JobResultQueryService : IJobResultQueryService
     {
         try
         {
-            var entity = await _dataService.GetLatestByJobIdAsync(jobId, ct);
+            var entity = await DataService.GetLatestByJobIdAsync(jobId, ct);
             if (entity == null) return null;
 
             return new JobResultListItemDto

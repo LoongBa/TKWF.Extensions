@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BackgroundJobs;
 
@@ -18,19 +19,21 @@ internal sealed class JobHistoryCleanupService : IJobHistoryCleanupService
 {
     private const int MaxRounds = 100;
 
-    private readonly JobExecutionEntityDataService _executionDataService;
-    private readonly JobResultEntityDataService _resultDataService;
+    private readonly IDomainUser _user;
+    private JobExecutionEntityDataService? _executionDataService;
+    private JobResultEntityDataService? _resultDataService;
     private readonly IOptions<BackgroundJobsPersistenceOptions> _options;
     private readonly ILogger<JobHistoryCleanupService> _logger;
 
+    private JobExecutionEntityDataService ExecutionDataService => _executionDataService ??= _user.Use<JobExecutionEntityDataService>();
+    private JobResultEntityDataService ResultDataService => _resultDataService ??= _user.Use<JobResultEntityDataService>();
+
     public JobHistoryCleanupService(
-        JobExecutionEntityDataService executionDataService,
-        JobResultEntityDataService resultDataService,
+        IDomainUser user,
         IOptions<BackgroundJobsPersistenceOptions> options,
         ILogger<JobHistoryCleanupService> logger)
     {
-        _executionDataService = executionDataService ?? throw new ArgumentNullException(nameof(executionDataService));
-        _resultDataService = resultDataService ?? throw new ArgumentNullException(nameof(resultDataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -42,9 +45,9 @@ internal sealed class JobHistoryCleanupService : IJobHistoryCleanupService
         var batchSize = Math.Max(1, _options.Value.CleanupBatchSize);
 
         var deletedExecutions = await CleanupTableAsync(
-            "JobExecution", cutoffUtc, batchSize, _executionDataService.DeleteExpiredAsync, ct);
+            "JobExecution", cutoffUtc, batchSize, ExecutionDataService.DeleteExpiredAsync, ct);
         var deletedResults = await CleanupTableAsync(
-            "JobResult", cutoffUtc, batchSize, _resultDataService.DeleteExpiredAsync, ct);
+            "JobResult", cutoffUtc, batchSize, ResultDataService.DeleteExpiredAsync, ct);
 
         return new JobHistoryCleanupResult(deletedExecutions, deletedResults);
     }

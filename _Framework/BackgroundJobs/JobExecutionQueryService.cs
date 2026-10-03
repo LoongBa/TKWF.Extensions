@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BackgroundJobs;
 
@@ -12,12 +13,15 @@ namespace TKWF.Ext.BackgroundJobs;
 /// </summary>
 internal sealed class JobExecutionQueryService : IJobExecutionQueryService
 {
-    private readonly JobExecutionEntityDataService _dataService;
+    private readonly IDomainUser _user;
+    private JobExecutionEntityDataService? _dataService;
     private readonly ILogger<JobExecutionQueryService> _logger;
 
-    public JobExecutionQueryService(JobExecutionEntityDataService dataService, ILogger<JobExecutionQueryService> logger)
+    private JobExecutionEntityDataService DataService => _dataService ??= _user.Use<JobExecutionEntityDataService>();
+
+    public JobExecutionQueryService(IDomainUser user, ILogger<JobExecutionQueryService> logger)
     {
-        _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
+        _user = user ?? throw new ArgumentNullException(nameof(user));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -29,12 +33,12 @@ internal sealed class JobExecutionQueryService : IJobExecutionQueryService
             var skip = Math.Max(0, input.Skip);
             var take = Math.Clamp(input.Take, 1, 200);
 
-            var total = await _dataService.CountAsync(
+            var total = await DataService.CountAsync(
                 input.JobId, input.JobType, input.Provider,
                 input.IsSuccess, input.IsCancelled, input.TenantId,
                 input.StartFromUtc, input.StartToUtc, ct);
 
-            var entities = await _dataService.GetListAsync(
+            var entities = await DataService.GetListAsync(
                 input.JobId, input.JobType, input.Provider,
                 input.IsSuccess, input.IsCancelled, input.TenantId,
                 input.StartFromUtc, input.StartToUtc,
@@ -71,7 +75,7 @@ internal sealed class JobExecutionQueryService : IJobExecutionQueryService
     {
         try
         {
-            var entity = await _dataService.GetEntityByIdAsync(id, ct);
+            var entity = await DataService.GetEntityByIdAsync(id, ct);
             if (entity == null) return null;
 
             return new JobExecutionDetailDto
@@ -103,7 +107,7 @@ internal sealed class JobExecutionQueryService : IJobExecutionQueryService
     {
         try
         {
-            return await _dataService.GetStatsAsync(window, ct);
+            return await DataService.GetStatsAsync(window, ct);
         }
         catch (Exception ex)
         {

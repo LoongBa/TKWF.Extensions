@@ -1,8 +1,8 @@
 # TKWF.Ext.DataPort 数据导入导出扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.4（V4.10.53 领域自治根治，ADR90——正确路线） | **框架**: .NET 10
 
-**核心约束**: 三层架构（核心运行库 + MiniExcel Provider + 扩展模块带持久化）、批次切分算法在核心、FileHash 幂等检查（R3）、消费方自管业务数据持久化（R2）、SG1 声明式实体
+**核心约束**: 三层架构（核心运行库 + MiniExcel Provider + 扩展模块带持久化）、批次切分算法在核心、FileHash 幂等检查（R3）、消费方自管业务数据持久化（R2）、SG1 声明式实体、领域服务门面继承 DomainServiceBase（IDomainUser 永不注册 DI）
 
 ---
 
@@ -48,7 +48,19 @@
 public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-白名单声明后自动注册：`IImportService`/`IExportService`（默认核心实现）+ `IImportProvider`/`IExportProvider`（默认 MiniExcel）+ `IDataImportTaskService`（默认批次任务实现）+ `DataPortOptions`（`TKWF:DataPort` 节）。
+白名单声明后自动注册（**V0.1.4 二态形态，V4.10.53 ADR90 领域自治根治**）：
+
+| 接口 | 实现 | 注册形态 | 消费方式 |
+|------|------|---------|---------|
+| `IImportService` / `IExportService` | `ImportService` / `ExportService`（核心运行库框架类型） | **接线型 `TryAddScoped`**（消费方可自定义覆盖） | 普通 DI 注入/`GetRequiredService` |
+| `IImportProvider` / `IExportProvider` | `MiniExcelImportProvider` / `MiniExcelExportProvider`（无状态） | **接线型 `TryAddSingleton`**（消费方可自定义覆盖） | 普通 DI 注入/`GetRequiredService` |
+| `IDataImportTaskService` | `DataImportTaskService`（本扩展，internal sealed 继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IDataImportTaskService>()` |
+
+> **V0.1.4（V4.10.53 ADR90 领域自治根治）**：`IDataImportTaskService` 注册形态由 `TryAddScoped` 改为 **`AddConstructibleService`**——
+> 门面继承 `DomainServiceBase`（经基类 `User` 取上下文——**IDomainUser 永不注册 DI**，D01）+
+> `[DiContractIgnore]` 豁免 DI001（运行时手写注册）；消费方统一经 `User.Use<IDataImportTaskService>()` 解析
+> （AOP 路径：设 CurrentAopUser → GetRequiredService → 守卫工厂）。旧形态构造注入 IDomainUser 生产解析必失败（v0.3.3 同根缺陷）。
+> 核心 Import/Export + Provider 为框架类型（零用户上下文依赖）——**接线型保留**（普通 DI，不继承基类）。
 
 ### 2. 消费方派生适配器 + 导入（R2' 推荐）
 
@@ -136,7 +148,7 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | **`IExportService`** | 导出门面（列表 → 流） | `ExportService`（核心运行库） |
 | **`IImportProvider`** | 读取引擎抽象（流式行，非泛型；只读场景可仅注册） | `MiniExcelImportProvider`（MiniExcel Provider） |
 | **`IExportProvider`** | 写入引擎抽象（IEnumerable 懒求值） | `MiniExcelExportProvider`（MiniExcel Provider） |
-| **`IDataImportTaskService`** | 批次任务：导入执行 + 批次记录落库 + FileHash 幂等 + 状态跟踪 | `DataImportTaskService`（本扩展） |
+| **`IDataImportTaskService`** | 批次任务：导入执行 + 批次记录落库 + FileHash 幂等 + 状态跟踪 | `DataImportTaskService`（本扩展——V0.1.4 继承 `DomainServiceBase` + `[DiContractIgnore]`，`AddConstructibleService` 注册，消费方 `User.Use<IDataImportTaskService>()`） |
 | **`DataImportRecordEntity`** | 导入批次记录实体（批次号/FileHash 唯一/状态/统计/错误摘要/CreatedBy） | SG1 声明式实体 → `DataImportRecord` 表 |
 | **`DataPortOptions`** | 配置（`TKWF:DataPort` 节） | 内置 |
 | **`DataPortExtensionInitializer<TUserInfo>`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + 三钩子 DI 接线） | 本扩展 |
@@ -167,6 +179,12 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
+### V0.1.4（V4.10.53 领域自治根治，ADR90——正确路线）
+- `IDataImportTaskService`（`: IDomainService`）门面化：实现继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ `[DiContractIgnore]` 豁免 DI001；注册由 `TryAddScoped` 改 **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory）；消费方经 `User.Use<IDataImportTaskService>()` 解析
+- 核心运行库 `ImportService`/`ExportService` + MiniExcel Provider **接线型保留**（框架类型 ctor 零用户上下文——普通 TryAddScoped/TryAddSingleton 不变，不继承基类）
+- 测试宿主重写走**生产路径**：真实 DI（Initializer ConfigureServices + FreeSql 基础设施 + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<IDataImportTaskService>()` AOP + Initializer 注册形态断言（守卫工厂/throw-factory/域外抛）；弃 StubDomainUser + 手写 DataService 直构
+- slnx/CPM 接线 + 全量回归
+
 ### V0.1.0（当前）
 - 三层架构落地：核心运行库（批次切分算法在核心）+ MiniExcel Provider + 扩展模块（SG1 实体 + 批次任务 + Initializer）
 - `IDataImportTaskService`：FileHash 幂等检查 + 批次记录落库 + Processing→Succeeded/Failed/PartiallySucceeded 状态跟踪
@@ -183,4 +201,4 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 - `.xls`/`.xlsb` 旧格式读取（体现 ExcelTools 桥接评估）
 - Excel 模板渲染/样式/公式（与 `TKWF.Ext.Reporting` 边界对齐）
 
-**文档信息**: V0.1.0 | 2026-09-06 | 关联：ADR-DataPort-读写引擎选型与分层架构.md（主框架私有）、v0.1.0-DataPort-数据导入导出-开发方案.md（主框架私有）
+**文档信息**: V0.1.0 | 2026-09-06 | 关联：ADR-DataPort-读写引擎选型与分层架构.md（主框架私有）、v0.1.0-DataPort-数据导入导出-开发方案.md（主框架私有）；**V0.1.4 整改注记**（2026-10-04）：领域自治根治（ADR90——正确路线）——门面 AddConstructibleService + 接线型保留框架服务，详见 §三 自动注册表与 §六 V0.1.4

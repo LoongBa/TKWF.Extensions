@@ -10,6 +10,9 @@ namespace TKWF.Ext.DataPort.Tests;
 /// <para>注意：IImportService/IExportService/IImportProvider/IExportProvider 经 Factory 注册
 /// （sp.GetRequiredService&lt;具体实现&gt;）——经 Descriptor 验证 ServiceType + Lifetime；
 /// 具体实现类（ImportService/MiniExcelImportProvider）仍保留 ImplementationType 可断言。</para>
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）：<see cref="IDataImportTaskService"/> 注册形态由
+/// TryAddScoped（ImplementationType）改为 <b>AddConstructibleService</b>——接口 = 可构造守卫工厂 + 实现类 = throw-factory；
+/// 域作用域外直接 DI 解析接口必抛领域架构守卫（DI004 运行期兜底）。</para>
 /// </summary>
 public class DataPortExtensionInitializerTests
 {
@@ -70,15 +73,45 @@ public class DataPortExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_RegistersDataImportTaskService()
+    public void ConfigureServices_RegistersDataImportTaskService_GuardFactory()
     {
         var services = new ServiceCollection();
         new DataPortExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
+        // V4.10.53：AddConstructibleService——接口注册为可构造守卫工厂（非实现映射），Scoped 生命周期
         var descriptor = services.First(d => d.ServiceType == typeof(IDataImportTaskService));
 
-        Assert.Equal(typeof(DataImportTaskService), descriptor.ImplementationType);
+        Assert.Null(descriptor.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_RegistersDataImportTaskService_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new DataPortExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IDataImportTaskService>() 创建
+        var descriptor = services.First(d => d.ServiceType == typeof(DataImportTaskService));
+        Assert.NotNull(descriptor.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<DataImportTaskService>());
+    }
+
+    [Fact]
+    public void DataImportTaskService_OutsideUseScope_Throws()
+    {
+        // AddConstructibleService 的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new DataPortExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IDataImportTaskService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IDataImportTaskService", ex.Message);
     }
 
     [Fact]

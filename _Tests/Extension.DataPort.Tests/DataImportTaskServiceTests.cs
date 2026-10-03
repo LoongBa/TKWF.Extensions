@@ -2,8 +2,6 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using FreeSql;
-using Microsoft.Extensions.Options;
 using miniExcel = MiniExcelLibs;
 using TKW.Framework.Utility.DataPort;
 using TKW.Framework.Utility.DataPort.Providers.MiniExcel;
@@ -13,23 +11,13 @@ namespace TKWF.Ext.DataPort.Tests;
 /// <summary>
 /// DataImportTaskService 测试——使用 SQLite 内存库 + MiniExcel 真实读写引擎验证
 /// 批次记录落库（Processing→Succeeded/Failed/PartiallySucceeded）+ FileHash 幂等 + 按 BatchNo 查询。
-/// <para>内部类型经 <c>InternalsVisibleTo</c> 直接实例化（对齐 PrintTemplates 存储测试模式）。</para>
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）宿主改走<b>生产路径</b>（对齐 Settings/FileManagement）：
+/// 真实 DI（Initializer ConfigureServices + FreeSql 基础设施 + AddLogging）+ <c>DomainUser&lt;TestUserInfo&gt;.BindScope</c>
+/// → 门面经 <c>User.Use&lt;IDataImportTaskService&gt;()</c> AOP 路径解析（AddConstructibleService 守卫工厂）。
+/// 原 StubDomainUser + 手写 DataService 直构已删除——IDomainUser 永不注册 DI 语义在生产路径下自然保持。</para>
 /// </summary>
 public class DataImportTaskServiceTests
 {
-    /// <summary>创建使用 SQLite 内存库的 IFreeSql 实例（每次调用新连接 = 独立内存库）。</summary>
-    private static IFreeSql CreateInMemoryFreeSql()
-    {
-        return new FreeSqlBuilder()
-            .UseConnectionString(DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(true)
-            .Build();
-    }
-
-    /// <summary>同步 DataImportRecord 表（含 FileHash/BatchNo 唯一索引）。</summary>
-    private static void SyncStructure(IFreeSql fsql)
-        => fsql.CodeFirst.SyncStructure<DataImportRecordEntity>();
-
     /// <summary>创建含 3 行数据（A/B/C，金额均 &gt; 0）的临时 xlsx 文件。</summary>
     private static async Task<string> CreateTempDataFileAsync()
     {
@@ -45,23 +33,15 @@ public class DataImportTaskServiceTests
         return path;
     }
 
-    private static DataImportTaskService CreateTaskService(IFreeSql fsql)
-    {
-        var importService = new ImportService(new MiniExcelImportProvider());
-        return new DataImportTaskService(importService, new StubDomainUser().With(DataPortTestHost.CreateDataService(fsql)), Options.Create(new DataPortOptions()));
-    }
-
     [Fact]
     public async Task ImportAsync_NewFile_CreatesRecordWithSucceededStatus()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var service = CreateTaskService(fsql);
+        using var host = DataPortTestHost.Create();
         var filePath = await CreateTempDataFileAsync();
 
         try
         {
-            var result = await service.ImportAsync(filePath, new TestImportAdapter());
+            var result = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
 
             Assert.True(result.RecordId > 0);
             Assert.False(string.IsNullOrWhiteSpace(result.BatchNo));
@@ -69,7 +49,7 @@ public class DataImportTaskServiceTests
             Assert.Empty(result.ImportResult.Failures);
             Assert.Empty(result.ImportResult.BatchFailures);
 
-            var record = await service.GetRecordByBatchNoAsync(result.BatchNo, CancellationToken.None);
+            var record = await host.TaskService.GetRecordByBatchNoAsync(result.BatchNo, CancellationToken.None);
 
             Assert.NotNull(record);
             Assert.Equal(result.BatchNo, record!.BatchNo);
@@ -89,15 +69,13 @@ public class DataImportTaskServiceTests
     [Fact]
     public async Task ImportAsync_SameFileSecondTime_ReturnsExistingBatch()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var service = CreateTaskService(fsql);
+        using var host = DataPortTestHost.Create();
         var filePath = await CreateTempDataFileAsync();
 
         try
         {
-            var first = await service.ImportAsync(filePath, new TestImportAdapter());
-            var second = await service.ImportAsync(filePath, new TestImportAdapter());
+            var first = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
+            var second = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
 
             // 幂等：同一文件（FileHash 相同）二次导入 → 拒绝/返回已有批次
             Assert.Equal(first.BatchNo, second.BatchNo);
@@ -105,7 +83,7 @@ public class DataImportTaskServiceTests
             Assert.Same(ImportResult.Empty, second.ImportResult);
 
             // 数据库仅一条批次记录（幂等：二次导入命中同一批次，无新增行）
-            var record = await service.GetRecordByBatchNoAsync(first.BatchNo, CancellationToken.None);
+            var record = await host.TaskService.GetRecordByBatchNoAsync(first.BatchNo, CancellationToken.None);
             Assert.NotNull(record);
             Assert.Equal(first.RecordId, record!.Id);
         }
@@ -118,9 +96,7 @@ public class DataImportTaskServiceTests
     [Fact]
     public async Task ImportAsync_FailedBatch_MarksPartiallySucceeded()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var service = CreateTaskService(fsql);
+        using var host = DataPortTestHost.Create();
         var filePath = await CreateTempDataFileAsync();
 
         try
@@ -129,12 +105,12 @@ public class DataImportTaskServiceTests
             var adapter = new ThrowingBatchAdapter();
             var batchOptions = new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false);
 
-            var result = await service.ImportAsync(filePath, adapter, batchOptions);
+            var result = await host.TaskService.ImportAsync(filePath, adapter, batchOptions);
 
             Assert.NotEmpty(result.ImportResult.BatchFailures);
             Assert.Equal(2, adapter.BatchCount);
 
-            var record = await service.GetRecordByBatchNoAsync(result.BatchNo, CancellationToken.None);
+            var record = await host.TaskService.GetRecordByBatchNoAsync(result.BatchNo, CancellationToken.None);
 
             Assert.NotNull(record);
             Assert.Equal("PartiallySucceeded", record!.Status);
@@ -152,22 +128,18 @@ public class DataImportTaskServiceTests
     [Fact]
     public async Task ImportAsync_ProviderThrows_MarksFailed()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
+        using var host = DataPortTestHost.Create(
+            configure: services => services.AddScoped<IImportService>(_ => new ImportService(new ThrowOnReadProvider())));
         var filePath = await CreateTempDataFileAsync();
 
         try
         {
             // Provider 读取抛异常（记录已落库 Processing）→ 核心 ImportAsync 抛异常 → 记录更新为 Failed
-            var importService = new ImportService(new ThrowOnReadProvider());
-            var service = new DataImportTaskService(importService, new StubDomainUser().With(DataPortTestHost.CreateDataService(fsql)), Options.Create(new DataPortOptions()));
-
             await Assert.ThrowsAsync<DataImportException>(
-                () => service.ImportAsync(filePath, new TestImportAdapter()));
+                () => host.TaskService.ImportAsync(filePath, new TestImportAdapter()));
 
             // 导入抛异常 → 无 BatchNo 可用；经 DataService 枚举回查（红线：断言不经裸 fsql.Select）
-            var dataService = DataPortTestHost.CreateDataService(fsql);
-            var records = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
+            var records = await host.DataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
             var record = Assert.Single(records);
 
             Assert.NotNull(record);
@@ -184,25 +156,23 @@ public class DataImportTaskServiceTests
     [Fact]
     public async Task ImportAsync_PreviouslyFailedBatch_ReimportsSuccessfully()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var service = CreateTaskService(fsql);
+        using var host = DataPortTestHost.Create();
         var filePath = await CreateTempDataFileAsync();
 
         try
         {
             // First import: ThrowingBatchAdapter causes PartiallySucceeded
-            var firstResult = await service.ImportAsync(filePath, new ThrowingBatchAdapter(),
+            var firstResult = await host.TaskService.ImportAsync(filePath, new ThrowingBatchAdapter(),
                 new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false));
-            var firstRecord = await service.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
+            var firstRecord = await host.TaskService.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
             Assert.Equal("PartiallySucceeded", firstRecord!.Status);
 
             // Second import of same file: should reset and re-run with TestImportAdapter
-            var secondResult = await service.ImportAsync(filePath, new TestImportAdapter());
+            var secondResult = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
             Assert.Equal(firstResult.RecordId, secondResult.RecordId); // Same record
             Assert.Equal(firstResult.BatchNo, secondResult.BatchNo);
 
-            var record = await service.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
+            var record = await host.TaskService.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
             Assert.Equal("Succeeded", record!.Status);
             Assert.Equal(3, record.SuccessCount);
         }
@@ -215,11 +185,9 @@ public class DataImportTaskServiceTests
     [Fact]
     public async Task GetRecordByBatchNoAsync_NotExists_ReturnsNull()
     {
-        using var fsql = CreateInMemoryFreeSql();
-        SyncStructure(fsql);
-        var service = CreateTaskService(fsql);
+        using var host = DataPortTestHost.Create();
 
-        var result = await service.GetRecordByBatchNoAsync("no-such-batch");
+        var result = await host.TaskService.GetRecordByBatchNoAsync("no-such-batch");
 
         Assert.Null(result);
     }

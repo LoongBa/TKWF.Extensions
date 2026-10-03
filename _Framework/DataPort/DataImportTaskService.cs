@@ -5,8 +5,10 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
-using TKW.Framework.Utility.DataPort;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.DataPort;
 
 namespace TKWF.Ext.DataPort
 {
@@ -15,23 +17,29 @@ namespace TKWF.Ext.DataPort
     /// <para>消费方自管业务数据持久化（adapter.OnBatchWrite 钩子）；本服务仅记录批次元数据。</para>
     /// <para>数据访问红线整改（2026-09-07）：经 <see cref="DataImportRecordEntityDataService"/>（SG1 DataService）
     /// 委托持久化——不直接注入 IFreeSql；原 3 处 raw SQL（重置/更新状态/标记失败）改为 DataService 业务方法。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（<b>IDomainUser 永不注册 DI</b>，D01；旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——
+    /// v0.3.3 同根缺陷）；<c>[DiContractIgnore]</c> 豁免 DI001（AddConstructibleService 运行时手写注册）；
+    /// 注册形态改 <c>AddConstructibleService&lt;IDataImportTaskService, DataImportTaskService&gt;</c>
+    /// （接口可构造守卫工厂 + 实现类 throw-factory，消费方经 <c>User.Use&lt;IDataImportTaskService&gt;()</c> 解析）。
+    /// ctor 保留 <see cref="IImportService"/>（框架核心运行库接线型，守卫工厂 ActivatorUtilities 从 DI 解析）。</para>
     /// </summary>
-    internal sealed class DataImportTaskService : IDataImportTaskService
+    [DiContractIgnore]
+    internal sealed class DataImportTaskService : DomainServiceBase, IDataImportTaskService
     {
         private readonly IImportService _importService;
-        private readonly IDomainUser _user;
         private DataImportRecordEntityDataService? _dataService;
         private readonly DataPortOptions _options;
 
-        private DataImportRecordEntityDataService DataService => _dataService ??= _user.Use<DataImportRecordEntityDataService>();
+        private DataImportRecordEntityDataService DataService => _dataService ??= User.Use<DataImportRecordEntityDataService>();
 
         public DataImportTaskService(
-            IImportService importService,
             IDomainUser user,
+            IImportService importService,
             IOptions<DataPortOptions> options)
+            : base(user)
         {
             _importService = importService ?? throw new ArgumentNullException(nameof(importService));
-            _user = user ?? throw new ArgumentNullException(nameof(user));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         }
 

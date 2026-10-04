@@ -20,11 +20,10 @@ namespace TKWF.Ext.Notifications.Tests;
 /// → <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> → 门面经 <c>user.Use&lt;接口&gt;()</c> AOP 路径解析
 /// （设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 → ActivatorUtilities 直建）；
 /// DataService 经基类 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 直建（IEntityDAC 从 DI 解析）。</para>
-/// <para>⚠️ 边界保留组（本批不改，对齐 MFA IMfaMethod 处理）：<see cref="InboxNotifier"/> 仍构造注入 IDomainUser
-/// （多实现集合 TryAddEnumerable——普通 DI 解析 ctor(IDomainUser) 时 IDomainUser 永不注册 → 生产解析失败，框架缺口候选 T3）；
-/// 测试宿主为其注册可配置 <see cref="StubDomainUser"/>（IDomainUser 单例——门面经守卫工厂走真实 DomainUser，
-/// 桩仅供未整改的 InboxNotifier / V0.5.0 <see cref="UserNotificationViewQueryService"/> 测试经 DI 解析）。
-/// 其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价（<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>）。</para>
+/// <para>✅ 边界集合已收编（V4.10.55 ADR92）：<see cref="InboxNotifier"/> 改 <c>TryAddEnumerableConstructible</c> + 继承
+/// DomainServiceBase（集合版守卫工厂——帧内 CurrentAopUser 供给 ctor IDomainUser，帧外枚举抛守卫；EmailNotifier 保持接线型）；
+/// 测试宿主保留 <see cref="StubDomainUser"/> 桩（IDomainUser 单例——供 <see cref="UserNotificationViewQueryService"/>
+/// 等接线型经 DI 解析；门面经守卫工厂走真实 DomainUser，其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价）。</para>
 /// </summary>
 internal sealed class NotificationTestHost : IDisposable
 {
@@ -108,8 +107,8 @@ INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
         services.AddSingleton<ITransactionManager, NoopTransactionManager>();
         services.AddSingleton<INotificationDefinitionProvider, TestNotificationDefinitions>();
 
-        // ⚠️ 边界保留组（本批不改）：InboxNotifier 仍 ctor 注入 IDomainUser——多实现集合普通 DI 解析需此桩
-        //（门面经守卫工厂走真实 DomainUser，此桩仅供未整改的 InboxNotifier / QueryService 测试经 DI 解析——T3 候选记录）
+        // ✅ V4.10.55 ADR92 收编：InboxNotifier 改 TryAddEnumerableConstructible + 继承 DomainServiceBase（帧内守卫供给）——
+        // 桩不再被 InboxNotifier 解析（守卫工厂经 CurrentAopUser 直供），仍供 QueryService 等接线型经 DI 解析（V0.5.0 遗留）
         var stubUser = new StubDomainUser();
         services.AddSingleton<IDomainUser>(sp => { stubUser.ServiceProvider = sp; return stubUser; });
 

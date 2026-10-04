@@ -25,11 +25,10 @@ namespace TKWF.Ext.Notifications.SignalR.Tests;
 /// AddConstructibleService 守卫工厂 → ActivatorUtilities 直建）；DataService 经基类
 /// <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 直建（IEntityDAC 从 DI 解析，零手动注册——删除旧
 /// <c>AddTestConstructibleDataService</c> 兜底工厂）。</para>
-/// <para>⚠️ 边界保留组（对齐主包宿主，本批不改）：<see cref="InboxNotifier"/> 仍构造注入 <see cref="IDomainUser"/>
-/// （多实现集合 TryAddEnumerable——普通 DI 解析 ctor(IDomainUser) 时 IDomainUser 永不注册 → 生产解析失败，
-/// 框架缺口候选 T3，见批次 3 整改日志）；测试宿主为其注册可配置 <see cref="StubDomainUser"/>
-/// （IDomainUser 单例——门面经守卫工厂走真实 <see cref="DomainUser{TUserInfo}"/>，桩仅供未整改的
-/// InboxNotifier 经 DI 解析；其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现）。</para>
+/// <para>✅ 边界集合已收编（V4.10.55 ADR92，对齐主包宿主）：<see cref="InboxNotifier"/> 改 <c>TryAddEnumerableConstructible</c>
+/// + 继承 DomainServiceBase（集合版守卫工厂——帧内 CurrentAopUser 供给 ctor IDomainUser，帧外枚举抛守卫）；
+/// 测试宿主保留 <see cref="StubDomainUser"/> 桩（IDomainUser 单例——仅供接线型经 DI 解析；门面经守卫工厂走真实
+/// <see cref="DomainUser{TUserInfo}"/>，其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现）。</para>
 /// </summary>
 internal sealed class SignalRTestHost : IDisposable
 {
@@ -103,8 +102,8 @@ internal sealed class SignalRTestHost : IDisposable
         services.AddSingleton<INotificationDefinitionProvider, SignalRTestDefinitions>();
         services.AddSingleton<IHubContext<NotificationsHub>>(hub);
 
-        // ⚠️ 边界保留组（对齐主包宿主，本批不改）：InboxNotifier 仍 ctor 注入 IDomainUser——多实现集合普通 DI
-        // 解析需此桩（门面经守卫工厂走真实 DomainUser，此桩仅供未整改的 InboxNotifier 经 DI 解析——T3 候选记录）
+        // ✅ V4.10.55 ADR92 收编：InboxNotifier 改 TryAddEnumerableConstructible + 继承 DomainServiceBase（帧内守卫供给）——
+        // 桩不再被 InboxNotifier 解析（守卫工厂经 CurrentAopUser 直供），仍供接线型经 DI 解析（V0.5.0 QueryService 遗留）
         var stubUser = new StubDomainUser();
         services.AddSingleton<IDomainUser>(sp => { stubUser.ServiceProvider = sp; return stubUser; });
 

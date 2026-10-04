@@ -551,7 +551,9 @@ public class BackgroundJobsTests
     [Fact]
     public void D9_ConfigureServices_Registers_Listener_TryAddEnumerable()
     {
-        // 边界保留组：IBackgroundJobExecutionListener（主框架契约非 IDomainService）——TryAddEnumerable 多实现集合
+        // ✅ V4.10.55 ADR92 特例收编：IBackgroundJobExecutionListener（主框架契约非 IDomainService——
+        // TryAddEnumerableConstructible 约束不满足）→ JobExecutionRecorder<TUserInfo> 泛型化 + ctor 移除 IDomainUser
+        //（改 IDomainUserAccessor<TUserInfo> 接线型，DataService 经 SystemUser NoAop 直建）——注册仍 TryAddEnumerable
         var services = CreateServicesBatch();
         var init = new BackgroundJobsExtensionInitializer<TestUserInfo>();
         init.ConfigureServices(services);

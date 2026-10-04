@@ -259,7 +259,7 @@ services.TryAddScoped<IMetricResultStore, SalesMetricResultStore>();
 ### 远期 / 评估
 - 性能/并发冒烟：大数据集（10 万+ 行）× 多定义性能基线（构建期访问器缓存已设计，无基准数字）
 - 消费方 Options 绑定真实验证：`[Options("TKWF:Metrics")]` SG 自动绑定在消费方 IConfiguration 生效（当前测试仅覆盖 AddOptions 默认值）
-- 定时触发重算：DMP-Lite 每日指标重算可用 `IAdvancedBackgroundJobManager` 包装（框架组周期调度能力补齐后——`EnqueueRecurringAsync`/`RemoveRecurringAsync`，见 `docs/03_扩展模块/转达/转达-扩展测试宿主生产路径模拟成本与定时任务编排缺口-请框架组评估.md` §6.2；扩展启动时注册周期作业一次调用，重算业务逻辑零改动）
+- 定时触发重算：DMP-Lite 每日指标重算可用 `IRecurringBackgroundJobManager` 包装（**v4.10.54 ADR91 已补齐**——`EnqueueRecurringAsync`/`RemoveRecurringAsync`，Quartz/Hangfire Provider 实现、Default 不实现；cron Unix 5-field；见 `docs/03_扩展模块/转达/转达-扩展测试宿主生产路径模拟成本与定时任务编排缺口-请框架组评估.md（已闭环-两议题v4.10.54兑现）.md` §6.2；扩展启动时注册周期作业一次调用，重算业务逻辑零改动——消费方启动期经 `IRecurringBackgroundJobManager.EnqueueRecurringAsync<TJob>(cron, args)` 注册每日重算 + `CleanupExpiredAsync` 同型作业）
 
 ---
 

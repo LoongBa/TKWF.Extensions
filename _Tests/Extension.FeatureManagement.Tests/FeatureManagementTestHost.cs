@@ -46,9 +46,10 @@ internal static class FeatureManagementTestSupport
 /// <item><b>DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 路径直建</b>（ActivatorUtilities + IEntityDAC 从 DI 解析，红线合规）；</item>
 /// <item><b>接线型 <see cref="IFeatureChecker"/> 普通 DI 解析</b>（GetRequiredService——框架 FeatureFilterAttribute 同路径；
 ///     ctor(IServiceProvider, ILogger)，内部 C1 延迟解析 IFeatureManager——测试经 ambient 桩设 CurrentAopUser 通过守卫工厂）；</item>
-/// <item><b>IDomainUser 注册保留（T3 桥接）</b>：内置四 Provider（User/Role/Tenant/Global，边界保留组）ctor(IDomainUser)——
-///     多实现集合经普通 DI GetServices 构造需 IDomainUser 可解析（框架机制缺口 T3 转达候选，本批保留）——测试注册
-///     <see cref="TestDomainUser"/> 桩（生产永不注册 IDomainUser——D01）；</item>
+/// <item><b>IDomainUser 桩注册（V4.10.55 ADR92 已收编）</b>：内置四 Provider（User/Role/Tenant/Global）v4.10.53 曾为
+///     边界保留组（T3 多实现集合供给缺口）；V4.10.55 已改 <c>TryAddEnumerableConstructible</c> + 继承 DomainServiceBase——
+///     守卫工厂直接从 CurrentAopUser 供给 ctor 的 IDomainUser（不再解析 DI 注册），DI 桩注册不再被触发解析；
+///     桩仍保留：显式 user 参数（匿名/认证切换）+ ambient 守卫（DomainUserContext.CurrentAopUser 非空）；</item>
 /// <item><b>Stub 桩 <c>Use&lt;T&gt;()</c> 按生产等价</b>：接口 → 设 CurrentAopUser 后 GetRequiredService（AOP 等价）；
 ///     具体类 → ActivatorUtilities 直建（NoAop 等价）。</item>
 /// </list>

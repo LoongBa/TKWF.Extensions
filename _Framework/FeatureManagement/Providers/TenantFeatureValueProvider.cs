@@ -1,20 +1,23 @@
-using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>Tenant 层 Provider（仅 TenantId.HasValue 时调用——providerKey=TenantId 字符串）。</summary>
-internal sealed class TenantFeatureValueProvider : IFeatureValueProvider
+[DiContractIgnore]
+internal sealed class TenantFeatureValueProvider : DomainServiceBase, IFeatureValueProvider
 {
-    private readonly IDomainUser _user;
     private IFeatureValueStore? _store;
 
-    // ADR88/DI004：IFeatureValueStore 懒加载经 IDomainUser.Use<IDomainService>()
-    private IFeatureValueStore Store => _store ??= _user.Use<IFeatureValueStore>();
+    // ADR92/DI004：IFeatureValueStore 懒加载经基类 User.Use（TryAddEnumerableConstructible 帧内供给）
+    private IFeatureValueStore Store => _store ??= User.Use<IFeatureValueStore>();
 
-    public TenantFeatureValueProvider(IDomainUser user) => _user = user ?? throw new ArgumentNullException(nameof(user));
+    public TenantFeatureValueProvider(IDomainUser user) : base(user)
+    {
+    }
 
     public string Name => FeatureProviders.Tenant;
 

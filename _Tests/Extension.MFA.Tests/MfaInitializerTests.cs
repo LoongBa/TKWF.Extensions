@@ -74,33 +74,34 @@ public class MfaInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_Registers_TwoMfaMethods_TryAddEnumerable()
+    public void ConfigureServices_Registers_TwoMfaMethods_TryAddEnumerableConstructible()
     {
         var services = new ServiceCollection();
         new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
 
-        // 双 IMfaMethod 实现（TryAddEnumerable——同 ServiceType 多实现并存，Oracle C5）
+        // 双 IMfaMethod 实现（V4.10.55 ADR92：TryAddEnumerableConstructible——集合版守卫工厂，
+        // 工厂委托形态：ImplementationType=null + ImplementationFactory 非空；Oracle C5 防 SMS 静默丢失）
         var descriptors = services.Where(d => d.ServiceType == typeof(IMfaMethod)).ToList();
 
         Assert.Equal(2, descriptors.Count);
-        Assert.Contains(descriptors, d => d.ImplementationType == typeof(TotpMfaMethod));
-        Assert.Contains(descriptors, d => d.ImplementationType == typeof(SmsMfaMethod));
+        Assert.All(descriptors, d => Assert.Null(d.ImplementationType));
+        Assert.All(descriptors, d => Assert.NotNull(d.ImplementationFactory));
         Assert.All(descriptors, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
     }
 
     [Fact]
-    public void ConfigureServices_TryAddEnumerable_DoesNotOverrideConsumerMethod()
+    public void ConfigureServices_TryAddEnumerableConstructible_DoesNotOverrideConsumerMethod()
     {
         var services = new ServiceCollection();
         services.AddScoped<IMfaMethod>(_ => throw new NotSupportedException("consumer marker"));
         new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
 
-        // TryAddEnumerable 不覆盖不同实现——消费方自定义方法 + 内置双方法共存
+        // TryAddEnumerableConstructible 不覆盖不同实现——消费方自定义方法 + 内置双方法共存
+        // （实现类 throw-factory + 集合守卫工厂均以工厂委托形态；消费方 marker 亦工厂委托）
         var descriptors = services.Where(d => d.ServiceType == typeof(IMfaMethod)).ToList();
 
         Assert.Equal(3, descriptors.Count);
-        Assert.Contains(descriptors, d => d.ImplementationType == typeof(TotpMfaMethod));
-        Assert.Contains(descriptors, d => d.ImplementationType == typeof(SmsMfaMethod));
+        Assert.All(descriptors, d => Assert.NotNull(d.ImplementationFactory));
     }
 
     [Fact]
@@ -123,13 +124,13 @@ public class MfaInitializerTests
     {
         using var host = MfaTestHost.Create();
 
-        // IMfaService 可经生产 AOP 路径解析（守卫工厂——CurrentAopUser = 真实 DomainUser）
+        // IMfaService 可经生产 AOP 路径解析（守卫工厂——CurrentAopUser = 真实 DomainUser）；
+        // MfaService ctor 注入 IEnumerable<IMfaMethod> 在 Use 帧内枚举（TryAddEnumerableConstructible 守卫工厂供给）
         Assert.NotNull(host.Mfa);
 
-        // IEnumerable<IMfaMethod> 恰 2 实现（TryAddEnumerable——C5 防 SMS 静默丢失）；注册序 totp → sms
-        var methods = host.GetRequiredService<System.Collections.Generic.IEnumerable<IMfaMethod>>().ToList();
-        Assert.Equal(2, methods.Count);
-        Assert.Equal(new[] { "totp", "sms" }, methods.Select(m => m.Method).ToArray());
+        // 集合在 MfaService 构造时已帧内枚举——经 GetEnabledMethodsAsync 验证 2 方法注册序（C5 防 SMS 静默丢失）
+        var enabledMethods = host.Mfa.GetEnabledMethodsAsync("probe-user").GetAwaiter().GetResult();
+        Assert.Equal(new[] { "totp", "sms" }, enabledMethods.Select(m => m.Method).ToArray());
 
         // Options 默认值（方案 §四决策 7 全表）
         var options = host.GetRequiredService<IOptions<MfaOptions>>().Value;

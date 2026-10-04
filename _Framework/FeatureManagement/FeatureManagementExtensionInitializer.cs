@@ -29,11 +29,14 @@ namespace TKWF.Ext.FeatureManagement;
 /// <item><b>接线型（TryAddScoped 普通 DI）</b>——<see cref="IFeatureChecker"/>（主框架 Core 契约，非 IDomainService
 ///     不可修改）：框架 <c>FeatureFilterAttribute</c> 经 <c>context.ServiceProvider.GetService&lt;IFeatureChecker&gt;()</c>
 ///     普通 DI 解析（L41）；实现 ctor(<see cref="IServiceProvider"/>, ILogger) + C1 延迟解析 <see cref="IFeatureManager"/>。</item>
-/// <item><b>多 Provider（TryAddEnumerable）</b>——<see cref="IFeatureValueProvider"/> 内置四层（User/Role/Tenant/Global）：
+/// <item><b>多 Provider（TryAddEnumerableConstructible）</b>——<see cref="IFeatureValueProvider"/> 内置四层（User/Role/Tenant/Global）：
 ///     多实现集合（按实现类型去重），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase，内部
-///     Use&lt;T&gt; 经基类 User。<b>⚠️ 框架机制边界（T3 转达候选）</b>：多实现集合中 DomainServiceBase 派生实现
-///     （ctor 需 IDomainUser）经普通 DI GetServices 构造时 IDomainUser 永不注册 → 生产解析失败（FeatureManager
-///     构造注入 IEnumerable&lt;IFeatureValueProvider&gt; 触发）——本批保留 + 记录（对齐 Authentication Provider 处理）。</item>
+///     Use&lt;T&gt; 经基类 User。<b>✅ 已迁移（V4.10.55 ADR92）</b>：集合版守卫工厂
+///     <c>TryAddEnumerableConstructible&lt;IFeatureValueProvider, TImpl&gt;()</c>——集合元素以守卫工厂形态注册，
+///     帧内（<c>User.Use&lt;T&gt;()</c> 调用链）经 CurrentAopUser 注入构造（ctor <see cref="IDomainUser"/> 由守卫
+///     工厂供给）；实现类注册 throw-factory；帧外枚举抛 InvalidOperationException（禁止形态）。原 TryAddEnumerable
+///     集合按实现类 ctor 激活、IDomainUser 永不注册 DI → 生产解析失败的框架机制缺口（T3 转达候选）已由框架侧
+///     ADR92 收编。</item>
 /// </list>
 /// <para>贡献者收集（对齐 PermissionExtensionInitializer 链路）：<c>ProjectMetaContextBase.Instance.FeatureContributors</c>
 /// （主框架 V4.9.114 SG1 收集）→ Activator.CreateInstance → Define(context) → repository.AddRange。</para>
@@ -90,12 +93,13 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         services.AddConstructibleService<IFeatureValueStore, FeatureValueStore>();
         services.AddConstructibleService<IFeatureManager, FeatureManager>();
 
-        // v0.2.0 Provider 扩展点——内置四层（TryAddEnumerable：多实现遍历，C2 评审修正——TryAddScoped 只注册第一个）
-        // V4.10.53：边界保留（多实现集合无法经 AddConstructibleService 供给 user——框架机制缺口，T3 转达候选）
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, UserFeatureValueProvider>());
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, RoleFeatureValueProvider>());
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, TenantFeatureValueProvider>());
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IFeatureValueProvider, GlobalFeatureValueProvider>());
+        // v0.2.0 Provider 扩展点——内置四层（V4.10.55 ADR92：TryAddEnumerableConstructible 集合版守卫工厂——
+        // 多实现集合，帧内 User.Use<T>() 调用链经 CurrentAopUser 注入构造（ctor IDomainUser 由守卫工厂供给），
+        // 解决原 TryAddEnumerable 集合按实现类 ctor 激活、IDomainUser 永不注册 DI → 生产解析失败的机制缺口）
+        services.TryAddEnumerableConstructible<IFeatureValueProvider, UserFeatureValueProvider>();
+        services.TryAddEnumerableConstructible<IFeatureValueProvider, RoleFeatureValueProvider>();
+        services.TryAddEnumerableConstructible<IFeatureValueProvider, TenantFeatureValueProvider>();
+        services.TryAddEnumerableConstructible<IFeatureValueProvider, GlobalFeatureValueProvider>();
 
         // V4.10.53（接线型）：IFeatureChecker 主框架契约（非 IDomainService）——保持 TryAddScoped 普通 DI
         //（框架 FeatureFilterAttribute 经 context.ServiceProvider.GetService<IFeatureChecker>() 解析；ctor IServiceProvider + C1 延迟解析 Manager）

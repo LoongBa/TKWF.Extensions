@@ -1,21 +1,23 @@
-using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>User 层 Provider（最优先——providerKey=UserId）。</summary>
-internal sealed class UserFeatureValueProvider : IFeatureValueProvider
+[DiContractIgnore]
+internal sealed class UserFeatureValueProvider : DomainServiceBase, IFeatureValueProvider
 {
-    private readonly IDomainUser _user;
     private IFeatureValueStore? _store;
 
-    // ADR88/DI004：IFeatureValueStore 懒加载经 IDomainUser.Use<T>()
-    private IFeatureValueStore Store => _store ??= _user.Use<IFeatureValueStore>();
+    // ADR92/DI004：IFeatureValueStore 懒加载经基类 User.Use（TryAddEnumerableConstructible 帧内供给）
+    private IFeatureValueStore Store => _store ??= User.Use<IFeatureValueStore>();
 
-    public UserFeatureValueProvider(IDomainUser user)
-        => _user = user ?? throw new ArgumentNullException(nameof(user));
+    public UserFeatureValueProvider(IDomainUser user) : base(user)
+    {
+    }
 
     public string Name => FeatureProviders.User;
 

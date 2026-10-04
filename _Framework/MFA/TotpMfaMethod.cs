@@ -4,6 +4,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
@@ -19,25 +21,29 @@ namespace TKWF.Ext.MFA;
 /// 时窗（±<see cref="MfaOptions.TotpClockSkewWindows"/>）验码 + 消费票据（单次防重放，Oracle C1）。</para>
 /// <para>⚠️ 依赖清单含 <see cref="MfaChallengeEntityDataService"/>（任务说明仅列 secret+options——挑战票据建行/消费
 /// 必须经挑战 DataService，为任务方法规范的权威要求）。</para>
+/// <para>V4.10.55（ADR92，T3 闭环）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
+/// 注册改 <c>TryAddEnumerableConstructible&lt;IMfaMethod, TotpMfaMethod&gt;</c>（集合版守卫工厂——
+/// 帧内经 CurrentAopUser 供给 ctor 的 IDomainUser；帧外枚举抛守卫）。<c>[DiContractIgnore]</c>：豁免 DI001 误报。</para>
 /// </summary>
-internal sealed class TotpMfaMethod : IMfaMethod
+[DiContractIgnore]
+internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
 {
     /// <summary>方法标识（"totp"）。</summary>
     public const string MethodName = "totp";
 
-    private readonly IDomainUser _user;
     private MfaSecretEntityDataService? _secrets;
     private MfaChallengeEntityDataService? _challenges;
     private readonly IOptions<MfaOptions> _options;
 
-    private MfaSecretEntityDataService Secrets => _secrets ??= _user.Use<MfaSecretEntityDataService>();
-    private MfaChallengeEntityDataService Challenges => _challenges ??= _user.Use<MfaChallengeEntityDataService>();
+    private MfaSecretEntityDataService Secrets => _secrets ??= User.Use<MfaSecretEntityDataService>();
+    private MfaChallengeEntityDataService Challenges => _challenges ??= User.Use<MfaChallengeEntityDataService>();
 
     public TotpMfaMethod(
         IDomainUser user,
         IOptions<MfaOptions> options)
+        : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 

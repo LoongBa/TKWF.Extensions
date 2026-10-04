@@ -119,8 +119,9 @@ internal sealed class FeatureManagementTestHost : IDisposable
         services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
             new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
 
-        // V4.10.53（T3 桥接）：IDomainUser 注册保留——内置四 Provider（边界保留组）ctor(IDomainUser) 经普通 DI
-        // GetServices 构造需要（框架机制缺口 T3 转达候选；生产永不注册 IDomainUser——D01）。桩同时供显式 user 参数。
+        // V4.10.55（ADR92）：Provider 守卫工厂直接从 CurrentAopUser 供给（不再解析 DI 的 IDomainUser 注册——
+        // SetCurrentUser/host.User 桩直传），DI 桩注册不再触发 → 须显式注入 Provider（内部 User.Use<T>() 解析源）。
+        // 桩仍保留：显式 user 参数（匿名/认证切换）+ ambient 守卫（DomainUserContext.CurrentAopUser 非空）。
         var user = new TestDomainUser();
         services.AddSingleton<IDomainUser>(sp => { user.Provider = sp; return user; });
 
@@ -163,6 +164,9 @@ internal sealed class FeatureManagementTestHost : IDisposable
         configure?.Invoke(services);
 
         var provider = services.BuildServiceProvider();
+        // V4.10.55（ADR92）：守卫工厂从 CurrentAopUser 直接供给 user——DI 的 IDomainUser 注册不会被解析触发，
+        // 桩 Provider 须在此显式注入（内部 FeatureManager.User.Use<T>() 经此解析；对齐 MFA/Notifications 宿主模式）
+        user.Provider = provider;
         // 生产路径：绑定当前异步流的解析作用域（DomainHost.NewDomainContext 等价——测试 BindScope）
         DomainUser<TestUserInfo>.BindScope(provider);
         return new FeatureManagementTestHost(provider, fsql, user);

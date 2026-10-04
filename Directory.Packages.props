@@ -63,34 +63,33 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         版本对齐主框架已发布稳定版 4.10.50（EduPlatform 转达·扩展 DataService 聚合缺陷根治——SG1 生成器
-         GetOrCreateInstance 按类型隔离 _instance 静态槽，扩展不再共享基类 Instance；BUG007 WASM 兼容——
-         AUTH_REQUIRED 改 DomainException{ErrorCode=AUTH_REQUIRED}；上一版 4.10.46 BUG005 纯修复），见 AGENTS §6 注记）；
+         版本对齐主框架 v4.10.55（ADR92 多实现集合守卫工厂——TryAddEnumerableConstructible，
+         转达 T3 方案 A 落地；4.10.54 上一版 ADR91 周期调度 + Testing.xUnit 测试辅助），见 AGENTS §6 注记）；
          主框架发新版后同步提升。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.54" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.54" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.54" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.54" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.54" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.54" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.54" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.54" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.55" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.55" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.55" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.55" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.55" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.55" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.55" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.55" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.55" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.54" />
-    <!-- ✅ 4.10.54 lockstep（2026-10-04，正式号）：主框架 v4.10.54 已正式发布（周期调度 IRecurringBackgroundJobManager
-         ADR91——议题 2 兑现；测试宿主辅助 A 精简版 BindTestScope/AssertConstructible 入 TKWF.Domain.Testing.xUnit——
-         议题 1 兑现，包定位分叉关闭：Testing.xUnit/.Mock 早已随框架发布）。正式号全量 lockstep（含 CodeGeneration 4.10.54
-         正式——解除 4.10.54-local 本地锁 + 删本地源）；需测试辅助（C 基座对齐 A）时新增 TKWF.Domain.Testing.xUnit 4.10.54 条目 -->
-  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.54" />
-  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.54" />
-    <!-- ✅ 4.10.54 测试辅助（议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.55" />
+    <!-- ✅ 4.10.55 lockstep（2026-10-04）：主框架 v4.10.55（ADR92 TryAddEnumerableConstructible——T3 方案 A 落地，
+         多实现集合 DomainServiceBase 派生实现 IDomainUser 供给缺口修复）。正式号全量 lockstep；
+         ⚠️ CodeGeneration 过渡期锁本地 feed 4.10.55-local（nuget.org 4.10.55 发布中——发布完成后切正式号 + 删本地源）；
+         Testing.xUnit 4.10.55 条目保留（C 基座对齐 A 用） -->
+  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.55-local" />
+  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.55" />
+    <!-- ✅ 4.10.55 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.54" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.55" />
   </ItemGroup>
 </Project>

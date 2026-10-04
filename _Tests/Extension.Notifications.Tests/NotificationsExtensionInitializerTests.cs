@@ -104,21 +104,30 @@ public class NotificationsExtensionInitializerTests
     [Fact]
     public void ConfigureServices_RegistersNotifiers_MultiInstanceCollection()
     {
+        var services = new ServiceCollection();
+        new NotificationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // v0.2.0：多实例收集——Inbox + Email 两个内置通道
+        // V4.10.55 (ADR92)：InboxNotifier 改 TryAddEnumerableConstructible（集合版守卫工厂——工厂委托形态，
+        // 帧内 CurrentAopUser 供给）；EmailNotifier 保持接线型普通 DI（实现映射可解析）
+        var notifierDescriptors = services.Where(d => d.ServiceType == typeof(INotificationNotifier)).ToList();
+        Assert.Equal(2, notifierDescriptors.Count);
+        Assert.Contains(notifierDescriptors, d => d.ImplementationFactory != null && d.ImplementationType == null); // Inbox = 守卫工厂
+        Assert.Contains(notifierDescriptors, d => d.ImplementationType == typeof(EmailNotifier));                    // Email = 接线型
+        Assert.All(notifierDescriptors, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
+    }
+
+    /// <summary>帧内验证：发布器门面经 User.Use（AOP 帧）创建时，ctor 注入的 IEnumerable&lt;INotificationNotifier&gt;
+    /// 在集合版守卫工厂帧内枚举成功（InboxNotifier 经 CurrentAopUser 构造 + EmailNotifier 普通可解析）——帧外
+    /// <c>GetServices&lt;INotificationNotifier&gt;()</c> 会触发守卫（禁止形态）。</summary>
+    [Fact]
+    public void Publisher_Resolves_InFrame_WithInboxAndEmailChannels()
+    {
         using var fsql = NotificationTestHost.CreateInMemoryFreeSql();
         NotificationTestHost.SyncStructure(fsql);
-        // 用 Build 宿主（生产路径——含 IEntityDAC 基础设施注册，Notifier 可解析；InboxNotifier 经 DI 桩 IDomainUser 构造——T3 候选）
         using var host = NotificationTestHost.Build(fsql);
 
-        // v0.2.0：多实例收集（TryAddEnumerable）——Inbox + Email 两个内置通道
-        var notifiers = host.Provider.GetServices<INotificationNotifier>().ToList();
-
-        Assert.Equal(2, notifiers.Count);
-        Assert.Contains(notifiers, n => n.Name == "Inbox");
-        Assert.Contains(notifiers, n => n.Name == "Email");
-
-        // Inbox 通道： Email 通道外部 best-effort
-        Assert.Contains(notifiers, n => n is InboxNotifier);
-        Assert.Contains(notifiers, n => n is EmailNotifier);
+        Assert.NotNull(host.Publisher);
     }
 
     [Fact]

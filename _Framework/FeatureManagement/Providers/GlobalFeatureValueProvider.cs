@@ -1,20 +1,23 @@
-using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.FeatureManagement;
 
 /// <summary>Global 层 Provider（最不优先兜底层——providerKey 忽略；匿名直查层）。</summary>
-internal sealed class GlobalFeatureValueProvider : IFeatureValueProvider
+[DiContractIgnore]
+internal sealed class GlobalFeatureValueProvider : DomainServiceBase, IFeatureValueProvider
 {
-    private readonly IDomainUser _user;
     private IFeatureValueStore? _store;
 
-    // ADR88/DI004：IFeatureValueStore 懒加载经 IDomainUser.Use<IDomainService>()
-    private IFeatureValueStore Store => _store ??= _user.Use<IFeatureValueStore>();
+    // ADR92/DI004：IFeatureValueStore 懒加载经基类 User.Use（TryAddEnumerableConstructible 帧内供给）
+    private IFeatureValueStore Store => _store ??= User.Use<IFeatureValueStore>();
 
-    public GlobalFeatureValueProvider(IDomainUser user) => _user = user ?? throw new ArgumentNullException(nameof(user));
+    public GlobalFeatureValueProvider(IDomainUser user) : base(user)
+    {
+    }
 
     public string Name => FeatureProviders.Global;
 

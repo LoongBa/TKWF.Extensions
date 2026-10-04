@@ -141,10 +141,10 @@ public class FeatureManagementInitializerTests
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
-    // ── 4 Provider = TryAddEnumerable ×4（多实现集合，边界保留） ──
+    // ── 4 Provider = TryAddEnumerableConstructible ×4（V4.10.55 ADR92——集合版守卫工厂，工厂委托形态） ──
 
     [Fact]
-    public void ConfigureServices_Registers_FourValueProviders_TryAddEnumerable()
+    public void ConfigureServices_Registers_FourValueProviders_TryAddEnumerableConstructible()
     {
         var services = new ServiceCollection();
         new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
@@ -152,13 +152,35 @@ public class FeatureManagementInitializerTests
         var providers = services.Where(d => d.ServiceType == typeof(IFeatureValueProvider)).ToList();
 
         Assert.Equal(4, providers.Count);
-        Assert.Equal(typeof(UserFeatureValueProvider), providers[0].ImplementationType);
-        Assert.Equal(typeof(RoleFeatureValueProvider), providers[1].ImplementationType);
-        Assert.Equal(typeof(TenantFeatureValueProvider), providers[2].ImplementationType);
-        Assert.Equal(typeof(GlobalFeatureValueProvider), providers[3].ImplementationType);
+        // TryAddEnumerableConstructible：工厂委托形态（ImplementationType=null + ImplementationFactory 非空）——
+        // 帧内（FeatureManager 经 User.Use<IFeatureManager>() 创建时）经 CurrentAopUser 供给构造
+        Assert.All(providers, d => Assert.Null(d.ImplementationType));
+        Assert.All(providers, d => Assert.NotNull(d.ImplementationFactory));
         Assert.All(providers, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
-        // 多实现集合按实现类型去重（TryAddEnumerable 语义）——重复注册同一实现不重复
-        Assert.Equal(4, providers.Select(d => d.ImplementationType).Distinct().Count());
+        // 集合版守卫工厂自定义去重（Oracle P0-1）——4 个不同实现各自独立工厂委托
+        Assert.Equal(4, providers.Select(d => d.ImplementationFactory).Distinct().Count());
+    }
+
+    /// <summary>实现类 throw-factory（禁直接 DI 直取——集合元素须经 User.Use 帧内枚举创建）。</summary>
+    [Fact]
+    public void ConfigureServices_ProviderImpl_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
+
+        foreach (var implType in new[]
+                 {
+                     typeof(UserFeatureValueProvider), typeof(RoleFeatureValueProvider),
+                     typeof(TenantFeatureValueProvider), typeof(GlobalFeatureValueProvider)
+                 })
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == implType);
+            Assert.NotNull(descriptor);
+            Assert.NotNull(descriptor!.ImplementationFactory);
+
+            using var provider = services.BuildServiceProvider();
+            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(implType));
+        }
     }
 
     [Fact]

@@ -1,6 +1,5 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -33,14 +32,16 @@ public class MFAExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo
     /// <summary>
     /// 注册 Options + 服务（SG1 DataService 经 v4.10.8 ADR61 基类类型判定 + 消费方聚合自动注册）。
     /// <para>V4.10.53（领域自治根治，正确路线）：</para>
-    /// <list type="bullet">
-    /// <item><see cref="IMfaService"/>（接口 : IDomainService，门面）用 <c>AddConstructibleService</c>——接口可构造
-    ///     守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方经 <c>User.Use&lt;IMfaService&gt;()</c> 解析
-    ///     （AOP 路径先设 CurrentAopUser 再 GetRequiredService，工厂据此显式传入 DomainUser）。</item>
-    /// <item><see cref="IMfaMethod"/> 双实现（TOTP/SMS 策略）保持 <c>TryAddEnumerable</c>——多实现并存
-    ///     （Oracle C5 防 SMS 静默丢失）；消费方可自定义扩展新方法。</item>
-    /// <item><see cref="IMfaSmsSender"/> 不注册默认实现（接线型——消费方实现短信渠道，TryAdd 语义无默认）。</item>
-    /// </list>
+/// <list type="bullet">
+/// <item><see cref="IMfaService"/>（接口 : IDomainService，门面）用 <c>AddConstructibleService</c>——接口可构造
+///     守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方经 <c>User.Use&lt;IMfaService&gt;()</c> 解析
+///     （AOP 路径先设 CurrentAopUser 再 GetRequiredService，工厂据此显式传入 DomainUser）。</item>
+/// <item><see cref="IMfaMethod"/> 双实现（TOTP/SMS 策略）注册由 TryAddEnumerable 改 <c>TryAddEnumerableConstructible</c>
+///     （V4.10.55 ADR92——集合版守卫工厂：帧内 CurrentAopUser 供给集合元素 ctor 的 IDomainUser；帧外枚举抛守卫）——
+///     多实现并存（Oracle C5 防 SMS 静默丢失）；实现继承 <see cref="DomainServiceBase"/>（经基类 User 取上下文）；
+///     消费方可自定义扩展新方法。</item>
+/// <item><see cref="IMfaSmsSender"/> 不注册默认实现（接线型——消费方实现短信渠道，TryAdd 语义无默认）。</item>
+/// </list>
     /// </summary>
     public override void ConfigureServices(IServiceCollection services)
     {
@@ -53,9 +54,11 @@ public class MFAExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo
         //    消费方统一经 User.Use<IMfaService>() 解析（旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）
         services.AddConstructibleService<IMfaService, MfaService>();
 
-        // ⚠️ 多 IMfaMethod 实现必须 TryAddEnumerable（TryAddScoped 同 ServiceType 仅注册首个 → SMS 静默丢失，Oracle C5）
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IMfaMethod, TotpMfaMethod>());
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IMfaMethod, SmsMfaMethod>());
+        // ⚠️ 多 IMfaMethod 实现必须 TryAddEnumerableConstructible（V4.10.55 ADR92——集合版守卫工厂：
+        // 集合内 DomainServiceBase 派生实现 ctor 的 IDomainUser 由帧内 CurrentAopUser 供给（门面 MfaService
+        // 经 User.Use<IMfaService>() 帧内创建时枚举集合）；TryAddScoped 同 ServiceType 仅注册首个 → SMS 静默丢失（Oracle C5）
+        services.TryAddEnumerableConstructible<IMfaMethod, TotpMfaMethod>();
+        services.TryAddEnumerableConstructible<IMfaMethod, SmsMfaMethod>();
 
         // IMfaSmsSender 不注册默认（消费方实现，TryAdd 语义——对齐 ISmsSender 先例）
     }

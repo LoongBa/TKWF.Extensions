@@ -19,9 +19,9 @@ namespace TKWF.Ext.BackgroundJobs.Tests;
 
 /// <summary>
 /// BackgroundJobs V0.1.0 扩展测试——D6-D10 验收覆盖：
-/// D6: JobExecution 落库（JobExecutionRecorder→DataService 写入一行）——<b>边界保留组</b>（实现主框架
-///     <see cref="IBackgroundJobExecutionListener"/> 契约，非 IDomainService，多实现集合 TryAddEnumerable；
-///     ctor 有 IDomainUser——ADR88 方案 i 已收敛懒加载窗口，本批不改代码，测试保持原状）
+/// D6: JobExecution 落库（JobExecutionRecorder→DataService 写入一行）——<b>V4.10.55 ADR92/T3 特例收编</b>（实现主框架
+///     <see cref="IBackgroundJobExecutionListener"/> 契约，非 IDomainService；泛型化 + ctor 移除 IDomainUser——
+///     DataService 经 StandaloneDomainUserAccessor SystemUser NoAop 直建，测试走生产路径）
 /// D7: IJobResultRecorder（BackgroundJobContext.Current 读 JobId + 无上下文抛异常）——生产路径
 ///     <c>User.Use&lt;IJobResultRecorder&gt;()</c> AOP（设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂）
 /// D8: 查询 API（分页/过滤/SQL 级聚合统计/GetDetailAsync + 结果查询）——生产路径
@@ -129,19 +129,30 @@ public class BackgroundJobsTests
         await ds.EntityCreateAsync(ToExecutionEntity(ctx));
     }
 
+    /// <summary>创建 JobExecutionRecorder（V4.10.55 ADR92/T3 特例收编：泛型 + ctor 注入 IDomainUserAccessor——
+    /// DataService 经 StandaloneDomainUserAccessor SystemUser NoAop 直建，模拟三桥 System 帧）。</summary>
+    private static JobExecutionRecorder<TestUserInfo> CreateRecorder(
+        ServiceProvider provider, DomainUser<TestUserInfo> user)
+    {
+        StandaloneDomainUserAccessor<TestUserInfo>.SetCurrentUser(user);
+        var accessor = provider.GetRequiredService<IDomainUserAccessor<TestUserInfo>>();
+        return new JobExecutionRecorder<TestUserInfo>(accessor, NullLogger<JobExecutionRecorder<TestUserInfo>>.Instance);
+    }
+
     // ═══════════════════════════════════════════════════════
-    // D6: JobExecution 落库测试（边界保留组——JobExecutionRecorder 未改代码，测试保持现状）
+    // D6: JobExecution 落库测试（JobExecutionRecorder→DataService 写入一行；V4.10.55 重写走生产路径）
     // ═══════════════════════════════════════════════════════
 
     [Fact]
     public async Task D6_Recorder_Success_CreatesExecutionRow()
     {
-        var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var (provider, user) = CreateProductionHost();
+        var recorder = CreateRecorder(provider, user);
         var context = CreateTestContext(isSuccess: true);
 
         await recorder.OnExecutedAsync(context);
 
+        var execDs = user.Use<JobExecutionEntityDataService>();
         var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
         Assert.Single(rows);
         var row = rows[0];
@@ -158,14 +169,15 @@ public class BackgroundJobsTests
     [Fact]
     public async Task D6_Recorder_Failed_RecordsErrorText()
     {
-        var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var (provider, user) = CreateProductionHost();
+        var recorder = CreateRecorder(provider, user);
         var context = CreateTestContext(
             isSuccess: false, isCancelled: false,
             error: "System.Exception: Test error\n   at Test.Method()");
 
         await recorder.OnExecutedAsync(context);
 
+        var execDs = user.Use<JobExecutionEntityDataService>();
         var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
         Assert.Single(rows);
         Assert.False(rows[0].IsSuccess);
@@ -175,13 +187,14 @@ public class BackgroundJobsTests
     [Fact]
     public async Task D6_Recorder_Cancelled_SetsIsCancelled()
     {
-        var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var (provider, user) = CreateProductionHost();
+        var recorder = CreateRecorder(provider, user);
         var context = CreateTestContext(
             isSuccess: false, isCancelled: true, error: null);
 
         await recorder.OnExecutedAsync(context);
 
+        var execDs = user.Use<JobExecutionEntityDataService>();
         var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
         Assert.Single(rows);
         Assert.True(rows[0].IsCancelled);
@@ -192,13 +205,14 @@ public class BackgroundJobsTests
     [Fact]
     public async Task D6_Recorder_MultipleProviders_Recorded()
     {
-        var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var (provider, user) = CreateProductionHost();
+        var recorder = CreateRecorder(provider, user);
 
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j1", provider: "builtin"));
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j2", provider: "hangfire"));
         await recorder.OnExecutedAsync(CreateTestContext(jobId: "j3", provider: "quartz"));
 
+        var execDs = user.Use<JobExecutionEntityDataService>();
         var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
         Assert.Equal(3, rows.Count);
         Assert.Contains(rows, r => r.Provider == "builtin" && r.JobId == "j1");
@@ -209,12 +223,13 @@ public class BackgroundJobsTests
     [Fact]
     public async Task D6_Recorder_RetryAttempt_Recorded()
     {
-        var (_, execDs, _) = CreateHost();
-        var recorder = new JobExecutionRecorder(new StubDomainUser().With(execDs), NullLogger<JobExecutionRecorder>.Instance);
+        var (provider, user) = CreateProductionHost();
+        var recorder = CreateRecorder(provider, user);
 
         await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 1));
         await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 2));
 
+        var execDs = user.Use<JobExecutionEntityDataService>();
         var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
         Assert.Equal(2, rows.Count);
         Assert.Contains(rows, r => r.RetryAttempt == 1);
@@ -543,7 +558,7 @@ public class BackgroundJobsTests
 
         var listenerDescriptors = services.Where(d => d.ServiceType == typeof(IBackgroundJobExecutionListener)).ToList();
         Assert.Single(listenerDescriptors);
-        Assert.Equal(typeof(JobExecutionRecorder), listenerDescriptors[0].ImplementationType);
+        Assert.Equal(typeof(JobExecutionRecorder<TestUserInfo>), listenerDescriptors[0].ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, listenerDescriptors[0].Lifetime);
     }
 
@@ -630,7 +645,7 @@ public class BackgroundJobsTests
 
         var listenerDescriptors = services.Where(d => d.ServiceType == typeof(IBackgroundJobExecutionListener)).ToList();
         Assert.Equal(2, listenerDescriptors.Count);
-        Assert.Contains(listenerDescriptors, d => d.ImplementationType == typeof(JobExecutionRecorder));
+        Assert.Contains(listenerDescriptors, d => d.ImplementationType == typeof(JobExecutionRecorder<TestUserInfo>));
         Assert.Contains(listenerDescriptors, d => d.ImplementationType == typeof(FakeExtraListener));
     }
 
@@ -660,23 +675,34 @@ public class BackgroundJobsTests
     }
 
     // ═══════════════════════════════════════════════════════
-    // D10: 监听器异常不阻断测试（边界保留组——JobExecutionRecorder 未改代码）
+    // D10: 监听器异常不阻断测试（V4.10.55 泛型化——未建表触发 DataService 异常 → catch 静默）
     // ═══════════════════════════════════════════════════════
 
     [Fact]
     public async Task D10_Recorder_Exception_DoesNotThrow()
     {
-        // 使用不可用的 DataService（未建表）触发异常
+        // 不可用 DataService（未建表 SyncStructure）触发异常 → 异常静默 + Warning，不向上抛
+        var services = new ServiceCollection();
+        services.AddLogging();
         var fsql = new FreeSql.FreeSqlBuilder()
             .UseConnectionString(FreeSql.DataType.Sqlite, "Data Source=:memory:")
-            .UseAutoSyncStructure(false) // 不自动建表
+            .UseAutoSyncStructure(false) // 不自动建表——DataService 落库触发 SQL 异常
             .Build();
-        // 不 SyncStructure——直接查会报错
-        var brokenDs = new JobExecutionEntityDataService(new StubDomainUser(),
-            new FreeSqlEntityDAC<JobExecutionEntity>(new UnitOfWorkManager(fsql)));
-        var recorder = new JobExecutionRecorder(new StubDomainUser().With(brokenDs), NullLogger<JobExecutionRecorder>.Instance);
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<JobExecutionEntity>, FreeSqlEntityDAC<JobExecutionEntity>>();
+        // V4.10.55（ADR92）：JobExecutionRecorder ctor 注入 IDomainUserAccessor——手动容器须补注册
+        //（生产经 BackgroundJobsExtensionInitializer.TryAddSingleton 注册 StandaloneDomainUserAccessor）
+        services.AddSingleton<IDomainUserAccessor<TestUserInfo>, StandaloneDomainUserAccessor<TestUserInfo>>();
+        var provider = services.BuildServiceProvider();
+        DomainUser<TestUserInfo>.BindScope(provider);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("d10-user", "D10 用户") };
+        StandaloneDomainUserAccessor<TestUserInfo>.SetCurrentUser(user);
+        var accessor = provider.GetRequiredService<IDomainUserAccessor<TestUserInfo>>();
+        var recorder = new JobExecutionRecorder<TestUserInfo>(accessor, NullLogger<JobExecutionRecorder<TestUserInfo>>.Instance);
 
-        // 不应抛出异常（异常静默 + Warning）
+        // 不应抛出异常（异常静默 + Warning）——DataService 经 SystemUser NoAop 直建（IEntityDAC 从 DI 解析），
+        // 落库 SQL 异常被 OnExecutedAsync catch 吞掉
         await recorder.OnExecutedAsync(CreateTestContext()); // should not throw
     }
 }
@@ -704,8 +730,9 @@ internal static class TestInfrastructure
 }
 
 /// <summary>
-/// 测试用户桩——实现 IDomainUser 最小契约（D6/D10 JobExecutionRecorder 边界保留组专用：
-/// JobExecutionRecorder 未改代码，其 <c>Use&lt;T&gt;()</c> 懒加载从服务映射表解析——<see cref="With{T}"/> 注册 DataService 实例）。
+/// 测试用户桩——实现 IDomainUser 最小契约（D6/D10 JobExecutionRecorder 遗留——泛型化后测试走生产路径
+/// <see cref="DomainUser{TUserInfo}"/>.BindScope + StandaloneDomainUserAccessor；StubDomainUser 保留供
+/// 历史 D6/D10 兼容路径，若不再引用可后续清理）。
 /// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {

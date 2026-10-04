@@ -27,8 +27,9 @@ public class AuthenticationProductionPathTests
 
     /// <summary>
     /// 构建消费方生产形态 DI：Initializer ConfigureServices + Options 值（RSA 密钥）+ FreeSql 基础设施。
+    /// <paramref name="configure"/> 在 Options/基础设施之后执行（消费方 OnRegisterDomainServices 扩展点）。
     /// </summary>
-    private static ServiceProvider CreateProvider(IFreeSql fsql)
+    private static ServiceProvider CreateProvider(IFreeSql fsql, Action<IServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -51,6 +52,8 @@ public class AuthenticationProductionPathTests
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();
         AuthenticationTestHost.RegisterEntityDacs(services);
+
+        configure?.Invoke(services);
 
         return services.BuildServiceProvider();
     }
@@ -151,5 +154,98 @@ public class AuthenticationProductionPathTests
         var source = sp.GetService<IUserProfileSource>();
         Assert.NotNull(source);
         Assert.IsType<AuthAccountUserProfileSource>(source);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // V4.10.55（ADR92/T3 闭环）：登录编排门面生产路径——EduPlatform 3 端点修复验收核心
+    // 控制器改 User.Use<ISmsLoginService>().LoginAsync(...)（不再 [FromServices] IEnumerable<IAuthenticationProvider>）
+    // ═══════════════════════════════════════════════════════
+
+    /// <summary>SMS 登录门面：验证码校验 → 无账号建账号 → 返回 ProviderAuthenticateResult（帧内 Provider 集合枚举）。</summary>
+    [Fact]
+    public async Task Use_ISmsLoginService_InFrame_SmsLoginCreatesAccount()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql, services =>
+        {
+            // 消费方实现 ISmsSender（生产路径——SmsVerificationService 经守卫工厂解析此渠道；Fake 捕获验证码）
+            services.AddSingleton<ISmsSender, CapturingSmsSender>();
+        });
+        DomainUser<TestUserInfo>.BindScope(sp);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+
+        // 发码（生产路径门面）→ 从 CapturingSmsSender 提取验证码（dev mock 日志码——Fake 捕获短信内容）
+        var sms = user.Use<ISmsVerificationService>();
+        await sms.SendCodeAsync("13800138000", SmsScenes.Login, CancellationToken.None);
+        var code = CapturingSmsSender.ExtractCode(sp.GetRequiredService<ISmsSender>() as CapturingSmsSender);
+
+        // V4.10.55 新门面：User.Use<ISmsLoginService>()（AOP 帧内→守卫工厂→ctor 注入 IEnumerable<IAuthenticationProvider>
+        // 集合版守卫工厂经 CurrentAopUser 供给 SmsAuthenticationProvider）
+        var login = user.Use<ISmsLoginService>();
+        var result = await login.LoginAsync("13800138000", code, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.UserId);
+
+        // 建账号落库
+        var account = await user.Use<IAuthAccountQueryService>().GetByUIdAsync(result.UserId!, CancellationToken.None);
+        Assert.NotNull(account);
+        Assert.Equal("13800138000", account!.Phone);
+    }
+
+    /// <summary>SMS 登录门面：验证码错误 → ProviderAuthenticateResult.Success=false（FailReason 透传）。</summary>
+    [Fact]
+    public async Task Use_ISmsLoginService_InFrame_WrongCode_Fails()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql, services =>
+        {
+            // ISmsSender 须可解析（SmsVerificationService 守卫工厂 ActivatorUtilities 解析 ctor 参数——TryAdd 语义消费方实现）
+            services.AddSingleton<ISmsSender, CapturingSmsSender>();
+        });
+        DomainUser<TestUserInfo>.BindScope(sp);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+
+        var login = user.Use<ISmsLoginService>();
+        var result = await login.LoginAsync("13800138000", "000000", CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.FailReason);
+    }
+
+    /// <summary>⚠️ 禁止形态守卫：控制器 [FromServices] IEnumerable&lt;IAuthenticationProvider&gt; 帧外枚举抛集合守卫
+    /// （表现层必须经登录编排门面消费——EduPlatform 原 3 端点 500 根因的防护）。</summary>
+    [Fact]
+    public void ProviderCollection_OutsideUseScope_ThrowsGuard()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => sp.GetServices<IAuthenticationProvider>().ToList());
+        Assert.Contains("集合元素", ex.Message);
+    }
+}
+
+/// <summary>捕获型 ISmsSender——记录短信内容（测试从短信文本提取验证码；生产消费方实现真实渠道）。</summary>
+internal sealed class CapturingSmsSender : ISmsSender
+{
+    private readonly object _gate = new();
+    private readonly List<SmsMessage> _messages = new();
+
+    public Task SendAsync(SmsMessage message, System.Threading.CancellationToken ct = default)
+    {
+        lock (_gate) _messages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>从捕获短信提取 6 位验证码（短信模板："您的验证码是 {code}，5 分钟内有效"——对齐 SmsVerificationService）。</summary>
+    public static string ExtractCode(CapturingSmsSender? sender)
+    {
+        if (sender == null) throw new InvalidOperationException("ISmsSender 未注册为 CapturingSmsSender");
+        var last = sender._messages.LastOrDefault()
+            ?? throw new InvalidOperationException("CapturingSmsSender 未捕获到短信（SendCodeAsync 未执行或经 dev mock 路径）");
+        var match = System.Text.RegularExpressions.Regex.Match(last.Content, @"(\d{6})");
+        return match.Success ? match.Groups[1].Value : throw new InvalidOperationException($"短信内容无 6 位验证码: {last.Content}");
     }
 }

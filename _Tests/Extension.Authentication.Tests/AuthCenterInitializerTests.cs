@@ -16,12 +16,15 @@ namespace TKWF.Ext.Authentication.Tests;
 /// <item>10 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
 /// <item><see cref="IUserProfileSource"/>（UserCenter.Abstractions 契约非 IDomainService）→ TryAddScoped 普通 DI（接线型）；</item>
-/// <item><see cref="IAuthenticationProvider"/> 双实现 → TryAddEnumerable（多实现集合，按实现类型去重）。</item>
+/// <item><see cref="IAuthenticationProvider"/> 双实现 → V4.10.55（ADR92）<c>TryAddEnumerableConstructible</c>
+///     （集合版守卫工厂——工厂委托形态 + 帧内 CurrentAopUser 供给；帧外枚举抛守卫）。</item>
+/// <item><see cref="ISmsLoginService"/>/<see cref="IWechatLoginService"/> 登录编排门面（V4.10.55 ADR92/T3 闭环）→
+///     <c>AddConstructibleService</c>——表现层经 <c>User.Use&lt;门面&gt;()</c> 帧内编排 Provider 集合。</item>
 /// </list>
 /// </summary>
 public class AuthCenterInitializerTests
 {
-    /// <summary>10 个 AddConstructibleService 门面（接口 → 实现）。</summary>
+    /// <summary>12 个 AddConstructibleService 门面（接口 → 实现）+ 2 登录编排门面（V4.10.55 ADR92/T3 闭环）。</summary>
     private static readonly (System.Type Interface, System.Type Impl)[] Facades =
     [
         (typeof(ITokenService), typeof(TokenService)),
@@ -33,7 +36,9 @@ public class AuthCenterInitializerTests
         (typeof(IWeChatApiClient), typeof(WeChatApiClient)),
         (typeof(ITokenVerifier), typeof(LocalJwtTokenVerifier)),
         (typeof(IAuthAccountQueryService), typeof(AuthAccountQueryService)),
-        (typeof(IAuthAccountService), typeof(AuthAccountService))
+        (typeof(IAuthAccountService), typeof(AuthAccountService)),
+        (typeof(ISmsLoginService), typeof(SmsLoginService)),
+        (typeof(IWechatLoginService), typeof(WechatLoginService))
     ];
 
     [Fact]
@@ -65,7 +70,7 @@ public class AuthCenterInitializerTests
         }
     }
 
-    /// <summary>V4.10.53：10 门面实现类注册为 throw-factory——禁止直接 DI 解析（必须经 User.Use&lt;接口&gt;()）。</summary>
+    /// <summary>V4.10.53：12 门面实现类注册为 throw-factory——禁止直接 DI 解析（必须经 User.Use&lt;接口&gt;()）。</summary>
     [Fact]
     public void ConfigureServices_Registers_Implementations_ThrowFactory()
     {
@@ -118,7 +123,7 @@ public class AuthCenterInitializerTests
         Assert.IsType<AuthAccountUserProfileSource>(provider.GetRequiredService<IUserProfileSource>());
     }
 
-    /// <summary>多 Provider——TryAddEnumerable（按实现类型去重）：双实现 Scoped 注册。</summary>
+    /// <summary>多 Provider——V4.10.55（ADR92）改 TryAddEnumerableConstructible（集合版守卫工厂）：双实现以工厂委托形态注册（ImplementationType=null + ImplementationFactory 非空）。</summary>
     [Fact]
     public void ConfigureServices_Registers_TwoProviders_Enumerable()
     {
@@ -127,9 +132,37 @@ public class AuthCenterInitializerTests
 
         var descriptors = services.Where(d => d.ServiceType == typeof(IAuthenticationProvider)).ToList();
         Assert.Equal(2, descriptors.Count);
-        Assert.Contains(descriptors, d => d.ImplementationType == typeof(SmsAuthenticationProvider));
-        Assert.Contains(descriptors, d => d.ImplementationType == typeof(WeChatAuthenticationProvider));
+        // TryAddEnumerableConstructible：工厂委托形态（ImplementationType=null + ImplementationFactory 非空）——
+        // 帧内（User.Use 链）经 CurrentAopUser 供给构造；实现类 SmsAuthenticationProvider 另有 throw-factory 描述符
+        Assert.DoesNotContain(descriptors, d => d.ImplementationType != null);
+        Assert.All(descriptors, d => Assert.NotNull(d.ImplementationFactory));
         Assert.All(descriptors, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
+    }
+
+    /// <summary>实现类 throw-factory（禁直接 DI 直取——须经 User.Use&lt;接口&gt;() 帧内集合枚举创建）。</summary>
+    [Fact]
+    public void ConfigureServices_ProviderImpl_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        foreach (var implType in new[] { typeof(SmsAuthenticationProvider), typeof(WeChatAuthenticationProvider) })
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == implType);
+            Assert.NotNull(descriptor);
+            Assert.NotNull(descriptor!.ImplementationFactory);
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                var sp = services.BuildServiceProvider();
+                _ = sp.GetRequiredService(implType);
+            });
+        }
+
+        // 登录编排门面（V4.10.55 ADR92/T3 闭环）：AddConstructibleService 守卫工厂注册
+        foreach (var facade in new[] { typeof(ISmsLoginService), typeof(IWechatLoginService) })
+        {
+            Assert.Contains(services, d => d.ServiceType == facade);
+        }
     }
 
     /// <summary>⚠️ D14 核心验收：零 DataService 手动注册（ADR61 铁律）——Initializer 不得注册任何 *EntityDataService。</summary>

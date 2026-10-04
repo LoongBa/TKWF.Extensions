@@ -86,9 +86,18 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
         // 被 UserCenterQueryService 经普通 DI 解析）；TryAdd 语义消费方可覆盖（数据属主承接契约——装配实例零桥接）
         services.TryAddScoped<IUserProfileSource, AuthAccountUserProfileSource>();
 
-        // 多 Provider：TryAddEnumerable（按实现类型去重——TryAddScoped 同 ServiceType 第二次会被跳过）
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IAuthenticationProvider, SmsAuthenticationProvider>());
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IAuthenticationProvider, WeChatAuthenticationProvider>());
+        // 多 Provider：V4.10.55 (ADR92) 改 TryAddEnumerableConstructible——集合版守卫工厂：
+        // 集合元素以守卫工厂形态注册，帧内（登录门面 User.Use<ISmsLoginService>() 等调用链）经 CurrentAopUser
+        // 供给 IDomainUser 构造；帧外枚举（如控制器 [FromServices] IEnumerable<IAuthenticationProvider>）抛守卫
+        // （禁止形态——表现层必须经登录编排门面消费，见 tkwf-use-extension §4.6 集合行）
+        services.TryAddEnumerableConstructible<IAuthenticationProvider, SmsAuthenticationProvider>();
+        services.TryAddEnumerableConstructible<IAuthenticationProvider, WeChatAuthenticationProvider>();
+
+        // V4.10.55 (ADR92/T3 闭环)：登录编排门面——表现层零编排终态（EduPlatform 3 端点修复配套）。
+        // 控制器改 User.Use<ISmsLoginService>().LoginAsync(...) / User.Use<IWechatLoginService>().LoginAsync(...)，
+        // 门面内帧内枚举 IAuthenticationProvider 集合（ctor 注入 IEnumerable——守卫工厂经 CurrentAopUser 供给）。
+        services.AddConstructibleService<ISmsLoginService, SmsLoginService>();
+        services.AddConstructibleService<IWechatLoginService, WechatLoginService>();
     }
 
     /// <summary>

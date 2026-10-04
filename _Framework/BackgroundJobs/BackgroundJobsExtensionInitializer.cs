@@ -11,7 +11,7 @@ namespace TKWF.Ext.BackgroundJobs;
 /// <summary>
 /// 后台任务持久化扩展初始化器（V0.1.0）——经 [TKWFExtension] 被 SG1 编译期发现，三钩子接线：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——DI 构建前：注册 Options + 监听器（TryAddEnumerable）+ 查询/记录器 + 历史清理服务（AddConstructibleService）</item>
+/// <item><see cref="ConfigureServices"/>——DI 构建前：注册 Options + 监听器（TryAddEnumerable——主框架 Core 契约）+ 查询/记录器 + 历史清理服务（AddConstructibleService）</item>
 /// <item><see cref="ConfigureFilters"/>——BackgroundJobs 无全局过滤器（空实现）</item>
 /// <item><see cref="InitializeAsync"/>——系统就绪后：空实现</item>
 /// </list>
@@ -22,11 +22,11 @@ namespace TKWF.Ext.BackgroundJobs;
 ///     （CurrentAopUser 守卫）+ 实现类 throw-factory；消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析
 ///     （AOP 路径先设 CurrentAopUser 再 GetRequiredService）。旧形态 TryAddScoped 构造注入
 ///     <see cref="IDomainUser"/>（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）。</item>
-/// <item><b>边界保留（TryAddEnumerable）</b>——<see cref="IBackgroundJobExecutionListener"/>（主框架 Core 契约，
-///     非 IDomainService 不可修改）+ <see cref="JobExecutionRecorder"/>：多实现集合（按实现类型去重），
-///     AddConstructibleService 单实现不适用；JobExecutionRecorder ctor 有 IDomainUser——运行期依赖框架三桥
-///     （内置/Hangfire/Quartz）经 GetServices 枚举 + SystemActor 通道供给 Use&lt;T&gt; 懒加载窗口
-///     （ADR88 方案 i 已收敛，本批不改代码）。</item>
+/// <item><b>主框架契约监听器（TryAddEnumerable，V4.10.55 ADR92/T3 特例收编）</b>——<see cref="IBackgroundJobExecutionListener"/>
+///     （主框架 Core 契约，非 IDomainService 不可修改；TryAddEnumerableConstructible 约束不满足）+
+///     <see cref="JobExecutionRecorder{TUserInfo}"/>（泛型化，ctor 移除 IDomainUser——三桥裸 GetServices 枚举无法供给，
+///     改经 <see cref="StandaloneDomainUserAccessor{TUserInfo}"/> SystemUser NoAop 直建 DataService：
+///     三桥 BeginSystemScopeAsync System 帧内已设 SystemUser + BindScope——QuartzJobBridge L88 实证）。</item>
 /// </list>
 /// <para>Options：<see cref="BackgroundJobsPersistenceOptions"/> 标 [Options("TKWF:BackgroundJobs")]——SG1 消费方
 /// 自动绑定（模式 A 双通道）；此处 <c>AddOptions + BindConfiguration</c> 显式绑定 + 默认值兜底
@@ -54,10 +54,14 @@ public class BackgroundJobsExtensionInitializer<TUserInfo> : ExtensionInitialize
 
         // 1.5 SG1 DataService——v4.10.8 (ADR61) 起经 SG 基类类型判定 + 消费方聚合自动注册（可构造工厂），不再手动 TryAddScoped
 
-        // 2. 执行历史监听器（边界保留）：主框架契约 IBackgroundJobExecutionListener 非 IDomainService——
-        //    TryAddEnumerable 多实现集合（Oracle C3 多监听器可叠加），AddConstructibleService 不适用；保持原注册
+        // 2. 执行历史监听器（主框架 Core 契约，V4.10.55 ADR92/T3 特例收编）：IBackgroundJobExecutionListener 非 IDomainService——
+        //    TryAddEnumerableConstructible 约束不满足，保持 TryAddEnumerable 多实现集合（Oracle C3 多监听器可叠加）；
+        //    JobExecutionRecorder<TUserInfo> 泛型化（ctor 移除 IDomainUser——三桥裸 GetServices 无法供给，
+        //    改经 IDomainUserAccessor<TUserInfo> SystemUser NoAop 直建 DataService，见 JobExecutionRecorder.cs）
+        //    Accessor 接线型注册（StandaloneDomainUserAccessor——三桥 BeginSystemScopeAsync System 帧内可解析）
+        services.TryAddSingleton<IDomainUserAccessor<TUserInfo>, StandaloneDomainUserAccessor<TUserInfo>>();
         services.TryAddEnumerable(
-            ServiceDescriptor.Scoped<IBackgroundJobExecutionListener, JobExecutionRecorder>());
+            ServiceDescriptor.Scoped<IBackgroundJobExecutionListener, JobExecutionRecorder<TUserInfo>>());
 
         // 3-5. V4.10.53（领域自治根治，ADR90）：4 门面 TryAddScoped → AddConstructibleService——
         //    接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory，消费方 User.Use<接口>() 解析

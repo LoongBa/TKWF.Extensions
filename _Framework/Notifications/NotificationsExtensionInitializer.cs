@@ -47,9 +47,9 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
     /// <item><b>TryAddScoped 接线型 + TryAddEnumerable 通道</b>——<see cref="InboxNotifier"/>/<see cref="EmailNotifier"/>
     ///      多实例收集（v0.2.0：InboxNotifier owns UserNotification 写入 C5；EmailNotifier 外部通道 best-effort M1，
     ///      接线型 ctor(IServiceProvider,ILogger) 无 user 依赖——对齐 UserCenter 先例）。
-    ///      ⚠️ 多实现集合中 DomainServiceBase 派生实现的 user 供给依赖框架机制（普通 DI 构造 ctor(IDomainUser)
-    ///      InboxNotifier 时 IDomainUser 永不注册 → 生产解析失败）——<b>框架缺口候选（T3 转达）</b>，
-    ///      本批保留 + 记录（对齐 MFA IMfaMethod 处理，见整改日志）。</item>
+    ///      V4.10.55（ADR92，T3 闭环）：<see cref="InboxNotifier"/> 改 <b>TryAddEnumerableConstructible</b>
+    ///      （集合版守卫工厂——帧内 CurrentAopUser 供给 ctor 的 IDomainUser，帧外枚举抛守卫）+ 继承
+    ///      <see cref="DomainServiceBase"/>；<see cref="EmailNotifier"/> 保持接线型普通 DI（无 user 依赖，可解析）。</item>
     /// </list>
     /// <para>TryAdd* 幂等：消费方可自定义实现，扩展默认实现不覆盖消费方。</para>
     /// </summary>
@@ -84,9 +84,8 @@ public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer
 
         // ── TryAddScoped 接线型 + TryAddEnumerable 通道（v0.2.0 多实例收集：InboxNotifier owns UserNotification
         //    写入 C5；EmailNotifier 外部通道 best-effort M1，延迟解析 IEmailSender/IUserEmailProvider）──
-        services.TryAddScoped<InboxNotifier>();
         services.TryAddScoped<EmailNotifier>();
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<INotificationNotifier, InboxNotifier>());
+        services.TryAddEnumerableConstructible<INotificationNotifier, InboxNotifier>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<INotificationNotifier, EmailNotifier>());
 
         // ── AddConstructibleService 门面 ──

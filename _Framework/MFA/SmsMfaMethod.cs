@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.MFA;
@@ -19,20 +21,24 @@ namespace TKWF.Ext.MFA;
 /// 返回 null，防 DI 硬失败）；发送时未装配 → <see cref="MfaMockForbiddenException"/>（503 语义 fail-fast）。</para>
 /// <para>发送侧频控（本方法内）：①per-user 小时窗口（<see cref="MfaOptions.SmsMaxPerHour"/>，key <c>mfa:sms:{userId}</c>）
 /// ②TTL 内重发拒绝（活动挑战未过期）；验证尝试频控归 <see cref="MfaService"/>（per-user×method 窗口）。</para>
+/// <para>V4.10.55（ADR92，T3 闭环）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
+/// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
+/// 注册改 <c>TryAddEnumerableConstructible&lt;IMfaMethod, SmsMfaMethod&gt;</c>（集合版守卫工厂——
+/// 帧内经 CurrentAopUser 供给 ctor 的 IDomainUser；帧外枚举抛守卫）。<c>[DiContractIgnore]</c>：豁免 DI001 误报。</para>
 /// </summary>
-internal sealed class SmsMfaMethod : IMfaMethod
+[DiContractIgnore]
+internal sealed class SmsMfaMethod : DomainServiceBase, IMfaMethod
 {
     /// <summary>方法标识（"sms"）。</summary>
     public const string MethodName = "sms";
 
-    private readonly IDomainUser _user;
     private MfaSecretEntityDataService? _secrets;
     private MfaChallengeEntityDataService? _challenges;
     private readonly IOptions<MfaOptions> _options;
     private readonly IServiceProvider _serviceProvider;
 
-    private MfaSecretEntityDataService Secrets => _secrets ??= _user.Use<MfaSecretEntityDataService>();
-    private MfaChallengeEntityDataService Challenges => _challenges ??= _user.Use<MfaChallengeEntityDataService>();
+    private MfaSecretEntityDataService Secrets => _secrets ??= User.Use<MfaSecretEntityDataService>();
+    private MfaChallengeEntityDataService Challenges => _challenges ??= User.Use<MfaChallengeEntityDataService>();
 
     /// <summary>发送频控器（进程级静态——频控须跨请求生效，不随 scope 重建；单实例语义 Oracle C8）。</summary>
     private static readonly MfaRateLimiter SendLimiter = new();
@@ -41,8 +47,8 @@ internal sealed class SmsMfaMethod : IMfaMethod
         IDomainUser user,
         IOptions<MfaOptions> options,
         IServiceProvider serviceProvider)
+        : base(user)
     {
-        _user = user ?? throw new ArgumentNullException(nameof(user));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     }

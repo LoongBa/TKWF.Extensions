@@ -63,37 +63,36 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         版本对齐主框架 v4.10.56（G19 修复——SG2b ApiMetadata 契约新增 1 枚举 + 4 字段破坏性，
+         版本对齐主框架 v4.10.57（SG Analyzer 版本锁正式号——CodeGeneration 4.10.57 已发布 nuget.org，
+         4.10.56-local 本地过渡结束；4.10.56 为 G19 修复——SG2b ApiMetadata 契约新增 1 枚举 + 4 字段破坏性，
          SG3 分类改纯消费元数据、生成形态不变；框架运行时无改动，见 AGENTS §6 注记）；
          4.10.55 上一版 ADR92 多实现集合守卫工厂（T3 方案 A），见 AGENTS §6 注记）；
          主框架发新版后同步提升。
-         ⚠️ 本地过渡（2026-10-04）：nuget.org 4.10.56 尚未发布（最新 4.10.55）——DLL 模式（默认 UseLocalFw=true）
-         运行时 refs 已同步 4.10.56（部署根 12:25），CodeGeneration 锁 4.10.56-local（本地 feed 过渡，
-         用户级 NuGet.config 已加回 TKWF Local Feed 源）；nuget.org 4.10.56 正式发布后切正式号 + 删本地源 + 全量复验。
+         ⚠️ 4.10.56 本地过渡已结束（2026-10-04）：nuget.org 4.10.57 全量发布（13 包）——CodeGeneration 切正式号
+         4.10.57，用户级 NuGet.config 已删 TKWF Local Feed 源。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.56" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.56" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.56" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.56" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.56" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.56" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.56" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.56" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.56" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.57" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.57" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.57" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.57" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.57" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.57" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.57" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.57" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.57" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.56" />
-    <!-- ✅ 4.10.56 lockstep（2026-10-04，G19 修复——SG2b ApiMetadata 契约破坏性 + SG3 分类纯消费元数据，
-         扩展侧零业务代码改动；正式号全量 lockstep——CodeGeneration 4.10.56-local 本地过渡（nuget.org 未发布），
-         发布后切正式号 + 删本地源；
-         Testing.xUnit 4.10.56 条目保留（C 基座对齐 A 用） -->
-  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.56-local" />
-  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.56" />
-    <!-- ✅ 4.10.56 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.57" />
+    <!-- ✅ 4.10.57 lockstep（2026-10-04，SG Analyzer 正式号锁——CodeGeneration 4.10.57 nuget.org 已发布，
+         4.10.56-local 本地过渡结束；全量 13 包 lockstep 4.10.57；
+         Testing.xUnit 4.10.57 条目保留（C 基座对齐 A 用） -->
+  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.57" />
+  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.57" />
+    <!-- ✅ 4.10.57 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.56" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.57" />
   </ItemGroup>
 </Project>

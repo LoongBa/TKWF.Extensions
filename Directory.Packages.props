@@ -82,12 +82,11 @@
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
     <PackageVersion Include="TKWF.Domain.Web" Version="4.10.54" />
-    <!-- ✅ 4.10.54 lockstep（2026-10-04，本地部署模式）：主框架 v4.10.54 交付（周期调度 IRecurringBackgroundJobManager
+    <!-- ✅ 4.10.54 lockstep（2026-10-04，正式号）：主框架 v4.10.54 已正式发布（周期调度 IRecurringBackgroundJobManager
          ADR91——议题 2 兑现；测试宿主辅助 A 精简版 BindTestScope/AssertConstructible 入 TKWF.Domain.Testing.xUnit——
-         议题 1 兑现，包定位分叉关闭：Testing.xUnit/.Mock 早已随框架发布）。本地部署模式验证：DLL 模式运行时 refs
-         4.10.54 + TKWF.CodeGeneration 4.10.54-local（本地 feed）——nuget.org 4.10.54 发布完成后切正式号 + 删本地源；
-         需测试辅助（C 基座对齐 A）时新增 TKWF.Domain.Testing.xUnit 4.10.54 条目（随正式发布） -->
-  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.54-local" />
+         议题 1 兑现，包定位分叉关闭：Testing.xUnit/.Mock 早已随框架发布）。正式号全量 lockstep（含 CodeGeneration 4.10.54
+         正式——解除 4.10.54-local 本地锁 + 删本地源）；需测试辅助（C 基座对齐 A）时新增 TKWF.Domain.Testing.xUnit 4.10.54 条目 -->
+  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.54" />
   <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.54" />
   </ItemGroup>
 </Project>

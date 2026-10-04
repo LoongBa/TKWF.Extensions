@@ -112,6 +112,9 @@
   <Folder Name="/_Framework/Authentication/">
     <Project Path="_Framework/Authentication/TKWF.Ext.Authentication.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Authentication.Abstractions/">
+    <Project Path="_Framework/Authentication.Abstractions/TKWF.Ext.Authentication.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/UserCenter.Abstractions/">
     <Project Path="_Framework/UserCenter.Abstractions/TKWF.Ext.UserCenter.Abstractions.csproj" />
   </Folder>
@@ -211,6 +214,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.UserCenter.Tests/">
     <Project Path="_Tests/Extension.UserCenter.Tests/TKWF.Ext.UserCenter.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/SSO/">
+    <Project Path="_Framework/SSO/TKWF.Ext.SSO.csproj" />
   </Folder>
 </Solution>
 

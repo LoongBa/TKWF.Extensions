@@ -67,18 +67,19 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
 
         try
         {
-            // V4.10.57（fcbffd1 框架组判定受理）：ITokenVerifier 守卫工厂（AddConstructibleService）需帧内
+            // V0.5.2（fcbffd1 受理终态，Oracle 裁决）：ITokenVerifier 守卫工厂（AddConstructibleService）需帧内
             // CurrentAopUser 供给 ctor IDomainUser——本中间件处于 HTTP 管线（无 User.Use<T>() AOP 帧），
             // 原裸 GetService 帧外抛守卫 → 带 Bearer 受保护端点 500（真实生产缺陷，测试 Fake 替换掩盖）。
-            // 修复：经系统作用域解析（BeginSystemScopeAsync → System.Use<ITokenVerifier>()——SystemUser 供给，
-            // 验签为系统级操作，黑名单查询经 SystemUser NoAop 直建 DataService；对齐 InitializeAsync A' 先例）。
-            // 降级路径：无 DomainHost（隔离测试宿主/未装配域）→ 原裸 GetService（测试 Fake 替换兼容；生产恒有 DomainHost）。
-            var host = context.RequestServices.GetService<DomainHost<TUserInfo>>();
+            // 语义：验签 = 匿名请求者证明身份（与 LoginAs/RestoreFromTokenAsync 同属 Guest 行为，非 System 操作）。
+            // ContextExtraction 阶段 2（UseWebSession）恒写游客 DomainUser 到 HttpContext.Items["DomainUser"]——
+            // 复用作 AOP 帧：guest.Use<ITokenVerifier>() 设 CurrentAopUser=guest → 守卫工厂供给（黑名单查询
+            // 经 guest NoAop 直建 DataService）。⚠️ JwtAuthenticationWebExtension 须与 UseWebSession 同装配，
+            // 否则无游客 → 降级裸 GetService（守卫工厂抛 = 正确 fail，非静默降级；隔离测试宿主用 Fake 替换兼容）。
+            var guest = context.Items[DomainUserKey] as DomainUser<TUserInfo>;
             ITokenVerifier? verifier;
-            if (host != null)
+            if (guest != null)
             {
-                await using var sysScope = await host.BeginSystemScopeAsync(context.RequestServices);
-                verifier = sysScope.System.Use<ITokenVerifier>();
+                verifier = guest.Use<ITokenVerifier>();
             }
             else
             {

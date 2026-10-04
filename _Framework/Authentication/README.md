@@ -1,6 +1,6 @@
 # TKWF.Ext.Authentication 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.1（V4.10.57 fcbffd1 受理——ITokenVerifier 无帧消费 500 修复：中间件 System 作用域 + UserHelper Use 帧内；V0.5.0 为 V4.10.55 多实现集合守卫工厂 ADR92/T3 闭环） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.2（V4.10.57 fcbffd1 受理——ITokenVerifier 无帧消费 500 修复终态：中间件游客帧 + UserHelper Use 帧内，Oracle 裁决；V0.5.1 过渡形态未发布） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -66,10 +66,12 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 }
 ```
 
-> **⚠️ V0.5.1 消费约束（fcbffd1 框架组判定受理，Bearer 受保护端点 500 修复）**：`ITokenVerifier` 为**守卫工厂**（`AddConstructibleService`——帧内 `CurrentAopUser` 供给 ctor `IDomainUser`，帧外解析抛守卫）。**两条无 AOP 帧消费路径已修复**：
-> - `JwtAuthenticationMiddleware`（路径 B Bearer 恢复）——中间件内改经**系统作用域**解析：`host.BeginSystemScopeAsync(context.RequestServices)` + `sysScope.System.Use<ITokenVerifier>()`（SystemUser 供给，验签系统级操作；黑名单查询经 SystemUser NoAop 直建 DataService）。原裸 `GetService` 帧外抛守卫 → 带 Bearer 受保护端点 500。
+> **⚠️ V0.5.2 消费约束（fcbffd1 受理终态，Oracle 裁决——Bearer 受保护端点 500 修复）**：`ITokenVerifier` 为**守卫工厂**（`AddConstructibleService`——帧内 `CurrentAopUser` 供给 ctor `IDomainUser`，帧外解析抛守卫）。**两条无 AOP 帧消费路径已修复**：
+> - `JwtAuthenticationMiddleware`（路径 B Bearer 恢复）——中间件内改经**游客帧**解析：`context.Items["DomainUser"]` 的游客 `DomainUser` → `guest.Use<ITokenVerifier>()`（验签 = 匿名请求者证明身份，与 LoginAs 同属 Guest 行为，非 System 操作）。原裸 `GetService` 帧外抛守卫 → 带 Bearer 受保护端点 500。**⚠️ 装配约束：`JwtAuthenticationWebExtension` 须与 `UseWebSession` 同装配**（ContextExtraction 阶段 2 才写入游客 DomainUser；未装配则无游客 → 降级裸 GetService 抛守卫 = 正确 fail，非静默降级）。
 > - `AuthenticationUserHelperBase.RestoreFromTokenAsync`（登录票据换令牌）——改 `user.Use<ITokenVerifier>()`（AOP 帧内，设 CurrentAopUser=user）。原 `DomainUser.GetService` 直通不设帧 → 同样 500。
 > **消费方（EduPlatform 等）注意**：控制器**禁止** `[FromServices] ITokenVerifier` 预绑定（模型绑定阶段无帧 → 帧外抛守卫）——验签归中间件/登录门面链路，表现层无需直取。
+>
+> **⚠️ V0.5.1（过渡形态，未发布）**：曾以 System 作用域（`BeginSystemScopeAsync` + `System.Use`）实现——语义错置（验签是 Guest 行为非 System 操作），经 Oracle 评审否决，V0.5.2 定稿游客帧。
 >
 > **⚠️ V0.5.0 消费约束（EduPlatform 3 端点修复，ADR92/T3 闭环）**：控制器**禁止**
 > `[FromServices] IEnumerable<IAuthenticationProvider>` 预绑定（帧外枚举抛守卫）——短信/微信登录改经登录编排门面：
@@ -145,7 +147,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
 | **`ITokenService`** | 签发/验证/刷新/撤销（手写 RS256 + kid + 黑名单 + rotation） | `TokenService`（internal sealed，本扩展） |
-| **`ITokenVerifier`** | 令牌验证（本地公钥验签；VerifyMode.RemoteIntrospection 装配层替换）——**守卫工厂注册**（帧内供给）；**消费须在 AOP 帧内**（中间件经 System 作用域 / UserHelper 经 user.Use，V0.5.1 修复） | `LocalJwtTokenVerifier`（本扩展） |
+| **`ITokenVerifier`** | 令牌验证（本地公钥验签；VerifyMode.RemoteIntrospection 装配层替换）——**守卫工厂注册**（帧内供给）；**消费须在 AOP 帧内**（中间件经游客帧 `guest.Use` / UserHelper 经 `user.Use`，V0.5.2 终态） | `LocalJwtTokenVerifier`（本扩展） |
 | **`IAuthenticationProvider`** | 认证矩阵 Provider（EnabledAuthTypes fail-closed；V0.5.0 改 TryAddEnumerableConstructible 集合版守卫工厂——帧内经 CurrentAopUser 供给，禁帧外枚举） | `SmsAuthenticationProvider` + `WeChatAuthenticationProvider`（本扩展） |
 | **`ISmsLoginService`（V0.5.0）** | 短信登录编排门面（表现层零编排终态——验证码校验→查/建账号→ProviderAuthenticateResult；控制器 `User.Use<>()` 帧内编排，替代集合直注） | `SmsLoginService`（internal sealed，本扩展） |
 | **`IWechatLoginService`（V0.5.0）** | 微信登录编排门面（code→openid→查/建账号→ProviderAuthenticateResult；snsapi_base/snsapi_login scope 透传） | `WechatLoginService`（internal sealed，本扩展） |
@@ -214,11 +216,12 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **两 Provider 注册改 `TryAddEnumerableConstructible`**（集合版守卫工厂）——集合内继承 `DomainServiceBase` 的实现 ctor 注入 `IDomainUser` 由帧内 `CurrentAopUser` 供给（`User.Use` 调用链）；**帧外枚举（如控制器 `[FromServices] IEnumerable<IAuthenticationProvider>` 预绑定）抛守卫**（禁止形态）。修复 EduPlatform 实证 3 认证端点运行时 500（`CallSiteFactory.TryCreateEnumerable`——普通 `GetServices` 裸枚举无法供给 `IDomainUser`，D01 永不注册）。
   - **新增登录编排门面** `ISmsLoginService` / `IWechatLoginService`（`AddConstructibleService` 注册，`[AllowAnonymousFlag]` 匿名面）——**表现层零编排终态**：控制器改 `User.Use<ISmsLoginService>().LoginAsync(phone, code)` / `User.Use<IWechatLoginService>().LoginAsync(code, scope)`，门面 ctor 注入 `IEnumerable<IAuthenticationProvider>`（帧内枚举，守卫工厂供给），选区后委托 `Provider.AuthenticateAsync`，失败语义透传 `ProviderAuthenticateResult`。**⚠️ 破坏性消费约束（评审 P1）**：控制器禁止 `[FromServices] IEnumerable<IAuthenticationProvider>`（帧外抛守卫）——原集合编排消费形态作废，改经登录门面。EduPlatform `sms/login` + `wechat mp/web callback` 3 端点修复路径。
   - 82 用例全绿（新增登录门面 3 用例：建账号成功/错码失败/帧外守卫 + Provider 守卫工厂形态断言）。
-- **V0.5.1（V4.10.57 fcbffd1 框架组判定受理——ITokenVerifier 无帧消费 500 修复）**：
+- **V0.5.1（过渡形态，未发布——Oracle 评审否决后并入 V0.5.2）**：曾以**系统作用域**修复（`BeginSystemScopeAsync` + `System.Use<ITokenVerifier>()`）——经 Oracle 评审**语义错置**（验签是 Guest 行为非 System 操作；System 作用域本意为系统级后台任务/启动预检，D22 L367"用户请求不可静默提权"）；且若黑名单 DataService 未来加审计，System 路径记 System 而 UserHelper 路径记 Guest，消费链语义分裂。否决并归并至 V0.5.2。
+- **V0.5.2（V4.10.57 fcbffd1 受理终态，Oracle 裁决——ITokenVerifier 无帧消费 500 修复）**：
   - **缺陷**：`ITokenVerifier` 守卫工厂（`AddConstructibleService`——帧内 CurrentAopUser 供给）被**两条无 AOP 帧路径**消费——`JwtAuthenticationMiddleware`（HTTP 管线裸 `GetService`）与 `AuthenticationUserHelperBase.RestoreFromTokenAsync`（`DomainUser.GetService` 直通不设帧）→ 守卫工厂帧外抛守卫 → **带 Bearer 受保护端点 500**（真实生产缺陷；测试 Fake 替换掩盖——skill §4.8 心得 8 同型，测试桩掩盖真实生产故障）。
-  - **修复**：① 中间件改经**系统作用域**解析（`host.BeginSystemScopeAsync(context.RequestServices)` + `sysScope.System.Use<ITokenVerifier>()`——SystemUser 供给，验签系统级操作；黑名单查询经 SystemUser NoAop 直建 DataService；无 DomainHost 隔离宿主走降级裸 GetService）；② UserHelper 改 `user.Use<ITokenVerifier>()`（AOP 帧内设 CurrentAopUser=user）。
+  - **修复（终态）**：① 中间件改经**游客帧**解析——ContextExtraction 阶段 2（UseWebSession 装配时）恒写游客 DomainUser 到 `HttpContext.Items["DomainUser"]`（`WebAppBuilder.InvokeSessionStepAsync`；`BeginSessionScopeAsync(context.RequestServices)` 传外部 SP 不建子作用域，游客 SP 即请求 SP 生命周期安全）→ `guest.Use<ITokenVerifier>()`（AOP 帧内设 CurrentAopUser=guest，守卫工厂供给——验签 = 匿名请求者证明身份，与 LoginAs 同属 Guest 行为）；**⚠️ JwtAuthenticationWebExtension 须与 UseWebSession 同装配**（无游客 → 降级裸 GetService 抛守卫 = 正确 fail 非静默降级；隔离测试宿主 Fake 替换兼容）。② UserHelper 改 `user.Use<ITokenVerifier>()`（AOP 帧内设 CurrentAopUser=user——登录流 user 即游客，与中间件语义一致）。
   - 消费约束：控制器禁 `[FromServices] ITokenVerifier` 预绑定（帧外抛守卫）；验签归中间件/登录链路（表现层零直取）。
-  - 82 用例全绿（WebHook FullChain System 帧分支 + 中间件测试降级分支 + TokenServiceTests 黑名单链）。
+  - 82 用例全绿（WebHook FullChain 游客帧分支 + 中间件测试降级分支 + TokenServiceTests 黑名单链）。
 - **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 

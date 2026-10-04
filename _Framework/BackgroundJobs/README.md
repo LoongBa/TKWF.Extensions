@@ -1,6 +1,6 @@
 # TKWF.Ext.BackgroundJobs 后台任务持久化增强技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地；**V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.4.0）**） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地；**V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.4.0）**；**V0.4.1（V4.10.55 ADR92/T3——JobExecutionRecorder 泛型化 + ctor 移除 IDomainUser，经 IDomainUserAccessor SystemUser 落库）**） | **框架**: .NET 10
 
 **定位**（ADR-BackgroundJobs-持久化增强与执行追踪架构）：补齐主框架三实现（内置 `TKWF.BackgroundJobs` / `TKWF.BackgroundJobs.Hangfire` / `TKWF.BackgroundJobs.Quartz`）的持久化缺口：
 - **执行历史审计**：`JobExecution` 实体——每次执行一行（耗时/重试/异常归档），经统一 `IBackgroundJobExecutionListener` 同步回调自动落库
@@ -57,9 +57,11 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 > **自动注册（V0.3.0 领域自治根治，ADR90——正确路线三态）**：
 > - **门面（AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory，消费方 `User.Use<接口>()` 解析）**：
 >   `IJobResultRecorder` / `IJobExecutionQueryService` / `IJobResultQueryService` / `IJobHistoryCleanupService`
-> - **边界保留（TryAddEnumerable 多实现集合）**：`IBackgroundJobExecutionListener` → `JobExecutionRecorder`
->   （主框架 Core 契约非 IDomainService，可叠加；JobExecutionRecorder ctor 有 IDomainUser——运行期经框架三桥
->   GetServices + SystemActor 通道供给 Use&lt;T&gt; 懒加载窗口，ADR88 方案 i 已收敛）
+> - **主框架契约监听器（V4.10.55 ADR92/T3 特例收编）**：`IBackgroundJobExecutionListener` → `JobExecutionRecorder<TUserInfo>`
+>   （主框架 Core 契约非 IDomainService，可叠加；**ctor 移除 IDomainUser**——TryAddEnumerableConstructible 约束
+>   `where TInterface : IDomainService` 不满足，且三桥 GetServices 裸枚举无法供给 D01——改泛型 + 接线型 ctor
+>   `IDomainUserAccessor<TUserInfo>`，DataService 经 SystemUser（三桥 BeginSystemScopeAsync System 帧内已设
+>   StandaloneDomainUserAccessor）NoAop 直建；Initializer 注册 `IDomainUserAccessor<TUserInfo>` → `StandaloneDomainUserAccessor<TUserInfo>`）
 > - **零 DataService 手动注册**（ADR61/D17 铁律）——JobExecution/JobResult DataService 经 SG1 消费方聚合自动注册
 >   （throw-factory）+ Options 绑定（`TKWF:BackgroundJobs`，[Options] SG 自动绑定 + Initializer 显式 BindConfiguration 双通道）
 
@@ -165,6 +167,7 @@ public class HistoryCleanupTask : DomainServiceBase   // V0.3.0：继承 DomainS
 - **统计 SQL 级聚合**（Oracle C1）——`Dac.CountAsync`（SQL COUNT(*) 分区计数）+ `FreeSqlQueryableExtensions.AvgAsync/MaxAsync`（SQL AVG/MAX 下推，ADR15 聚合 API 分层：IQueryable 桥接不支持 GroupBy 翻译，走 FreeSql ISelect 原生聚合）——**禁 Dac.ToListAsync + 内存 GroupBy**
 - **TryAddEnumerable 注册监听器**（Oracle C3）——多监听器可叠加，无注册时零开销
 - **V0.3.0 领域自治根治（ADR90）**——4 门面（`IJobResultRecorder`/`IJobExecutionQueryService`/`IJobResultQueryService`/`IJobHistoryCleanupService`）实现继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）+ `[DiContractIgnore]` 豁免 DI001；注册由 TryAddScoped 改 **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory，消费方统一 `User.Use<接口>()` 解析）；`JobExecutionRecorder` 属**边界保留组**（实现主框架 `IBackgroundJobExecutionListener` 契约非 IDomainService——多实现集合 TryAddEnumerable 保持，ADR88 方案 i 懒加载窗口已收敛，本批不改代码）；测试宿主重写走生产路径（真实 DI + `DomainUser<TUserInfo>.BindScope` + `User.Use<接口>()` AOP）
+- **V0.4.1（V4.10.55 ADR92/T3 特例收编）**——`JobExecutionRecorder` **泛型化 `JobExecutionRecorder<TUserInfo>` + ctor 移除 IDomainUser**：框架 §6.1 修正确认三桥 `GetServices` 裸枚举（BeginSystemScopeAsync 只设 StandaloneDomainUserAccessor，**不设 CurrentAopUser**）→ ctor(IDomainUser) 生产解析必失败（非"可用逃生通道"）；`IBackgroundJobExecutionListener` 非 `IDomainService`（TryAddEnumerableConstructible 约束不满足）→ 改接线型 ctor(`IDomainUserAccessor<TUserInfo>`, ILogger)，DataService 经 `IDomainUserAccessor.DomainUser`（三桥 System 帧内 SystemUser）NoAop 直建；Initializer 注册 `IDomainUserAccessor<TUserInfo>` → `StandaloneDomainUserAccessor<TUserInfo>`（TryAddSingleton）；**实体无执行者列、context 亦无执行者字段**（框架 §6.4.3"取执行者身份"建议前提不成立——以 SystemUser 落库等价实现）；测试宿主 D6/D10 走生产路径（BindScope + SetCurrentUser）；40 用例全绿
 - **v0.1.0 无 ExecutionId**（Oracle C4）——JobExecution 后置写入，执行中不可得（YAGNI）
 - **异常静默**——监听器/记录器异常不阻断作业执行，ILogger.Warning 记录
 - **历史清理经 DataService 物理删**（v0.2.0）——`DeleteExpiredAsync` 先查过期 Id 列表（Take batchSize）再 `EntityDeleteBatchAsync`（hasSoftDelete:false，绝不用 `EntitySoftDeleteAsync`——会抛 InvalidOperationException）；`JobHistoryCleanupService` 只依赖 2 个 DataService + IOptions + ILogger，红线合规

@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析** |
+| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析）** + **V0.1.3（V4.10.55 ADR92/T3 闭环——2 Method 改 `TryAddEnumerableConstructible` + 继承 DomainServiceBase，集合版守卫工厂帧内供给）** |
 | 依赖 | `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖** |
 | 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 
@@ -16,7 +16,7 @@
 
 ```
 IMfaService / MfaService                      # 门面（绑定管理 + 挑战-验证编排 + 恢复码 + 频控）——继承 DomainServiceBase + AddConstructibleService 注册（V4.10.53 领域自治根治）
-├── IMfaMethod（TryAddEnumerable 多实现）
+├── IMfaMethod（TryAddEnumerableConstructible 多实现——V4.10.55 ADR92 集合版守卫工厂）
 │     ├── TotpMfaMethod                       # TOTP（RFC 6238 自研——TotpGenerator，零 NuGet）
 │     └── SmsMfaMethod                        # 短信（SmsMfaMethod + 消费方 IMfaSmsSender 渠道）
 ├── MfaSecretEntityDataService                # SG1 DataService（secret 密文落库；密钥经 MfaSecretKeyStore）
@@ -108,7 +108,7 @@ public class LoginService : DomainServiceBase
 }
 ```
 
-三钩子自动接线。DI 注册形态（V4.10.53）：`IMfaService` 经 `AddConstructibleService`（接口可构造守卫工厂 + 实现类 throw-factory——域作用域外解析即抛）；`IMfaMethod` 双实现 `TryAddEnumerable`（消费方自定义实现优先）；`IMfaSmsSender` 消费方 `TryAddScoped`（无默认实现）。
+三钩子自动接线。DI 注册形态（V4.10.53 → V4.10.55）：`IMfaService` 经 `AddConstructibleService`（接口可构造守卫工厂 + 实现类 throw-factory——域作用域外解析即抛）；`IMfaMethod` 双实现 **`TryAddEnumerableConstructible`**（V4.10.55 ADR92 集合版守卫工厂——`MfaService` 经 `User.Use<IMfaService>()` 帧内创建时枚举集合，守卫工厂经 CurrentAopUser 供给 ctor IDomainUser；帧外枚举抛守卫；消费方自定义实现优先）；`IMfaSmsSender` 消费方 `TryAddScoped`（无默认实现）。
 
 ## 数据模型
 

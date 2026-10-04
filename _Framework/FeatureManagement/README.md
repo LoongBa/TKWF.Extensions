@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.FeatureManagement` |
-| 版本 | **V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线）**：Store/Manager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；FeatureChecker 改接线型（ctor `IServiceProvider` + C1 延迟解析）修复真实生产故障；测试宿主走生产路径 |
+| 版本 | **V0.4.4（V4.10.55 多实现集合守卫工厂——4 Provider TryAddEnumerableConstructible + 继承 DomainServiceBase，ADR92/T3 闭环）**：修复 FeatureManager 集合枚举生产失败（T3 转达 V0.4.0 边界保留组收编） |
 | 依赖 | `TKWF.Domain`（含框架 `IFeatureChecker`/`RequireFeature`/`AddFeatureCheck`/`ILocalEventBus`/`IDistributedEventBus` 基座）+ SG1（接口判定收集，v4.10.31 A+ 阶段 3） |
 | 数据 | 表 `FeatureValue`（框架 `SyncTables` 统一建表；`Value` 列 v0.3.0 起无界） |
 
@@ -37,7 +37,7 @@ FeatureManagementApiService（[GenerateController] 管理 API——写路径委�
 - **注册形态（V0.4.0 领域自治根治，ADR90——正确路线三态）**：
   - **门面（AddConstructibleService）**——`IFeatureValueStore` / `IFeatureManager`（接口 `: IDomainService`）：接口可构造守卫工厂（`CurrentAopUser` 守卫）+ 实现类 throw-factory；实现继承 `DomainServiceBase`（经基类 `User` 取上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败，v0.3.3 同根缺陷）+ `[DiContractIgnore]` 豁免 DI001；消费方统一经 `User.Use<IFeatureValueStore>()` / `User.Use<IFeatureManager>()` 解析。
   - **接线型（TryAddScoped 普通 DI）**——`IFeatureChecker`（主框架 Core 契约非 IDomainService 不可修改）：框架 `FeatureFilterAttribute` 经 `context.ServiceProvider.GetService<IFeatureChecker>()` 普通 DI 解析；实现 ctor(`IServiceProvider`, ILogger) + C1 延迟解析 `IFeatureManager`（`GetRequiredService`）——修复真实生产故障（旧 ctor(IDomainUser) 在过滤器 GetService 解析时构造失败 → 特性检查静默失效）。
-  - **多 Provider（TryAddEnumerable）**——`IFeatureValueProvider` 内置四层：多实现集合（按实现类型去重），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase（ctor 需 IDomainUser）。⚠️ **框架机制边界（T3 转达候选）**：多实现集合中 DomainServiceBase 派生实现经普通 DI GetServices 构造时 IDomainUser 永不注册 → 生产解析失败（`FeatureManager` 构造注入 `IEnumerable<IFeatureValueProvider>` 触发）——本批保留 + 记录（对齐 Authentication Provider 处理）。
+  - **多 Provider（TryAddEnumerableConstructible，V4.10.55 ADR92/T3 闭环）**——`IFeatureValueProvider` 内置四层：集合版守卫工厂（实现类 throw-factory + 集合元素守卫工厂，帧内 CurrentAopUser 供给 ctor IDomainUser；帧外枚举抛守卫）；实现继承 DomainServiceBase + `[DiContractIgnore]`。`FeatureManager` 经 `User.Use<IFeatureManager>()` 帧内创建时 ctor 注入 `IEnumerable<IFeatureValueProvider>` 在帧内枚举成功——修复原 TryAddEnumerable 按实现类 ctor 激活、IDomainUser 永不注册（D01）→ 生产解析失败（T3 转达 §三 实证，V0.4.0 边界保留组收编）。
 - **管理 API（C3）**：`FeatureManagementApiService`（`[GenerateController]`）写路径委托 `IFeatureManager`——缓存失效 + Global 唯一性 + 写时校验在门面处理；DataService 仅内部存储（裸 CRUD 禁直通）。
 
 ## 核心能力
@@ -179,6 +179,12 @@ FeatureValue(id BIGINT PK, name VARCHAR(128), value TEXT NULL, provider_name VAR
 - **`FeatureChecker<TUserInfo>` 改接线型**（skill §4.2/§4.8 #7）——`IFeatureChecker` 为主框架 Core 契约（非 IDomainService 不可修改），框架 `FeatureFilterAttribute` 经 `context.ServiceProvider.GetService<IFeatureChecker>()` 普通 DI 解析；ctor 改 `IServiceProvider` + C1 延迟解析 `IFeatureManager`（GetRequiredService）；注册保持 TryAddScoped。**修复真实生产故障**：旧 ctor(IDomainUser)（永不注册 DI）在框架过滤器 GetService 解析时构造失败 → 特性检查静默失效
 - **4 Provider 边界保留**（User/Role/Tenant/Global，TryAddEnumerable 多实现集合）——ctor 需 IDomainUser 经普通 DI GetServices 构造时 IDomainUser 永不注册 → 生产解析失败（**框架机制缺口 T3 转达候选**，本批不改，对齐 Authentication Provider 处理）
 - 测试宿主走生产路径：真实 DI（Initializer ConfigureServices + FreeSql SQLite + AddLogging）+ `DomainUser<TestUserInfo>.BindScope` + `User.Use<接口>()` AOP 路径 + 接线型 GetRequiredService 可解析哨兵 + Initializer 注册形态断言（守卫工厂/throw-factory/域外抛/4 Provider TryAddEnumerable）；**134 用例全绿**（127→134：+5 Initializer 形态断言 +2 Checker 接线型哨兵；禁止 slnx 构建，仅本扩展项目 + 测试项目）
+
+### V0.4.4（V4.10.55 多实现集合守卫工厂，ADR92/T3 闭环，2026-10-04）
+
+- **4 Provider（User/Role/Tenant/Global）改 `TryAddEnumerableConstructible`（集合版守卫工厂）**（V4.10.55 ADR92/T3 方案 A 落地）——Provider 继承 `DomainServiceBase`（经基类 `User` 取上下文，删 `_user` 字段）+ `[DiContractIgnore]` 豁免 DI001；注册由 `TryAddEnumerable` 改 `TryAddEnumerableConstructible<IFeatureValueProvider, {Provider}>()` ×4（集合版 `AddConstructibleService`：实现类 throw-factory + 集合元素守卫工厂——`FeatureManager` 经 `User.Use<IFeatureManager>()` 帧内创建时 ctor 注入的 `IEnumerable<IFeatureValueProvider>` 在帧内枚举，守卫工厂经 `CurrentAopUser` 供给 ctor 的 `IDomainUser`）
+- **修复生产失败态**：原 TryAddEnumerable 集合按实现类 ctor 激活、`IDomainUser` 永不注册（D01）→ `FeatureManager` 构造注入 `IEnumerable` 时生产解析失败（T3 转达 §三 实证，V0.4.0 边界保留组）；帧外枚举（控制器 `[FromServices] IEnumerable` 等）抛守卫（禁止形态）
+- 测试宿主同步：`FeatureManagementTestHost` 桩 `Provider` 显式注入（守卫工厂从 CurrentAopUser 直供 user，DI 桩注册不再被触发解析）+ Initializer 断言改守卫工厂形态 + ProviderImpl throw-factory 哨兵；**135 用例全绿**
 
 ## 后续演进（v0.4.0+ 候选）
 

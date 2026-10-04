@@ -1,6 +1,6 @@
 # TKWF.Ext.Notifications 通知中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0 + **V0.6.0（领域自治根治，ADR90——V0.5.1/V0.5.2 为既有 tag，整改发布版升 V0.6.0：4 门面继承 `DomainServiceBase` + `AddConstructibleService` 注册，消费方统一 `User.Use<接口>()` 解析）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.6.0 + **V0.6.1（V4.10.55 多实现集合守卫工厂，ADR92/T3 闭环——InboxNotifier TryAddEnumerableConstructible + 继承 DomainServiceBase）** | **框架**: .NET 10
 
 **核心约束**: 三层数据模型（Notification 发布态 → UserNotification 收件箱行 → NotificationSubscription 订阅）、事件驱动通知（D15 事件总线高层组合）、多通道路由（v0.2.0 已实施：定义 UseChannels 声明 + Email 通道 best-effort）、用户偏好路由 + 逐用户权限门控（v0.3.0 已实施）、SignalR 实时推送通道（v0.4.0 独立包 `TKWF.Ext.Notifications.SignalR`，服务端非 UI）、REST 直接暴露（v0.5.0 已实施：VEntity DTO 一等公民）、SG1 声明式实体、**领域自治根治（V0.5.1：门面 `AddConstructibleService` + `User.Use<接口>()`）**
 
@@ -78,7 +78,7 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 > - **`TryAddScoped` 接线型 + `TryAddEnumerable` 通道**——`InboxNotifier`/`EmailNotifier`（多实例收集：InboxNotifier owns UserNotification 写入 C5；EmailNotifier 接线型 ctor(IServiceProvider,ILogger) 无 user 依赖，best-effort M1）。
 > - **反射 Provider 扫描**——`[NotificationDefinitionProvider]` 特性驱动注册（`RegisterNotificationDefinitionProviders`，M3，不动）。
 >
-> ⚠️ **框架缺口候选（T3 转达）**：`TryAddEnumerable` 多实现集合中 `InboxNotifier` 仍构造注入 `IDomainUser`（本批边界保留未改，对齐 MFA `IMfaMethod` 处理）——普通 DI `GetServices<INotificationNotifier>()` 构造 `InboxNotifier` 时 IDomainUser 永不注册（D01）→ 生产解析失败；待框架机制补齐"多实现集合中 DomainServiceBase 派生实现的 user 供给"后统一整改。
+> ✅ **V4.10.55（ADR92/T3 闭环）**：`InboxNotifier` 改 `TryAddEnumerableConstructible`（集合版守卫工厂）+ 继承 `DomainServiceBase`（删 `_user` 字段，经基类 `User` 取上下文 + `[DiContractIgnore]`）——`NotificationPublisher` 经 `User.Use<INotificationPublisher>()` 帧内创建时 ctor 注入的 `IEnumerable<INotificationNotifier>` 在帧内枚举，守卫工厂经 `CurrentAopUser` 供给；帧外枚举（控制器 `[FromServices]` 等）抛守卫（禁止形态）。`EmailNotifier` 保持接线型普通 DI（无 user 依赖，可解析）。修复原边界保留生产失败态（T3 转达 §三 实证）。
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
@@ -87,7 +87,7 @@ public class OrderNotificationHandler(INotificationPublisher publisher)
 | **`INotificationSubscriptionManager`** | 订阅管理（定义级/实体级订阅/退订，幂等） | `NotificationSubscriptionStore`（继承 `DomainServiceBase`，`AddConstructibleService` 注册——V0.5.1；命名错位候选类名 Store/接口 Manager 留待后续批次） |
 | **`INotificationDefinitionManager`** | 通知定义注册/校验（Singleton） | `NotificationDefinitionManager`（接线型保留——ctor 仅 `IEnumerable<INotificationDefinitionProvider>` 无 user 依赖，TryAddSingleton 普通 DI 注册不变；接口标 IDomainService 但实现无 user 依赖——记录于整改日志） |
 | **`INotificationDefinitionProvider`** | 通知定义贡献者（`[NotificationDefinitionProvider]` 扫描） | 消费方实现 |
-| **`INotificationNotifier`** | 通道抽象（多实例收集 TryAddEnumerable：Inbox + Email） | `InboxNotifier` / `EmailNotifier`（边界保留——InboxNotifier 仍 ctor 注入 IDomainUser，T3 框架缺口候选，本批不改） |
+| **`INotificationNotifier`** | 通道抽象（多实例收集：Inbox `TryAddEnumerableConstructible` V4.10.55 ADR92 + Email 接线型普通 DI） | `InboxNotifier`（V4.10.55 已改构造守卫工厂）/ `EmailNotifier` |
 | **`INotificationPreferenceManager`** | 用户通道偏好管理（Get/Set/Clear + 批量预取，V0.3.0） | `NotificationPreferenceStore`（继承 `DomainServiceBase`，`AddConstructibleService` 注册——V0.5.1；命名错位候选同上） |
 | **`IUserEmailProvider`** | 用户邮箱提供者（Email 通道收件地址，消费方实现） | 消费方实现（扩展不注册） |
 | **`NotificationsOptions`** | 配置（`TKWF:Notifications` 节） | 内置 |
@@ -215,6 +215,11 @@ TKWF.Ext.Notifications.SignalR（v0.4.0 独立包——按需引入，不引则�
 - **测试宿主走生产路径**：真实 DI（扩展 ConfigureServices + FreeSql 基础设施 + IEntityDAC Singleton）→ `DomainUser<TestUserInfo>.BindScope` → `user.Use<接口>()` AOP 路径；Initializer 注册形态断言（守卫工厂 + throw-factory + 域外抛，新增 2 用例）；**75 → 77 用例全绿**
 - **边界保留组（本批不改，记录于整改日志）**：`InboxNotifier`/`EmailNotifier`（TryAddScoped<具体类> + TryAddEnumerable 多实现集合）——**框架缺口候选（T3 转达）**：多实现集合中 DomainServiceBase 派生实现的 user 供给依赖框架机制（普通 DI 构造 ctor(IDomainUser) 时 IDomainUser 永不注册 → 生产解析失败），对齐 MFA `IMfaMethod` 处理保留 + 记录；`NotificationDefinitionManager`（接口标 IDomainService 但实现无 user 依赖）接线型保留（TryAddSingleton 普通 DI，不继承基类——skill §4.7 心得 5）；`UserNotificationViewQueryService`/VEntity（已合规）零改动
 - **命名重组候选（本批不改）**：`NotificationStore`→`NotificationInboxManager`；`NotificationSubscriptionStore`/`NotificationPreferenceStore` 类名 Store/接口 Manager 命名错位——留待后续批次
+
+### V0.6.1（V4.10.55 多实现集合守卫工厂，ADR92/T3 闭环）
+- **`InboxNotifier` 改 `TryAddEnumerableConstructible`（集合版守卫工厂）+ 继承 `DomainServiceBase`**——删 `_user` 字段（经基类 `User` 取上下文）+ `[DiContractIgnore]`；注册由 `TryAddScoped<具体类>` + `TryAddEnumerable` 改 `TryAddEnumerableConstructible<INotificationNotifier, InboxNotifier>`（实现类 throw-factory + 集合元素守卫工厂）；`EmailNotifier` 保持接线型（TryAddScoped<具体类> + TryAddEnumerable 普通 DI——ctor 无 IDomainUser，可解析）
+- **修复生产失败态**（T3 转达 §三 实证，V0.5.1 边界保留组收编）——`NotificationPublisher` 经 `User.Use<INotificationPublisher>()` 帧内创建时 ctor 注入的 `IEnumerable<INotificationNotifier>` 在帧内枚举：InboxNotifier 守卫工厂经 CurrentAopUser 供给 ctor IDomainUser；帧外枚举（`GetServices` 直取）抛守卫（禁止形态）
+- 测试宿主同步：`NotificationsExtensionInitializerTests` 注册断言改守卫工厂形态（Inbox = 工厂委托 / Email = 实现映射）+ `Publisher_Resolves_InFrame_WithInboxAndEmailChannels` 帧内哨兵；**78 用例全绿**
 
 ### 远期 / 评估
 - 通知本地化（`ILocalizableString`，对接 D16/ADR31）

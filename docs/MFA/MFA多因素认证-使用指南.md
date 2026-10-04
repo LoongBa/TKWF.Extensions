@@ -10,7 +10,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0 |
+| 版本 | v0.1.0（+ **V0.1.2** V4.10.53 领域自治根治 / **V0.1.3** V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂） |
 | 依赖 | 主框架 `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖**（短信渠道经消费方抽象 `IMfaSmsSender` 注入） |
 | 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 | 职责 | 第二因素验证服务（绑定管理 + 挑战验证 + 频控 + 恢复码）；**不签发令牌、不维护登录状态、不做主认证** |

@@ -1,6 +1,6 @@
 # TKWF.Ext.Authentication 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.2（V4.10.57 fcbffd1 受理——ITokenVerifier 无帧消费 500 修复终态：中间件游客帧 + UserHelper Use 帧内，Oracle 裁决；V0.5.1 过渡形态未发布） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.3（框架组转达 2026-10-05——开发模式临时 RSA 密钥跨实例不一致修复：`DevRsaKeyCache` 进程内静态缓存；V0.5.2 为 fcbffd1 受理 ITokenVerifier 无帧消费 500 修复终态——中间件游客帧，Oracle 裁决） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -222,6 +222,10 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **修复（终态）**：① 中间件改经**游客帧**解析——ContextExtraction 阶段 2（UseWebSession 装配时）恒写游客 DomainUser 到 `HttpContext.Items["DomainUser"]`（`WebAppBuilder.InvokeSessionStepAsync`；`BeginSessionScopeAsync(context.RequestServices)` 传外部 SP 不建子作用域，游客 SP 即请求 SP 生命周期安全）→ `guest.Use<ITokenVerifier>()`（AOP 帧内设 CurrentAopUser=guest，守卫工厂供给——验签 = 匿名请求者证明身份，与 LoginAs 同属 Guest 行为）；**⚠️ JwtAuthenticationWebExtension 须与 UseWebSession 同装配**（无游客 → 降级裸 GetService 抛守卫 = 正确 fail 非静默降级；隔离测试宿主 Fake 替换兼容）。② UserHelper 改 `user.Use<ITokenVerifier>()`（AOP 帧内设 CurrentAopUser=user——登录流 user 即游客，与中间件语义一致）。
   - 消费约束：控制器禁 `[FromServices] ITokenVerifier` 预绑定（帧外抛守卫）；验签归中间件/登录链路（表现层零直取）。
   - 82 用例全绿（WebHook FullChain 游客帧分支 + 中间件测试降级分支 + TokenServiceTests 黑名单链）。
+- **V0.5.3（框架组转达 2026-10-05——开发模式临时 RSA 密钥跨实例不一致修复）**：
+  - **缺陷**：`TokenService` 开发模式（`SigningKeyPath` 未配置 && `IsProduction=false`）每次 `LoadKeysCore` 都 `RSA.Create()` **新建临时密钥**且无进程内共享——每个 scoped 实例（每请求一个）各自 `Lazy<RsaKeySet>` → 签发实例与验签实例（`LocalJwtTokenVerifier` 经 `User.Use<ITokenService>()` 解析的另一实例）密钥集不同 → **INVALID_SIGNATURE**（EduPlatform 反馈，框架组转达 P0）。既有 `Dev_MissingSigningKey_AutoGeneratesTemporary` 只测**单实例**自带签发+验签——单实例密钥集自洽必通过，漏检跨实例不一致。
+  - **修复**：新增 `DevRsaKeyCache`（internal static + 双重校验锁 `GetOrCreate(Func<RsaKeySet>)` + `ResetForTests()` 测试隔离钩子——镜像 `PlatformCredentialKeyStore` 既有模式并补其缺 Reset 缺陷）——`LoadKeysCore` dev 分支改从缓存取（工厂仅首次执行）；**生产分支（PEM 文件）天然跨实例一致，绝不走缓存**（缺 PEM 仍 fail-fast）。`RsaKeySet` private → internal（复用同一类型）；`ResetForTests` 先 Dispose 已缓存密钥再置 null（防托管资源泄漏）。
+  - 84 用例全绿（新增 `DevRsaKeyCacheTests`：T1 两独立实例 A 签发/B 验签成功——缺陷消除唯一证明 + T2 Reset 后新实例拒旧 token——隔离有效；setup Reset 防跨类泄漏）。
 - **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 

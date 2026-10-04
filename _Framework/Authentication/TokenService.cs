@@ -250,13 +250,17 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
     // ── 私有实现 ──────────────────────────────────────────────────────────
 
-    private sealed record RsaKeySet(string CurrentKid, RSA SigningKey, Dictionary<string, RSA> VerifyKeys);
+    // V0.5.3：private → internal——DevRsaKeyCache（开发模式密钥集进程内缓存）复用同一类型（token 签发/验签一致性密钥对）
+    internal sealed record RsaKeySet(string CurrentKid, RSA SigningKey, Dictionary<string, RSA> VerifyKeys);
 
     /// <summary>
     /// 加载签名密钥（fail-fast：生产缺密钥/默认值 → 拒绝启动；开发自动生成临时密钥 + Warning）。
     /// <para>kid 轮换（JWK RFC 7517 语义）：CurrentKid 指定签发；验证遍历 SigningKeys 全量 kid 匹配。</para>
     /// <para>V0.3.1：改为 static + 参数化（options/logger）——单一真相源，runtime 实例 Lazy 与 Initializer
     /// 系统作用域预检（经 scope.System.Use&lt;ITokenService&gt;() 解析实例）共享同一实现。</para>
+    /// <para>V0.5.3（转达-2026-10-05 修复）：开发模式（SigningKeyPath 未配置 &amp;&amp; !IsProduction）临时密钥
+    /// 经 <see cref="DevRsaKeyCache"/> 进程内静态缓存（双重校验锁）——修复跨 scoped 实例密钥不一致
+    /// （签发实例与验签实例各自 RSA.Create → INVALID_SIGNATURE）；生产分支（PEM 文件）天然一致不走缓存。</para>
     /// </summary>
     private static RsaKeySet LoadKeysCore(AuthCenterOptions o, ILogger logger)
     {
@@ -275,7 +279,9 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
             if (o.IsProduction)
                 throw new InvalidOperationException($"AuthCenterOptions.SigningKeyPath 未配置——生产环境必须提供 RSA 私钥 PEM（kid={currentKid}）");
             logger.LogWarning("AuthCenterOptions.SigningKeyPath 未配置——开发环境自动生成临时 RSA 密钥（重启即变，仅限开发）");
-            signingKey = RSA.Create(RsaMinKeyBits);
+            // V0.5.3：进程内静态缓存（DevRsaKeyCache 双重校验锁）——每个 scoped 实例解析同一密钥集，
+            // 消除"签发实例与验签实例密钥不同 → INVALID_SIGNATURE"（跨实例验签失败）；仅 dev 分支触发。
+            return DevRsaKeyCache.GetOrCreate(() => CreateDevKeySet(currentKid, o, logger));
         }
 
         EnsureKeyLength(signingKey);
@@ -292,6 +298,34 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
                 verifyKeys[cfg.Kid] = rsa;
             }
             // CurrentKid 未列入 SigningKeys 时补充（签发密钥即验证密钥）
+            if (!verifyKeys.ContainsKey(currentKid)) verifyKeys[currentKid] = signingKey;
+        }
+        else
+        {
+            verifyKeys[currentKid] = signingKey;
+        }
+
+        logger.LogInformation("认证中心签名密钥已加载：kid={CurrentKid}，验证密钥数={Count}", currentKid, verifyKeys.Count);
+        return new RsaKeySet(currentKid, signingKey, verifyKeys);
+    }
+
+    /// <summary>构建开发模式密钥集（工厂——DevRsaKeyCache 仅首次执行；dev 分支 signingKey 恒为 null，直接 RSA.Create）。</summary>
+    private static RsaKeySet CreateDevKeySet(string currentKid, AuthCenterOptions o, ILogger logger)
+    {
+        var signingKey = RSA.Create(RsaMinKeyBits);
+        EnsureKeyLength(signingKey);
+
+        var verifyKeys = new Dictionary<string, RSA>(StringComparer.Ordinal);
+        if (o.SigningKeys.Count > 0)
+        {
+            foreach (var cfg in o.SigningKeys)
+            {
+                if (string.IsNullOrEmpty(cfg.Kid)) continue;
+                var rsa = CreateRsaFromPem(cfg.PrivateKeyPath) ?? CreateRsaFromPem(cfg.PublicKeyPath);
+                if (rsa == null) continue;
+                EnsureKeyLength(rsa);
+                verifyKeys[cfg.Kid] = rsa;
+            }
             if (!verifyKeys.ContainsKey(currentKid)) verifyKeys[currentKid] = signingKey;
         }
         else

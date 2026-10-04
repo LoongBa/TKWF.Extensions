@@ -10,6 +10,13 @@ namespace TKWF.Ext.Authentication.Tests;
 /// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
 public class PlatformCredentialServiceTests
 {
+    /// <summary>V0.5.3（Oracle 评审 MAJOR）：PlatformCredentialKeyStore 静态缓存测试隔离——每用例前置 Reset，
+    /// 防跨测试类/跨用例泄漏（CreateService 每次生成不同密钥文件路径，静态缓存若不复位会复用首次密钥 → 解密失败）。</summary>
+    public PlatformCredentialServiceTests()
+    {
+        PlatformCredentialKeyStore.ResetForTests();
+    }
+
     private static (PlatformCredentialService Service, PlatformCredentialEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();

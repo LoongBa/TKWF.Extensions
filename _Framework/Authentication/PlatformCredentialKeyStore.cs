@@ -57,6 +57,24 @@ internal static class PlatformCredentialKeyStore
     public static byte[] GetKey()
         => _key ?? throw new InvalidOperationException("PlatformCredentialKeyStore 未初始化——请先经 PlatformCredentialService 构造（Initialize）");
 
+    /// <summary>
+    /// 测试隔离钩子（V0.5.3 补齐——ADR-Authentication-DevRsaKeyCache 契约"静态缓存必须有 Reset 钩子"，
+    /// 本类为镜像模式的缺 Reset 缺陷回补）——清空密钥并覆盖敏感字节（防托管残留）。
+    /// 测试 setup/teardown 调用；生产路径仅经 PlatformCredentialService 构造 Initialize 后再 Reset 的场景
+    /// 不存在（Reset 仅供测试），零生产接触。
+    /// </summary>
+    public static void ResetForTests()
+    {
+        lock (Gate)
+        {
+            if (_key != null)
+            {
+                Array.Clear(_key);
+                _key = null;
+            }
+        }
+    }
+
     /// <summary>AES-GCM 加密：输出 "base64(iv).base64(tag).base64(cipher)"（12 字节 nonce + 16 字节 tag）。</summary>
     public static string Encrypt(string plaintext, byte[] key)
     {

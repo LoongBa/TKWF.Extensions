@@ -67,7 +67,10 @@ public abstract class AuthenticationUserHelperBase<TUserInfo> : DomainUserHelper
     {
         if (string.IsNullOrWhiteSpace(token)) throw new AuthenticationException("TOKEN_MALFORMED");
 
-        var verifier = user.GetService<ITokenVerifier>();
+        // V4.10.57（fcbffd1 框架组判定受理）：ITokenVerifier 守卫工厂（AddConstructibleService）需帧内供给——
+        // 原 GetService（DomainUser.GetService 直通 GetRequiredService 不设 CurrentAopUser）帧外抛守卫 → 票据换令牌 500。
+        // 改 user.Use<ITokenVerifier>()（AOP 帧内：设 CurrentAopUser=user → 守卫工厂 ActivatorUtilities 供给）。
+        var verifier = user.Use<ITokenVerifier>();
         var tokenResult = await verifier.VerifyAsync(token);
 
         var mapper = user.GetService<IAuthorizationMapper<TUserInfo>>();

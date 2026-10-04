@@ -67,7 +67,24 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
 
         try
         {
-            var verifier = context.RequestServices.GetService<ITokenVerifier>();
+            // V4.10.57（fcbffd1 框架组判定受理）：ITokenVerifier 守卫工厂（AddConstructibleService）需帧内
+            // CurrentAopUser 供给 ctor IDomainUser——本中间件处于 HTTP 管线（无 User.Use<T>() AOP 帧），
+            // 原裸 GetService 帧外抛守卫 → 带 Bearer 受保护端点 500（真实生产缺陷，测试 Fake 替换掩盖）。
+            // 修复：经系统作用域解析（BeginSystemScopeAsync → System.Use<ITokenVerifier>()——SystemUser 供给，
+            // 验签为系统级操作，黑名单查询经 SystemUser NoAop 直建 DataService；对齐 InitializeAsync A' 先例）。
+            // 降级路径：无 DomainHost（隔离测试宿主/未装配域）→ 原裸 GetService（测试 Fake 替换兼容；生产恒有 DomainHost）。
+            var host = context.RequestServices.GetService<DomainHost<TUserInfo>>();
+            ITokenVerifier? verifier;
+            if (host != null)
+            {
+                await using var sysScope = await host.BeginSystemScopeAsync(context.RequestServices);
+                verifier = sysScope.System.Use<ITokenVerifier>();
+            }
+            else
+            {
+                verifier = context.RequestServices.GetService<ITokenVerifier>();
+            }
+
             if (verifier == null)
             {
                 logger.LogWarning("ITokenVerifier 未注册——JWT 恢复路径跳过（装配方须启用认证中心或注册验证器）");

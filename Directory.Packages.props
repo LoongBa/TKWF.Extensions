@@ -88,5 +88,9 @@
          正式——解除 4.10.54-local 本地锁 + 删本地源）；需测试辅助（C 基座对齐 A）时新增 TKWF.Domain.Testing.xUnit 4.10.54 条目 -->
   <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.54" />
   <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.54" />
+    <!-- ✅ 4.10.54 测试辅助（议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
+         IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
+         对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.54" />
   </ItemGroup>
 </Project>

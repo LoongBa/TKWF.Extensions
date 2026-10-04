@@ -39,6 +39,12 @@
     <ProjectReference Include="..\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
   </ItemGroup>
 
+  <!-- V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：SSO 消费面契约包——接口 + 不可变 DTO（零实体零 SG1）；
+       实现类在本主包补实现 ISsoAccountQueryService / ISsoChannelMapService（AuthAccountQueryService / PlatformAccountMapService） -->
+  <ItemGroup>
+    <ProjectReference Include="..\Authentication.Abstractions\TKWF.Ext.Authentication.Abstractions.csproj" />
+  </ItemGroup>
+
   <!-- 实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations）+ TokenService 黑名单 IMemoryCache 缓存（Oracle C3） -->
   <ItemGroup>
     <PackageReference Include="FreeSql" />
@@ -68,6 +74,9 @@
   <!-- 测试项目访问 internal -->
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Authentication.Tests" />
+    <!-- SSO 模块测试（2026-10-05，ADR-SSO）：生产路径测试经 User.Use<AuthAccountEntityDataService>() 种子账号——
+         对齐 Notifications.SignalR 先例（主包 IVT 给卫星测试包） -->
+    <InternalsVisibleTo Include="TKWF.Ext.SSO.Tests" />
   </ItemGroup>
 
 </Project>

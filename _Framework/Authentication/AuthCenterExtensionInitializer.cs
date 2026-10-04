@@ -79,6 +79,12 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
         // V0.2.0：账号查询契约（对外只读查询——UserCenter 桥接 / 装配实例 / 内部复用；委托 DataService 红线合规）
         services.AddConstructibleService<IAuthAccountQueryService, AuthAccountQueryService>();
 
+        // V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：SSO 消费面契约——实现类复用既有（AuthAccountQueryService /
+        // PlatformAccountMapService 补实现 ISsoAccountQueryService / ISsoChannelMapService，返回不可变 DTO）；
+        // 注册 AddConstructibleService（门面标准形态，SSO 经 User.Use<接口>() 帧内解析）
+        services.AddConstructibleService<ISsoAccountQueryService, AuthAccountQueryService>();
+        services.AddConstructibleService<ISsoChannelMapService, PlatformAccountMapService>();
+
         // V0.2.0：账号写契约（DMP 渐进替换影子账号 upsert——ADR-Authentication-账号写契约；委托 DataService 红线合规）
         services.AddConstructibleService<IAuthAccountService, AuthAccountService>();
 

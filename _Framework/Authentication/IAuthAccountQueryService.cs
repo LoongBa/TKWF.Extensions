@@ -22,9 +22,11 @@ public interface IAuthAccountQueryService : IDomainService
 /// V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文；
 /// DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；注册改
 /// <c>AddConstructibleService&lt;IAuthAccountQueryService, AuthAccountQueryService&gt;</c>。
-/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para></summary>
+/// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。
+/// V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：补实现 <see cref="ISsoAccountQueryService"/>——SSO 消费面契约
+/// （返回不可变 DTO <see cref="SsoAccountDto"/>，敏感字段不出契约包）。</para></summary>
 [DiContractIgnore]
-internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService
+internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService, ISsoAccountQueryService
 {
     private AuthAccountEntityDataService? _dataService;
     private AuthAccountEntityDataService DataService => _dataService ??= User.Use<AuthAccountEntityDataService>();
@@ -41,4 +43,22 @@ internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQ
         => DataService.GetByWechatMpOpenIdAsync(openId, ct);
     public Task<AuthAccountEntity?> GetByWechatWebOpenIdAsync(string openId, CancellationToken ct = default)
         => DataService.GetByWechatWebOpenIdAsync(openId, ct);
+
+    /// <inheritdoc cref="ISsoAccountQueryService.GetByUIdAsync"/>
+    /// <remarks>显式接口实现——与 <see cref="IAuthAccountQueryService.GetByUIdAsync"/> 同名同参不同返回类型（实体 vs DTO），
+    /// C# 隐式实现签名冲突，须显式实现区分。</remarks>
+    async Task<SsoAccountDto?> ISsoAccountQueryService.GetByUIdAsync(string uid, CancellationToken ct)
+    {
+        var entity = await DataService.GetByUIdAsync(uid, ct);
+        return entity is null ? null : ToDto(entity);
+    }
+
+    /// <summary>实体 → SSO 消费面 DTO（只映射消费字段，敏感字段不外泄）。</summary>
+    private static SsoAccountDto ToDto(AuthAccountEntity entity)
+        => new SsoAccountDto(
+            UId: entity.UId,
+            FederationAnchorOpenId: entity.FederationAnchorOpenId,
+            Nickname: entity.Nickname,
+            AvatarUrl: entity.Avatar,
+            AuthLevel: entity.AuthLevel);
 }

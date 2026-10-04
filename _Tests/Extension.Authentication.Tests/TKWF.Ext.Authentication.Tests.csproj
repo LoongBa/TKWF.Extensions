@@ -46,6 +46,8 @@
   <ItemGroup>
     <!-- 本仓库扩展（Authentication）+ 主框架（TKWFSourceRoot 定义于 ../Directory.Build.props） -->
     <ProjectReference Include="..\..\_Framework\Authentication\TKWF.Ext.Authentication.csproj" />
+    <!-- V0.6.0（SSO 立项，ADR-SSO）：SSO 消费面契约包——测试断言 ISsoAccountQueryService/ISsoChannelMapService 返回 DTO 类型 -->
+    <ProjectReference Include="..\..\_Framework\Authentication.Abstractions\TKWF.Ext.Authentication.Abstractions.csproj" />
     <!-- v0.2.0：UserCenter 契约承接测试（N2-N5——UserCenterQueryService 门面 + IUserProfileSource 契约） -->
     <ProjectReference Include="..\..\_Framework\UserCenter\TKWF.Ext.UserCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />

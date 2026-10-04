@@ -12,6 +12,9 @@ namespace TKWF.Ext.Authentication
     /// </summary>
     [Table("PlatformAccountMap")]
     [FreeSql.DataAnnotations.Index("UX_PlatformAccountMap", nameof(PlatformAccountId) + "," + nameof(BusinessAppId) + "," + nameof(BusinessLocalId), IsUnique = true)]
+    // SSO 联邦映射（channel_id + external_user_id → uid）专用唯一索引——既有 UX 保留不变（V0.5.x 消费方零回归），
+    // 新索引对 NULL 放行（既有行 ChannelId/ExternalUserId 为空不冲突，ADR-SSO Oracle P1-3）
+    [FreeSql.DataAnnotations.Index("UX_PlatformAccountMap_Channel", nameof(ChannelId) + "," + nameof(ExternalUserId), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class PlatformAccountMapEntity
     {
@@ -39,12 +42,22 @@ namespace TKWF.Ext.Authentication
         [MaxLength(64)]
         public string? UnionId { get; set; }
 
-        /// <summary>创建时间（UTC）；唯一索引 (PlatformAccountId, BusinessAppId, BusinessLocalId)。</summary>
+        /// <summary>channel 实例 id（SSO 联邦映射，如微信公众号 id；可空——既有业务 app 映射行不填，ADR-SSO Oracle P1-3）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 6)]
+        [MaxLength(64)]
+        public string? ChannelId { get; set; }
+
+        /// <summary>渠道身份标识（SSO 联邦映射，如商户 openid2；可空——既有行 NULL 放行）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 7)]
+        [MaxLength(128)]
+        public string? ExternalUserId { get; set; }
+
+        /// <summary>创建时间（UTC）；唯一索引 (PlatformAccountId, BusinessAppId, BusinessLocalId)。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 8)]
         public DateTime CreateTime { get; set; } = DateTime.UtcNow;
 
         /// <summary>更新时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 7)]
+        [FreeSql.DataAnnotations.Column(Position = 9)]
         public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
     }
 }

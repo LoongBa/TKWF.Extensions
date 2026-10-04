@@ -17,6 +17,8 @@ namespace TKWF.Ext.Authentication
     //    短信路径必填由 SmsAuthenticationProvider 保证。微信 openid 列唯一索引防重复创建（Provider 建号兜底）。
     [FreeSql.DataAnnotations.Index("UX_AuthAccount_WechatMpOpenId", nameof(WechatMpOpenId), IsUnique = true)]
     [FreeSql.DataAnnotations.Index("UX_AuthAccount_WechatWebOpenId", nameof(WechatWebOpenId), IsUnique = true)]
+    // 联盟锚点（自建 unionid，SSO 联邦层）：唯一索引防重复（可空 NULL 放行）
+    [FreeSql.DataAnnotations.Index("UX_AuthAccount_FederationAnchorOpenId", nameof(FederationAnchorOpenId), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuthAccountEntity
     {
@@ -49,43 +51,49 @@ namespace TKWF.Ext.Authentication
         [MaxLength(64)]
         public string? WechatWebOpenId { get; set; }
 
-        /// <summary>微信开放平台 unionid（双形态归并）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 7)]
-        [MaxLength(64)]
-        public string? UnionId { get; set; }
+    /// <summary>微信开放平台 unionid（双形态归并）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 7)]
+    [MaxLength(64)]
+    public string? UnionId { get; set; }
 
-        /// <summary>昵称（微信授权拉取）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 8)]
-        [MaxLength(128)]
-        public string? Nickname { get; set; }
+    /// <summary>联盟锚点 openid（自建 unionid，SSO 联邦层——联盟认证服务号 snsapi_base 取；跨商户稳定锚点；
+    /// 一对一；唯一索引对 NULL 放行）。⚠️ 与 UnionId（微信开放平台 unionid）语义不同——UnionId 保留原语义，不可重定义（ADR-SSO P1-2）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 8)]
+    [MaxLength(64)]
+    public string? FederationAnchorOpenId { get; set; }
 
-        /// <summary>头像 URL（string 非二进制——DMP 实践确认）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 9)]
-        [MaxLength(512)]
-        public string? Avatar { get; set; }
+    /// <summary>昵称（微信授权拉取）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 9)]
+    [MaxLength(128)]
+    public string? Nickname { get; set; }
 
-        /// <summary>教师审核标记——认证中心仅标「已核实教师」，不含业务权限（业务角色由消费方 MapRoles 映射）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 10)]
-        public bool TeacherVerified { get; set; }
+    /// <summary>头像 URL（string 非二进制——DMP 实践确认）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 10)]
+    [MaxLength(512)]
+    public string? Avatar { get; set; }
 
-        /// <summary>认证强度（1=手机号 / 2=微信便捷 / 3=教师核实）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 11)]
-        public int AuthLevel { get; set; } = 1;
+    /// <summary>教师审核标记——认证中心仅标「已核实教师」，不含业务权限（业务角色由消费方 MapRoles 映射）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 11)]
+    public bool TeacherVerified { get; set; }
 
-        /// <summary>密码/绑定变更自增 → 旧 Refresh Token 失效（闭环 DMP PlatformAdmin.TokenVersion 未消费缺口）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 12)]
-        public int TokenVersion { get; set; }
+    /// <summary>认证强度（1=手机号 / 2=微信便捷 / 3=教师核实）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 12)]
+    public int AuthLevel { get; set; } = 1;
 
-        /// <summary>账号启用（默认 true；禁用无法登录）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 13)]
-        public bool IsEnabled { get; set; } = true;
+    /// <summary>密码/绑定变更自增 → 旧 Refresh Token 失效（闭环 DMP PlatformAdmin.TokenVersion 未消费缺口）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 13)]
+    public int TokenVersion { get; set; }
 
-        /// <summary>创建时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 14)]
-        public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+    /// <summary>账号启用（默认 true；禁用无法登录）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 14)]
+    public bool IsEnabled { get; set; } = true;
 
-        /// <summary>更新时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 15)]
-        public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
+    /// <summary>创建时间（UTC）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 15)]
+    public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>更新时间（UTC）。</summary>
+    [FreeSql.DataAnnotations.Column(Position = 16)]
+    public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
     }
 }

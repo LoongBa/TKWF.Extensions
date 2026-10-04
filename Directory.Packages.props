@@ -82,10 +82,10 @@
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
     <PackageVersion Include="TKWF.Domain.Web" Version="4.10.55" />
     <!-- ✅ 4.10.55 lockstep（2026-10-04）：主框架 v4.10.55（ADR92 TryAddEnumerableConstructible——T3 方案 A 落地，
-         多实现集合 DomainServiceBase 派生实现 IDomainUser 供给缺口修复）。正式号全量 lockstep；
-         ⚠️ CodeGeneration 过渡期锁本地 feed 4.10.55-local（nuget.org 4.10.55 发布中——发布完成后切正式号 + 删本地源）；
+         多实现集合 DomainServiceBase 派生实现 IDomainUser 供给缺口修复）。正式号全量 lockstep——
+         ✅ CodeGeneration 4.10.55 正式号（nuget.org 已发布，解除 4.10.55-local 本地锁 + 删本地源）；
          Testing.xUnit 4.10.55 条目保留（C 基座对齐 A 用） -->
-  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.55-local" />
+  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.55" />
   <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.55" />
     <!-- ✅ 4.10.55 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义

@@ -2,7 +2,7 @@
 
 ## 状态
 
-**提议（草案）**——Oracle 评审 **PASS WITH CONDITIONS**（2026-10-05，bg_2ab92af3）；P1 三项修订已落实（见 §五），P2 五项标注为开发方案期细化；修订后转活跃
+**已废弃**（2026-10-05）——被 [ADR-AuthCenter-归层与命名](../AuthCenter/ADR/ADR-AuthCenter-归层与命名.md) 取代：认证体系归层为 AuthCenter（对内核心）/ Federation（对外接口）/ Federation.{平台}（平台网关库）/ Utility.OAuthClient（引擎）四层。本 ADR 的"SSO 独立模块 + 平台卫星扩展"裁定被修订：SSO 联邦层能力拆解为 `TKWF.Ext.Federation`（无持久化外交部，存储契约归调用者）+ 持久化状态归 `TKWF.Ext.AuthCenter`；平台适配降级为库（`TKWF.Federation.{平台}`，非扩展）；SSO 命名废弃→Federation（体验词→结构词）。历史裁定保留作演进记录，不删除。原 Oracle 评审（PASS WITH CONDITIONS，bg_2ab92af3）结论在新模型下部分仍适用（token2 独立密钥域 / 契约包形态），部分被覆盖（平台卫星扩展形态）。
 
 ## 一、目的与目标
 

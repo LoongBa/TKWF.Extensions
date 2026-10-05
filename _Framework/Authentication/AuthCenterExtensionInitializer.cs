@@ -85,6 +85,9 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
         services.AddConstructibleService<ISsoAccountQueryService, AuthAccountQueryService>();
         services.AddConstructibleService<ISsoChannelMapService, PlatformAccountMapService>();
 
+        // V0.6.0（SSO.WeChat 评审 P1-1）：联盟锚点写契约——AuthAccountQueryService 补实现 ISsoAccountLinkService
+        services.AddConstructibleService<ISsoAccountLinkService, AuthAccountQueryService>();
+
         // V0.2.0：账号写契约（DMP 渐进替换影子账号 upsert——ADR-Authentication-账号写契约；委托 DataService 红线合规）
         services.AddConstructibleService<IAuthAccountService, AuthAccountService>();
 

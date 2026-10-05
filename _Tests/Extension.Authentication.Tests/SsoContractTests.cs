@@ -117,4 +117,47 @@ public class SsoContractTests
         Assert.Single(list);
         Assert.Equal("u-3", list[0].UId);
     }
+
+    // ── SSO.WeChat 评审 P1-1：ISsoAccountLinkService（联盟锚点写契约）──
+
+    [Fact]
+    public async Task LinkService_SetFederationAnchor_And_GetByAnchor()
+    {
+        var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var authDs = stub.Use<AuthAccountEntityDataService>();
+        var linkSvc = new AuthAccountQueryService(stub);
+
+        await authDs.EntityCreateAsync(new AuthAccountEntity { UId = "u-100", Phone = "13800138000" }, default);
+
+        // 写锚点 → 落库
+        var updated = await linkSvc.SetFederationAnchorAsync("u-100", "anchor-abc", default);
+        Assert.Equal("u-100", updated.UId);
+        Assert.Equal("anchor-abc", updated.FederationAnchorOpenId);
+
+        // 反查（后续任一 openid 直认链路）
+        var byAnchor = await linkSvc.GetByFederationAnchorAsync("anchor-abc", default);
+        Assert.NotNull(byAnchor);
+        Assert.Equal("u-100", byAnchor!.UId);
+
+        // 未绑定锚点账号反查 → null；未知账号写锚点 → 异常
+        Assert.Null(await linkSvc.GetByFederationAnchorAsync("not-exist", default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => linkSvc.SetFederationAnchorAsync("u-not-exist", "anchor-x", default));
+    }
+
+    [Fact]
+    public async Task LinkService_AnchorUniqueness_ConflictThrows()
+    {
+        var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+        var stub = AuthenticationTestHost.CreateStub(fsql);
+        var authDs = stub.Use<AuthAccountEntityDataService>();
+        var linkSvc = new AuthAccountQueryService(stub);
+
+        await authDs.EntityCreateAsync(new AuthAccountEntity { UId = "u-1", Phone = "13800138000" }, default);
+        await authDs.EntityCreateAsync(new AuthAccountEntity { UId = "u-2", Phone = "13800138001" }, default);
+        await linkSvc.SetFederationAnchorAsync("u-1", "anchor-dup", default);
+
+        // 同一锚点绑到另一账号 → 唯一索引冲突（唯一约束日志可含 account：确保共用 SQLite 语义）
+        await Assert.ThrowsAnyAsync<System.Exception>(() => linkSvc.SetFederationAnchorAsync("u-2", "anchor-dup", default));
+    }
 }

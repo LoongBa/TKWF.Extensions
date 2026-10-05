@@ -30,6 +30,19 @@ partial class AuthAccountEntityDataService(IDomainUser user, IEntityDAC<AuthAcco
     public async Task<AuthAccountEntity?> GetByWechatWebOpenIdAsync(string openId, CancellationToken ct = default)
         => await EntityGetAsync(a => a.WechatWebOpenId == openId, ct);
 
+    /// <summary>按联盟锚点 openid 查询账号（SSO 联邦层自建 unionid——跨商户稳定锚点；唯一索引 UX_AuthAccount_FederationAnchorOpenId）。</summary>
+    public async Task<AuthAccountEntity?> GetByFederationAnchorAsync(string federationAnchorOpenId, CancellationToken ct = default)
+        => await EntityGetAsync(a => a.FederationAnchorOpenId == federationAnchorOpenId, ct);
+
+    /// <summary>写/更新联盟锚点（一对一；唯一索引冲突 → 抛异常）。</summary>
+    public async Task SetFederationAnchorAsync(string uid, string federationAnchorOpenId, CancellationToken ct = default)
+    {
+        var account = await GetByUIdAsync(uid, ct);
+        if (account == null) throw new InvalidOperationException($"ACCOUNT_NOT_FOUND uid={uid}");
+        account.FederationAnchorOpenId = federationAnchorOpenId;
+        await UpdateAsync(account, ct);
+    }
+
     /// <summary>创建账号（回写自增 Id；CreateTime/UpdateTime UTC）。</summary>
     public async Task CreateAsync(AuthAccountEntity account, CancellationToken ct = default)
     {

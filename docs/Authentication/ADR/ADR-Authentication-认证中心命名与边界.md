@@ -2,7 +2,7 @@
 
 ## 状态
 
-活跃
+**已废弃**（2026-10-05）——被 [ADR-AuthCenter-归层与命名](../AuthCenter/ADR/ADR-AuthCenter-归层与命名.md) 取代：认证体系归层为 AuthCenter（对内核心）/ Federation（对外接口）/ Connectors（平台网关库）/ Utility.OAuthClient（引擎）四层；本 ADR 的"单包选项 A"裁定被四层模型修订（认证内核归 AuthCenter，对外接口层独立为 Federation）。历史裁定保留作演进记录，不删除。
 
 ## 一、目的与目标
 

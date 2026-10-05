@@ -24,9 +24,10 @@ public interface IAuthAccountQueryService : IDomainService
 /// <c>AddConstructibleService&lt;IAuthAccountQueryService, AuthAccountQueryService&gt;</c>。
 /// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。
 /// V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：补实现 <see cref="ISsoAccountQueryService"/>——SSO 消费面契约
-/// （返回不可变 DTO <see cref="SsoAccountDto"/>，敏感字段不出契约包）。</para></summary>
+/// （返回不可变 DTO <see cref="SsoAccountDto"/>，敏感字段不出契约包）。
+/// V0.6.0（SSO.WeChat 评审 P1-1）：补实现 <see cref="ISsoAccountLinkService"/>——联盟锚点写契约。</para></summary>
 [DiContractIgnore]
-internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService, ISsoAccountQueryService
+internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService, ISsoAccountQueryService, ISsoAccountLinkService
 {
     private AuthAccountEntityDataService? _dataService;
     private AuthAccountEntityDataService DataService => _dataService ??= User.Use<AuthAccountEntityDataService>();
@@ -51,6 +52,23 @@ internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQ
     {
         var entity = await DataService.GetByUIdAsync(uid, ct);
         return entity is null ? null : ToDto(entity);
+    }
+
+    /// <inheritdoc cref="ISsoAccountLinkService.GetByFederationAnchorAsync"/>
+    public async Task<SsoAccountDto?> GetByFederationAnchorAsync(string federationAnchorOpenId, CancellationToken ct)
+    {
+        var entity = await DataService.GetByFederationAnchorAsync(federationAnchorOpenId, ct);
+        return entity is null ? null : ToDto(entity);
+    }
+
+    /// <inheritdoc cref="ISsoAccountLinkService.SetFederationAnchorAsync"/>
+    public async Task<SsoAccountDto> SetFederationAnchorAsync(string uid, string federationAnchorOpenId, CancellationToken ct)
+    {
+        await DataService.SetFederationAnchorAsync(uid, federationAnchorOpenId, ct);
+        var entity = await DataService.GetByUIdAsync(uid, ct);
+        return entity is null
+            ? new SsoAccountDto(uid, federationAnchorOpenId, null, null, 0)
+            : ToDto(entity);
     }
 
     /// <summary>实体 → SSO 消费面 DTO（只映射消费字段，敏感字段不外泄）。</summary>

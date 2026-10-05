@@ -1,6 +1,6 @@
 # TKWF.Ext.Authentication 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.3（框架组转达 2026-10-05——开发模式临时 RSA 密钥跨实例不一致修复：`DevRsaKeyCache` 进程内静态缓存；V0.5.2 为 fcbffd1 受理 ITokenVerifier 无帧消费 500 修复终态——中间件游客帧，Oracle 裁决） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.4（框架组转达 2026-10-05——**Development 模式启动崩溃修复**：`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参框架内部建子 scope，同 defect 修复 Federation/Tagging/Permissions/Identity 四处；V0.5.3 为开发模式临时 RSA 密钥跨实例不一致修复 `DevRsaKeyCache` 进程内静态缓存；V0.5.2 为 fcbffd1 受理 ITokenVerifier 无帧消费 500 修复终态——中间件游客帧，Oracle 裁决） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -46,6 +46,12 @@
 ```xml
 <!-- 消费方 .csproj -->
 <ProjectReference Include="..\..\_Framework\Authentication\TKWF.Ext.Authentication.csproj" />
+<!-- ⚠️ V0.6.0 契约包拆分（SSO 消费面）：使用 Federation/SSO 联邦契约（ISsoAccountQueryService /
+     ISsoChannelMapService / ISsoAccountLinkService + 不可变 DTO）的消费方须**同时**引用独立契约包
+     TKWF.Ext.Authentication.Abstractions——SSO 契约已迁出主 DLL，只引主 DLL 会致接口继承解析断裂误报
+     （DI005，EduPlatform 实证 2026-10-05）；仅内部认证（不消费 SSO 契约）可不引。
+     契约包零实体零 SG1，命名空间保持 TKWF.Ext.Authentication -->
+<ProjectReference Include="..\..\_Framework\Authentication.Abstractions\TKWF.Ext.Authentication.Abstractions.csproj" />
 ```
 
 ```csharp
@@ -181,14 +187,16 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 
 | 表 | 关键列/约束 |
 |----|-----------|
-| `AuthAccount` | UId(32 唯一)/Phone(20 **可空**唯一——微信便捷账号无手机号)/PasswordHash?/WechatMpOpenId(唯一)/WechatWebOpenId(唯一)/UnionId?/TeacherVerified/AuthLevel/TokenVersion/IsEnabled |
+| `AuthAccount` | UId(32 唯一)/Phone(20 **可空**唯一——微信便捷账号无手机号)/PasswordHash?/WechatMpOpenId(唯一)/WechatWebOpenId(唯一)/UnionId?/TeacherVerified/AuthLevel/TokenVersion/IsEnabled/**FederationAnchorOpenId?**（V0.6.0 联盟锚点——联邦 SSO 账号锚定列，**唯一**；保留 UnionId 微信开放平台原语义，见 Federation 联盟锚点数据模型） |
 | `AuthLoginAttempt` | UserIdentity(100)+AuthType(20)+IsSuccess+IpAddress?+FailReason?+AttemptTime；索引 (UserIdentity,AuthType,AttemptTime) |
 | `SmsRecord` | Phone+Scene+CodeHash(SHA256 不存明文)+IsVerified+ExpireAt；索引 (Phone,Scene,CreateTime)/(IpAddress,CreateTime) |
 | `AuthRefreshToken` | Jti/UserId+TokenHash(SHA256 唯一)/TokenVersion/ExpiresAt/IsRevoked/RevokedAt?；索引 (UserId,TokenVersion) |
 | `AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
 | `OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
-| `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId? |
+| `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留） |
 | `PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文，DtoFieldIgnore 不外泄)/IsEnabled |
+
+> ⚠️ **V0.6.0 升级迁移提示（EduPlatform 实证 2026-10-05）**：`AuthAccount` 新增 `FederationAnchorOpenId` 列、`PlatformAccountMap` 新增 `ChannelId`/`ExternalUserId` 列（+ `UX_PlatformAccountMap_Channel` 索引）——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA），否则 Federation 联邦流 sms/login 相关路径 500（列缺失）。
 
 ## 六、安全边界
 
@@ -226,6 +234,10 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **缺陷**：`TokenService` 开发模式（`SigningKeyPath` 未配置 && `IsProduction=false`）每次 `LoadKeysCore` 都 `RSA.Create()` **新建临时密钥**且无进程内共享——每个 scoped 实例（每请求一个）各自 `Lazy<RsaKeySet>` → 签发实例与验签实例（`LocalJwtTokenVerifier` 经 `User.Use<ITokenService>()` 解析的另一实例）密钥集不同 → **INVALID_SIGNATURE**（EduPlatform 反馈，框架组转达 P0）。既有 `Dev_MissingSigningKey_AutoGeneratesTemporary` 只测**单实例**自带签发+验签——单实例密钥集自洽必通过，漏检跨实例不一致。
   - **修复**：新增 `DevRsaKeyCache`（internal static + 双重校验锁 `GetOrCreate(Func<RsaKeySet>)` + `ResetForTests()` 测试隔离钩子——镜像 `PlatformCredentialKeyStore` 既有模式并补其缺 Reset 缺陷）——`LoadKeysCore` dev 分支改从缓存取（工厂仅首次执行）；**生产分支（PEM 文件）天然跨实例一致，绝不走缓存**（缺 PEM 仍 fail-fast）。`RsaKeySet` private → internal（复用同一类型）；`ResetForTests` 先 Dispose 已缓存密钥再置 null（防托管资源泄漏）。
   - 84 用例全绿（新增 `DevRsaKeyCacheTests`：T1 两独立实例 A 签发/B 验签成功——缺陷消除唯一证明 + T2 Reset 后新实例拒旧 token——隔离有效；setup Reset 防跨类泄漏）。
+- **V0.5.4（框架组转达 2026-10-05——Development 模式启动崩溃修复）**：
+  - **缺陷**：`AuthCenterExtensionInitializer.InitializeAsync` 经 `BeginSystemScopeAsync(sp)` 进入系统作用域——传参形态（DomainHost M1 所有权契约）**原样绑定传入 provider、不建子 scope**，而 `InitializeAsync(IServiceProvider sp)` 收到的是**根容器**（`ServiceProviderBuiltCallbackAsync` 保持根容器）→ `sysScope.System.Use<ITokenService>()` 从根解析 `AddScoped` 守卫工厂 → **Development（ValidateScopes=true）启动必崩**（`Cannot resolve scoped service ... from root provider`——EduPlatform 实证）。冒烟恒 Production（ValidateScopes 关）掩盖；（同为 V0.3.1 方案 A' 复制链：Federation/Tagging/Permissions/Identity 四处同 defect）。
+  - **修复**：`host.BeginSystemScopeAsync()` **不传参**——框架内部 `_ServiceProvider.CreateScope()` 建子 scope 并自拥生命周期（DomainHost.cs L405-409；`SystemActorApiTests` "必须使用独立 IServiceScope 而非根容器" 既有实证）。
+  - 回归护栏：`JwtAuthenticationWebHookIntegrationTests` 宿主改走 **Development** 环境（ValidateScopes=true）——启动通过 = 修复回归哨兵（旧形态在此环境启动必崩）。
 - **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 

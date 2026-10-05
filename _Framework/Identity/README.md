@@ -1,6 +1,6 @@
 # TKWF.Ext.Identity 身份管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露 + 领域自治根治 ADR90) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.1 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露 + 领域自治根治 ADR90 + **Development 启动崩溃修复 V0.5.1——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参，同 AuthCenter V0.5.4 defect 复制链**) | **框架**: .NET 10
 
 **核心约束**: 用户/角色持久化、PasswordHasher 凭据验证、FreeSql 存储、异常静默处理、SG1 声明式实体
 

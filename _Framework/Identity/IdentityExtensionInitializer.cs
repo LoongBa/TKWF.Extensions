@@ -84,8 +84,10 @@ namespace TKWF.Ext.Identity
 
             // V4.10.53（领域自治根治，修复既有已知缺陷——对齐 Authentication V0.3.1 / Tagging / Permissions 方案 A'）：
             // IRoleStore 经 AddConstructibleService 注册——经 System 作用域 + sysScope.System.Use<IRoleStore>() 解析
+            // V0.5.1（同 AuthCenter V0.5.4 defect 复制链修复）：BeginSystemScopeAsync(sp) 传 root 不建子 scope，
+            // ValidateScopes（Development）下 Scoped 解析崩——改不传参（框架内部 CreateScope）
             var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
-            await using var sysScope = await host.BeginSystemScopeAsync(sp);
+            await using var sysScope = await host.BeginSystemScopeAsync();
             var roleStore = sysScope.System.Use<IRoleStore>();
             await SeedAdminRoleAsync(roleStore);
         }

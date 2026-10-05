@@ -118,11 +118,20 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
     /// （ADR61 Oracle B4）。改为经 <see cref="BeginSystemScopeAsync"/> 进入系统作用域 + <c>scope.System.Use&lt;ITokenService&gt;()</c>
     /// 解析——<c>Use&lt;T&gt;()</c> 内设 <c>CurrentAopUser=SystemUser</c>（领域自治铁律零妥协，Oracle 方案 A' 裁决；
     /// <c>ITokenService : IDomainService</c> 空标记准入）。fail-fast 语义不变（同一 <c>LoadKeysCore</c> 单一真相源）。</para>
+    /// <para><b>V0.5.4 修复（Development 模式启动崩溃——框架组转达 2026-10-05）</b>：
+    /// <c>BeginSystemScopeAsync(externalSp)</c> 传参 <b>不建子 scope</b>——按 M1 所有权契约（DomainHost.cs）原样绑定
+    /// 传入 provider，而 <c>InitializeAsync(IServiceProvider sp)</c> 收到的是 <b>根容器</b>（DomainHostInitializerBase
+    /// ServiceProviderBuiltCallbackAsync 保持根容器）；<c>System.Use&lt;ITokenService&gt;()</c> 于是从根解析
+    /// <c>AddScoped</c> 的守卫工厂 → <c>ValidateScopes=true</c>（Development）必崩
+    /// （"%SERVICE%' ... from root provider"）。<b>修复：不传参</b> <c>host.BeginSystemScopeAsync()</c>——框架内部
+    /// <c>_ServiceProvider.CreateScope()</c> 建子 scope 并自拥生命周期（DomainHost.cs L405-409，SystemActorApiTests
+    /// "必须使用独立 IServiceScope 而非根容器"），Scoped 解析合法。同 defect 修复 Federation/Tagging/Permissions/Identity
+    /// 四处（方案 A' 复制链）。</para>
     /// </summary>
     public override async Task InitializeAsync(IServiceProvider sp)
     {
         var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
-        await using var sysScope = await host.BeginSystemScopeAsync(sp);
+        await using var sysScope = await host.BeginSystemScopeAsync(); // V0.5.4：不传 sp——框架内部建子 scope（传 root 不建 scope，ValidateScopes 下 Scoped 解析崩）
 
         var tokenService = sysScope.System.Use<ITokenService>();
         if (tokenService is TokenService concrete)

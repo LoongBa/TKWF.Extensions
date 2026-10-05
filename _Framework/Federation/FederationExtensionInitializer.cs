@@ -58,11 +58,16 @@ public class FederationExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
     /// 开发自动生成临时密钥 + Warning）。
     /// <para>经 <see cref="BeginSystemScopeAsync"/> 进入系统作用域 + <c>scope.System.Use&lt;IToken2Service&gt;()</c>
     /// 解析（对齐 AuthCenter V0.3.1 A' 裁定——门面解析需域作用域；IToken2Service : IDomainService 准入）。</para>
+    /// <para><b>V0.1.1 修复（Development 模式启动崩溃，同 AuthCenter V0.5.4 defect 复制链）</b>：
+    /// <c>BeginSystemScopeAsync(externalSp)</c> 传参按 M1 契约原样绑定不建子 scope——<c>InitializeAsync</c> 的
+    /// <c>sp</c> 是根容器，<c>System.Use&lt;IToken2Service&gt;()</c> 从根解析 <c>AddScoped</c> 守卫工厂 →
+    /// <c>ValidateScopes=true</c>（Development）必崩。修复：<b>不传参</b> <c>host.BeginSystemScopeAsync()</c>
+    /// ——框架内部 <c>CreateScope()</c> 建子 scope 并自拥生命周期。</para>
     /// </summary>
     public override async Task InitializeAsync(IServiceProvider sp)
     {
         var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
-        await using var sysScope = await host.BeginSystemScopeAsync(sp);
+        await using var sysScope = await host.BeginSystemScopeAsync(); // V0.1.1：不传 sp——框架内部建子 scope（同 AuthCenter V0.5.4 修复）
 
         var token2Service = sysScope.System.Use<IToken2Service>();
         if (token2Service is Token2Service concrete)

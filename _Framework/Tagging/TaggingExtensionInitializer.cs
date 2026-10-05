@@ -95,10 +95,12 @@ public class TaggingExtensionInitializer<TUserInfo> : ExtensionInitializer<TUser
         // V4.10.53（领域自治根治）：ITagRuleStore 注册形态改 AddConstructibleService——裸 GetService
         // 触 CurrentAopUser 守卫必抛；改经 System 作用域 + scope.System.Use<ITagRuleStore>()（Use<T> 内设
         // CurrentAopUser=SystemUser——对齐 Authentication V0.3.1 / Permissions V4.10.53 方案 A'）
+        // V0.4.6（同 AuthCenter V0.5.4 defect 复制链修复）：BeginSystemScopeAsync(sp) 传 root 不建子 scope，
+        // ValidateScopes（Development）下 Scoped 解析崩——改不传参（框架内部 CreateScope）
         if (options.AutoLoadRulesFromStore)
         {
             var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
-            await using var sysScope = await host.BeginSystemScopeAsync(sp);
+            await using var sysScope = await host.BeginSystemScopeAsync();
             var store = sysScope.System.Use<ITagRuleStore>();
             await LoadRulesFromStoreAsync(tagService, store);
         }

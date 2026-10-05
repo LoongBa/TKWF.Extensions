@@ -163,6 +163,7 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 | 版本 | 内容 |
 |------|------|
+| V0.1.1（2026-10-05） | **Development 模式启动崩溃修复**（同 AuthCenter V0.5.4 defect——方案 A' 复制链）：`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope，ValidateScopes（Development）下 Scoped 守卫工厂从根解析必崩 → 改不传参（框架内部 CreateScope 建子 scope） |
 | V0.1.0（2026-10-05） | Federation 联邦层内核（归层后命名，原 SSO）：应用注册（origin 白名单 + scope + AES-GCM credential + per-channel HMAC）/ accesscode（120s 原子 CAS + SHA256 + PKCE）/ token2（手写 ES256 独立密钥域 + kid 轮换 + JWKS）/ profile API（scope 强制 + 审计）/ ISsoChannel 契约；前置 `Authentication.Abstractions` 契约包拆出（Federation 消费面：ISsoAccountQueryService/ISsoChannelMapService + DTO，零实体零 SG1）；联盟锚点数据模型（AuthAccount.FederationAnchorOpenId 列 + PlatformAccountMap 扩展）；19 测试全绿 + 全量回归通过 |
 
 <!-- EOF -->

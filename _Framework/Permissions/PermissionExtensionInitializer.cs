@@ -118,8 +118,10 @@ namespace TKWF.Ext.Permissions
             // 裸 GetService<PermissionGrantEntityDataService>() 在 throw-factory（V4.10.53 起 DataService
             // 由 AddConstructibleDataService 改 AddService）下必抛「禁止直接 DI 解析」——经 System 作用域
             // + scope.System.Use<T>() 解析（Use<T> 内设 CurrentAopUser=SystemUser，领域自治铁律零妥协）。
+            // V0.9.4（同 AuthCenter V0.5.4 defect 复制链修复）：BeginSystemScopeAsync(sp) 传 root 不建子 scope，
+            // ValidateScopes（Development）下 Scoped 解析崩——改不传参（框架内部 CreateScope）
             var host = sp.GetRequiredService<DomainHost<TUserInfo>>();
-            await using var sysScope = await host.BeginSystemScopeAsync(sp);
+            await using var sysScope = await host.BeginSystemScopeAsync();
 
             // ── V0.7.0 W3：种子高级化——预置 admin 角色 Admin.All 系统权限（替代逐权限授予）──
             var dataService = sysScope.System.Use<PermissionGrantEntityDataService>();

@@ -29,6 +29,11 @@ namespace TKWF.Ext.Authentication.Tests;
 /// （UseWebSession 会话解析）已写游客 DomainUser；<see cref="JwtAuthVerifyProbeWebExtension"/> 断言
 /// JwtAuth 中间件真实执行验签 + 恢复（Items 中用户 UserId 变为恢复委托产物）；HttpAuthentication 标记
 /// 经消费方 <c>BeforeRouting</c> 回调（管道序在 HttpAuthentication 之后）追加。</para>
+/// <para>⚠️ <b>V0.5.4 回归哨兵增强</b>：宿主恒走 <b>Development</b> 环境（ValidateScopes=true）——认证
+/// 启动链入口 <c>AuthCenterExtensionInitializer.InitializeAsync</c> 的 <c>BeginSystemScopeAsync</c>
+/// 系统作用域正于宿主启动时执行；旧形态 <c>BeginSystemScopeAsync(sp)</c>（传 root 不建子 scope，
+/// Scoped 守卫工厂从根解析）在 Development 启动必崩（EduPlatform 实证 2026-10-05）。冒烟此前恒
+/// Production（ValidateScopes 关）正是该缺陷逃逸原因——Development 启动通过 = V0.5.4 修复回归护栏。</para>
 /// </summary>
 public class JwtAuthenticationWebHookIntegrationTests
 {
@@ -68,6 +73,13 @@ public class JwtAuthenticationWebHookIntegrationTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        // ⚠️ V0.5.4 回归哨兵（Development 模式启动崩溃—框架组转达 2026-10-05）：宿主恒走 Development
+        // 环境（ValidateScopes=true）——AuthCenterExtensionInitializer.InitializeAsync 的
+        // BeginSystemScopeAsync 系统作用域正于宿主启动时执行；旧形态 BeginSystemScopeAsync(sp)
+        // （传 root 不建子 scope）在此环境启动必崩（"Cannot resolve scoped service ... from root provider"）；
+        // V0.5.4 不传参修复（框架内部 CreateScope 建子 scope）后启动通过。此前冒烟恒 Production
+        // （ValidateScopes 关）正是该缺陷逃逸原因——Development 启动通过 = V0.5.4 回归护栏。
+        builder.Environment.EnvironmentName = "Development";
         // ConfigWebAppDomain 要求 TKWDomain 配置节存在（CoreConfigDomain 硬校验）——注入最小节
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {

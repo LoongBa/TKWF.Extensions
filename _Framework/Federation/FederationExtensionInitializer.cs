@@ -13,7 +13,10 @@ namespace TKWF.Ext.Federation;
 /// <b>门面（AddConstructibleService）</b>——IToken2Service / ISsoAccessCodeService / ISsoClientService /
 /// ISsoProfileService（接口 : IDomainService → 接口可构造守卫工厂 + 实现类 throw-factory，消费方经
 /// <c>User.Use&lt;接口&gt;()</c> 解析）；<b>多实现集合（TryAddEnumerableConstructible）</b>——
-/// <see cref="ISsoChannel"/>（平台适配扩展追加实现，未注册通道自然跳过）。</para>
+/// <see cref="ISsoChannel"/>（契约归属本扩展——Oracle P1-1；<b>集合注册责任归平台网关库扩展方法</b>
+/// <c>AddWeChatFederationChannels()</c> 内部 <c>TryAddEnumerableConstructible&lt;ISsoChannel, X&gt;()</c>
+/// （归层实施方案 §5.4 Oracle P1-4/评审点 7），Federation 扩展零 ISsoChannel 具体实现故本初始器
+/// <b>不注册任何集合元素</b>——未装配库时 <c>IEnumerable&lt;ISsoChannel&gt;</c> 帧内解析为空（"未注册通道自然跳过" F5））。</para>
 /// <para>零 DataService 手动注册（ADR61/D17 铁律）——2 实体 DataService 经 SG1 消费方聚合自动注册；
 /// Options（FederationOptions）+ 消费方经 Abstractions 契约消费认证内核（ISsoAccountQueryService/ISsoChannelMapService
 /// 由 Authentication 主包注册，Federation 经 <c>User.Use&lt;契约&gt;()</c> 帧内解析）。</para>
@@ -32,7 +35,9 @@ public class FederationExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
     /// 注册 Federation 服务。
     /// <para>门面（AddConstructibleService——V4.10.53 ADR90 正确路线）：接口 : IDomainService，
     /// 接口可构造守卫工厂 + 实现类 throw-factory，消费方经 <c>User.Use&lt;接口&gt;()</c> 帧内解析；
-    /// 多实现集合（TryAddEnumerableConstructible——V4.10.55 ADR92）：ISsoChannel 平台适配扩展追加。</para>
+    /// 多实现集合（TryAddEnumerableConstructible——V4.10.55 ADR92）：ISsoChannel 集合元素由平台网关库
+    /// 扩展方法追加（如 <c>AddWeChatFederationChannels()</c>——归层实施方案 §5.4 Oracle P1-4/评审点 7）；
+    /// 本初始器零元素注册（Federation 无 ISsoChannel 具体实现——集合壳归库扩展，未装配自然跳过）。</para>
     /// <para>Options：FederationOptions 标 [Options("TKWF:Federation")]——SG1 消费方自动绑定；此处 AddOptions 兜底默认值
     /// （守卫工厂经 ActivatorUtilities 解析剩余参数需 IOptions 可解析，对齐 AuthCenter 先例）。</para>
     /// </summary>

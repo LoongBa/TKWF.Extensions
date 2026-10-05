@@ -44,7 +44,36 @@ using TKWF.Ext.Federation;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-### 2. 配置 `TKWF:Federation`
+### 2. 接入平台网关库（`TKWF.Federation.{平台}`）——外交部经 `ISsoChannel` 集合窄适配编排
+
+Federation 扩展**拥有 `ISsoChannel` 契约**（Oracle P1-1），但**不实现任何通道**——通道由平台网关库（`TKWF.Federation.WeChat`/`.QQ`/`.Google`/...）实现并经其 DI 扩展方法注册进集合（开发方案 §5.4 Oracle P1-4/评审点 7）。消费方装配链路：
+
+```csharp
+// ① 消费方（认证中心实例）领域初始化器——白名单声明 Federation 扩展（三钩子接线）
+using TKWF.Ext.Federation;
+
+[TKWFEnabledExtension(typeof(FederationExtensionInitializer<>))]
+[TKWFEnabledExtension(typeof(AuthCenterExtensionInitializer<>))]   // 组合式：认证中心实例
+public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
+
+// ② Program.cs（Web 装配层）——装配 TKWF.Federation.WeChat 平台网关库
+//    库侧 AddWeChatFederationChannels() 内部 TryAddEnumerableConstructible<ISsoChannel, X>（ADR92 集合版守卫工厂）
+builder.Services.AddWeChatFederationChannels();
+//    通道配置经 TKWF:Federation:WeChat 配置节绑定（SG1 [Options] 自动），或编程覆盖：
+builder.Services.Configure<WeChatOptions>(o => { /* 按 AppId 选区 Channels */ });
+
+// ③ 编排——/sso/login 等装配层端点经 User.Use<门面>() 帧内枚举 ISsoChannel 集合
+//    （门面 ctor 注入 IEnumerable<ISsoChannel>，ADR92 守卫工厂于帧内经 CurrentAopUser 供给通道）：
+await user.Use<ISsoLogin>().LoginAsync(channelType, context, ct);
+//    ⛔ 禁止 [FromServices] IEnumerable<ISsoChannel> 预绑定（帧外枚举抛守卫）
+```
+
+- **依赖方向**：`TKWF.Federation.{平台}` 库 → `TKWF.Ext.Federation` 扩展 → `Authentication.Abstractions` + 主框架（Oracle P1-1，单向无循环）。
+- **未装配库 = 空集合**：Federation 初始器零 `ISsoChannel` 元素注册——未引用任何平台网关库时 `IEnumerable<ISsoChannel>` 帧内解析为空数组，"未注册通道自然跳过"（验收 F5）；装配库后元素自动进集合。
+- **注册责任归属**：库无 Initializer（纯库判据）——由库侧 `AddWeChatFederationChannels()` 扩展方法注册（`Microsoft.Extensions.DependencyInjection` 命名空间）；Federation 扩展不强制引库保持核心轻量。
+- ☝️ `AddWeChatFederationChannels()` 为 `TKWF.Federation.WeChat` 库提供（V0.1.0，库侧 T6）；`ISsoLogin` 登录编排门面归装配层/后续迭代，本 README 示例为其形态示意。
+
+### 3. 配置 `TKWF:Federation`
 
 ```jsonc
 {
@@ -69,7 +98,7 @@ openssl ec -in sso-ec-private.pem -pubout -out sso-ec-public.pem
 
 > ⚠️ **生产 fail-fast**：`IsProduction=true` 时缺 `Issuer` / `SigningKeyPath` / `SecretEncryptionKeyPath` → 启动拒绝（InitializeAsync 预检经系统作用域 `Use<IToken2Service>()`）。开发模式自动生成临时 EC 密钥（DevEcKeyCache 进程内缓存——重启即变，仅限开发联调）。
 
-### 3. 消费（应用端起）
+### 4. 消费（应用端起）
 
 ```csharp
 // 门面帧内解析（AddConstructibleService 守卫工厂——禁止 [FromServices] 预绑定）

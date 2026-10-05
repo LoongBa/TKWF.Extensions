@@ -29,6 +29,9 @@
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference
          （ISsoChannel : IDomainService + [Options] 特性所在程序集） -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- DiContractIgnore 所在（TKW.Framework.CodeGeneration——门面/通道运行时手写注册豁免 DI001 误报，对齐 Authentication 先例） -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
     <!-- HttpClient 注入（IHttpClientFactory——Microsoft.Extensions.Http；Oracle 评审点 5：纯逻辑 + HttpClient，不引 AspNetCore） -->
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>

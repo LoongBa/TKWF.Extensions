@@ -18,7 +18,8 @@ namespace TKWF.Federation.WeChat;
 /// <para>② <c>GetOpenIdAsync</c>——<c>sns/oauth2/access_token</c> 网页授权 code 换 openid
 /// （AppSecret 服务端持有，结果不缓存——一次性 code）；</para>
 /// <para>③ <c>GetUserInfoAsync</c>——<c>sns/userinfo</c> 拉取用户信息（响应裁剪，snsapi_base 场景降级 null）。</para>
-/// <para>HttpClient 经 <see cref="IHttpClientFactory"/> 注入（Microsoft.Extensions.Http——Oracle 评审点 5：
+/// <para>HttpClient 经 **typed client** 注入（<c>AddHttpClient&lt;WeChatApiClient&gt;</c>——ctor 收
+/// <see cref="HttpClient"/> + IOptions + ILogger，对齐 Microsoft.Extensions.Http 惯例；Oracle 评审点 5：
 /// 库纯逻辑 + HttpClient，不引 AspNetCore，入站端点归装配层）。</para>
 /// <para>零持久化零 Store（tkwf-extension 铁律）——纯内存态 access_token 缓存。</para>
 /// </summary>
@@ -27,7 +28,7 @@ public sealed class WeChatApiClient
     private const string ApiBase = "https://api.weixin.qq.com";
     private static readonly TimeSpan TokenEarlyRefresh = TimeSpan.FromMinutes(5);
 
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly HttpClient _httpClient;
     private readonly IOptions<WeChatOptions> _options;
     private readonly ILogger<WeChatApiClient> _logger;
 
@@ -35,10 +36,10 @@ public sealed class WeChatApiClient
     private readonly ConcurrentDictionary<string, CachedToken> _tokenCache = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
 
-    /// <summary>HttpClient 经工厂注入（Microsoft.Extensions.Http——DI 生命周期托管，避免 HttpClient 悬挂 socket）。</summary>
-    public WeChatApiClient(IHttpClientFactory httpClientFactory, IOptions<WeChatOptions> options, ILogger<WeChatApiClient> logger)
+    /// <summary>HttpClient 经 typed client 注入（AddHttpClient&lt;WeChatApiClient&gt;——DI 生命周期托管，避免 HttpClient 悬挂 socket）。</summary>
+    public WeChatApiClient(HttpClient httpClient, IOptions<WeChatOptions> options, ILogger<WeChatApiClient> logger)
     {
-        _httpClientFactory = httpClientFactory;
+        _httpClient = httpClient;
         _options = options;
         _logger = logger;
     }
@@ -64,9 +65,8 @@ public sealed class WeChatApiClient
             var secret = ResolveCredential(appId);
 
             // cgi-bin/token?grant_type=client_credential&appid=&secret=
-            using var client = CreateClient();
             var url = $"{ApiBase}/cgi-bin/token?grant_type=client_credential&appid={Uri.EscapeDataString(secret.AppId)}&secret={Uri.EscapeDataString(secret.AppSecret)}";
-            using var resp = await client.GetAsync(url, ct);
+            using var resp = await _httpClient.GetAsync(url, ct);
             var json = await resp.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -93,9 +93,8 @@ public sealed class WeChatApiClient
         var secret = ResolveCredential(appId);
 
         // sns/oauth2/access_token?appid=&secret=&code=&grant_type=authorization_code（网页授权 code 换 openid）
-        using var client = CreateClient();
         var url = $"{ApiBase}/sns/oauth2/access_token?appid={Uri.EscapeDataString(secret.AppId)}&secret={Uri.EscapeDataString(secret.AppSecret)}&code={Uri.EscapeDataString(code)}&grant_type=authorization_code";
-        using var resp = await client.GetAsync(url, ct);
+        using var resp = await _httpClient.GetAsync(url, ct);
         var json = await resp.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -109,9 +108,8 @@ public sealed class WeChatApiClient
     /// </summary>
     public async Task<WeChatUserInfo?> GetUserInfoAsync(string accessToken, string openid, CancellationToken ct = default)
     {
-        using var client = CreateClient();
         var url = $"{ApiBase}/sns/userinfo?access_token={Uri.EscapeDataString(accessToken)}&openid={Uri.EscapeDataString(openid)}&lang=zh_CN";
-        using var resp = await client.GetAsync(url, ct);
+        using var resp = await _httpClient.GetAsync(url, ct);
         var json = await resp.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -142,8 +140,6 @@ public sealed class WeChatApiClient
 
         throw new InvalidOperationException($"微信凭证未配置：appId={appId}（Channels 无匹配项）");
     }
-
-    private HttpClient CreateClient() => _httpClientFactory.CreateClient();
 
     private sealed record CachedToken(string AccessToken, DateTime ExpiresAtUtc);
 }

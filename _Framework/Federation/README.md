@@ -1,6 +1,8 @@
-# TKWF.Ext.Federation 认证中心联邦层技术规范
+# TKWF.Ext.Federation 联邦互联技术规范
 
 **状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + TKWF.Ext.Authentication.Abstractions 契约包 + FreeSql + Microsoft.AspNetCore.App（JWKS/profile 端点装配）
+
+**中文名**: **联邦互联**（2026-10-05 用户裁定——"联邦认证"偏窄，落脚点"互联"宽于认证：Federation 层职责含应用注册/信任建立/身份映射/多 IdP 连接；与"认证中心"对仗：内部中心 + 外部互联）
 
 **核心约束**: 手写 ES256 JWT（零第三方 JWT 库）/ **独立密钥域**（ECDSA P-256 PEM + kid 轮换 + JWKS，与 Authentication RS256 完全独立）/ 授权码 accesscode（120s 单次原子 CAS + SHA256 存储 + PKCE 可选）/ 应用注册（origin 白名单防开放重定向 + scope + client credential AES-GCM + per-channel HMAC）/ 数据访问红线合规（全走 SG1 DataService）/ 经 Authentication.Abstractions 契约消费认证内核（组合式，L2 门控）
 
@@ -8,7 +10,7 @@
 
 ## 一、定位
 
-认证中心（联邦枢纽）的**跨应用联邦层**（Federated SSO）——认证中心实例的对外面：目标 H5 应用对认证渠道（微信/QQ/Google/Apple/微软）零感知，统一消费 token2（ES256 自包含 JWT）。
+认证中心（联邦枢纽）的**跨应用联邦互联层**（Federated SSO）——认证中心实例的对外面：目标 H5 应用对认证渠道（微信/QQ/Google/Apple/微软）零感知，统一消费 token2（ES256 自包含 JWT）。
 
 | 能力 | 说明 |
 |------|------|
@@ -21,7 +23,7 @@
 
 **组合矩阵**（消费方按需装配）：
 - 只引 `TKWF.Ext.Authentication` = 内部认证（单应用登录）
-- **Authentication + Federation = 认证中心实例**（内部认证 + 多应用联邦 SSO）
+- **Authentication + Federation = 认证中心实例**（内部认证 + 多应用联邦互联 SSO）
 - Federation + 平台适配扩展 = 纯外部联邦登录（BYO IdP——V5 国外客户主力形态，经 Abstractions 引契约零全量传递）
 
 **不包含**：具体平台适配扩展（微信/QQ/Google/Apple/微软 channel 实现，独立立项 `TKWF.Federation.{平台}`）；`/sso/*` 端点映射（装配层职责——Federation 提供 Service 层）；我方多实例互通（默认不做，iss 域隔离）。
@@ -141,7 +143,7 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 **错误码**：`ACCESS_CODE_NOT_FOUND` / `TICKET_EXPIRED` / `TICKET_CONSUMED`（重放）/ `TICKET_STATE_MISMATCH`（PKCE）。
 
-**与既有 `IOAuthTicketService` 边界**（并列不迁移）：既有 = 单应用票据（login/bind + PKCE + TTL 5min，服务认证中心内部"票据换令牌"）；Federation accesscode = 联邦授权码（channel_id + target_app_id + scope，服务跨应用联邦流）——语义不同，各自独立（ADR-SSO 3.3 并存路径）。
+**与既有 `IOAuthTicketService` 边界**（并列不迁移）：既有 = 单应用票据（login/bind + PKCE + TTL 5min，服务认证中心内部"票据换令牌"）；Federation accesscode = 联邦互联授权码（channel_id + target_app_id + scope，服务跨应用联邦流）——语义不同，各自独立（ADR-SSO 3.3 并存路径）。
 
 ## 五、安全边界
 

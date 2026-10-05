@@ -109,11 +109,11 @@
   <Folder Name="/_Framework/FeatureManagement/">
     <Project Path="_Framework/FeatureManagement/TKWF.Ext.FeatureManagement.csproj" />
   </Folder>
-  <Folder Name="/_Framework/Authentication/">
-    <Project Path="_Framework/Authentication/TKWF.Ext.Authentication.csproj" />
+  <Folder Name="/_Framework/AuthCenter/">
+    <Project Path="_Framework/AuthCenter/TKWF.Ext.AuthCenter.csproj" />
   </Folder>
-  <Folder Name="/_Framework/Authentication.Abstractions/">
-    <Project Path="_Framework/Authentication.Abstractions/TKWF.Ext.Authentication.Abstractions.csproj" />
+  <Folder Name="/_Framework/AuthCenter.Abstractions/">
+    <Project Path="_Framework/AuthCenter.Abstractions/TKWF.Ext.AuthCenter.Abstractions.csproj" />
   </Folder>
   <Folder Name="/_Framework/UserCenter.Abstractions/">
     <Project Path="_Framework/UserCenter.Abstractions/TKWF.Ext.UserCenter.Abstractions.csproj" />
@@ -209,8 +209,8 @@
   <Folder Name="/_Tests/Extension.FeatureManagement.Tests/">
     <Project Path="_Tests/Extension.FeatureManagement.Tests/TKWF.Ext.FeatureManagement.Tests.csproj" />
   </Folder>
-  <Folder Name="/_Tests/Extension.Authentication.Tests/">
-    <Project Path="_Tests/Extension.Authentication.Tests/TKWF.Ext.Authentication.Tests.csproj" />
+  <Folder Name="/_Tests/Extension.AuthCenter.Tests/">
+    <Project Path="_Tests/Extension.AuthCenter.Tests/TKWF.Ext.AuthCenter.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.UserCenter.Tests/">
     <Project Path="_Tests/Extension.UserCenter.Tests/TKWF.Ext.UserCenter.Tests.csproj" />

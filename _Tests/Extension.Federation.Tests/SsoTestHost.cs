@@ -6,7 +6,7 @@ using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.Authentication;
+using TKWF.Ext.AuthCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Federation.Tests;

@@ -22,7 +22,7 @@
   <ItemGroup>
     <!-- 2026-10-05（SSO 立项，ADR-SSO Oracle P1-2/P1-3）：SSO 消费面契约包（接口 + DTO）——
          不引 Authentication 主包（ADR48 D7 L2 门控合规；组合矩阵第三形态零全量传递） -->
-    <ProjectReference Include="..\Authentication.Abstractions\TKWF.Ext.Authentication.Abstractions.csproj" />
+    <ProjectReference Include="..\AuthCenter.Abstractions\TKWF.Ext.AuthCenter.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

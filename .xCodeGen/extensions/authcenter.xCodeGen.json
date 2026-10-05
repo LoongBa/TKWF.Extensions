@@ -1,7 +1,7 @@
 {
-  "TargetProject": "..\\..\\_Framework\\Authentication\\TKWF.Ext.Authentication.csproj",
+  "TargetProject": "..\\..\\_Framework\\AuthCenter\\TKWF.Ext.AuthCenter.csproj",
   "EnableSkipUnchanged": true,
-  "OutputRoot": "..\\..\\_Framework\\Authentication\\Generated",
+  "OutputRoot": "..\\..\\_Framework\\AuthCenter\\Generated",
   "TemplatesPath": "%TKWFDeployPath%\\xCodeGen\\Templates",
 
   "Artifacts": {

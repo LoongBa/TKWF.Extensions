@@ -40,9 +40,9 @@
   <ItemGroup>
     <!-- Federation 主包 + 契约包（Federation 经 Authentication.Abstractions 消费认证内核） -->
     <ProjectReference Include="..\..\_Framework\Federation\TKWF.Ext.Federation.csproj" />
-    <ProjectReference Include="..\..\_Framework\Authentication.Abstractions\TKWF.Ext.Authentication.Abstractions.csproj" />
+    <ProjectReference Include="..\..\_Framework\AuthCenter.Abstractions\TKWF.Ext.AuthCenter.Abstractions.csproj" />
     <!-- 消费方白名单装配需认证内核（ISsoAccountQueryService 实现 + AuthAccount 实体）——测试宿主启用 -->
-    <ProjectReference Include="..\..\_Framework\Authentication\TKWF.Ext.Authentication.csproj" />
+    <ProjectReference Include="..\..\_Framework\AuthCenter\TKWF.Ext.AuthCenter.csproj" />
     <!-- C 基座（2026-10-04）：共享测试设施 -->
     <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />

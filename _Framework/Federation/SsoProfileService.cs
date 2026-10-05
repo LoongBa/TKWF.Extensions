@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.Authentication;
+using TKWF.Ext.AuthCenter;
 
 namespace TKWF.Ext.Federation;
 

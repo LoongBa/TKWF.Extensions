@@ -160,6 +160,25 @@ _Tests/Extension.{扩展名}.Tests/
 
 > **✅ V0.3.0+ 正确路线（v4.10.53 ADR90 领域自治根治，主框架 `tkwf-extension` skill 磨合版定稿——`../_TKWF/docs/AC-Kit/skills/tkwf-extension/SKILL.md` §4.7 六条心得必读）**：扩展模块 = 业务领域开发方式（Entity → SG1 → xCodeGen → DataService → Service 门面继承 `DomainServiceBase` → 消费方 `User.Use<T>()`）。**本仓库 40+ Store/Service/Provider/Manager 类须按此范式分批整改**——代表性实证：Settings V0.3.0（删 `ISettingStore/SettingStore`；`SettingManager : DomainServiceBase` + `AddConstructibleService`）、Permissions V0.9.1（删 `EntityDACPermissionStore`；`PermissionChecker : DomainServiceBase<TUserInfo>`）、Tagging V0.4.4（三 Store 继承基类 + `AddConstructibleService`）。铁律：**IDomainUser 永不注册 DI（经基类 `User`）；领域服务必须继承 `DomainServiceBase`；禁 Store 伪 DataService 层；DataService 禁构造注入（DI004 默认 Error）；`InitializeAsync` 启动加载经 System 作用域**。
 
+> **⛔ 红线：不手写 Store（2026-10-05 显式强化——AuthCenter 归层阶段 1 曾犯，已回退）**：**禁止创建任何 `I{Xxx}Store`/`{Xxx}Store`（DataService 薄包装）**——SG1/xCodeGen 生成的 DataService 已提供全部 CRUD 原子方法（`EntityGetAsync`/`EntitySelectAsync`/`EntityCreateAsync`/`EntityUpdateAsync`/`EntityUpdateWhereAsync`/`EntityCreateBatchAsync`/`EntityDeleteBatchAsync` 等），**领域服务门面直接经 `User.Use<XxxDataService>()` 懒加载组合即可，不需要也不允许再包一层 Store**（CRUD 与 DataService 完全重叠 = 伪层；settings `ISettingStore`/Permissions `EntityDACPermissionStore` 曾为反例）。
+> - **判据**：门面需要数据访问时 → 直接 `User.Use<具体 DataService>()`（如 `User.Use<SsoClientEntityDataService>()`）；**只有当契约需跨扩展消费（数据属主在他扩展主包）时才经 Abstractions 契约包定义接口**——但该接口是**对外的领域服务门面契约**（含业务语义），不是 DataService 的 CRUD 薄包装；零手写 CRUD（SG1 已生成）。
+> - **自检**：新增文件若以 `Store` 结尾或方法仅是 `EntityXxxAsync` 的透传 → 删除，改门面直接组合 DataService。
+
+### 扩展开发强制 Skill 路由（2026-10-05 新增，违反即失败）
+
+> **扩展仓库也是 TKWF 消费方**（用户裁定 2026-10-05）：扩展用主框架 API 开发（消费框架），产物被装配进消费项目——因此**与消费方项目同款强制 Skill 路由**（参考 `DMP-Lite/Agents_Use_TKWF.md §7`，路由方向面向扩展开发）。任何扩展开发任务必须按表格加载对应 Skill，禁止使用通用 Agent 分类或手动编写绕过。
+
+| 任务 | 必须使用的 Skill | 关键参数 | 禁止行为 |
+|------|-----------------|---------|---------|
+| 扩展整体开发/重构/整改（门面/Store/Service/Initializer/测试宿主） | **`tkwf-extension`** | `{Ext}=扩展名` | 禁手写 Store/构造注入/裸 ORM（红线）；禁通用 category 绕过 |
+| 扩展实体编写（Entity） | `tkwf-entity` | `{Ext}=扩展名` `{Entity}=实体名` | 禁手写 `IDomainEntity`/`[Key]`/`IsFromPersistentSource`（SG1 自动生成） |
+| 扩展 Service/业务规则 | `tkwf-service` | `{Ext}=扩展名` | 禁手动写 Service、禁绕过门面范式 |
+| 扩展测试（生产路径 + 契约测试） | `tkwf-test` | `{Ext}=扩展名` | 禁手写测试宿主绕过生产路径（StubDomainUser 掩盖守卫缺陷先例） |
+| 接入/启用/使用他扩展（引用→白名单→Web 装配→`User.Use` 门面） | `tkwf-use-extension` | `{Ext}=被消费扩展名` | 禁绕过白名单/门面 AOP 路径 |
+
+> **前置检查**：接到扩展开发任务时，第一步先加载并阅读对应 Skill 全文，按其规范执行，不得凭记忆或通用做法替代（对齐消费方 `Agents_Use_TKWF.md §7` 前置检查）。
+> **Skill 位置**：主框架 `../_TKWF/docs/AC-Kit/skills/{skill名}/SKILL.md`（本仓库通过软链/路径引用，无需手动加载——OpenCode 按 AGENTS.md 路由自动装载）。
+
 > **实践思路**（V0.2.0 起）：扩展模块**可以**采用框架原生开发方式——引入 SG1 分析器 + xCodeGen 生成 DTO/DataService/Conditions/IDomainEntity 实现，与业务领域项目使用同一套开发模式（tkwf-entity / tkwf-service skill）。这使扩展获得自动建表、REST/GraphQL API 暴露、Dto 自动裁剪等框架能力，减少手写样板代码。
 >
 > **数据访问红线（2026-09-07 用户裁定）**——扩展数据访问层必须遵循以下三条，违反即架构违规：

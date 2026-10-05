@@ -6,7 +6,7 @@
 
 ## 一、目的与目标
 
-确立认证体系扩展的**最终归层模型**：认证体系拆分为四层——**`TKWF.Ext.AuthCenter`**（联盟核心/认证中心：对内、持久化+装配）、**`TKWF.Ext.Federation`**（外交部/对外身份接口：配置装配、**无持久化**、编排 Connectors）、**`TKWF.Federation.{平台}`**（大使馆/平台网关库：`WeChat`/`QQ`/`Google`/`Alipay`——平台名直接挂 Federation 域下，**无持久化纯库**）、**`TKWF.Utility.OAuthClient`**（引擎/协议：纯 BCL，被上层调用）。读者应在 3 句话内明白：认证体系 = AuthCenter（对内核心）+ Federation（对外接口）+ Federation.{平台}（平台网关库，如 `TKWF.Federation.WeChat`）+ Utility.OAuthClient（引擎）；**"不是所有 AuthCenter 都需要 Federation"**（单应用认证中心可单独装，需要对外时才加装外交部）；Federation **无持久化**（装载配置 + 编排平台网关，存储契约归调用者实现）。
+确立认证体系扩展的**最终归层模型**：认证体系拆分为四层——**`TKWF.Ext.AuthCenter`**（联盟核心/认证中心：对内、持久化+装配）、**`TKWF.Ext.Federation`**（外交部/对外身份接口：配置装配、**自含实体**、编排平台网关）、**`TKWF.Federation.{平台}`**（大使馆/平台网关库：`WeChat`/`QQ`/`Google`/`Alipay`——平台名直接挂 Federation 域下，**无持久化纯库**）、**`TKWF.Utility.OAuthClient`**（引擎/协议：纯 BCL，被上层调用）。读者应在 3 句话内明白：认证体系 = AuthCenter（对内核心）+ Federation（对外接口）+ Federation.{平台}（平台网关库，如 `TKWF.Federation.WeChat`）+ Utility.OAuthClient（引擎）；**"不是所有 AuthCenter 都需要 Federation"**（单应用认证中心可单独装，需要对外时才加装外交部）；Federation **自含实体**（SsoClient/SsoAccessCode——数据访问直接经 SG1 DataService，**不建 Store 伪层**，skill 铁律）。
 
 ## 二、问题
 
@@ -71,21 +71,16 @@
 选定：**选项 A——四层归层模型**。
 
 1. **命名与职责**：
-   - `TKWF.Ext.AuthCenter`：联盟核心/认证中心（对内）——账号/令牌/登录保护/票据 + **Federation 存储契约实现**（持久化+装配）。
-   - `TKWF.Ext.Federation`：外交部/对外身份接口——token2/accesscode/JWKS 协议编排 + `ISsoChannel` 窄适配（Connector → 身份获取方向）+ `FederationOptions`（单/多身份配置，装载配置即可）——**无持久化**，存储契约（client 注册表/授权码状态/签名密钥）归调用者（AuthCenter 或消费方）。
+   - `TKWF.Ext.AuthCenter`：联盟核心/认证中心（对内）——账号/令牌/登录保护/票据（持久化+装配）。
+   - `TKWF.Ext.Federation`：外交部/对外身份接口——token2/accesscode/JWKS 协议编排 + `ISsoChannel` 窄适配（Connector → 身份获取方向）+ `FederationOptions`（单/多身份配置）；**自含实体**（`SsoClientEntity`/`SsoAccessCodeEntity`——client 注册表/授权码状态是协议编排核心状态），数据访问直接经 SG1 DataService（门面 `User.Use<DataService>()`，不建 Store——skill 铁律）。
    - `TKWF.Federation.{平台}`：大使馆/平台网关库——`TKWF.Federation.WeChat`/`.QQ`/`.Google`/`.Alipay`（平台名直接挂 Federation 域下，少 Connectors 中间层——用户裁定；**独立库域语义**：与 `TKWF.Ext.*`（扩展）/`TKWF.Utility`（引擎）平级，命名空间表归属（联邦域）、程序集保独立，可独立包发布不引 Federation 扩展——Oracle P2-1 命名一致性关切以"独立库域 + 命名空间表归属"回应）——双向（出站签名调用 + 入站接收验签）+ 内存态缓存，**无持久化纯库**。
    - `TKWF.Utility.OAuthClient`：引擎——authorize 构造/code 交换/令牌解析/验签调用，BCL `HttpClient`，**零框架依赖**（不绑 `IHttpClientFactory`），归主框架 Utility（`TKW.Framework.Utility` 命名空间族）。**⚠️ 归属标注（Oracle P1-4）**：本 ADR 是扩展仓库文档，**主框架 Utility 归属须转达框架组裁定**——本 ADR 仅记录方向（先例 `TKW.Framework.Utility.Cryptography` 的 `WeChatPaySignUtil`/`AlipaySignUtil` 已存在），不作为本仓库决策项。
 2. **"不是所有 AuthCenter 都需要 Federation"**（用户裁定）：单应用认证中心只装 AuthCenter；需要对外统一身份接口时才加装 Federation——分开合理。
-3. **Federation 无持久化 + 存储契约设计（Oracle P1-1 补充）**：Federation 定义存储契约接口，AuthCenter 实现（依赖倒置 ADR48 D7 L2 门控）：
-   - `ISsoClientStore`（Query/Upsert/IsOriginAllowed——client 注册表）
-   - `ISsoAccessCodeStore`（Issue 原子 CAS/Consume——授权码状态）
-   - `ISsoSigningKeyStore`（Load/Save EC 密钥——签名密钥持久化）
-   - **实体物理位置**：`SsoClientEntity`/`SsoAccessCodeEntity` **迁回 AuthCenter 主包**（Federation 只持 Store 契约，零实体）；联盟锚点列（`FederationAnchorOpenId`/`ChannelId`/`ExternalUserId`）已在 AuthCenter 实体上，无需迁移；`SsoSigningKeyStore` 实现归 AuthCenter。
-   - **Federation 层厚度**（拆解后剩余）：token2 签发/验证逻辑 + accesscode 编排（调 Store）+ profile API + ISsoChannel 契约 + FederationOptions——足够独立成包（协议编排层，无持久化）。
+3. **Federation 持久化与数据访问（2026-10-05 user+tkwf-extension skill 复核修订——不建 Store）**：Federation **保留自有实体 `SsoClientEntity`/`SsoAccessCodeEntity`**（client 注册表/授权码状态是 Federation 协议编排的核心状态，不迁回 AuthCenter）；数据访问**直接经 SG1 DataService**（门面 `User.Use<SsoClientEntityDataService>()` 懒加载组合，红线合规）——**不创建 `ISsoClientStore`/`ISsoAccessCodeStore` 伪层**（tkwf-extension skill §5 铁律：CRUD 归 SG1 DataService，组合归门面；Settings `ISettingStore`/SSO 阶段 1 Store 曾为反例已回退）。签名密钥（EC PEM 文件）Federation 自持（配置文件非 DB 持久化）。
 4. **单/多身份配置**（用户裁定）：Federation 不关心"一个身份 vs 多个身份"——取决于传入配置（装载的 Connector 实例数），联邦层逻辑不变。
 5. **SSO 命名废弃 → Federation**：SSO（体验词）废弃，Federation（结构词）采用。
 6. **平台适配 = 库非扩展**：`TKWF.Federation.{平台}`（单包多命名空间，少分包），微信/QQ/Google/支付宝均为 `TKWF.Federation.WeChat` 等命名空间内类；SSO.WeChat 开发方案改写为 `WeChatConnector`（`TKWF.Federation.WeChat`）库实施（降级：从含 Initializer 的扩展 → 纯库，无 `[TKWFExtension]`）。
-7. **契约包去留（Oracle P1-2 定论）**：**保留并更名** `TKWF.Ext.AuthCenter.Abstractions`——既有内容（SSO 消费面契约：`ISsoAccountQueryService`/`ISsoChannelMapService`/`ISsoAccountLinkService` + DTO）保留 + 新增存储契约（`ISsoClientStore`/`ISsoAccessCodeStore`/`ISsoSigningKeyStore`，Federation 定义、AuthCenter 实现的依赖倒置）；命名空间随主包迁移；V0.5.x 消费方 public API 位置变更**非破坏性设计**（命名空间保持 `TKWF.Ext.Authentication` + `TypeForwardedTo`，或评估过渡期）。
+7. **契约包去留（Oracle P1-2 定论 + skill 复核）**：`Authentication.Abstractions` **保留**（SSO 消费面契约：`ISsoAccountQueryService`/`ISsoChannelMapService`/`ISsoAccountLinkService` + DTO）——Federation 经契约消费 AuthCenter 的账号/映射（跨扩展消费面）；**不再新增存储契约**（Federation 自含实体，数据访问直接经 SG1 DataService，无需契约包承载 Store）；命名随归层调整（`AuthCenter.Abstractions` 或保留——评审后定）；V0.5.x 消费方 public API 位置变更**非破坏性设计**（命名空间保持 `TKWF.Ext.Authentication` + `TypeForwardedTo`，或评估过渡期）。
 8. **标准 OAuth 接口（v0.2.0 迭代）**：Federation 后续迭代在 Service 层之上补标准 OAuth 端点薄层（`/authorize` `/token` `/userinfo` `/.well-known/openid-configuration`）——异构客户端（.NET/Node.js/静态页）经标准 OAuth 库对接（前瞻，本 ADR 记录方向，v0.2.0 细化）。
 
 ## 六、后果
@@ -108,25 +103,27 @@
 ### 后续待办
 
 - ✅ **Oracle 评审完成（bg_3518b273，PASS WITH CONDITIONS）**——P1 四项修订已落实本 ADR（存储契约设计 §五.3 / 契约包定论 §五.7 / 迁移路径 §六.1 / Utility 归属转达标注 §五.1），P2 二项标注为开发方案期细化。
-- 修订开发方案：SSO 联邦层开发方案 → Federation（无持久化）+ AuthCenter 合并；SSO.WeChat → `TKWF.Federation.WeChat` 库。
+- **修订开发方案**：SSO 联邦层开发方案 → Federation（**自含实体 + 数据访问直接经 SG1 DataService**，不建 Store）；SSO.WeChat → `TKWF.Federation.WeChat` 库。t` 库。
 - 实施迁移（见 §六.1 分阶段）。
 
-### 6.1 迁移路径（Oracle P1-3 分阶段）
+### 6.1 迁移路径（2026-10-05 skill 复核修订——不建 Store、不拆实体）
+
+**原则（tkwf-extension skill §5 铁律）**：Federation **保留自有实体**（SsoClientEntity/SsoAccessCodeEntity），数据访问直接经 SG1 DataService（`User.Use<DataService>()`）——**不创建 Store 伪层**（阶段 1 曾试建 ISsoClientStore/ISsoAccessCodeStore，已回退 763e614）。
 
 **阶段 1（无 NuGet 破坏——SSO 未发布窗口期）**：
-1. 定义存储契约接口（`ISsoClientStore`/`ISsoAccessCodeStore`/`ISsoSigningKeyStore`）——Federation 侧
-2. AuthCenter 主包（暂保留 `TKWF.Ext.Authentication` 包名）实现存储契约（委托既有 DataService）
-3. SSO→Federation 重命名 + 拆解：实体（`SsoClientEntity`/`SsoAccessCodeEntity`）迁回 AuthCenter 主包；Federation 改调存储契约；协议编排（token2/accesscode/profile/ISsoChannel）留 Federation
-4. `Authentication.Abstractions` → `AuthCenter.Abstractions` 更名（未发布，无破坏）+ 内容扩展（加存储契约）
-5. SSO.WeChat → `TKWF.Federation.WeChat` 降级为库（无 Initializer 无 `[TKWFExtension]`）
-6. 107 测试迁移（88+19）+ `SsoContractTests` 7 例跨项目 + 全量 1647 回归
+1. **代码零移动**（SSO 实体/服务/测试保持现状——已满足 skill 正确路线：门面继承 DomainServiceBase + 直接 User.Use<DataService>）
+2. **命名归层**：SSO → Federation 纯命名调整（项目/命名空间/README 表述；实体 DataService 等生成物不变）——`TKWF.Ext.SSO` → `TKWF.Ext.Federation`（MinVerTagPrefix SSO→Federation，未发布无破坏）
+3. `Authentication.Abstractions` 契约包随命名调整（`AuthCenter.Abstractions` 或保留——评审后定）；**不新增存储契约**（Federation 自含实体，跨扩展消费面仅账号/映射契约）
+4. SSO.WeChat → `TKWF.Federation.WeChat` 降级为库（无 Initializer 无 `[TKWFExtension]`——平台网关从扩展降为库）
+5. 测试路径对齐：生产路径集成（真实 DI + BindScope + `User.Use<接口>()`）+ 分层单测（可配置 stub 直构门面）——**测试宿主不得手写 Store/掩盖守卫**（skill §4.5）
+6. 全量回归（107 + 全量 1647）
 
 **阶段 2（有 NuGet 破坏——需消费方协同）**：
 7. `TKWF.Ext.Authentication` → `TKWF.Ext.AuthCenter` 包名变更（破坏性——EduPlatform 等已消费方）+ Initializer 类名（`AuthCenterExtensionInitializer` 已吻合）
 8. 消费方（EduPlatform）迁移 + NuGet 包 deprecated 过渡
 9. **阶段 2 破坏性评估（Oracle P1-3）**：Authentication 已打 tag + 已发布 NuGet（v0.5.x，消费方 EduPlatform）——重命名为 AuthCenter 的成本/收益比需重新评估；**折中方案**：保留 `TKWF.Ext.Authentication` 包名（NuGet 契约）+ 内部归层用 AuthCenter 概念（文档/命名空间按需），或 `TKWF.Ext.AuthCenter` 新包名 + 旧包 deprecated 过渡期（评审后定）。
 
-**Initializer 说明（Oracle P2-2）**：AuthCenter 吸收 Federation 存储契约实现后，Federation **仍独立 Initializer**（协议编排层，注册 Store 契约实现类由 AuthCenter Initializer 完成）；两 Initializer 并存（`AuthCenterExtensionInitializer` + `FederationExtensionInitializer`），消费方按需白名单声明。
+**Initializer 说明（Oracle P2-2 + skill 复核）**：Federation 自含实体（SG1 DataService 自动注册）——`FederationExtensionInitializer`（原 SsoExtensionInitializer）独立注册门面（AddConstructibleService）+ 多实现集合（TryAddEnumerableConstructible ISsoChannel）；AuthCenter（`AuthCenterExtensionInitializer`）独立注册其门面；**两 Initializer 并存**，消费方按需白名单声明（AuthCenter 单装 / AuthCenter+Federation 组合 / 未来 Federation+Connectors 纯外部）。零 Store 契约注册（skill 铁律）。
 
 ## 七、关联文档
 
@@ -140,3 +137,4 @@
 |------|---------|
 | 2026-10-05 | 初始草案——认证体系四层归层模型（AuthCenter/Federation/Federation.{平台}/Utility.OAuthClient）："不是所有 AuthCenter 都需要 Federation"按需装配；Federation 无持久化（存储契约归调用者）；单/多身份取决配置；SSO 命名废弃→Federation；平台适配=库非扩展（单包多命名空间）；标准 OAuth 接口前瞻（v0.2.0） |
 | 2026-10-05 | **Oracle 评审（bg_3518b273）PASS WITH CONDITIONS，P1 四项 + P2 二项落实**：① P1-1 §五.3 存储契约设计——定义 `ISsoClientStore`/`ISsoAccessCodeStore`/`ISsoSigningKeyStore`（Federation 定义、AuthCenter 实现）+ `SsoClientEntity`/`SsoAccessCodeEntity` 迁回 AuthCenter + Federation 层厚度（协议编排层）；② P1-2 §五.7 契约包定论——保留并更名 `TKWF.Ext.AuthCenter.Abstractions` + 内容扩展（加存储契约）+ V0.5.x 非破坏性设计（命名空间保持 + TypeForwarded）；③ P1-3 §六.1 迁移路径分阶段——阶段 1（无破坏：Federation 拆解/实体迁回/契约包更名）+ 阶段 2（破坏性：Authentication→AuthCenter 包名 + 消费方协同 + 保留包名折中评估）；④ P1-4 §五.1 Utility 归属标注转达框架组（本 ADR 是扩展仓库文档，主框架归属不越权裁定）；⑤ P2-1 命名一致性——`TKWF.Federation.{平台}`（用户裁定少 Connectors 中间层）以"独立库域 + 命名空间表归属、程序集保独立"回应 Oracle 关切；⑥ P2-2 §六.1 Initializer 并存说明（AuthCenter + Federation 两 Initializer，Store 实现归 AuthCenter） |
+| 2026-10-05 | **skill 复核修订（用户裁定 + tkwf-extension skill §5 铁律——Store 伪层回退 763e614）**：阶段 1 曾实施 Store 拆解（ISsoClientStore/ISsoAccessCodeStore 契约 + 实体迁回 AuthCenter + Federation 改调 Store）——经 tkwf-extension skill 检查认定违反「不创建 Store 伪 DataService 层」（CRUD 归 SG1 DataService，组合归门面；Settings ISettingStore 反例同型），**完整回退**（Revert d1c50da + 工作区 46 项变更丢弃）。修订：§五.3 **Federation 保留自有实体**（SsoClientEntity/SsoAccessCodeEntity 不迁回），数据访问直接经 SG1 DataService（门面 `User.Use<DataService>()`），零 Store 合约；§五.7 契约包不再新增存储契约；§六.1 迁移路径改**代码零移动、纯命名归层**（SSO→Federation 命名 + 平台适配降级为库 + 测试路径对齐）；Initializer 说明改写（两 Initializer 并存，零 Store 注册）。AGENTS.md 显式强化「禁手写 Store」红线 + 新增「扩展开发强制 Skill 路由」（扩展= TKWF 消费方，参考 Agent_Use_TKWF.md §7） |

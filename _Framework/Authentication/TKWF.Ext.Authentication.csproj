@@ -75,8 +75,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Authentication.Tests" />
     <!-- SSO 模块测试（2026-10-05，ADR-SSO）：生产路径测试经 User.Use<AuthAccountEntityDataService>() 种子账号——
-         对齐 Notifications.SignalR 先例（主包 IVT 给卫星测试包） -->
-    <InternalsVisibleTo Include="TKWF.Ext.SSO.Tests" />
+         对齐 Notifications.SignalR 先例（主包 IVT 给卫星测试包）——2026-10-05 归层：SSO→Federation -->
+    <InternalsVisibleTo Include="TKWF.Ext.Federation.Tests" />
   </ItemGroup>
 
 </Project>

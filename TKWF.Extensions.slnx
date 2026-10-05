@@ -215,8 +215,11 @@
   <Folder Name="/_Tests/Extension.UserCenter.Tests/">
     <Project Path="_Tests/Extension.UserCenter.Tests/TKWF.Ext.UserCenter.Tests.csproj" />
   </Folder>
-  <Folder Name="/_Framework/SSO/">
-    <Project Path="_Framework/SSO/TKWF.Ext.SSO.csproj" />
+  <Folder Name="/_Framework/Federation/">
+    <Project Path="_Framework/Federation/TKWF.Ext.Federation.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.Tests/">
+    <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />
   </Folder>
 </Solution>
 

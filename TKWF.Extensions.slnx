@@ -218,6 +218,9 @@
   <Folder Name="/_Framework/Federation/">
     <Project Path="_Framework/Federation/TKWF.Ext.Federation.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Federation.WeChat/">
+    <Project Path="_Framework/Federation.WeChat/TKWF.Federation.WeChat.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />
   </Folder>

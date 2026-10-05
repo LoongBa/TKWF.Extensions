@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Federation.WeChat</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Federation.WeChat/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.WeChat</PackageId>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：微信公众平台双向网关（OAuth 身份获取 + 事件推送接收验签）；WeChatApiClient 出站 API 客户端（access_token L1 缓存 + 并发锁 + code→openid + sns/userinfo）+ WeChatOptions 配置（TKWF:Federation:WeChat 节）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
+         扩展不引库。T4/T5 WeChatOauthChannel/WeChatEventChannel 实现 ISsoChannel 在此库内） -->
+    <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference
+         （ISsoChannel : IDomainService + [Options] 特性所在程序集） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- HttpClient 注入（IHttpClientFactory——Microsoft.Extensions.Http；Oracle 评审点 5：纯逻辑 + HttpClient，不引 AspNetCore） -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- ⚠️ 不引 AspNetCore（Oracle 评审点 5）：库纯逻辑 + HttpClient（Microsoft.Extensions.Http）；
+       入站端点（/sso/wechat/event）归 Federation 扩展/消费方装配层，库只提供验签逻辑类（T5） -->
+
+  <!-- 测试项目访问 internal（T3 无测试项目——预留，对齐仓库惯例） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Federation.WeChat.Tests" />
+  </ItemGroup>
+
+</Project>

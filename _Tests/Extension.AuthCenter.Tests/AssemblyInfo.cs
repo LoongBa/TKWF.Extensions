@@ -1,6 +1,4 @@
-using Xunit;
-
-// V0.6.0 归层迭代（2026-10-06）——DevRsaKeyCache 进程内静态缓存（V0.5.3）+ 测试宿主 dev 临时密钥全局共享：
-// 并行下 DevRsaKeyCacheTests.ResetForTests 清缓存会与并行用例中途 签发→验签 窗口冲突（既有 flaky——
-// 归层前偶发，归层后用例量/调度时序变化更易暴露）。本项目用例量小（91），禁用并行换取确定性。
-[assembly: CollectionBehavior(DisableTestParallelization = true)]
+// V0.6.0 归层迭代（2026-10-06）曾因 DevRsaKeyCache 进程内静态缓存（V0.5.3）+ 测试宿主 dev 临时密钥全局共享
+// 禁用测试并行（DisableTestParallelization）——E4 密钥管理抽象（V0.7.0）后 DevRsaKeyCache 已删、
+// 改经 DevKeyCache DI 单例（非静态，每用例独立实例）——并行冲突根因消失，恢复默认并行（无此文件属性）。
+// 文件保留以记录该决定的历史注记。

@@ -14,6 +14,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.Federation;
 
@@ -35,15 +36,21 @@ internal sealed class Token2Service : DomainServiceBase, IToken2Service
 
     private readonly IOptions<FederationOptions> _options;
     private readonly ILogger<Token2Service> _logger;
+    private readonly DevKeyCache<EcKeySet> _devKeys;
 
-    // 签名密钥（懒加载——kid 轮换经 SigningKeys 遍历验证；静态 LoadKeysCore 单一真相源 + DevEcKeyCache dev 缓存）
+    // 签名密钥（懒加载——kid 轮换经 SigningKeys 遍历验证；LoadKeysCore 单一真相源 + DevKeyCache dev 缓存（DI 单例））
     private readonly Lazy<EcKeySet> _keys;
 
-    public Token2Service(IDomainUser user, IOptions<FederationOptions> options, ILogger<Token2Service> logger) : base(user)
+    public Token2Service(
+        IDomainUser user,
+        DevKeyCache<EcKeySet> devKeys,
+        IOptions<FederationOptions> options,
+        ILogger<Token2Service> logger) : base(user)
     {
         _options = options;
         _logger = logger;
-        _keys = new Lazy<EcKeySet>(() => LoadKeysCore(_options.Value, _logger), isThreadSafe: true);
+        _devKeys = devKeys;
+        _keys = new Lazy<EcKeySet>(() => LoadKeysCore(), isThreadSafe: true);
     }
 
     public Task<Token2IssueResult> IssueToken2Async(Token2IssueRequest request, CancellationToken ct = default)
@@ -159,11 +166,20 @@ internal sealed class Token2Service : DomainServiceBase, IToken2Service
 
     // ── 私有实现 ──────────────────────────────────────────────────────────
 
-    internal sealed record EcKeySet(string CurrentKid, ECDsa SigningKey, Dictionary<string, ECDsa> VerifyKeys);
-
-    /// <summary>加载签名密钥（fail-fast：生产缺密钥 → 拒绝启动；开发自动生成临时密钥 + Warning + 进程内缓存）。</summary>
-    private static EcKeySet LoadKeysCore(FederationOptions o, ILogger logger)
+    internal sealed record EcKeySet(string CurrentKid, ECDsa SigningKey, Dictionary<string, ECDsa> VerifyKeys) : IDisposable
     {
+        public void Dispose()
+        {
+            SigningKey.Dispose();
+            foreach (var k in VerifyKeys.Values) k.Dispose();
+        }
+    }
+
+    /// <summary>加载签名密钥（fail-fast：生产缺密钥 → 拒绝启动；开发自动生成临时密钥 + Warning + DevKeyCache 缓存）。</summary>
+    private EcKeySet LoadKeysCore()
+    {
+        var o = _options.Value;
+        var logger = _logger;
         if (string.IsNullOrEmpty(o.Issuer))
         {
             if (o.IsProduction) throw new InvalidOperationException("FederationOptions.Issuer 未配置——生产环境禁止签发/验证 token2");
@@ -178,7 +194,7 @@ internal sealed class Token2Service : DomainServiceBase, IToken2Service
             if (o.IsProduction)
                 throw new InvalidOperationException($"FederationOptions.SigningKeyPath 未配置——生产环境必须提供 EC 私钥 PEM（kid={currentKid}）");
             logger.LogWarning("FederationOptions.SigningKeyPath 未配置——开发环境自动生成临时 EC 密钥（重启即变，仅限开发）");
-            return DevEcKeyCache.GetOrCreate(() => CreateDevKeySet(currentKid, o, logger));
+            return _devKeys.GetOrCreate(() => CreateDevKeySet(currentKid, _options.Value, _logger));
         }
 
         EnsureP256(signingKey);
@@ -205,7 +221,7 @@ internal sealed class Token2Service : DomainServiceBase, IToken2Service
         return new EcKeySet(currentKid, signingKey, verifyKeys);
     }
 
-    /// <summary>构建开发模式密钥集（工厂——DevEcKeyCache 仅首次执行）。</summary>
+    /// <summary>构建开发模式密钥集（工厂——DevKeyCache 仅首次执行）。</summary>
     private static EcKeySet CreateDevKeySet(string currentKid, FederationOptions o, ILogger logger)
     {
         var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);

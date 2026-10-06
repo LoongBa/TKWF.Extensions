@@ -2,28 +2,26 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Domain.KeyManagement;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>D12：PlatformCredential——AES-GCM 落库加密（DB 无明文）/ 读路径解密 / 唯一约束 / SetEnabled。
 /// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
-/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para>
+/// <para>E4 密钥管理抽象（V0.7.0）：静态 PlatformCredentialKeyStore 已删——密钥经 FileSymmetricKeyProvider 实例持有
+/// （每用例 CreateService 新建独立 provider + 唯一密钥文件路径 → 无跨用例共享，不再需要 ctor Reset）。</para></summary>
 public class PlatformCredentialServiceTests
 {
-    /// <summary>V0.5.3（Oracle 评审 MAJOR）：PlatformCredentialKeyStore 静态缓存测试隔离——每用例前置 Reset，
-    /// 防跨测试类/跨用例泄漏（CreateService 每次生成不同密钥文件路径，静态缓存若不复位会复用首次密钥 → 解密失败）。</summary>
-    public PlatformCredentialServiceTests()
-    {
-        PlatformCredentialKeyStore.ResetForTests();
-    }
-
     private static (PlatformCredentialService Service, PlatformCredentialEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var options = AuthenticationTestHost.CreateOptions();
         options.SecretEncryptionKeyPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"tkwf-auth-key-{System.Guid.NewGuid():N}.key");
         var stub = AuthenticationTestHost.CreateStub(fsql);
-        var service = new PlatformCredentialService(stub, Options.Create(options), NullLogger<PlatformCredentialService>.Instance);
+        // keyed ISymmetricKeyProvider 无法按位置传参——直接构造 FileSymmetricKeyProvider（dev 分支：路径缺失 → 随机 32B + 写盘）
+        var keys = new FileSymmetricKeyProvider(options.SecretEncryptionKeyPath, isProduction: false, logger: null);
+        var service = new PlatformCredentialService(stub, keys, Options.Create(options), NullLogger<PlatformCredentialService>.Instance);
         return (service, stub.Use<PlatformCredentialEntityDataService>());
     }
 

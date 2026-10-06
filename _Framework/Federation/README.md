@@ -1,6 +1,6 @@
 # TKWF.Ext.Federation 联邦互联技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + TKWF.Ext.Authentication.Abstractions 契约包 + FreeSql + Microsoft.AspNetCore.App（JWKS/profile 端点装配）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0（2026-10-06 E4 密钥管理抽象——删 `FederationSecretKeyStore`/`DevEcKeyCache` 静态密钥类；密钥经框架 `ISymmetricKeyProvider`（keyed "Federation"，`SymmetricKeyProviderKeys.Federation`）+ `DevKeyCache<Token2Service.EcKeySet>`（Utility.Caching）；AES-GCM 格式统一单段（AeadEncryptionUtil）） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + TKWF.Ext.Authentication.Abstractions 契约包 + FreeSql + Microsoft.AspNetCore.App（JWKS/profile 端点装配）
 
 **中文名**: **联邦互联**（2026-10-05 用户裁定——"联邦认证"偏窄，落脚点"互联"宽于认证：Federation 层职责含应用注册/信任建立/身份映射/多 IdP 连接；与"认证中心"对仗：内部中心 + 外部互联）
 
@@ -16,7 +16,7 @@
 |------|------|
 | 应用注册 | `SsoClientEntity`（app_id + origin 白名单 + scope + client credential + per-channel HMAC 密钥，AES-GCM 加密落库） |
 | 授权码 accesscode | `SsoAccessCodeEntity`——CSPRNG 32B base64url / 120s TTL / **单次原子 CAS**（ADR89 条件 UPDATE）/ 只存 SHA256(code) / **PKCE 可选**（defense in depth） |
-| token2 签发/验证 | `Token2Service`——手写 **ES256**（BCL ECDsa，P-256 曲线强制）+ kid 轮换 + 独立密钥域（生产 PEM fail-fast / 开发临时密钥 DevEcKeyCache）+ JWKS 分发 |
+| token2 签发/验证 | `Token2Service`——手写 **ES256**（BCL ECDsa，P-256 曲线强制）+ kid 轮换 + 独立密钥域（生产 PEM fail-fast / 开发临时密钥 `DevKeyCache<Token2Service.EcKeySet>`——框架 Utility.Caching）+ JWKS 分发 |
 | profile API | `SsoProfileService`——server-to-server（scope 强制 + ILogger 审计 + 永不返回 openid/channel_id/phone） |
 | channel 契约 | `ISsoChannel`——IdP 适配器接口（可扩展键值上下文，供 `TKWF.Federation.{平台}` 平台适配扩展实现） |
 | 契约包 | `TKWF.Ext.Authentication.Abstractions`——Federation 消费面契约（`ISsoAccountQueryService`/`ISsoChannelMapService` + 不可变 DTO，零实体零 SG1） |
@@ -98,7 +98,7 @@ openssl ecparam -name prime256v1 -genkey -noout -out sso-ec-private.pem   # PKCS
 openssl ec -in sso-ec-private.pem -pubout -out sso-ec-public.pem
 ```
 
-> ⚠️ **生产 fail-fast**：`IsProduction=true` 时缺 `Issuer` / `SigningKeyPath` / `SecretEncryptionKeyPath` → 启动拒绝（InitializeAsync 预检经系统作用域 `Use<IToken2Service>()`）。开发模式自动生成临时 EC 密钥（DevEcKeyCache 进程内缓存——重启即变，仅限开发联调）。
+> ⚠️ **生产 fail-fast**：`IsProduction=true` 时缺 `Issuer` / `SigningKeyPath` / `SecretEncryptionKeyPath` → 启动拒绝（InitializeAsync 预检经系统作用域 `Use<IToken2Service>()`）。开发模式自动生成临时 EC 密钥（`DevKeyCache<Token2Service.EcKeySet>` 进程内缓存——框架 Utility.Caching；重启即变，仅限开发联调）。
 
 ### 4. 消费（应用端起）
 
@@ -165,6 +165,7 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 | 版本 | 内容 |
 |------|------|
+| V0.2.0（2026-10-06） | **E4 密钥管理抽象**（框架 v4.10.61 配套）：删 `FederationSecretKeyStore`/`DevEcKeyCache` 静态密钥类——密钥迁移框架 `ISymmetricKeyProvider`（keyed "Federation"，`SymmetricKeyProviderKeys.Federation`）+ `DevKeyCache<Token2Service.EcKeySet>`（Utility.Caching）；删 `FederationSecretKeyStore` 死钩子 `ResetForTests`（零调用）；AES-GCM 格式统一单段（AeadEncryptionUtil）；23 测试全绿 + 全量回归通过 |
 | V0.1.1（2026-10-05） | **Development 模式启动崩溃修复**（同 AuthCenter V0.5.4 defect——方案 A' 复制链）：`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope，ValidateScopes（Development）下 Scoped 守卫工厂从根解析必崩 → 改不传参（框架内部 CreateScope 建子 scope） |
 | V0.1.0（2026-10-05） | Federation 联邦层内核（归层后命名，原 SSO）：应用注册（origin 白名单 + scope + AES-GCM credential + per-channel HMAC）/ accesscode（120s 原子 CAS + SHA256 + PKCE）/ token2（手写 ES256 独立密钥域 + kid 轮换 + JWKS）/ profile API（scope 强制 + 审计）/ ISsoChannel 契约；前置 `Authentication.Abstractions` 契约包拆出（Federation 消费面：ISsoAccountQueryService/ISsoChannelMapService + DTO，零实体零 SG1）；联盟锚点数据模型（AuthAccount.FederationAnchorOpenId 列 + PlatformAccountMap 扩展）；19 测试全绿 + 全量回归通过 |
 

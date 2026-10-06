@@ -62,9 +62,6 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
         _methods = methods ?? throw new ArgumentNullException(nameof(methods));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        // TOTP secret 密钥惰性初始化（幂等单例）——生产缺 SecretEncryptionKeyPath fail-fast 拒启动（Oracle C6）
-        MfaSecretKeyStore.Initialize(options.Value, logger);
     }
 
     // ── 绑定管理 ──

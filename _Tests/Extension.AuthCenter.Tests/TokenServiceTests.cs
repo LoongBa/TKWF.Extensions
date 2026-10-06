@@ -9,6 +9,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
@@ -25,7 +26,8 @@ public class TokenServiceTests
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var stub = AuthenticationTestHost.CreateStub(fsql); // 全部 8 实体 DAC——Use<DataService>() NoAop 直建源
         var service = new TokenService(
-            stub, Options.Create(options),
+            stub, new DevKeyCache<TokenService.RsaKeySet>(), // E4 密钥管理抽象（V0.7.0）：dev 分支密钥缓存（单测内单实例自洽）
+            Options.Create(options),
             new MemoryCache(new MemoryCacheOptions()), NullLogger<TokenService>.Instance);
         return (service, stub);
     }

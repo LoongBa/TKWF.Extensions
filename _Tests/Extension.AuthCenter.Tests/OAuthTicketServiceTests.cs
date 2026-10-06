@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
@@ -22,7 +23,8 @@ public class OAuthTicketServiceTests
         var stub = AuthenticationTestHost.CreateStub(fsql, (services, user) =>
         {
             var tokenService = new TokenService(
-                user, Options.Create(options),
+                user, new DevKeyCache<TokenService.RsaKeySet>(), // E4 密钥管理抽象（V0.7.0）：dev 分支密钥缓存
+                Options.Create(options),
                 new MemoryCache(new MemoryCacheOptions()), NullLogger<TokenService>.Instance);
             services.AddSingleton<ITokenService>(tokenService);   // OAuthTicketService.Use<ITokenService>() 接口懒加载源
             tokenService.EnsureKeysLoaded();

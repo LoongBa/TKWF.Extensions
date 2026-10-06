@@ -10,7 +10,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（+ **V0.1.2** V4.10.53 领域自治根治 / **V0.1.3** V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂） |
+| 版本 | v0.1.0（+ **V0.1.2** V4.10.53 领域自治根治 / **V0.1.3** V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂 / **V0.2.0** E4 密钥管理抽象——删 `MfaSecretKeyStore`、`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`） |
 | 依赖 | 主框架 `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖**（短信渠道经消费方抽象 `IMfaSmsSender` 注入） |
 | 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 | 职责 | 第二因素验证服务（绑定管理 + 挑战验证 + 频控 + 恢复码）；**不签发令牌、不维护登录状态、不做主认证** |
@@ -155,7 +155,7 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 - **多实例部署 ⚠️（Oracle C8）**：v0.1.0 频控为**内存单实例**（验证尝试 + 短信发码）——SMS MFA 多实例 = 5×N 条/小时/用户（短信计费滥用），**须外部限流器（Redis 等）或单实例部署**；TOTP MFA 无此限制（不发码）。
 - **TTL 内重发拒绝（理论 TOCTOU）⚠️**：活动挑战检查与建行非原子——单实例**极端并发**下两请求可同时通过检查、同时创建挑战双发 SMS（理论窗口）；`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
 - **密钥 fail-fast**：`SecretEncryptionKeyPath` 生产缺失 → 拒启动（对齐 Authentication 密钥策略）；密钥文件前 32 字节为 AES-GCM 密钥，**不进代码库**。
-- **加密边界（实施注记）**：TOTP secret 的 AES-GCM 加解密在**方法实现层**（`TotpMfaMethod` 经 `MfaSecretKeyStore`——DataService 分部构造器固定 (IDomainUser, IEntityDAC) 无法注入密钥）；密文落库、DB 无明文、生产缺密钥 fail-fast，与方案"DataService 边界"（Oracle C6 意图）安全语义等价。**解密异常语义**：格式非法（非三段结构）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`。
+- **加密边界（实施注记）**：TOTP secret 的 AES-GCM 加解密在**方法实现层**（`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`——框架 TKW.Framework.Domain.KeyManagement v4.10.61，`SymmetricKeyProviderKeys.Mfa`，E4 V0.2.0）；密文落库、DB 无明文、生产缺密钥 fail-fast（`FileSymmetricKeyProvider` 自 `TKWF:Mfa:SecretEncryptionKeyPath` 派生密钥），与方案"DataService 边界"（Oracle C6 意图）安全语义等价。**解密异常语义**：格式非法（单段 blob 结构损坏）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`。
 - **防枚举**：`VerifyChallengeAsync` 失败统一 `false`（不区分原因）；`RequestChallengeAsync` 对未启用用户返回统一"已发起"——日志层自行区分。
 - **恢复码保存**：激活/再生成时一次性明文返回——消费方提示用户保存；丢失后凭已保存恢复码解绑重绑（无恢复码 + 设备丢失 = 锁死，防锁死是恢复码的意义）。
 - **UTC 时间**：挑战 TTL/过期经 `DateTime.UtcNow` 判定；消费方时区无关。
@@ -182,5 +182,6 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 
 | 日期 | 版本 | 变更内容 |
 |------|------|---------|
+| 2026-10-06 | V0.2.0 | **E4 密钥管理抽象（框架 v4.10.61 配套）**：删 `MfaSecretKeyStore` 静态密钥类——`TotpMfaMethod` ctor 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`，消费点即注入点）；`MfaService` 构造不再有 Initialize 密钥副作用；测试去反射（`ResetMfaSecretKeyStore` 改注入式 internal Reset）；修正 `MfaSecretEntityDataService` 陈旧注释；AES-GCM 单段规范格式（AeadEncryptionUtil）。消费方零配置变更。65 用例全绿 |
 | 2026-10-01 | v0.1.0 | 首版——TOTP（RFC 6238 自研）+ 短信验证码双方法：绑定/解绑 + 挑战-验证流 + 尝试频控 + 恢复码；独立扩展零依赖（消费方编排）；Oracle 评审 PASS WITH CONDITIONS 11 条件全吸收（方案 `docs/MFA/MFA多因素认证-开发方案.md`） |
 | 2026-10-01 | —（v0.1.0 后置补丁） | Oracle7 审核 C1 修复 + C2/C3 文档对齐——SMS 发送失败清理孤儿挑战行（`SendCodeAsync` 发送 try/catch → 物理删除挑战 + 再抛，防 TTL 内孤儿阻塞重发）；新增 2 测试用例（失败清理无残留 + 渠道恢复立即重发）；文档修正解密异常语义（`CryptographicException`/`FormatException`）并补充 TTL 重发 TOCTOU 边界 |

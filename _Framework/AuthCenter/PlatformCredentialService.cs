@@ -2,19 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 
 namespace TKWF.Ext.AuthCenter;
 
 /// <summary>
 /// 第三方平台凭证服务——公众号/小程序/网站应用/移动应用凭证管理（方案 §5.10）。
 /// <para>摒弃 DMP 裸 FreeSql（POCO + 直触 ORM）——SG1 化 + DataService 委托；</para>
-/// <para>AES-GCM 加解密在 <see cref="PlatformCredentialEntityDataService"/> 边界
-/// （<c>AuthCenterOptions.SecretEncryptionKeyPath</c> 派生密钥）；本服务只见明文（不触 AppSecretEncrypted 密文格式）。</para>
+/// <para>E4 密钥管理抽象（V0.7.0）：AES-GCM 加解密在【本服务边界】——经注入的
+/// <see cref="ISymmetricKeyProvider"/>（keyed 注册键 <see cref="SymmetricKeyProviderKeys.AuthCenter"/>，
+/// <c>FileSymmetricKeyProvider</c> 生产 fail-fast / 开发随机兜底）；DataService 回归纯持久化
+/// （AppSecretEncrypted 密文列原样存取）；本服务只见明文/负责加密（密文格式不触 DataService）。</para>
 /// <para>数据访问红线合规：不注入 IFreeSql/IEntityDAC——全部方法委托 DataService 边界方法。</para>
 /// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
 /// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
@@ -25,29 +29,21 @@ namespace TKWF.Ext.AuthCenter;
 internal sealed class PlatformCredentialService : DomainServiceBase, IPlatformCredentialService
 {
     private PlatformCredentialEntityDataService? _dataService;
-    private readonly IOptions<AuthCenterOptions> _options;
-    private readonly ILogger<PlatformCredentialService> _logger;
+    private readonly ISymmetricKeyProvider _keys;
 
     private PlatformCredentialEntityDataService DataService => _dataService ??= User.Use<PlatformCredentialEntityDataService>();
 
+    // E4 密钥管理抽象（V0.7.0）：keyed ISymmetricKeyProvider 注入（FileSymmetricKeyProvider 构造即加载密钥——
+    // 生产缺密钥 fail-fast 语义与旧 PlatformCredentialKeyStore.Initialize 启动期等价；keyed 单例惰性解析，
+    // 首次构造本服务时触发）
     public PlatformCredentialService(
         IDomainUser user,
+        [FromKeyedServices(SymmetricKeyProviderKeys.AuthCenter)] ISymmetricKeyProvider keys,
         IOptions<AuthCenterOptions> options,
         ILogger<PlatformCredentialService> logger)
         : base(user)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        // 生产 fail-fast 门（对齐签名密钥策略）：SecretEncryptionKeyPath 未配置 → 拒绝启动。
-        if (options.Value.IsProduction && string.IsNullOrWhiteSpace(options.Value.SecretEncryptionKeyPath))
-        {
-            _logger.LogError("生产环境未配置 AuthCenterOptions.SecretEncryptionKeyPath——平台凭证 AES-GCM 密钥无法派生，拒绝启动。");
-            throw new InvalidOperationException("生产环境必须配置 AuthCenterOptions.SecretEncryptionKeyPath（平台凭证 AES-GCM 密钥派生文件路径）。");
-        }
-
-        // AES-GCM 密钥幂等初始化（DataService 边界经 PlatformCredentialKeyStore 取密钥——生产缺文件 fail-fast / 开发生成+Warning）
-        PlatformCredentialKeyStore.Initialize(options.Value, logger);
+        _keys = keys;
     }
 
     /// <inheritdoc />
@@ -59,20 +55,40 @@ internal sealed class PlatformCredentialService : DomainServiceBase, IPlatformCr
         => DataService.GetByAppAsync(platform, appType, ct);
 
     /// <inheritdoc />
-    public Task<PlatformCredentialSecret?> GetSecretAsync(string platform, string appType, CancellationToken ct = default)
-        => DataService.GetSecretByAppAsync(platform, appType, ct);
+    public async Task<PlatformCredentialSecret?> GetSecretAsync(string platform, string appType, CancellationToken ct = default)
+    {
+        var entity = await DataService.GetByAppAsync(platform, appType, ct);
+        if (entity == null || !entity.IsEnabled || string.IsNullOrEmpty(entity.AppSecretEncrypted))
+            return null; // 禁用凭证不发放明文密钥（对标旧 GetSecretByAppAsync 启停管控语义）
+        return new PlatformCredentialSecret(entity.AppId, _keys.Decrypt(entity.AppSecretEncrypted));
+    }
 
     /// <inheritdoc />
-    public Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default)
-        => DataService.GetSecretByAppIdAsync(platform, appId, ct);
+    public async Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default)
+    {
+        var entity = await DataService.GetByAppIdAsync(platform, appId, ct);
+        if (entity == null || string.IsNullOrEmpty(entity.AppSecretEncrypted))
+            return null;
+        return new PlatformCredentialSecret(entity.AppId, _keys.Decrypt(entity.AppSecretEncrypted));
+    }
 
     /// <inheritdoc />
-    public Task CreateAsync(PlatformCredentialEntity credential, string plainSecret, CancellationToken ct = default)
-        => DataService.CreateEncryptedAsync(credential, plainSecret, ct);
+    public async Task CreateAsync(PlatformCredentialEntity credential, string plainSecret, CancellationToken ct = default)
+    {
+        if (credential == null) throw new ArgumentNullException(nameof(credential));
+        if (plainSecret == null) throw new ArgumentNullException(nameof(plainSecret));
+        credential.AppSecretEncrypted = _keys.Encrypt(plainSecret);
+        await DataService.CreateAsync(credential, ct); // CreateTime/UpdateTime UTC 由 DataService 置
+    }
 
     /// <inheritdoc />
-    public Task UpdateAsync(PlatformCredentialEntity credential, string? newPlainSecret, CancellationToken ct = default)
-        => DataService.UpdateEncryptedAsync(credential, newPlainSecret, ct);
+    public async Task UpdateAsync(PlatformCredentialEntity credential, string? newPlainSecret, CancellationToken ct = default)
+    {
+        if (credential == null) throw new ArgumentNullException(nameof(credential));
+        if (newPlainSecret != null)
+            credential.AppSecretEncrypted = _keys.Encrypt(newPlainSecret);
+        await DataService.UpdateAsync(credential, ct); // UpdateTime UTC 由 DataService 置
+    }
 
     /// <inheritdoc />
     public Task SetEnabledAsync(long id, bool enabled, CancellationToken ct = default)

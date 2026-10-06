@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析）** + **V0.1.3（V4.10.55 ADR92/T3 闭环——2 Method 改 `TryAddEnumerableConstructible` + 继承 DomainServiceBase，集合版守卫工厂帧内供给）** |
+| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析）** + **V0.1.3（V4.10.55 ADR92/T3 闭环——2 Method 改 `TryAddEnumerableConstructible` + 继承 DomainServiceBase，集合版守卫工厂帧内供给）** + **V0.2.0（E4 密钥管理抽象——删 `MfaSecretKeyStore`；`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`）；MfaService 不再 Initialize 密钥副作用；修正 DataService 陈旧注释；格式统一单段）** |
 | 依赖 | `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖** |
 | 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 
@@ -19,17 +19,17 @@ IMfaService / MfaService                      # 门面（绑定管理 + 挑战-�
 ├── IMfaMethod（TryAddEnumerableConstructible 多实现——V4.10.55 ADR92 集合版守卫工厂）
 │     ├── TotpMfaMethod                       # TOTP（RFC 6238 自研——TotpGenerator，零 NuGet）
 │     └── SmsMfaMethod                        # 短信（SmsMfaMethod + 消费方 IMfaSmsSender 渠道）
-├── MfaSecretEntityDataService                # SG1 DataService（secret 密文落库；密钥经 MfaSecretKeyStore）
+├── MfaSecretEntityDataService                # SG1 DataService（secret 密文落库；加解密在方法层 TotpMfaMethod 经 keyed ISymmetricKeyProvider）
 ├── MfaChallengeEntityDataService             # 挑战票据（一次性 TTL + 单次消费）
 └── MfaRecoveryCodeEntityDataService          # 恢复码（SHA256 + 单次消费）
 
 IMfaSmsSender / MfaSmsMessage                 # 消费方实现（TryAdd 无默认——对齐 ISmsSender 先例）
-MfaSecretKeyStore / MfaRateLimiter            # internal 设施（AES-GCM 密钥 + 内存滑动窗口频控）
+MfaRateLimiter                              # internal 设施（内存滑动窗口频控）
 ```
 
 - **数据访问红线**：Service 层只依赖 SG1 DataService（ADR61 自动注册，零手动注册）——零 IFreeSql/IEntityDAC 直注入。
 - **零扩展间依赖（ADR48 D7 L2 门控）**：不引 `TKWF.Ext.Authentication` 本体、不拆其 Abstractions——短信渠道经消费方 `IMfaSmsSender` 注入（对齐 Account「验证码渠道归消费方」裁定）。
-- **AES-GCM 加密在方法实现层**（对齐 `PlatformCredentialKeyStore` 先例）：`MfaSecretKeyStore` 持有密钥（`TKWF:Mfa:SecretEncryptionKeyPath` 派生，MfaService 构造时幂等 Initialize），`TotpMfaMethod` 经其加解密 secret——密文落库（明文不落库），生产缺密钥 fail-fast。DataService 分部构造器固定 (IDomainUser, IEntityDAC) 无法注入密钥，故加密边界在方法层（DB 无明文语义等价）。
+- **AES-GCM 加密在方法实现层**：`TotpMfaMethod` 经 keyed `ISymmetricKeyProvider`（框架 TKW.Framework.Domain.KeyManagement v4.10.61，`SymmetricKeyProviderKeys.Mfa`——`FileSymmetricKeyProvider` 自 `TKWF:Mfa:SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）加解密 secret——密文落库（明文不落库）。`MfaService` 构造不再有 Initialize 密钥副作用。
 
 ## 核心能力
 
@@ -77,7 +77,7 @@ MfaSecretKeyStore / MfaRateLimiter            # internal 设施（AES-GCM 密钥
 - **挑战票据模型（ADR-MFA-挑战票据与验证模型）**：`MfaChallengeEntity` 一次性 TTL + `IsConsumed` 原子翻转单次消费（防重放）；TOTP 无码落库（票据仅句柄 + 频控挂点）；不设 Attempts 列（频控归内存窗口）。
 - **防枚举（Oracle Q6）**：验证失败统一 `false`；未启用挑战返回统一"已发起"；已启用重复绑定返回统一形态。
 - **恒定时间比较**：SMS 码/恢复码/TOTP 比对经 `CryptographicOperations.FixedTimeEquals`。
-- **secret 加密（ADR-MFA-TOTP自研与密钥存储）**：TOTP 自研 RFC 6238（HMAC-SHA1 + 30s + 6 位 + Base32 + ±1 窗口，附录 B 向量锚定）；secret AES-GCM 密文落库（`SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）；解密异常语义：**格式非法（非三段结构）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`**。
+- **secret 加密（ADR-MFA-TOTP自研与密钥存储）**：TOTP 自研 RFC 6238（HMAC-SHA1 + 30s + 6 位 + Base32 + ±1 窗口，附录 B 向量锚定）；secret AES-GCM 密文落库（`SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）；解密异常语义：**格式非法（单段 blob 结构损坏）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`**。
 - **频控单实例（Oracle Q3/C8）**：v0.1.0 内存滑动窗口仅本实例生效——TOTP/SMS 验证暴力多实例可忽略（6 位码 + 单次消费）；**SMS 发码多实例 = 短信计费滥用 → 外部限流器/单实例前置**；DB 化跨实例频控 v0.2.0 候选。⚠️ **TTL 内重发拒绝在单实例极端并发下存在理论 TOCTOU 窗口**（两并发请求可同时过活动挑战检查 → 同时创建挑战双发 SMS）——`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
 - **恢复码**：SHA256 落库（明文不落库）、单次消费、验证纳入频控、再生成全量替换；丢失恢复码 + 设备丢失 = 锁死（防锁死是恢复码的意义）。
 - **零扩展间依赖**：`SmsMfaMethod` 与 Authentication `SmsVerificationService` 逻辑重叠但语义不同（第二因素 per-user×method vs 首因素 per-phone×scene + IP）——独立实现正确（Oracle Q1 裁决）；收敛出口 = 后续评估 `Authentication.Abstractions` 拆包（独立迭代）。
@@ -125,7 +125,7 @@ MfaRecoveryCode(id BIGINT PK, user_id VARCHAR(128), code_hash VARCHAR(64), is_co
 ```
 
 - 删除语义：**物理删除**（不声明 `IsDeleted`，`hasSoftDelete:false`）——Disable 解绑删绑定 + 未消费挑战 + 恢复码（级联）。
-- `secret_encrypted` 为 AES-GCM 密文（`base64(iv).base64(tag).base64(cipher)`——明文不落库，`DtoFieldIgnore` 不入 DTO）；`code_hash`/`enroll_token_hash`/`recovery code_hash` 为 SHA256 十六进制小写（明文不落库）。
+- `secret_encrypted` 为 AES-GCM 密文（单段 `base64(nonce[12]‖cipher‖tag[16])`——明文不落库，`DtoFieldIgnore` 不入 DTO）；`code_hash`/`enroll_token_hash`/`recovery code_hash` 为 SHA256 十六进制小写（明文不落库）。
 - 绑定激活后 `secret_encrypted`/`phone` 不可变（`CanUpdate=false`）——解绑重绑走 Disable+Enroll。
 - 生产建表：框架 `SyncTables` 统一托管（ADR49），**无手工 DDL 前置**。
 

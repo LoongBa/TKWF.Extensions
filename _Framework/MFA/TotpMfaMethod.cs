@@ -3,17 +3,20 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 
 namespace TKWF.Ext.MFA;
 
 /// <summary>
 /// TOTP MFA 方法（RFC 6238 自研，零第三方）——验证器绑定 + 无状态挑战验证。
 /// <para>绑定：<see cref="EnrollAsync"/> 生成 Base32 secret → AES-GCM 密文落绑定行（明文不落库——
-/// <see cref="MfaSecretKeyStore"/>，ADR-MFA-TOTP自研与密钥存储）；<see cref="ConfirmEnrollAsync"/> 校验
+/// keyed <see cref="ISymmetricKeyProvider"/>（SymmetricKeyProviderKeys.Mfa，E4 密钥管理抽象 V0.2.0），
+/// ADR-MFA-TOTP自研与密钥存储）；<see cref="ConfirmEnrollAsync"/> 校验
 /// EnrollToken（SHA256 恒定时间 + TTL，Oracle C3）+ 一次码（时窗）→ 激活（IsConfirmed=true + 清空
 /// EnrollTokenHash/EnrollExpireAt）。</para>
 /// <para>挑战：<see cref="RequestChallengeAsync"/> 建票据句柄（CodeHash=null——TOTP 无码落库，仅流程句柄 +
@@ -34,6 +37,7 @@ internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
 
     private MfaSecretEntityDataService? _secrets;
     private MfaChallengeEntityDataService? _challenges;
+    private readonly ISymmetricKeyProvider _keys;
     private readonly IOptions<MfaOptions> _options;
 
     private MfaSecretEntityDataService Secrets => _secrets ??= User.Use<MfaSecretEntityDataService>();
@@ -41,9 +45,11 @@ internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
 
     public TotpMfaMethod(
         IDomainUser user,
+        [FromKeyedServices(SymmetricKeyProviderKeys.Mfa)] ISymmetricKeyProvider keys,
         IOptions<MfaOptions> options)
         : base(user)
     {
+        _keys = keys ?? throw new ArgumentNullException(nameof(keys));
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
@@ -56,9 +62,9 @@ internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
         var opt = _options.Value;
         var now = DateTime.UtcNow;
 
-        // 生成 secret → AES-GCM 加密（密钥经 MfaSecretKeyStore——MfaService 构造时幂等 Initialize，缺密钥生产 fail-fast）
+        // 生成 secret → AES-GCM 加密（keyed ISymmetricKeyProvider——单例工厂构造时加载密钥，生产缺密钥 fail-fast）
         var base32Secret = TotpGenerator.GenerateSecret();
-        var secretEncrypted = MfaSecretKeyStore.Encrypt(base32Secret, MfaSecretKeyStore.GetKey());
+        var secretEncrypted = _keys.Encrypt(base32Secret);
 
         // 待激活绑定（Oracle C3）——IsConfirmed=false + EnrollTokenHash（SHA256 落库）+ EnrollExpireAt（TTL 对齐 ChallengeTtl）
         var enrollToken = RandomToken(32);
@@ -104,7 +110,7 @@ internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
         // 解密 secret → 一次码时窗校验（RFC 6238——激活确认输一次验证器码）
         if (pending.SecretEncrypted is null)
             return new MfaVerifyResult(false, 0, "绑定缺少 secret（数据异常）");
-        var base32Secret = MfaSecretKeyStore.Decrypt(pending.SecretEncrypted, MfaSecretKeyStore.GetKey());
+        var base32Secret = _keys.Decrypt(pending.SecretEncrypted);
         var unixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (!TotpGenerator.Validate(code, base32Secret, unixSeconds, opt.TotpTimeStepSeconds, opt.TotpDigits, opt.TotpClockSkewWindows))
             return new MfaVerifyResult(false, 0, "TOTP 验证码校验失败（码错/过期——统一失败不区分原因）");
@@ -157,7 +163,7 @@ internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
             return new MfaVerifyResult(false, 0, "挑战不存在/已消费/已过期");
 
         // 解密 secret → 时窗验证（TOTP 无状态语义——验证不依赖票据码）
-        var base32Secret = MfaSecretKeyStore.Decrypt(active.SecretEncrypted, MfaSecretKeyStore.GetKey());
+        var base32Secret = _keys.Decrypt(active.SecretEncrypted);
         var unixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (!TotpGenerator.Validate(code, base32Secret, unixSeconds, opt.TotpTimeStepSeconds, opt.TotpDigits, opt.TotpClockSkewWindows))
             return new MfaVerifyResult(false, 0, "TOTP 验证码校验失败（码错/过期——统一失败不区分原因）");

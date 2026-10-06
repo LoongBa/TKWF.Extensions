@@ -72,7 +72,9 @@ public class IdentityAdapterTests
         {
             // LocalJwtTokenVerifier.Use<ITokenService>() 接口懒加载源（CreateStub 注册单例）
             var tokenService = new TokenService(
-                user, Microsoft.Extensions.Options.Options.Create(options),
+                user,
+                new TKW.Framework.Utility.Caching.DevKeyCache<TokenService.RsaKeySet>(), // E4 密钥管理抽象（V0.7.0）：dev 分支密钥缓存
+                Microsoft.Extensions.Options.Options.Create(options),
                 new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenService>.Instance);
             services.AddSingleton<ITokenService>(tokenService);

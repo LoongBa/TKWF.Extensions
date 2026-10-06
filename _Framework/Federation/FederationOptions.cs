@@ -22,7 +22,7 @@ public class FederationSigningKeyConfig
 /// <para>[Options("TKWF:Federation")]：SG1 在消费方生成 GeneratedOptionsBindings，宿主启动期自动绑定
 /// （对齐 AuthCenterOptions 先例——模式 A 双通道）。</para>
 /// <para>关键安全门：生产（IsProduction=true）缺签名密钥 → 拒绝启动（fail-fast，对齐 Authentication）；
-/// 开发自动生成临时 EC 密钥 + Warning（DevEcKeyCache 进程内缓存）。</para>
+/// 开发自动生成临时 EC 密钥 + Warning（DevKeyCache DI 单例缓存）。</para>
 /// </summary>
 [Options("TKWF:Federation")]
 public class FederationOptions

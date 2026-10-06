@@ -2,9 +2,11 @@
 
 ## 状态
 
-活跃
+~~活跃~~ **已废弃（E4 密钥管理抽象上提主框架，2026-10-06）**
 
-> 本 ADR 为永久架构决策记录，不可删除。如后续决策被推翻（如开发模式密钥持久化方案落地替代静态缓存），须在本 ADR 标注「已废弃」并引用新 ADR，而非删除本文件。
+> 本 ADR 为永久架构决策记录，不可删除。如后续决策被推翻，须在本 ADR 标注「已废弃」并引用新 ADR，而非删除本文件。
+>
+> **已废弃注记（2026-10-06）**：本 ADR 确立的「可复用模式」（L36——未来 dev 临时加密材料可同形处理）与「测试隔离契约」（静态缓存 Reset 钩子）已被 **E4 密钥管理抽象** 收敛为框架共享抽象落地——`DevRsaKeyCache`/`DevEcKeyCache` 两处复制 → `TKW.Framework.Utility.Caching.DevKeyCache<TKey>`（DI 单例，`where TKey : class, IDisposable`）；`PlatformCredentialKeyStore` 缺 Reset 缺陷 → `ISymmetricKeyProvider`/`FileSymmetricKeyProvider` internal `ResetForTests` 契约统一。**引用新 ADR**：`docs/KeyStore/ADR/ADR-KeyStore-密钥管理抽象上提主框架.md`（E4 决策全记录：落点/格式/DI/加密边界）。本 ADR 的缺陷实证（跨实例 INVALID_SIGNATURE）与修复路径（进程内共享密钥集）作为历史根因记录保留。
 
 ## 一、目的与目标
 
@@ -109,5 +111,6 @@
 
 | 日期 | 变更内容 |
 |------|---------|
+| 2026-10-06 | **标注废弃**（E4 密钥管理抽象上提主框架闭环）——本 ADR 模式被框架 `DevKeyCache<TKey>` + `ISymmetricKeyProvider` 抽象替代；「可复用模式」注记标注废弃引用 `ADR-KeyStore-密钥管理抽象上提主框架.md`；缺陷实证/修复路径作为历史根因保留 |
 | 2026-10-05 | 初始版本——框架组转达（P0）闭环：`DevRsaKeyCache`（internal static + 双重校验锁 + ResetForTests）接入 `LoadKeysCore` dev 分支；生产分支不变；RsaKeySet private → internal（复用同一类型）；T1 跨实例签发/验签 + T2 Reset 隔离回归测试；否决 ②持久化/③singleton/④不修 |
 | 2026-10-05 | Oracle 评审调整（bg_a0ced91a，近最优可发布）：**MAJOR** `PlatformCredentialKeyStore` 补 `ResetForTests()`（本 ADR 契约闭环——镜像模式不留缺 Reset 缺陷）+ `PlatformCredentialServiceTests` ctor Reset；**MINOR** `DevRsaKeyCache._cached` 加 `volatile`（DCL 教科书完整性）；`CreateDevKeySet` 移除恒 null 的 `pemSigningKey` 参数（死代码收敛）；§三 不适用边界补多 AuthCenter 同进程 dev 注记 |

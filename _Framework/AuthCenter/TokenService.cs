@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.AuthCenter;
 
@@ -43,6 +44,10 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
     private readonly IMemoryCache _cache;
     private readonly ILogger<TokenService> _logger;
 
+    // E4 密钥管理抽象（V0.7.0）：开发模式临时 RSA 密钥集缓存（DI 单例 DevKeyCache——非静态，
+    // 替代 V0.5.3 DevRsaKeyCache 进程内静态缓存；测试可并行化）；生产分支（PEM 文件）天然一致不走缓存。
+    private readonly DevKeyCache<TokenService.RsaKeySet> _devKeys;
+
     private AuthAccountEntityDataService AccountDataService => _accountDataService ??= User.Use<AuthAccountEntityDataService>();
     private AuthRefreshTokenEntityDataService RefreshTokenDataService => _refreshTokenDataService ??= User.Use<AuthRefreshTokenEntityDataService>();
     private AuthTokenBlacklistEntityDataService BlacklistDataService => _blacklistDataService ??= User.Use<AuthTokenBlacklistEntityDataService>();
@@ -52,6 +57,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
     public TokenService(
         IDomainUser user,
+        DevKeyCache<TokenService.RsaKeySet> devKeys,
         IOptions<AuthCenterOptions> options,
         IMemoryCache cache,
         ILogger<TokenService> logger)
@@ -60,10 +66,11 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
         _options = options;
         _cache = cache;
         _logger = logger;
-        // V0.3.1：Lazy 委托到静态 LoadKeysCore（单一真相源）——runtime 实例路径与 Initializer
+        _devKeys = devKeys;
+        // V0.3.1：Lazy 委托到 LoadKeysCore（单一真相源）——runtime 实例路径与 Initializer
         // 系统作用域预检共用同一实现（Initializer 经 scope.System.Use<ITokenService>() 解析实例后
         // 调实例 EnsureKeysLoaded()，A' 裁定——领域自治铁律零妥协，见 ADR61 Oracle B4）
-        _keys = new Lazy<RsaKeySet>(() => LoadKeysCore(_options.Value, _logger), isThreadSafe: true);
+        _keys = new Lazy<RsaKeySet>(() => LoadKeysCore(), isThreadSafe: true);
     }
 
     public async Task<TokenIssueResult> IssueTokenAsync(TokenIssueRequest request, CancellationToken ct = default)
@@ -251,19 +258,33 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
     // ── 私有实现 ──────────────────────────────────────────────────────────
 
     // V0.5.3：private → internal——DevRsaKeyCache（开发模式密钥集进程内缓存）复用同一类型（token 签发/验签一致性密钥对）
-    internal sealed record RsaKeySet(string CurrentKid, RSA SigningKey, Dictionary<string, RSA> VerifyKeys);
+    // E4 密钥管理抽象（V0.7.0）：实现 IDisposable——DevKeyCache<TKey> 约束（class, IDisposable）前置条件；
+    // ResetForTests 销毁时 Dispose 已缓存密钥集（原 DevRsaKeyCache.ResetForTests 的 Dispose 行为移入类型自身）
+    internal sealed record RsaKeySet(string CurrentKid, RSA SigningKey, Dictionary<string, RSA> VerifyKeys) : IDisposable
+    {
+        public void Dispose()
+        {
+            SigningKey.Dispose();
+            foreach (var k in VerifyKeys.Values) k.Dispose();
+        }
+    }
 
     /// <summary>
     /// 加载签名密钥（fail-fast：生产缺密钥/默认值 → 拒绝启动；开发自动生成临时密钥 + Warning）。
     /// <para>kid 轮换（JWK RFC 7517 语义）：CurrentKid 指定签发；验证遍历 SigningKeys 全量 kid 匹配。</para>
-    /// <para>V0.3.1：改为 static + 参数化（options/logger）——单一真相源，runtime 实例 Lazy 与 Initializer
-    /// 系统作用域预检（经 scope.System.Use&lt;ITokenService&gt;() 解析实例）共享同一实现。</para>
+    /// <para>V0.3.1：单一真相源——runtime 实例 Lazy 与 Initializer 系统作用域预检
+    /// （经 scope.System.Use&lt;ITokenService&gt;() 解析实例）共享同一实现。</para>
     /// <para>V0.5.3（转达-2026-10-05 修复）：开发模式（SigningKeyPath 未配置 &amp;&amp; !IsProduction）临时密钥
-    /// 经 <see cref="DevRsaKeyCache"/> 进程内静态缓存（双重校验锁）——修复跨 scoped 实例密钥不一致
-    /// （签发实例与验签实例各自 RSA.Create → INVALID_SIGNATURE）；生产分支（PEM 文件）天然一致不走缓存。</para>
+    /// 进程内共享——修复跨 scoped 实例密钥不一致（签发实例与验签实例各自 RSA.Create → INVALID_SIGNATURE）；
+    /// 生产分支（PEM 文件）天然一致不走缓存。</para>
+    /// <para>E4 密钥管理抽象（V0.7.0）：改为实例方法——dev 分支经注入的
+    /// <see cref="DevKeyCache{TKey}"/> DI 单例缓存（替代 V0.5.3 DevRsaKeyCache 进程内静态缓存）。</para>
     /// </summary>
-    private static RsaKeySet LoadKeysCore(AuthCenterOptions o, ILogger logger)
+    private RsaKeySet LoadKeysCore()
     {
+        var o = _options.Value;
+        var logger = _logger;
+
         if (string.IsNullOrEmpty(o.Issuer))
         {
             if (o.IsProduction) throw new InvalidOperationException("AuthCenterOptions.Issuer 未配置——生产环境禁止签发/验证令牌");
@@ -279,9 +300,9 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
             if (o.IsProduction)
                 throw new InvalidOperationException($"AuthCenterOptions.SigningKeyPath 未配置——生产环境必须提供 RSA 私钥 PEM（kid={currentKid}）");
             logger.LogWarning("AuthCenterOptions.SigningKeyPath 未配置——开发环境自动生成临时 RSA 密钥（重启即变，仅限开发）");
-            // V0.5.3：进程内静态缓存（DevRsaKeyCache 双重校验锁）——每个 scoped 实例解析同一密钥集，
+            // E4 密钥管理抽象（V0.7.0）：DI 单例缓存（DevKeyCache 双重校验锁）——每个 scoped 实例解析同一密钥集，
             // 消除"签发实例与验签实例密钥不同 → INVALID_SIGNATURE"（跨实例验签失败）；仅 dev 分支触发。
-            return DevRsaKeyCache.GetOrCreate(() => CreateDevKeySet(currentKid, o, logger));
+            return _devKeys.GetOrCreate(() => CreateDevKeySet(currentKid, o, logger));
         }
 
         EnsureKeyLength(signingKey);
@@ -309,7 +330,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
         return new RsaKeySet(currentKid, signingKey, verifyKeys);
     }
 
-    /// <summary>构建开发模式密钥集（工厂——DevRsaKeyCache 仅首次执行；dev 分支 signingKey 恒为 null，直接 RSA.Create）。</summary>
+    /// <summary>构建开发模式密钥集（工厂——DevKeyCache 仅首次执行；dev 分支 signingKey 恒为 null，直接 RSA.Create）。</summary>
     private static RsaKeySet CreateDevKeySet(string currentKid, AuthCenterOptions o, ILogger logger)
     {
         var signingKey = RSA.Create(RsaMinKeyBits);

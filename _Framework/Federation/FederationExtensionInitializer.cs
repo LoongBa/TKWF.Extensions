@@ -2,8 +2,12 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.Federation;
 
@@ -45,6 +49,19 @@ public class FederationExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
     {
         // Options 默认值兜底（SG1 [Options] 已在消费方自动绑定 TKWF:Federation 节）
         services.AddOptions<FederationOptions>();
+
+        // 对称密钥提供者（keyed singleton，键 SymmetricKeyProviderKeys.Federation）——构造即加载：
+        // 生产缺密钥 fail-fast / 开发按 FileSymmetricKeyProvider 三态语义（随机不落盘 / 写盘 / 取前 32 字节）
+        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(
+            SymmetricKeyProviderKeys.Federation,
+            (sp, _) =>
+            {
+                var o = sp.GetRequiredService<IOptions<FederationOptions>>().Value;
+                return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());
+            });
+
+        // 开发模式临时 EC 密钥缓存（DI 单例——消灭静态缓存，测试可并行）
+        services.AddSingleton(new DevKeyCache<Token2Service.EcKeySet>());
 
         // 门面（AddConstructibleService）——消费方 User.Use<接口>() 帧内解析
         services.AddConstructibleService<IToken2Service, Token2Service>();

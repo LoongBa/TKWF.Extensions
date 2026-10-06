@@ -1,35 +1,39 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Utility.Caching;
 using Xunit;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
-/// V0.5.3（转达-2026-10-05 修复）——开发模式临时 RSA 密钥跨实例一致性回归测试。
-/// <para>缺陷：开发模式（SigningKeyPath 未配置 &amp;&amp; !IsProduction）下每个 TokenService scoped 实例
-/// 各自 <c>Lazy&lt;RsaKeySet&gt;</c> → 签发实例与验签实例密钥集不同 → INVALID_SIGNATURE。</para>
-/// <para>T1（核心）：两个独立实例 A 签发 / B 验签 → 必须成功（DevRsaKeyCache 进程内共享密钥集）；
-/// T2：ResetForTests() 清场后，新实例无法验证旧实例签发的 token（密钥集已变化——隔离有效）。
-/// setup 调 Reset 防跨测试类/跨用例泄漏（DevRsaKeyCache 静态缓存）。</para>
+/// E4 密钥管理抽象（V0.7.0）——开发模式临时 RSA 密钥缓存（<see cref="DevKeyCache{TKey}"/> DI 单例）回归测试。
+/// 继 V0.5.3 DevRsaKeyCache（进程内静态缓存，已删）——现由主框架 <see cref="DevKeyCache{TKey}"/> 泛型实现替代
+/// （TokenService ctor 注入，LoadKeysCore dev 分支经 <c>_devKeys.GetOrCreate</c> 共享）。
+/// <para>T1（核心）：两个独立 TokenService 实例共享同一 DevKeyCache → 签发实例 A / 验签实例 B 成功
+/// （跨实例密钥一致性——缺陷消除唯一证明）；T2：独立缓存实例互不共享密钥集 → 新实例拒旧 token
+/// （隔离有效——原 ResetForTests 隔离语义等价验证；DevKeyCache.ResetForTests 为 TKWF.Utility internal 钩子，
+/// 未对扩展测试 IVT，按"禁反射"约束改用独立缓存实例验证）；T3：DevKeyCache 工厂仅首次执行
+/// （GetOrCreate 两次返回同一实例）。</para>
 /// </summary>
 public class DevRsaKeyCacheTests
 {
-    public DevRsaKeyCacheTests()
-    {
-        DevRsaKeyCache.ResetForTests();
-    }
+    // 每用例新实例——DevKeyCache 为实例态（非静态），无跨测试类/跨用例泄漏，无需 ctor Reset
+    private readonly DevKeyCache<TokenService.RsaKeySet> _devKeys = new();
 
     [Fact]
     public async Task DevMode_TwoInstances_IssueThenVerify_Succeeds()
     {
-        // 缺陷复现场景：两个独立 scoped 实例（各持 Lazy<RsaKeySet>）——修前 A 签发、B 验签必 INVALID_SIGNATURE
+        // 缺陷复现场景：两个独立 scoped 实例（各持 Lazy<RsaKeySet>）——共享同一 DevKeyCache（DI 单例）→
+        // 签发/验签密钥一致性（修前 A 签发、B 验签必 INVALID_SIGNATURE）
         var options = new AuthCenterOptions { IsProduction = false, Issuer = "auth-test" };
-        var (issuer, issuerStub) = CreateService(options);
-        var (verifier, verifierStub) = CreateService(options);
+        var (issuer, issuerStub) = CreateService(options, _devKeys);
+        var (verifier, verifierStub) = CreateService(options, _devKeys);
 
         var account = CreateAccount();
         await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, default);
@@ -37,41 +41,60 @@ public class DevRsaKeyCacheTests
         var issued = await issuer.IssueTokenAsync(
             new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false), default);
 
-        // 核心断言：跨实例验签成功（同一 DevRsaKeyCache 密钥集——缺陷消除的唯一证明）
+        // 核心断言：跨实例验签成功（同一 DevKeyCache 密钥集——缺陷消除的唯一证明）
         var validation = await verifier.ValidateTokenAsync(issued.AccessToken, default);
         Assert.Equal(account.UId, validation.UserId);
         Assert.Equal(AuthTypes.Sms, validation.AuthType);
     }
 
     [Fact]
-    public async Task ResetForTests_ClearsCache_NewInstanceRejectsOldToken()
+    public async Task SeparateCache_NewInstanceRejectsOldToken()
     {
-        // 先经实例 A 填充缓存 + 签发 token
+        // 先经实例 A（缓存 I）填充密钥集 + 签发 token
         var options = new AuthCenterOptions { IsProduction = false, Issuer = "auth-test" };
-        var (issuer, issuerStub) = CreateService(options);
+        var (issuer, issuerStub) = CreateService(options, _devKeys);
         var account = CreateAccount();
         await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, default);
         var issued = await issuer.IssueTokenAsync(
             new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false), default);
 
-        // 清场：Reset 后缓存已空（旧密钥集已 Dispose）
-        DevRsaKeyCache.ResetForTests();
-
-        // 新实例 B 触发重新生成——验签旧实例签发的 token 必须失败（密钥集已变化 → 隔离有效）
-        var (freshVerifier, _) = CreateService(options);
+        // 隔离：新实例使用独立 DevKeyCache（另一密钥集——工厂独立生成）——验签旧 token 必须失败
+        //（密钥集不共享 → 隔离有效；等价于原 ResetForTests 清场后重建密钥集的隔离语义）
+        var freshCache = new DevKeyCache<TokenService.RsaKeySet>();
+        var (freshVerifier, _) = CreateService(options, freshCache);
         var ex = await Assert.ThrowsAsync<AuthenticationException>(
             () => freshVerifier.ValidateTokenAsync(issued.AccessToken, default));
         Assert.Contains("INVALID_SIGNATURE", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── helpers（对齐 TokenServiceTests.CreateService 形态——独立实例直构）──
+    [Fact]
+    public void GetOrCreate_RunsFactoryOnce_ReturnsSameInstance()
+    {
+        var cache = new DevKeyCache<TokenService.RsaKeySet>();
+        var factoryCalls = 0;
 
-    private static (TokenService Service, StubDomainUser Stub) CreateService(AuthCenterOptions options)
+        TokenService.RsaKeySet Factory()
+        {
+            factoryCalls++;
+            return new TokenService.RsaKeySet("rsa-key-1", RSA.Create(2048), new Dictionary<string, RSA>());
+        }
+
+        // 双重校验锁语义：工厂仅首次执行，后续 GetOrCreate 直接返回已缓存实例（同引用）
+        var first = cache.GetOrCreate(Factory);
+        var second = cache.GetOrCreate(Factory);
+        Assert.Same(first, second);
+        Assert.Equal(1, factoryCalls);
+    }
+
+    // ── helpers（对齐 TokenServiceTests.CreateService 形态——独立实例直构 + 显式传入 DevKeyCache）──
+
+    private static (TokenService Service, StubDomainUser Stub) CreateService(AuthCenterOptions options, DevKeyCache<TokenService.RsaKeySet> devKeys)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var stub = AuthenticationTestHost.CreateStub(fsql);
         var service = new TokenService(
-            stub, Options.Create(options),
+            stub, devKeys,
+            Options.Create(options),
             new MemoryCache(new MemoryCacheOptions()), NullLogger<TokenService>.Instance);
         return (service, stub);
     }

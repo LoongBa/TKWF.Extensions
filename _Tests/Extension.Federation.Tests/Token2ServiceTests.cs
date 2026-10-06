@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.Federation.Tests;
 
@@ -18,7 +19,7 @@ public class Token2ServiceTests
         var fsql = SsoTestHost.CreateInMemoryFreeSql();
         var stub = SsoTestHost.CreateStub(fsql);
         var options = SsoTestHost.CreateOptions();
-        var service = new Token2Service(stub, Options.Create(options), NullLogger<Token2Service>.Instance);
+        var service = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(options), NullLogger<Token2Service>.Instance);
         return service;
     }
 
@@ -76,7 +77,7 @@ public class Token2ServiceTests
         var fsql = SsoTestHost.CreateInMemoryFreeSql();
         var stub = SsoTestHost.CreateStub(fsql);
         var options = SsoTestHost.CreateOptions();
-        var service = new Token2Service(stub, Options.Create(options), NullLogger<Token2Service>.Instance);
+        var service = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(options), NullLogger<Token2Service>.Instance);
 
         // 直接构造已过期 token：ttl=0 签发（exp=now）→ 验签 service 用同密钥但 ClockSkew=0（无 leeway 覆盖）
         var shortOptions = new FederationOptions
@@ -84,7 +85,7 @@ public class Token2ServiceTests
             Issuer = options.Issuer, SigningKeyPath = options.SigningKeyPath, CurrentKid = options.CurrentKid,
             SigningKeys = options.SigningKeys, Token2ExpirationSeconds = 0, ClockSkewSeconds = 0, IsProduction = true,
         };
-        var shortService = new Token2Service(stub, Options.Create(shortOptions), NullLogger<Token2Service>.Instance);
+        var shortService = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(shortOptions), NullLogger<Token2Service>.Instance);
         var issued = await shortService.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), default);
         // 同密钥验签（shortOptions 与 options 同 SigningKeys——签发/验签密钥一致），但 exp=now 且 leeway=0 → TOKEN_EXPIRED
         var verifyOptions = new FederationOptions
@@ -92,7 +93,7 @@ public class Token2ServiceTests
             Issuer = options.Issuer, SigningKeyPath = options.SigningKeyPath, CurrentKid = options.CurrentKid,
             SigningKeys = options.SigningKeys, Token2ExpirationSeconds = 300, ClockSkewSeconds = 0, IsProduction = true,
         };
-        var verifyService = new Token2Service(stub, Options.Create(verifyOptions), NullLogger<Token2Service>.Instance);
+        var verifyService = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(verifyOptions), NullLogger<Token2Service>.Instance);
         await Assert.ThrowsAsync<AuthenticationException>(() => verifyService.ValidateToken2Async(issued.Token, default));
     }
 
@@ -126,14 +127,14 @@ public class Token2ServiceTests
             ],
             IsProduction = true,
         };
-        var service = new Token2Service(stub, Options.Create(options), NullLogger<Token2Service>.Instance);
+        var service = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(options), NullLogger<Token2Service>.Instance);
 
         // 旧密钥签发（构造旧 service）→ 新 service 仍可验签（verifyKeys 遍历含旧 kid）
         var oldOptions = new FederationOptions
         {
             Issuer = options.Issuer, SigningKeyPath = key1Private, CurrentKid = "sso-old-key", SigningKeys = options.SigningKeys, IsProduction = true,
         };
-        var oldService = new Token2Service(stub, Options.Create(oldOptions), NullLogger<Token2Service>.Instance);
+        var oldService = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(oldOptions), NullLogger<Token2Service>.Instance);
         var issued = await oldService.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), default);
 
         var validated = await service.ValidateToken2Async(issued.Token, default);   // 新 service 验旧签名

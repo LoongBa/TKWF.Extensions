@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.MFA.DTOs;
 
 namespace TKWF.Ext.MFA;
@@ -14,8 +15,8 @@ namespace TKWF.Ext.MFA;
 /// MFA 绑定 DataService——<c>partial</c> 骨架（.g.cs 由 xCodeGen 生成承载 CRUD，不入库）。
 /// <para>删除语义：<c>hasSoftDelete:false</c>——物理删除（Disable 解绑删绑定行）。</para>
 /// <para>数据访问红线：Service 层只依赖 DataService（ADR61 自动注册），零 IFreeSql/IEntityDAC 直注入。</para>
-/// <para>secret AES-GCM 加解密在 DataService 边界（对齐 <c>PlatformCredentialEntityDataService</c> 先例——
-/// <c>MfaSecretKeyStore</c> 持有密钥；Service 层只见明文/密文按场景）。</para>
+/// <para>secret AES-GCM 加解密在 <c>TotpMfaMethod</c> 方法层（经 keyed <see cref="ISymmetricKeyProvider"/>，
+/// E4 密钥管理抽象 V0.2.0）；本 DataService 纯持久化。</para>
 /// </summary>
 partial class MfaSecretEntityDataService(IDomainUser user, IEntityDAC<MfaSecretEntity> dac)
     : DomainDataServiceBase<MfaSecretEntity, MfaSecretEntityDto>(user, dac, hasSoftDelete: false)

@@ -6,11 +6,13 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 
 namespace TKWF.Ext.Federation;
 
@@ -20,9 +22,10 @@ namespace TKWF.Ext.Federation;
 /// client credential（AES-GCM 密文落库）+ per-channel HMAC 密钥（<c>/sso/issue</c> 验签密钥来源，Oracle P1-4——
 /// 不复用 PlatformCredentialEntity）。</para>
 /// <para>数据访问红线合规：不注入 IFreeSql/IEntityDAC——全部经 <see cref="SsoClientEntityDataService"/>
-/// 内部转发访问器（Entity*，同程序集）委托查询/写入；AES-GCM 加解密经 <see cref="FederationSecretKeyStore"/>
-/// （<c>FederationOptions.SecretEncryptionKeyPath</c> 前 32 字节密钥——SSO 独立扩展内建等价辅助，镜像
-/// <c>PlatformCredentialKeyStore</c> 模式），密文落库明文不落库。</para>
+/// 内部转发访问器（Entity*，同程序集）委托查询/写入；AES-GCM 加解密经注入的
+/// <see cref="ISymmetricKeyProvider"/>（键 <see cref="SymmetricKeyProviderKeys.Federation"/>——
+/// <c>FederationOptions.SecretEncryptionKeyPath</c> 前 32 字节密钥，FileSymmetricKeyProvider），
+/// 密文落库明文不落库。</para>
 /// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
 /// （IDomainUser 永不注册 DI）；DataService 经 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载；
 /// 注册改 <c>AddConstructibleService&lt;ISsoClientService, SsoClientService&gt;</c>（Initializer 负责）。
@@ -32,6 +35,7 @@ namespace TKWF.Ext.Federation;
 internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
 {
     private SsoClientEntityDataService? _dataService;
+    private readonly ISymmetricKeyProvider _keys;
     private readonly IOptions<FederationOptions> _options;
     private readonly ILogger<SsoClientService> _logger;
 
@@ -39,22 +43,14 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
 
     public SsoClientService(
         IDomainUser user,
+        [FromKeyedServices(SymmetricKeyProviderKeys.Federation)] ISymmetricKeyProvider keys,
         IOptions<FederationOptions> options,
         ILogger<SsoClientService> logger)
         : base(user)
     {
+        _keys = keys;
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        // 生产 fail-fast 门（对齐签名密钥策略）：SecretEncryptionKeyPath 未配置 → 拒绝启动。
-        if (options.Value.IsProduction && string.IsNullOrWhiteSpace(options.Value.SecretEncryptionKeyPath))
-        {
-            _logger.LogError("生产环境未配置 FederationOptions.SecretEncryptionKeyPath——SSO 应用凭证 AES-GCM 密钥无法派生，拒绝启动。");
-            throw new InvalidOperationException("生产环境必须配置 FederationOptions.SecretEncryptionKeyPath（SSO 应用凭证 AES-GCM 密钥派生文件路径）。");
-        }
-
-        // AES-GCM 密钥幂等初始化（FederationSecretKeyStore 取密钥——生产缺文件 fail-fast / 开发生成+Warning）
-        FederationSecretKeyStore.Initialize(options.Value, logger);
     }
 
     /// <summary>
@@ -70,7 +66,6 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
         var appId = "app-" + Guid.NewGuid().ToString("N");
         var clientSecret = NewSecret();
         var hmacSecret = NewSecret();
-        var key = FederationSecretKeyStore.GetKey();
         var now = DateTime.UtcNow;
 
         var entity = new SsoClientEntity
@@ -78,8 +73,8 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
             AppId = appId,
             OriginWhitelist = JsonSerializer.Serialize(origins),
             Scopes = JsonSerializer.Serialize(scopeList),
-            ClientSecretEncrypted = FederationSecretKeyStore.Encrypt(clientSecret, key),
-            HmacSecretEncrypted = FederationSecretKeyStore.Encrypt(hmacSecret, key),
+            ClientSecretEncrypted = _keys.Encrypt(clientSecret),
+            HmacSecretEncrypted = _keys.Encrypt(hmacSecret),
             IsEnabled = true,
             CreateTime = now,
             UpdateTime = now,
@@ -116,7 +111,7 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
 
         try
         {
-            var decrypted = FederationSecretKeyStore.Decrypt(entity.ClientSecretEncrypted, FederationSecretKeyStore.GetKey());
+            var decrypted = _keys.Decrypt(entity.ClientSecretEncrypted);
             return FixedTimeEquals(decrypted, clientSecret);
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException)
@@ -128,13 +123,13 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
 
     /// <summary>
     /// 取 HMAC 密钥（明文——<c>/sso/issue</c> 验签用；AES-GCM 解密于 DataService 边界语义等价——
-    /// 解密经 <see cref="FederationSecretKeyStore"/> 于本服务边界）。应用不存在返回 null。
+    /// 解密经注入的 <see cref="ISymmetricKeyProvider"/> 于本服务边界）。应用不存在返回 null。
     /// </summary>
     public async Task<string?> GetHmacSecretAsync(string appId, CancellationToken ct = default)
     {
         var entity = await GetEntityAsync(appId, ct);
         if (entity == null) return null;
-        return FederationSecretKeyStore.Decrypt(entity.HmacSecretEncrypted, FederationSecretKeyStore.GetKey());
+        return _keys.Decrypt(entity.HmacSecretEncrypted);
     }
 
     /// <summary>

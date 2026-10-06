@@ -3,8 +3,12 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Utility.Caching;
 using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.AuthCenter;
@@ -57,11 +61,30 @@ public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TU
     /// 此处 <c>AddOptions</c> 兜底默认值（AddConstructibleService 守卫工厂经 ActivatorUtilities 解析剩余参数需
     /// IOptions 可解析；无可配置节时默认值兜底，对齐 Settings/Identity 先例）。缓存：TokenService 黑名单短 TTL
     /// 前置过滤（Oracle C3）依赖 IMemoryCache——TryAddSingleton 兜底，消费方可覆盖。</para>
+    /// <para>E4 密钥管理抽象（V0.7.0）：注册 keyed <see cref="ISymmetricKeyProvider"/> 单例
+    /// （<see cref="SymmetricKeyProviderKeys.AuthCenter"/> 键 → <c>FileSymmetricKeyProvider</c>——构造即加载密钥：
+    /// 生产缺密钥 fail-fast / 开发随机兜底；AddKeyedSingleton 惰性构造，首次解析门面时触发，启动语义与旧
+    /// PlatformCredentialKeyStore.Initialize 等价）——<see cref="PlatformCredentialService"/> 经
+    /// <c>[FromKeyedServices]</c> 注入；另注册 <see cref="DevKeyCache{TKey}"/> 单例（开发模式临时 RSA 密钥集
+    /// 缓存——<see cref="TokenService"/> ctor 注入，dev 分支共享密钥集，签发/验签一致性；非静态可测试并行化）。</para>
     /// </summary>
     public override void ConfigureServices(IServiceCollection services)
     {
         // Options 默认值兜底（门面 ctor 依赖 IOptions<AuthCenterOptions>；SG1 [Options] 已在消费方自动绑定 TKWF:AuthCenter 节）
         services.AddOptions<AuthCenterOptions>();
+
+        // E4 密钥管理抽象（V0.7.0）：keyed ISymmetricKeyProvider（FileSymmetricKeyProvider——构造即加载密钥：
+        // 生产缺密钥 fail-fast / 开发随机兜底；AddKeyedSingleton 惰性构造，首次解析门面时触发，启动语义与旧
+        // PlatformCredentialKeyStore.Initialize 等价）——PlatformCredentialService ctor 经 [FromKeyedServices] 注入
+        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(SymmetricKeyProviderKeys.AuthCenter, (sp, _) =>
+        {
+            var o = sp.GetRequiredService<IOptions<AuthCenterOptions>>().Value;
+            return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());
+        });
+
+        // E4 密钥管理抽象（V0.7.0）：开发模式临时 RSA 密钥集缓存 DI 单例（DevKeyCache——非静态，替代 V0.5.3
+        // DevRsaKeyCache 进程内静态缓存；测试可并行化）——TokenService ctor 注入，dev 分支经 _devKeys.GetOrCreate 共享
+        services.AddSingleton(new DevKeyCache<TokenService.RsaKeySet>());
 
         // 缓存：TokenService 黑名单 IMemoryCache 短 TTL 前置过滤（Oracle C3）——TryAddSingleton 消费方可覆盖
         services.TryAddSingleton<IMemoryCache, MemoryCache>();

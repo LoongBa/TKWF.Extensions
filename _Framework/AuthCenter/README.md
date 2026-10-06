@@ -1,6 +1,6 @@
 # TKWF.Ext.AuthCenter 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.6.0（2026-10-06 归层迭代——**Authentication → AuthCenter 全面归层**（包名/命名空间/契约包 `AuthCenter.Abstractions` 统一，Federation 同步）；**登录门面升级 `LoginResult`**（门面内 认证→取账号→签发 全编排，表现层零编排 Oracle P0-1）；**`AuthCenterWebExtension` 内建 6 标准对内端点**（原 JwtAuthenticationWebExtension——sms 验证码/短信登录/微信登录/refresh/logout/票据换令牌，minimal API + 游客帧 + 免认证，`AuthCenterEndpointOptions` `TKWF:AuthCenter:Web` 路径可配置，配置分层 AGENTS §8；前版 V0.5.4 为 Development 模式启动崩溃修复不传参、V0.5.3 `DevRsaKeyCache`、V0.5.2 游客帧终态） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.7.0（2026-10-06 E4 密钥管理抽象——**删 `PlatformCredentialKeyStore`/`DevRsaKeyCache` 静态类**：`PlatformCredentialService` 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.AuthCenter`——`FileSymmetricKeyProvider` 构造即加载：生产缺密钥 fail-fast / 开发两分支）+ `DevKeyCache<RsaKeySet>` DI 单例（dev 临时 RSA 密钥集非静态——测试并行化恢复）；**`PlatformCredentialEntityDataService` 加密上移服务层**（回归纯持久化：`GetSecretByAppAsync`→`GetByAppAsync` 不解密、`CreateEncryptedAsync`→`CreateAsync` 已加密、`UpdateEncryptedAsync`→`UpdateAsync`——AES-GCM 委托框架 `AeadEncryptionUtil` byte[] 重载单段规范格式；前版 V0.6.0 归层迭代、V0.5.4 Development 崩溃修复、V0.5.3 `DevRsaKeyCache`、V0.5.2 游客帧终态） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -18,7 +18,7 @@
 | 票据换令牌 | `OAuthTicketEntity` TTL 5min 单次 + **PKCE** + app_id/redirect_uri 白名单 + state 防重放 |
 | 身份适配层 | `JwtDomainUserParser`（Parse 内部强制 Verify）/ `ITokenVerifier` / `IAuthorizationMapper<TUserInfo>` / `AuthenticationUserHelperBase<TUserInfo>` / `JwtAuthenticationMiddleware`（路径 B Bearer JWT 恢复）——**AuthorityFilter 零改动** |
 | 跨系统映射 | `PlatformAccountMapEntity`（平台内部 id ↔ 业务 app + 业务本地 id + UnionId——统一 DMP 双机制） |
-| 平台凭证 | `PlatformCredentialEntity`（AppSecret **AES-GCM 加密**在 DataService 边界）+ `WeChatApiClient`（access_token 缓存 + 并发锁） |
+| 平台凭证 | `PlatformCredentialEntity`（AppSecret **AES-GCM 加密**在服务层 `PlatformCredentialService`——经 keyed `ISymmetricKeyProvider`；DataService 纯持久化）+ `WeChatApiClient`（access_token 缓存 + 并发锁） |
 | 平台账号 | `AuthAccountEntity`（手机号主键 + 微信绑定 + 认证声明 teacher_verified/auth_level，**不含业务角色**） |
 | 账号查询契约（V0.2.0） | `IAuthAccountQueryService`——对外只读查询（4 方法），委托 DataService（红线合规） |
 | **UserCenter 终态承接（V0.2.0）** | 实现 `IUserProfileSource`（`AuthAccountUserProfileSource`）——数据属主扩展实现他扩展读取契约，装配实例零桥接 |
@@ -163,7 +163,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | **`IOAuthTicketService`** | 一次性票据签发/消费（PKCE + 白名单 + 防重放） | `OAuthTicketService`（本扩展） |
 | **`IAuthLoginAttemptService`** | 登录尝试记录 + 限流窗口 | `AuthLoginAttemptService`（本扩展） |
 | **`IPlatformAccountMapService`** | 跨系统映射（Link upsert / 双向 / UnionId） | `PlatformAccountMapService`（本扩展） |
-| **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 在 DataService 边界） | `PlatformCredentialService`（本扩展） |
+| **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 加密在**服务层**——V0.7.0 自 DataService 边界上移，密钥经 keyed `ISymmetricKeyProvider`） | `PlatformCredentialService`（本扩展） |
 | **`IWeChatApiClient`** | 微信 API（access_token 缓存 + 并发锁 + 凭证解析） | `WeChatApiClient`（本扩展） |
 | **8 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential | SG1 + xCodeGen（.g.cs 入库） |
 | **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone/ByWechatMpOpenId/ByWechatWebOpenId——返回完整 `AuthAccountEntity`） | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
@@ -194,14 +194,14 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | `AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
 | `OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
 | `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留） |
-| `PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文，DtoFieldIgnore 不外泄)/IsEnabled |
+| `PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore 不外泄)/IsEnabled |
 
 > ⚠️ **V0.6.0 升级迁移提示（EduPlatform 实证 2026-10-05）**：`AuthAccount` 新增 `FederationAnchorOpenId` 列、`PlatformAccountMap` 新增 `ChannelId`/`ExternalUserId` 列（+ `UX_PlatformAccountMap_Channel` 索引）——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA），否则 Federation 联邦流 sms/login 相关路径 500（列缺失）。
 
 ## 六、安全边界
 
 - **数据访问红线合规**：全部实体 SG1 + `*EntityDataService` 委托（非泛型 `DomainDataServiceBase`——ADR61）；扩展零 IFreeSql/IEntityDAC 直注入（Service 层只委托 DataService）。
-- **密钥安全**：PEM 私钥（chmod 600）/ AES-GCM 密钥文件（前 32 字节）不进代码库；生产缺密钥 fail-fast 拒绝启动；kid 轮换支持紧急换钥。
+- **密钥安全**：PEM 私钥（chmod 600）/ AES-GCM 密钥文件（前 32 字节）不进代码库；生产缺密钥 fail-fast 拒绝启动；kid 轮换支持紧急换钥。**对称密钥经框架（v4.10.61）`ISymmetricKeyProvider`/`FileSymmetricKeyProvider`（Domain.KeyManagement）keyed 注册（`SymmetricKeyProviderKeys.AuthCenter`）持有 + `DevKeyCache<T>`（Utility.Caching）缓存开发临时密钥**——开发临时密钥进程内共享（重启即变），生产缺密钥 fail-fast。
 - **只增语义**：AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist 无 Update/Delete 公开业务方法（对齐 SecurityLog 先例）。
 - **密码修改处置（Oracle C2）**：`TokenVersion++` 后存量 2h access 靠短 TTL 自然失效（不做 access 级主动撤销）；高安全场景 v0.2.0 加"按 UserId 批量黑名单撤销"。
 - **微信便捷账号 Phone 可空**（方案偏离登记 2026-09-30）：微信便捷登录无手机号账号 Phone=null（唯一索引对 NULL 放行）；短信路径必填由 SmsAuthenticationProvider 保证；短信绑定补齐后回填。
@@ -234,6 +234,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **缺陷**：`TokenService` 开发模式（`SigningKeyPath` 未配置 && `IsProduction=false`）每次 `LoadKeysCore` 都 `RSA.Create()` **新建临时密钥**且无进程内共享——每个 scoped 实例（每请求一个）各自 `Lazy<RsaKeySet>` → 签发实例与验签实例（`LocalJwtTokenVerifier` 经 `User.Use<ITokenService>()` 解析的另一实例）密钥集不同 → **INVALID_SIGNATURE**（EduPlatform 反馈，框架组转达 P0）。既有 `Dev_MissingSigningKey_AutoGeneratesTemporary` 只测**单实例**自带签发+验签——单实例密钥集自洽必通过，漏检跨实例不一致。
   - **修复**：新增 `DevRsaKeyCache`（internal static + 双重校验锁 `GetOrCreate(Func<RsaKeySet>)` + `ResetForTests()` 测试隔离钩子——镜像 `PlatformCredentialKeyStore` 既有模式并补其缺 Reset 缺陷）——`LoadKeysCore` dev 分支改从缓存取（工厂仅首次执行）；**生产分支（PEM 文件）天然跨实例一致，绝不走缓存**（缺 PEM 仍 fail-fast）。`RsaKeySet` private → internal（复用同一类型）；`ResetForTests` 先 Dispose 已缓存密钥再置 null（防托管资源泄漏）。
   - 84 用例全绿（新增 `DevRsaKeyCacheTests`：T1 两独立实例 A 签发/B 验签成功——缺陷消除唯一证明 + T2 Reset 后新实例拒旧 token——隔离有效；setup Reset 防跨类泄漏）。
+  - **注（V0.7.0）**：`DevRsaKeyCache` 已被框架 `DevKeyCache<T>`（Utility.Caching）取代（E4 密钥管理抽象，见 V0.7.0）——本条为历史记录。
 - **V0.5.4（框架组转达 2026-10-05——Development 模式启动崩溃修复）**：
   - **缺陷**：`AuthCenterExtensionInitializer.InitializeAsync` 经 `BeginSystemScopeAsync(sp)` 进入系统作用域——传参形态（DomainHost M1 所有权契约）**原样绑定传入 provider、不建子 scope**，而 `InitializeAsync(IServiceProvider sp)` 收到的是**根容器**（`ServiceProviderBuiltCallbackAsync` 保持根容器）→ `sysScope.System.Use<ITokenService>()` 从根解析 `AddScoped` 守卫工厂 → **Development（ValidateScopes=true）启动必崩**（`Cannot resolve scoped service ... from root provider`——EduPlatform 实证）。冒烟恒 Production（ValidateScopes 关）掩盖；（同为 V0.3.1 方案 A' 复制链：Federation/Tagging/Permissions/Identity 四处同 defect）。
   - **修复**：`host.BeginSystemScopeAsync()` **不传参**——框架内部 `_ServiceProvider.CreateScope()` 建子 scope 并自拥生命周期（DomainHost.cs L405-409；`SystemActorApiTests` "必须使用独立 IServiceScope 而非根容器" 既有实证）。
@@ -244,6 +245,12 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **内建标准对内端点**：`AuthCenterWebExtension<TUserInfo>`（原 JwtAuthenticationWebExtension 更名 + ConfigureEndpoints）内建 6 端点——`POST {prefix}/sms/send-code`（scene 白名单）/ `{prefix}/login/sms` / `{prefix}/login/wechat` / `{prefix}/refresh` / `{prefix}/logout`（已认证 Bearer，jti 经中间件 Items 取）/ `{prefix}/ticket/exchange`——minimal API 手写（Oracle P2-5 非 RESTful）+ **匿名端点游客帧**（`guest.Use<门面>()`，须 UseWebSession 同装配）+ `.AllowAnonymous()` 免认证 + `TokenResponse` DTO（access/refresh/token_type/expires_in）+ FailReason→HTTP 映射（400/429 频控码/503 无 ISmsSender）。
   - **配置分层（AGENTS §8）**：领域 `AuthCenterOptions`（`TKWF:AuthCenter` 不动——EnabledAuthTypes fail-closed/LoginProtection/生命周期）+ 表现层 `AuthCenterEndpointOptions`（`TKWF:AuthCenter:Web`——`RoutePrefix` 默认 `/api/auth` + 6 端点开关，POCO 不镜像领域配置）+ 中间件 `AuthCenterMiddlewareOptions`（RejectInvalidToken）。
   - 测试：102 用例全绿（归层回归 + 门面升级回归 + 端点黑盒冒烟模式 A 共享宿主 + 配置绑定/分层断言）；全 slnx 全绿（Federation 23 同步）。
+- **V0.7.0（2026-10-06 E4 密钥管理抽象——响应框架组转达，CPM 4.10.61）**：
+  - **删静态密钥类**：`PlatformCredentialKeyStore` / `DevRsaKeyCache` 删除（5 份复制链族系收敛为框架共享抽象——ADR-KeyStore-密钥管理抽象上提主框架）。
+  - **keyed DI 首次引入**：`PlatformCredentialService` ctor 注入 `[FromKeyedServices(SymmetricKeyProviderKeys.AuthCenter)] ISymmetricKeyProvider`（`FileSymmetricKeyProvider`——构造即加载：生产缺密钥 fail-fast / 开发两分支；`AddKeyedSingleton` 惰性构造，首次解析门面时触发，启动语义与旧 `Initialize` 等价）；`TokenService` ctor 注入 `DevKeyCache<RsaKeySet>` DI 单例（dev 分支临时 RSA 密钥集非静态缓存——替代 V0.5.3 `DevRsaKeyCache` 进程静态；生产 PEM 分支恒不走缓存语义不变）。
+  - **加密边界上移服务层（P1-6 方法面显式规约）**：`PlatformCredentialEntityDataService` 回归纯持久化——`GetSecretByAppAsync`（解密）拆为 `GetByAppIdAsync`（entity 返回不解密）/`CreateEncryptedAsync(cred, plainSecret)` → `CreateAsync(cred)`（已加密）/`UpdateEncryptedAsync` → `UpdateAsync(cred)`（已加密）/删 `GetSecretByAppAsync`；加密移 `PlatformCredentialService` 私有包装（`_keys.Encrypt/Decrypt`）；`WeChatApiClient` 等 DataService 直接消费方改经门面（T1 穷举）。收敛对齐 Federation/MFA 既有服务层加密拓扑（DataService 保持 ADR61 纯 DAC 语义）。
+  - **格式统一单段**：AES-GCM 委托框架 `AeadEncryptionUtil` byte[] 重载（`base64(nonce[12]‖cipher‖tag[16])` 规范格式）——三段点分废弃（用户裁定不考虑过渡）；存量三段密文一次性迁移或重注册（三扩展新发大概率无生产存量——闭环确认）。
+  - **测试**：`DevRsaKeyCacheTests` 改注入式（去静态 Reset）；`PlatformCredentialServiceTests` keyed provider 注入；**AssemblyInfo 撤销 `DisableTestParallelization`**（静态消失 → 并行安全回归哨兵）；102+ 用例全绿。
 - **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Testing.Shared;
 
@@ -213,10 +214,12 @@ internal sealed class MfaTestHost : IDisposable
         var stub = new StubDomainUser { ServiceProvider = services.BuildServiceProvider() };
         var opt = Options.Create(options ?? new MfaOptions());
 
-        // 独立方法实例（stub 用户直构——方法与 DataService 同链隔离）
+        // 独立方法实例（stub 用户直构——方法与 DataService 同链隔离；TotpMfaMethod 经 keyed 单例等价物：
+        // 直接构造 FileSymmetricKeyProvider（独立实例——无跨用例静态共享，E4 密钥管理抽象 V0.2.0））
+        var keys = new FileSymmetricKeyProvider(opt.Value.SecretEncryptionKeyPath, opt.Value.IsProduction, NullLogger<FileSymmetricKeyProvider>.Instance);
         IEnumerable<IMfaMethod> methods =
         [
-            new TotpMfaMethod(stub, opt),
+            new TotpMfaMethod(stub, keys, opt),
             new SmsMfaMethod(stub, opt, stub.ServiceProvider!),
         ];
         return new MfaService(stub, methods, opt, NullLogger<MfaService>.Instance);

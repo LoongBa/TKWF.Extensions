@@ -21,7 +21,7 @@ public sealed class GoogleOidcChannel : OidcChannelBase
     /// <summary>构造——Google 固定端点 Defaults + Channels 选区凭证合并（对齐 WeChat 先例 Channels[0] 默认）。</summary>
     public GoogleOidcChannel(
         IDomainUser user,
-        OidcAuthFlow flow,
+        OidcChannelFlow flow,
         IOptions<GoogleOptions> options)
         : base(user, flow)
     {

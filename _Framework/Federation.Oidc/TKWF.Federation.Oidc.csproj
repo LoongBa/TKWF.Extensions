@@ -28,6 +28,9 @@
   <ItemGroup>
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- OIDC 原语委托引擎（OIDC 归并方案 §3.4——OAuthClient/IdTokenDecoder/JwksManager/OidcDiscoveryClient 所在）。
+         ⚠️ CPM 暂 4.10.61 桥接（4.10.64 未发 nuget.org——先本地部署消费部署根 DLL，框架发布后 lockstep 提升到 4.10.64） -->
+    <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- DiContractIgnore 所在（TKW.Framework.CodeGeneration——通道运行时手写注册豁免 DI001 误报，对齐 WeChat 先例） -->
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />

@@ -22,7 +22,7 @@ public sealed class OidcConfiguredChannel : OidcChannelBase
     /// <summary>构造——从 <c>TKWF:Federation:Oidc</c> 节 Channels 选区（Channels[0] 默认，多实例选区归后续迭代）。</summary>
     public OidcConfiguredChannel(
         IDomainUser user,
-        OidcAuthFlow flow,
+        OidcChannelFlow flow,
         IOptions<OidcOptions> options)
         : base(user, flow)
     {

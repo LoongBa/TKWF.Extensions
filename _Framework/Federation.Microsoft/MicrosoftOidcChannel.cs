@@ -23,7 +23,7 @@ public sealed class MicrosoftOidcChannel : OidcChannelBase
     /// <summary>构造——Defaults 按 Tenant 模板化 + Channels 选区凭证合并（Channels[0] 默认，对齐先例）。</summary>
     public MicrosoftOidcChannel(
         IDomainUser user,
-        OidcAuthFlow flow,
+        OidcChannelFlow flow,
         IOptions<MicrosoftOptions> options)
         : base(user, flow)
     {

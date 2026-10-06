@@ -19,7 +19,7 @@ public static class MicrosoftFederationServiceCollectionExtensions
         this IServiceCollection services, Action<MicrosoftOptions>? configure = null)
     {
         services.AddOptions<MicrosoftOptions>().Configure(o => configure?.Invoke(o));
-        services.AddOidcDerivedChannels<MicrosoftOidcChannel>();   // 基座注册 OidcAuthFlow/JwksManager/Validator + 通道入集合
+        services.AddOidcDerivedChannels<MicrosoftOidcChannel>();   // 基座注册 OidcChannelFlow + 通道入集合
         return services;
     }
 }

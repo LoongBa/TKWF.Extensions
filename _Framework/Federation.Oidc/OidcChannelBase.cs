@@ -26,9 +26,9 @@ namespace TKWF.Federation.Oidc;
 [DiContractIgnore]
 public abstract class OidcChannelBase : DomainServiceBase, ISsoChannel
 {
-    private readonly OidcAuthFlow _flow;
+    private readonly OidcChannelFlow _flow;
 
-    protected OidcChannelBase(IDomainUser user, OidcAuthFlow flow)
+    protected OidcChannelBase(IDomainUser user, OidcChannelFlow flow)
         : base(user)
     {
         _flow = flow ?? throw new ArgumentNullException(nameof(flow));

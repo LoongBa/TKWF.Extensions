@@ -1,8 +1,8 @@
 # TKWF.Federation.Oidc 通用 OIDC 通道基座技术规范
 
-**状态**: 平台网关基座库 (Platform Gateway Base Library——纯库无装配无持久化) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关基座库 (Platform Gateway Base Library——纯库无装配无持久化) | **版本**: V0.2.0（2026-10-06——OIDC 原语委托引擎：删扩展侧 JwksManager/OidcIdTokenValidator 内联，OidcAuthFlow → OidcChannelFlow 薄层；authorize/code/userinfo/discovery/验签全部委托 `Utility.OAuthClient` 引擎 v4.10.64） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + **`TKWF.Utility`（OIDC 引擎——OIDC 归并方案 §3.4）** + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
-**核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**）/ **零持久化零 Store**（tkwf-extension 铁律）/ **最小职责 = channel 适配 + 配置驱动**（OIDC 原语若 `Utility.OAuthClient` 引擎可用则委托、否则内联标注待迁移——国外规划 §五 Oracle P1-3）/ **不引 AspNetCore**（入站端点归装配层）/ 凭证自持（Oracle P2-4）
+**核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**）/ **零持久化零 Store**（tkwf-extension 铁律）/ **最小职责 = channel 适配 + 配置驱动**（OIDC 原语已委托 `Utility.OAuthClient` 引擎——OIDC 归并方案 v0.1.1 实施闭环，F1 终态）/ **不引 AspNetCore**（入站端点归装配层）/ 凭证自持（Oracle P2-4）
 
 ---
 
@@ -13,11 +13,10 @@
 | 能力 | 说明 |
 |------|------|
 | `OidcChannelBase` | 抽象通道基座（`DomainServiceBase, ISsoChannel`）——`AuthenticateAsync` 编排 code→token→验签→sub；`BuildChannelId` 复合编码（pairwise/public）；`Defaults()` 派生填平台端点 |
-| `OidcAuthFlow` | 出站协议流——Discovery 可选解析 / authorize URL 构造（装配层消费）/ code→token（client_secret post / private_key_jwt + redirect_uri 一致性 RFC 6749 §4.1.3 + PKCE）/ userinfo 拉取 |
-| `JwksManager` | JWKS 管理——kid→RSA 公钥 L1 缓存 + SemaphoreSlim 并发锁 + 过期刷新；kid 匹配失败重取一次（平台轮换密钥恢复） |
-| `OidcIdTokenValidator` | id_token 验签器——alg 强制 RS256 / kid 白名单 + JWKS 验签 / iss 白名单（通配/正则——Microsoft common tenant iss 含 GUID）/ aud 含 client_id（数组场景 azp）/ exp·iat leeway 30s + nbf / sub 必存 / Base64Url 边界 + FixedTimeEquals |
+| `OidcChannelFlow` | 出站协议流**薄层**（OIDC 归并后）——组装 `OAuthClientOptions`（引擎参数化）+ 调引擎四职责（authorize/code/userinfo）+ 验签增强（引擎 `IdTokenDecoder`）+ discovery（引擎 `OidcDiscoveryClient`）；保留内联仅 private_key_jwt（RFC 7523——引擎无 PrivateKeyJwt，P1-8） |
 | `OidcConfiguredChannel` | 自托管 IdP 直配通道（Keycloak/Okta/Auth0/Authentik——零专属代码） |
 | `OidcPlatformConfig` | 平台配置（端点全可覆盖 + TokenIssuer 白名单 + PKCE 开关 + private_key_jwt 预留） |
+| ~~`JwksManager`~~/~~`OidcIdTokenValidator`~~ | ✅ **已上移引擎**（`TKW.Framework.Utility.OAuthClient`——kid 路由/墓园 Dispose/512KB 钳制/RSA≥2048/iss 通配正则/azp/leeway/nbf/exp 强校验；扩展侧删内联重复） |
 
 **双边接线**：
 - **派生平台库**（M2 Google/Microsoft）：`GoogleOidcChannel : OidcChannelBase`（Defaults 填端点 + BuildChannelId 复合编码）→ `AddOidcDerivedChannels<GoogleOidcChannel>()`（平台库自行注册其 Options——Oracle P1-6）；
@@ -56,7 +55,7 @@ builder.Services.AddOidcFederationChannel("keycloak-corp", o =>
 ```csharp
 public sealed class GoogleOidcChannel : OidcChannelBase
 {
-    public GoogleOidcChannel(IDomainUser user, OidcAuthFlow flow, IOptions<GoogleOptions> options) : base(user, flow) { ... }
+    public GoogleOidcChannel(IDomainUser user, OidcChannelFlow flow, IOptions<GoogleOptions> options) : base(user, flow) { ... }
     public override string ChannelType => "google_oidc";
     protected override string BuildChannelId(OidcPlatformConfig config) => $"{ChannelType}:*";   // public 通配
     protected override OidcPlatformConfig EffectiveConfig => /* 平台 Options 选区 + Defaults 合并 */;
@@ -98,7 +97,7 @@ using TKWF.Ext.Federation;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-装配层构造 authorize URL（`OidcAuthFlow.BuildAuthorizeUrl`——state/PKCE verifier 会话绑定）→ 回调 code → 帧内 `User.Use<ISsoLogin>().LoginAsync(channelType, context)`（context 带 code + redirect_uri + code_verifier）→ `OidcChannelBase.AuthenticateAsync` 验签归一 `(channel_id, sub)` → token2。**state 校验归装配层**（库 `AuthenticateAsync` 不感知 state——对齐 WeChat/N3 先例）。
+装配层构造 authorize URL（`OidcChannelFlow.BuildAuthorizeUrl`——**引擎生成 state/PKCE verifier，装配层持久化回调传回**；OIDC 归并后契约变化：M1 由装配层生成 state/verifier 传入 → 引擎 `OAuthAuthorizeResult(Url, State, PkceVerifier, PkceChallenge)` 返回，装配层持久化 State/PkceVerifier）→ 回调 code → 帧内 `User.Use<ISsoLogin>().LoginAsync(channelType, context)`（context 带 code + redirect_uri + code_verifier）→ `OidcChannelBase.AuthenticateAsync` 验签归一 `(channel_id, sub)` → token2。**state 校验归装配层**（库 `AuthenticateAsync` 不感知 state——对齐 WeChat/N3 先例）。
 
 ## 三、安全边界
 
@@ -121,6 +120,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 
 | 版本 | 内容 |
 |------|------|
+| V0.2.0（2026-10-06） | **OIDC 原语归并引擎实施闭环**（OIDC 归并方案 v0.1.1 + 框架 v4.10.64）：删扩展侧 `JwksManager.cs`/`OidcIdTokenValidator.cs` 内联重复（引擎 `JwksManager`/`IdTokenDecoder`——kid 路由/墓园 Dispose/512KB 钳制/RSA≥2048/iss 通配正则/azp/leeway/nbf/exp 强校验）；`OidcAuthFlow` → `OidcChannelFlow` 薄层（authorize/code/userinfo 委托引擎 `OAuthClient`；验签委托 `IdTokenDecoder.ValidateAsync` + 流自持 JwksManager 按 jwksUri 键缓存；discovery 委托引擎 `OidcDiscoveryClient`（容忍语义保留——失败降级 null 回退显式端点）；保留内联仅 private_key_jwt P1-8）；`OidcIdTokenValidationResult` record 移入 OidcChannelFlow.cs；csproj 补 `TKWF.Utility` 条件引用（CPM 4.10.61 桥接——4.10.64 发布后 lockstep）；Oidc 17 / Google 9 / Microsoft 11 测试全绿 + 全量回归 39 项目零失败 |
 | V0.1.0（2026-10-06） | M1 通用 OIDC 通道基座：OidcChannelBase（DomainServiceBase, ISsoChannel——BuildChannelId 复合编码 + Defaults 派生）/ OidcAuthFlow（Discovery 配置驱动 + code→token（client_secret post / private_key_jwt + redirect_uri 一致性 + PKCE S256）+ userinfo）/ JwksManager（kid 精确匹配 + L1 缓存 + 轮换重取）/ OidcIdTokenValidator（RS256 + iss 白名单通配/正则 + aud/azp + exp/iat/nbf + sub）/ OidcConfiguredChannel（自托管 IdP 直配）+ AddOidcFederationChannel / AddOidcDerivedChannels 注册；18 测试全绿（验签正负/issuer 容错/pairwise 复合编码/PKCE/Discovery/multi-IdP 枚举）；slnx 已接线；Oracle 评审 P0×1（注册抽象基类→OidcConfiguredChannel）+ P1×7 落实 |
 
 <!-- EOF -->

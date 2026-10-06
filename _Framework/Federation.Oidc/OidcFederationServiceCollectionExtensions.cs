@@ -34,9 +34,8 @@ public static class OidcFederationServiceCollectionExtensions
             o.Channels.Add(cfg);
         });
 
-        services.AddHttpClient<OidcAuthFlow>();
-        services.AddHttpClient<JwksManager>();
-        services.AddTransient<OidcIdTokenValidator>();   // 依赖 JwksManager（typed client）——验签器注册
+        // OidcChannelFlow（typed client——OIDC 原语委托引擎后：流内自持 JwksManager 缓存 + 引擎协作，无独立 JwksManager/Validator 注册）
+        services.AddHttpClient<OidcChannelFlow>();
         // Oracle P0-1：注册具体包装通道（抽象基类不可 direct 注册）
         services.TryAddEnumerableConstructible<ISsoChannel, OidcConfiguredChannel>();
         return services;
@@ -47,9 +46,7 @@ public static class OidcFederationServiceCollectionExtensions
     public static IServiceCollection AddOidcDerivedChannels<TChannel>(this IServiceCollection services)
         where TChannel : OidcChannelBase
     {
-        services.AddHttpClient<OidcAuthFlow>();
-        services.AddHttpClient<JwksManager>();
-        services.AddTransient<OidcIdTokenValidator>();
+        services.AddHttpClient<OidcChannelFlow>();
         services.TryAddEnumerableConstructible<ISsoChannel, TChannel>();
         return services;
     }

@@ -233,6 +233,9 @@
   <Folder Name="/_Framework/Federation.DingTalk/">
     <Project Path="_Framework/Federation.DingTalk/TKWF.Federation.DingTalk.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Federation.WeCom/">
+    <Project Path="_Framework/Federation.WeCom/TKWF.Federation.WeCom.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>
@@ -247,6 +250,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.DingTalk.Tests/">
     <Project Path="_Tests/Extension.Federation.DingTalk.Tests/TKWF.Federation.DingTalk.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.WeCom.Tests/">
+    <Project Path="_Tests/Extension.Federation.WeCom.Tests/TKWF.Federation.WeCom.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />

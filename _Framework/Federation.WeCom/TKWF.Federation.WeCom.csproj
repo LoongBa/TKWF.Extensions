@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Federation.WeCom</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Federation.WeCom/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.WeCom</PackageId>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：企业微信（WeCom）双向网关（双授权流 Webview+扫码统一 getuserinfo + 通讯录/事件回调验签）；WeComApiClient 出站 API 客户端（gettoken 双用途缓存 + getuserinfo 三路径身份 + getuserdetail 敏感信息即用即弃）+ WeComOptions 配置（TKWF:Federation:WeCom 节）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
+         扩展不引库。WeComOauthChannel/WeComEventChannel 实现 ISsoChannel 在此库内） -->
+    <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference
+         （ISsoChannel : IDomainService + [Options] 特性所在程序集） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- DiContractIgnore 所在（TKW.Framework.CodeGeneration——通道运行时手写注册豁免 DI001 误报，对齐 WeChat 先例） -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+    <!-- HttpClient 注入（IHttpClientFactory——Microsoft.Extensions.Http；Oracle 评审点 5：纯逻辑 + HttpClient，不引 AspNetCore） -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- ⚠️ 不引 AspNetCore（Oracle 评审点 5）：库纯逻辑 + HttpClient（Microsoft.Extensions.Http）；
+       入站端点（/sso/wecom/event）归 Federation 扩展/消费方装配层，库只提供验签逻辑类（T5） -->
+
+  <!-- 测试项目访问 internal（WeComEventCrypto——信任根验证） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Federation.WeCom.Tests" />
+  </ItemGroup>
+
+</Project>

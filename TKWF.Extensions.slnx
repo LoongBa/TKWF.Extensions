@@ -224,11 +224,23 @@
   <Folder Name="/_Framework/Federation.Oidc/">
     <Project Path="_Framework/Federation.Oidc/TKWF.Federation.Oidc.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Federation.Google/">
+    <Project Path="_Framework/Federation.Google/TKWF.Federation.Google.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/Federation.Microsoft/">
+    <Project Path="_Framework/Federation.Microsoft/TKWF.Federation.Microsoft.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Oidc.Tests/">
     <Project Path="_Tests/Extension.Federation.Oidc.Tests/TKWF.Federation.Oidc.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.Google.Tests/">
+    <Project Path="_Tests/Extension.Federation.Google.Tests/TKWF.Federation.Google.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.Microsoft.Tests/">
+    <Project Path="_Tests/Extension.Federation.Microsoft.Tests/TKWF.Federation.Microsoft.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />

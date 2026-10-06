@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Federation.Microsoft</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Federation.Microsoft/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.Microsoft</PackageId>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：Microsoft Entra ID 平台网关——基于通用 OIDC 基座（TKWF.Federation.Oidc）继承配置驱动，pairwise sub 复合编码 channel_id（microsoft_oidc:{client_id}）+ tenant 配置化（common/consumers/organizations/{id}）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- M2：继承 M1 OIDC 基座（ISsoChannel 经基座传递引用——Oracle P2-2 不直接引 Federation） -->
+    <ProjectReference Include="..\Federation.Oidc\TKWF.Federation.Oidc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 双模式（DLL 模式定案）：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  </ItemGroup>
+
+  <!-- ⚠️ 不引 AspNetCore：纯逻辑 + HttpClient（经 OidcAuthFlow typed client） -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Federation.Microsoft.Tests" />
+  </ItemGroup>
+
+</Project>

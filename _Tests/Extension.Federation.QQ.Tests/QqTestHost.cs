@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,13 +16,10 @@ using TKWF.Ext.Testing.Shared;
 namespace TKWF.Federation.QQ.Tests;
 
 /// <summary>
-/// QQ 互联平台网关库测试公共设施（**N1 壳——生产路径宿主骨架，协议测试在 N3 立项填充**）。
-/// <para>对齐 <c>Extension.Federation.WeChat.Tests</c> 事实源 + N1 模板（`_Tests/Extension.Federation.Template.Tests/`）：
-/// 真实 DI（<c>AddQqFederationChannels</c>）+ C 基座 <see cref="TestHostBase"/> + 探针门面
-/// （帧内枚举 <see cref="ISsoChannel"/> 集合，ADR92 守卫工厂供给）+ Stub QQ API handler。</para>
-/// <para>⚠️ N1 骨架：本文件仅宿主壳（可编译可运行、零 [Fact] 用例）——OAuth 正负用例（code 缺 / state 伪造
-/// （装配层集成测试——库不感知 state，N3 P1-3）/ openid 换取 / redirect_uri 不一致拒（N3 P1-4））在 N3 T5 按
-/// 模板 <c>{Platform}OauthChannelTests.cs</c> 填充。</para>
+/// QQ 互联平台网关库测试公共设施（N3 T5——生产路径宿主 + Stub QQ API 协议链）。
+/// <para>对齐 <c>Extension.Federation.WeChat.Tests</c> 事实源 + N1 模板：真实 DI（<c>AddQqFederationChannels</c>）+
+/// C 基座 <see cref="TestHostBase"/> + 探针门面（帧内枚举 <see cref="ISsoChannel"/> 集合，ADR92 守卫工厂供给）+
+/// Stub QQ API handler（路由 QQ 协议事实链：/oauth2.0/token → /oauth2.0/me → /user/get_user_info）。</para>
 /// </summary>
 internal static class QqTestHost
 {
@@ -39,37 +37,100 @@ internal static class QqTestHost
             EnableUnionId = enableUnionId,
         };
 
+    /// <summary>测试回调地址（redirect_uri——授权时装配层决定，测试代码与 stub 服务端比对基准一致）。</summary>
+    public const string TestRedirectUri = "https://test.local/sso/oauth/qq/callback";
+
     /// <summary>
     /// QQ API 出站桩 HttpMessageHandler——按 URL 路径路由返回固定 JSON（不真打 QQ）。
-    /// ⚠️ N1 壳：仅占位（NotFound）——N3 T5 按 QQ 协议事实填充路由（oauth2.0/token → code→access_token；
-    /// /me → openid；user/get_user_info → 裁剪）。
+    /// <para>路由（对齐 QQ 协议事实，N3 §二）：<c>oauth2.0/token</c>（code→access_token，含 redirect_uri 一致性
+    /// 服务端比对模拟——P1-4）/ <c>oauth2.0/me</c>（access_token→openid，EnableUnionId 时含 unionid）/
+    /// <c>user/get_user_info</c>（ret/msg 错误模型裁剪）。其余路径 404。</para>
     /// </summary>
-    public static HttpMessageHandler CreateStubHandler(string openId = "test_openid_1", bool failOauth = false)
-        => new StubQqHandler(openId, failOauth);
+    public static HttpMessageHandler CreateStubHandler(
+        string openId = "test_openid_1",
+        string? unionId = null,
+        bool failOauth = false,
+        bool failMe = false,
+        bool redirectMismatch = false,
+        bool failUserInfo = false)
+        => new StubQqHandler(openId, unionId, failOauth, failMe, redirectMismatch, failUserInfo);
 
     /// <summary>构造 SsoChannelAuthContext（IReadOnlyDictionary&lt;string,string?&gt; 参数包）。</summary>
     public static SsoChannelAuthContext CreateContext(params (string Key, string? Value)[] parameters)
         => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
 
-    /// <summary>Stub HttpMessageHandler 实现（路由 QQ API 路径——N3 按协议事实填充）。</summary>
+    /// <summary>Stub HttpMessageHandler 实现（路由 QQ API 路径——对齐 QQ 协议事实链）。</summary>
     private sealed class StubQqHandler : HttpMessageHandler
     {
         private readonly string _openId;
-        private readonly bool _failOauth;
+        private readonly string? _unionId;
+        private readonly bool _failOauth;        // token 端点失败（error 模型）
+        private readonly bool _failMe;           // /me 端点失败（error 模型）
+        private readonly bool _redirectMismatch; // token 端点 redirect_uri 一致性比对失败（P1-4）
+        private readonly bool _failUserInfo;     // get_user_info 失败（ret/msg 模型）
 
-        public StubQqHandler(string openId, bool failOauth)
+        public StubQqHandler(string openId, string? unionId, bool failOauth, bool failMe, bool redirectMismatch, bool failUserInfo)
         {
             _openId = openId;
+            _unionId = unionId;
             _failOauth = failOauth;
+            _failMe = failMe;
+            _redirectMismatch = redirectMismatch;
+            _failUserInfo = failUserInfo;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            // ⚠️ N1 壳：N3 T5 按 QQ 协议路由填充（oauth2.0/token /me user/get_user_info）
-            _ = _openId;
-            _ = _failOauth;
+            var path = request.RequestUri?.AbsolutePath ?? "";
+            var query = request.RequestUri?.Query ?? "";
+
+            if (path.EndsWith("/oauth2.0/token", StringComparison.Ordinal))
+            {
+                // 服务端 redirect_uri 一致性比对模拟（N3 P1-4 —— code 换 token 时须与授权时一致）
+                var redirectUri = GetQueryParam(query, "redirect_uri");
+                if (_redirectMismatch || !string.Equals(redirectUri, TestRedirectUri, StringComparison.Ordinal))
+                    return Json("{\"error\":100030,\"error_description\":\"redirect_uri is not consistent with the authorization request\"}");
+                if (_failOauth)
+                    return Json("{\"error\":100016,\"error_description\":\"access token check failed\"}");
+                return Json($"{{\"access_token\":\"stub-access-token\",\"expires_in\":7776000,\"refresh_token\":\"stub-refresh-token\"}}");
+            }
+
+            if (path.EndsWith("/oauth2.0/me", StringComparison.Ordinal))
+            {
+                if (_failMe)
+                    return Json("{\"error\":100016,\"error_description\":\"access token check failed\"}");
+                var union = _unionId is null ? "" : $",\"unionid\":\"{_unionId}\"";
+                return Json($"{{\"client_id\":\"test-appid\",\"openid\":\"{_openId}\"{union}}}");
+            }
+
+            if (path.EndsWith("/user/get_user_info", StringComparison.Ordinal))
+            {
+                if (_failUserInfo)
+                    return Json("{\"ret\":1002,\"msg\":\"请先登录\"}");
+                return Json($"{{\"ret\":0,\"msg\":\"\",\"nickname\":\"QQ 测试用户\",\"figureurl\":\"http://q.qlogo.cn/30\",\"figureurl_qq_1\":\"http://q.qlogo.cn/40\",\"figureurl_qq_2\":\"http://q.qlogo.cn/100\",\"gender\":\"男\",\"province\":\"广东\",\"city\":\"深圳\"}}");
+            }
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
+
+        private static string GetQueryParam(string query, string name)
+        {
+            // query 形如 "?a=1&b=2"——手拆避免 System.Web 依赖
+            var s = query.StartsWith('?') ? query[1..] : query;
+            foreach (var pair in s.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = pair.Split('=', 2);
+                if (kv.Length == 2 && kv[0] == name)
+                    return Uri.UnescapeDataString(kv[1]);
+            }
+            return "";
+        }
+
+        private static Task<HttpResponseMessage> Json(string json)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            });
     }
 }
 
@@ -104,7 +165,7 @@ public sealed class ChannelProbe : DomainServiceBase, IChannelProbe
 /// </summary>
 public class QqChannelTestHost : TestHostBase
 {
-    /// <summary>QQ API 桩 handler（N1 壳默认占位——N3 按协议填充路由）。</summary>
+    /// <summary>QQ API 桩 handler（默认正向：openid=test_openid_1）。</summary>
     public HttpMessageHandler Handler { get; set; } = QqTestHost.CreateStubHandler();
 
     /// <summary>QqOptions 编程覆盖（Channels 配置）。</summary>

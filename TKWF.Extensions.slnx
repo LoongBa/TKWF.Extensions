@@ -236,6 +236,10 @@
   <Folder Name="/_Framework/Federation.WeCom/">
     <Project Path="_Framework/Federation.WeCom/TKWF.Federation.WeCom.csproj" />
   </Folder>
+  <!-- N1 平台网关通用模板 T4：QQ 试点骨架（出站-only——协议实现在 N3 立项填充，F2 验证 slnx 构建 0 错误） -->
+  <Folder Name="/_Framework/Federation.QQ/">
+    <Project Path="_Framework/Federation.QQ/TKWF.Federation.QQ.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>
@@ -253,6 +257,10 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeCom.Tests/">
     <Project Path="_Tests/Extension.Federation.WeCom.Tests/TKWF.Federation.WeCom.Tests.csproj" />
+  </Folder>
+  <!-- N1 平台网关通用模板 T4：QQ 测试宿主壳（N3 填充用例） -->
+  <Folder Name="/_Tests/Extension.Federation.QQ.Tests/">
+    <Project Path="_Tests/Extension.Federation.QQ.Tests/TKWF.Federation.QQ.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />

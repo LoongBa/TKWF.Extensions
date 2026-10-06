@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Federation.QQ</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Federation.QQ/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.QQ</PackageId>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：QQ 互联身份获取网关（出站-only——OAuth 跳转授权 code→openid）；QqApiClient 出站 API 客户端 + QqOptions 配置（TKWF:Federation:QQ 节）+ QqOauthChannel（ISsoChannel qq_oauth）【N1 骨架——协议实现在 N3 立项填充】</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
+         扩展不引库。QqOauthChannel 实现 ISsoChannel 在此库内） -->
+    <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference
+         （ISsoChannel : IDomainService + [Options] 特性所在程序集） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- DiContractIgnore 所在（TKW.Framework.CodeGeneration——通道运行时手写注册豁免 DI001 误报，对齐 WeChat 先例） -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+    <!-- HttpClient 注入（IHttpClientFactory——Microsoft.Extensions.Http；Oracle 评审点 5：纯逻辑 + HttpClient，不引 AspNetCore） -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- ⚠️ 不引 AspNetCore（Oracle 评审点 5）：库纯逻辑 + HttpClient（Microsoft.Extensions.Http）；
+       入站端点归 Federation 扩展/消费方装配层，库只提供出站逻辑类 -->
+
+  <!-- 测试项目访问 internal（预留，对齐仓库惯例） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Federation.QQ.Tests" />
+  </ItemGroup>
+
+</Project>

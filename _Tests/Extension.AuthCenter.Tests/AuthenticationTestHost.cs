@@ -12,7 +12,7 @@ using TKWF.Ext.AuthCenter;
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
-/// 测试公共设施——SQLite 内存库 + 8 实体 SyncStructure + RSA 测试密钥 + 生产路径等价测试桩。
+/// 测试公共设施——SQLite 内存库 + 9 实体 SyncStructure + RSA 测试密钥 + 生产路径等价测试桩。
 /// <para>V4.10.53（领域自治根治后重写）：门面现继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>，DataService 经基类
 /// <c>User</c> 懒加载（NoAop 路径）——分层单测用可配置 <see cref="StubDomainUser"/> 直构门面（经基类 User 取上下文），
 /// 其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现：具体类（DataService）经
@@ -22,15 +22,16 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// </summary>
 internal static class AuthenticationTestHost
 {
-    /// <summary>全部 8 实体类型——统一注册真实 FreeSqlEntityDAC（分层单测/生产路径 Use&lt;DataService&gt; 直建源）。</summary>
+    /// <summary>全部 9 实体类型——统一注册真实 FreeSqlEntityDAC（分层单测/生产路径 Use&lt;DataService&gt; 直建源）。</summary>
     private static readonly Type[] AllEntityTypes =
     [
         typeof(AuthAccountEntity), typeof(AuthLoginAttemptEntity), typeof(SmsRecordEntity),
         typeof(AuthRefreshTokenEntity), typeof(AuthTokenBlacklistEntity), typeof(OAuthTicketEntity),
-        typeof(PlatformAccountMapEntity), typeof(PlatformCredentialEntity)
+        typeof(PlatformAccountMapEntity), typeof(PlatformCredentialEntity),
+        typeof(AuthGrantEntity)   // V0.8.0：应用授权实体（/grants 数据底座）
     ];
 
-    /// <summary>注册全部 8 实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）——CreateStub 与生产路径 Provider 共用。</summary>
+    /// <summary>注册全部 9 实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）——CreateStub 与生产路径 Provider 共用。</summary>
     public static void RegisterEntityDacs(IServiceCollection services)
     {
         foreach (var entityType in AllEntityTypes)
@@ -44,7 +45,7 @@ internal static class AuthenticationTestHost
     private static string? _rsaDir;
     private static readonly object RsaGate = new();
 
-    /// <summary>建表（8 实体 SyncStructure——SQLite 方言）。</summary>
+    /// <summary>建表（9 实体 SyncStructure——SQLite 方言）。</summary>
     public static void SyncSchema(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<AuthAccountEntity>();
@@ -55,6 +56,7 @@ internal static class AuthenticationTestHost
         fsql.CodeFirst.SyncStructure<OAuthTicketEntity>();
         fsql.CodeFirst.SyncStructure<PlatformAccountMapEntity>();
         fsql.CodeFirst.SyncStructure<PlatformCredentialEntity>();
+        fsql.CodeFirst.SyncStructure<AuthGrantEntity>();
     }
 
     /// <summary>创建使用 SQLite 内存库的 IFreeSql + 建表（每次调用新连接 = 独立内存库）。</summary>
@@ -119,14 +121,16 @@ internal static class AuthenticationTestHost
     }
 
     /// <summary>
-    /// 构建生产路径等价测试桩——真实 FreeSqlEntityDAC（全部 8 实体）+ 可选附加服务注册。
+    /// 构建生产路径等价测试桩——真实 FreeSqlEntityDAC（全部 9 实体）+ 可选附加服务注册。
     /// 门面直构传本桩（经基类 User 取上下文）；桩内 Use&lt;T&gt;() 走生产 NoAop 路径等价（具体类 ActivatorUtilities 直建，
     /// 接口 GetRequiredService——分层单测需在 <paramref name="register"/> 中注册接口实例，如 ITokenService 供
     /// OAuthTicketService/WeChatApiClient 懒加载）。
+    /// <paramref name="user"/> 可选（默认匿名 StubDomainUser）——BindTicketAsync 已认证帧测试传
+    /// <see cref="AuthenticatedStubUser"/>（经基类 User 供给 UserId）。
     /// </summary>
-    public static StubDomainUser CreateStub(IFreeSql fsql, Action<IServiceCollection, StubDomainUser>? register = null)
+    public static StubDomainUser CreateStub(IFreeSql fsql, StubDomainUser? user = null, Action<IServiceCollection, StubDomainUser>? register = null)
     {
-        var user = new StubDomainUser();
+        user ??= new StubDomainUser();
         var services = new ServiceCollection();
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();

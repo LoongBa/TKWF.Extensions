@@ -68,7 +68,7 @@ public class IdentityAdapterTests
         // LocalJwtTokenVerifier 构造注入 ITokenService——契约接线（验签细节 TokenServiceTests 覆盖）
         var options = AuthenticationTestHost.CreateOptions();
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = AuthenticationTestHost.CreateStub(fsql, (services, user) =>
+        var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
         {
             // LocalJwtTokenVerifier.Use<ITokenService>() 接口懒加载源（CreateStub 注册单例）
             var tokenService = new TokenService(

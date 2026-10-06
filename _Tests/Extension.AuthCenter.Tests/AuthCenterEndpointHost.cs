@@ -41,6 +41,8 @@ internal static class AuthCenterEndpointHost
     public static FakeTokenService Token { get; } = new();
     public static FakeSmsVerificationService SmsVerification { get; } = new();
     public static FakeTicketService Ticket { get; } = new();
+    public static FakeAuthGrantQueryService Grants { get; } = new();        // V0.8.0 /grants 查询门面
+    public static FakeAuthGrantCommandService GrantCommand { get; } = new(); // V0.8.0 /grants 写入门面（未暴露端点，注册保真）
 
     private static TestServer CreateServer()
     {
@@ -65,6 +67,8 @@ internal static class AuthCenterEndpointHost
             svc.Replace(ServiceDescriptor.Scoped<ITokenService>(_ => Token));
             svc.Replace(ServiceDescriptor.Scoped<ISmsVerificationService>(_ => SmsVerification));
             svc.Replace(ServiceDescriptor.Scoped<IOAuthTicketService>(_ => Ticket));
+            svc.Replace(ServiceDescriptor.Scoped<IAuthGrantQueryService>(_ => Grants));       // V0.8.0 /grants 查询
+            svc.Replace(ServiceDescriptor.Scoped<IAuthGrantCommandService>(_ => GrantCommand)); // V0.8.0 写入门面（未暴露端点，注册保真）
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -195,6 +199,9 @@ internal static class AuthCenterEndpointHost
     {
         public bool SendCodeInvoked { get; private set; }
 
+        /// <summary>重置 Invoked 标志——共享宿主跨用例状态防污染（V0.8.0 修复：负向断言测试前置重置）。</summary>
+        public void Reset() => SendCodeInvoked = false;
+
         public Task SendCodeAsync(string phone, string scene, CancellationToken ct = default)
         {
             SendCodeInvoked = true;
@@ -216,6 +223,49 @@ internal static class AuthCenterEndpointHost
         {
             ExchangeInvoked = true;
             return Task.FromResult(new OAuthTicketExchangeResult("at-3", "rt-3", 7200));
+        }
+
+        public Task BindTicketAsync(string ticket, CancellationToken ct = default)
+            => Task.CompletedTask;
+    }
+
+    /// <summary>V0.8.0 /grants 查询门面 Fake——Invoked 标记 + 可配置 Result（默认 app-1 授权行）。</summary>
+    internal sealed class FakeAuthGrantQueryService : IAuthGrantQueryService
+    {
+        public bool Invoked { get; private set; }
+
+        public IReadOnlyList<AuthGrantEntity> Result { get; set; } =
+        [
+            new AuthGrantEntity
+            {
+                UserId = "u-100",
+                AppId = "app-1",
+                Scopes = "a,b",
+                ValidUntil = null,
+                Source = AuthGrantSources.Login,
+                Status = 0
+            }
+        ];
+
+        /// <summary>重置 Invoked 标志——共享宿主跨用例状态防污染（V0.8.0 修复：负向断言测试前置重置）。</summary>
+        public void Reset() => Invoked = false;
+
+        public Task<IReadOnlyList<AuthGrantEntity>> GetGrantsAsync(string userId, string? appId = null, CancellationToken ct = default)
+        {
+            Invoked = true;
+            return Task.FromResult(Result);
+        }
+    }
+
+    /// <summary>V0.8.0 写入门面 Fake——Invoked 标记（端点未暴露，注册保真供 OAuthTicketService 生产路径替换场景）。</summary>
+    internal sealed class FakeAuthGrantCommandService : IAuthGrantCommandService
+    {
+        public bool Invoked { get; private set; }
+
+        public Task RecordLoginGrantAsync(string userId, string appId, CancellationToken ct = default)
+        {
+            Invoked = true;
+            return Task.CompletedTask;
         }
     }
 }

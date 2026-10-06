@@ -36,4 +36,13 @@ public class AuthCenterEndpointOptions
 
     /// <summary>票据换令牌端点开关（POST {prefix}/ticket/exchange）。</summary>
     public bool TicketExchangeEndpointEnabled { get; set; } = true;
+
+    /// <summary>令牌验签快照端点开关（GET {prefix}/verify——已认证内省，Bearer 必需；Oracle P2-3 前缀消歧义）。</summary>
+    public bool TokenVerifyEndpointEnabled { get; set; } = true;
+
+    /// <summary>应用授权状态端点开关（GET {prefix}/grants——已认证 Bearer，Bearer 必需）。</summary>
+    public bool GrantsEndpointEnabled { get; set; } = true;
+
+    /// <summary>验证码独立校验端点开关（POST {prefix}/sms/verify——匿名，scene 白名单 Login/Register/Bind/Reset）。</summary>
+    public bool SmsVerifyEndpointEnabled { get; set; } = true;
 }

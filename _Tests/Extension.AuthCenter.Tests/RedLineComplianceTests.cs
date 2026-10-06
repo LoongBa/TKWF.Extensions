@@ -37,7 +37,7 @@ public class RedLineComplianceTests
         var partialFiles = Directory.GetFiles(root, "*.cs")
             .Where(f => !f.EndsWith(".g.cs", StringComparison.Ordinal))
             .ToList();
-        Assert.Equal(8, partialFiles.Count); // 8 实体 DataService 分部
+        Assert.Equal(9, partialFiles.Count); // 9 实体 DataService 分部（V0.8.0 增 AuthGrantEntityDataService）
 
         foreach (var file in partialFiles)
         {

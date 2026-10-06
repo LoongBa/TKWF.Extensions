@@ -31,7 +31,7 @@ public class UserCenterIntegrationTests
     {
         // 真实数据链：种子账号经 DataService 落库（红线合规路径——无裸 ORM）
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = AuthenticationTestHost.CreateStub(fsql, (services, user) =>
+        var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
         {
             // 查询契约（接口）→ CreateStub 注册单例，供 AuthAccountUserProfileSource（接线型 C1 延迟解析）
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));

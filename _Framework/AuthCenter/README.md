@@ -1,6 +1,6 @@
 # TKWF.Ext.AuthCenter 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.7.0（2026-10-06 E4 密钥管理抽象——**删 `PlatformCredentialKeyStore`/`DevRsaKeyCache` 静态类**：`PlatformCredentialService` 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.AuthCenter`——`FileSymmetricKeyProvider` 构造即加载：生产缺密钥 fail-fast / 开发两分支）+ `DevKeyCache<RsaKeySet>` DI 单例（dev 临时 RSA 密钥集非静态——测试并行化恢复）；**`PlatformCredentialEntityDataService` 加密上移服务层**（回归纯持久化：`GetSecretByAppAsync`→`GetByAppAsync` 不解密、`CreateEncryptedAsync`→`CreateAsync` 已加密、`UpdateEncryptedAsync`→`UpdateAsync`——AES-GCM 委托框架 `AeadEncryptionUtil` byte[] 重载单段规范格式；前版 V0.6.0 归层迭代、V0.5.4 Development 崩溃修复、V0.5.3 `DevRsaKeyCache`、V0.5.2 游客帧终态） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.8.0（2026-10-06 认证 API 补全——内建 3 端点 `/verify`（已认证内省）`/grants`（应用授权状态）`/sms/verify`（验证码独立校验）+ **B5 票据绑定缺口闭环**（`OAuthTicketIssueRequest.UserId` 签发即绑 + `BindTicketAsync` 已认证帧补绑 + CAS 条件更新）；**`AuthGrantEntity` 应用授权数据底座**（唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`——`IAuthGrantQueryService`/`IAuthGrantCommandService` 双门面，exchange 成功经写入门面落登录授权）+ 配置分层（3 端点开关进 `AuthCenterEndpointOptions` `TKWF:AuthCenter:Web`）；Oracle 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -65,6 +65,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
     //       ITokenService / IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService /
     //       IPlatformCredentialService / IPlatformAccountMapService / IWeChatApiClient / ITokenVerifier /
     //       IAuthAccountQueryService / IAuthAccountService
+    //       + 应用授权双门面（V0.8.0）：IAuthGrantQueryService / IAuthGrantCommandService
     //       + 登录编排门面（V0.5.0）：ISmsLoginService / IWechatLoginService——控制器经此编排，禁 [FromServices] 集合
     //   接线型（TryAddScoped 普通 DI）：IUserProfileSource（UserCenter 档案源——非 IDomainService 契约，被门面 GetService 解析）
     //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 微信）
@@ -165,9 +166,11 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | **`IPlatformAccountMapService`** | 跨系统映射（Link upsert / 双向 / UnionId） | `PlatformAccountMapService`（本扩展） |
 | **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 加密在**服务层**——V0.7.0 自 DataService 边界上移，密钥经 keyed `ISymmetricKeyProvider`） | `PlatformCredentialService`（本扩展） |
 | **`IWeChatApiClient`** | 微信 API（access_token 缓存 + 并发锁 + 凭证解析） | `WeChatApiClient`（本扩展） |
-| **8 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential | SG1 + xCodeGen（.g.cs 入库） |
+| **9 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential/**AuthGrant（V0.8.0 应用授权）** | SG1 + xCodeGen（.g.cs 入库） |
 | **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone/ByWechatMpOpenId/ByWechatWebOpenId——返回完整 `AuthAccountEntity`） | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
 | **`IAuthAccountService`（V0.2.0）** | 对外写契约（Create/Update/IncrementTokenVersion/GetByUId——DMP 渐进替换影子账号 upsert，ADR-Authentication-账号写契约） | `AuthAccountService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
+| **`IAuthGrantQueryService`（V0.8.0）** | 应用授权**查询**门面（只读——`/grants` 端点数据底座：`GetGrantsAsync(userId, appId?)` 按用户/应用查询有效授权，Status=Active 按 CreateTime 倒序） | `AuthGrantQueryService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
+| **`IAuthGrantCommandService`（V0.8.0）** | 应用授权**写入**门面（`RecordLoginGrantAsync` upsert 幂等——`OAuthTicketService.ExchangeAsync` 成功经 `User.Use` 落登录授权；唯一约束 `UX_AuthGrant_User_App_Source` 兜底 TOCTOU；[AllowAnonymousFlag] 匿名面） | `AuthGrantCommandService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
 | **`IUserProfileSource`（V0.2.0）** | UserCenter 档案读取契约（AuthAccount 属主终态承接——`GetProfileAsync` 返回 `UserProfileDto`） | `AuthAccountUserProfileSource`（public sealed，本扩展） |
 
 ## 四之二、V0.2.0 查询契约与 UserCenter 承接
@@ -183,7 +186,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 - **依赖**：引 `TKWF.Ext.UserCenter.Abstractions`（**契约包非主包**——L2 门控合规）
 - **边界**：两契约**不可合并**——查询服务返回完整 `AuthAccountEntity`（含 TokenVersion/IsEnabled，供 TokenService/装配桥接），档案源返回 `UserProfileDto`（公共档案子集，无敏感字段，Phone 门面脱敏）
 
-## 五、实体表结构（8 张）
+## 五、实体表结构（9 张）
 
 | 表 | 关键列/约束 |
 |----|-----------|
@@ -193,6 +196,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | `AuthRefreshToken` | Jti/UserId+TokenHash(SHA256 唯一)/TokenVersion/ExpiresAt/IsRevoked/RevokedAt?；索引 (UserId,TokenVersion) |
 | `AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
 | `OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
+| `AuthGrant`（**V0.8.0**） | UserId(50)/AppId(100)/Scopes(500 逗号分隔)/**ValidUntil?（应用授权有效期——null=持续至吊销，非会话有效期）**/Source(20：login/redeem)/Status(int 0 Active/1 Revoked)/CreateTime/UpdateTime；**唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**（防并发 exchange 重复 grant 行——写入门面 upsert 以此复合键冲突判定） |
 | `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留） |
 | `PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore 不外泄)/IsEnabled |
 
@@ -251,6 +255,12 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **加密边界上移服务层（P1-6 方法面显式规约）**：`PlatformCredentialEntityDataService` 回归纯持久化——`GetSecretByAppAsync`（解密）拆为 `GetByAppIdAsync`（entity 返回不解密）/`CreateEncryptedAsync(cred, plainSecret)` → `CreateAsync(cred)`（已加密）/`UpdateEncryptedAsync` → `UpdateAsync(cred)`（已加密）/删 `GetSecretByAppAsync`；加密移 `PlatformCredentialService` 私有包装（`_keys.Encrypt/Decrypt`）；`WeChatApiClient` 等 DataService 直接消费方改经门面（T1 穷举）。收敛对齐 Federation/MFA 既有服务层加密拓扑（DataService 保持 ADR61 纯 DAC 语义）。
   - **格式统一单段**：AES-GCM 委托框架 `AeadEncryptionUtil` byte[] 重载（`base64(nonce[12]‖cipher‖tag[16])` 规范格式）——三段点分废弃（用户裁定不考虑过渡）；存量三段密文一次性迁移或重注册（三扩展新发大概率无生产存量——闭环确认）。
   - **测试**：`DevRsaKeyCacheTests` 改注入式（去静态 Reset）；`PlatformCredentialServiceTests` keyed provider 注入；**AssemblyInfo 撤销 `DisableTestParallelization`**（静态消失 → 并行安全回归哨兵）；102+ 用例全绿。
+- **V0.8.0（2026-10-06 认证 API 补全——EduPlatform 转告 2026-10-06，Oracle 评审 PASS WITH CONDITIONS 修订闭环）**：
+  - **内建 3 认证端点**（`AuthCenterWebExtension.ConfigureEndpoints` 扩编，minimal API + Options 开关）：`GET {prefix}/verify`（**已认证内省**——判别器 = 中间件验签产物 `Items[TokenValidationResult]`，零二次验签；无效 Bearer → **401 显式拒绝**（非 RFC 7662 `200{active:false}`，README/指南标注）；返回 `VerifyResponse(valid/userId/authType/auth_level/teacher_verified/exp/jti)`）+ `GET {prefix}/grants?app_id`（已认证——`user.Use<IAuthGrantQueryService>()` → `GrantsResponse(GrantView[]——Scopes 拆分归 Web 层)`）+ `POST {prefix}/sms/verify`（匿名游客帧——scene 白名单 Login/Register/Bind/Reset + `ISmsVerificationService.VerifyCodeAsync` 单次消费 → `200{verified:true}`；频控 429）。
+  - **B5 票据绑定缺口闭环（转告 §三.3 + Oracle P0-1/P1-2）**：`OAuthTicketIssueRequest` 末位增 `string? UserId = null`（签发即绑——authorize 时用户已登录带 UId；末位默认参零破坏既有调用）；新增 `BindTicketAsync(ticket)`（**已认证帧**——userId 取 `User.UserId` 不经请求体，**无 `[AllowAnonymousFlag]`**；防票据泄漏后绑任意 userId 账号接管）+ DataService `BindUserAsync` **CAS 条件更新**（`WHERE Id=? AND UserId IS NULL` → false 抛 `TICKET_ALREADY_BOUND`）；`ExchangeAsync` 语义不动（保留 `TICKET_NOT_BOUND`——绑定后才可换取）。**测试收敛**：`OAuthTicketServiceTests` 删 5 处手动 `entity.UserId=` 回填改 `IssueAsync(UserId:)` 签发即绑。
+  - **`AuthGrantEntity` 应用授权数据底座（Oracle P0-2/P1-1/P1-3/P2-1/P2-4）**：OAuth2 authorization grant 语义（UserId/AppId/Scopes/ValidUntil/Source/Status + **唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**）；`IAuthGrantQueryService`（只读）+ `IAuthGrantCommandService`（写入——`RecordLoginGrantAsync` upsert 幂等，唯一冲突 catch→重查转 update）双门面 `AddConstructibleService` 注册；**写入点**：`ExchangeAsync` 成功（签发 JWT 对后）经 `User.Use<IAuthGrantCommandService>()` 落登录授权（**best-effort**——写入失败不阻断 JWT 签发，grant 仅服务 `/grants` 查询，可接受降级标注）；`Source="redeem"` 预留 B-口令兑换产品线。**⚠️ `ValidUntil` 语义**：应用授权有效期（null=持续至吊销，跨会话），**非会话有效期**（2h access/30d refresh 与 grant 正交）。
+  - **配置分层（AGENTS §8）**：`AuthCenterEndpointOptions`（`TKWF:AuthCenter:Web`）增 `TokenVerifyEndpointEnabled`/`GrantsEndpointEnabled`/`SmsVerifyEndpointEnabled`（默认 true，纯暴露面；领域侧零新增——verify 验签模式已由 `AuthCenterOptions.VerifyMode` 承载、grant 无开关、sms 频控由 `LoginProtection` 承载）；`SmsScenes.Bind` 复用（转告"缺绑定场景"偏差——已天然满足）。
+  - 测试：**124 用例全绿**（103→124：+3 端点冒烟×6 + grants 查询 Fake + sms/verify 2 + verify 2 + 配置断言 2 + `AuthGrantCommandServiceTests` 4（创建/幂等/并发唯一/多 app）+ `OAuthTicketServiceTests` BindTicketAsync 全矩阵 6（成功/无帧/消费/过期/已绑/CAS 并发））；9 实体 DataService 红线断言同步。
 - **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
 

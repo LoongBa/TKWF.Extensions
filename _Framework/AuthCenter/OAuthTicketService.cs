@@ -28,10 +28,12 @@ internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketServic
     private readonly AuthCenterOptions _options;
     private OAuthTicketEntityDataService? _dataService;
     private ITokenService? _tokenService;
+    private IAuthGrantCommandService? _grantCommandService;
     private readonly ILogger<OAuthTicketService> _logger;
 
     private OAuthTicketEntityDataService DataService => _dataService ??= User.Use<OAuthTicketEntityDataService>();
     private ITokenService TokenService => _tokenService ??= User.Use<ITokenService>();
+    private IAuthGrantCommandService GrantCommandService => _grantCommandService ??= User.Use<IAuthGrantCommandService>();
 
     /// <summary>构造——注入认证中心配置、用户上下文与日志（DataService/TokenService 经 User.Use&lt;T&gt;() 懒加载）。</summary>
     public OAuthTicketService(
@@ -81,6 +83,7 @@ internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketServic
             RedirectUri = request.RedirectUri,
             State = request.State,
             CodeVerifierHash = codeVerifierHash,
+            UserId = request.UserId, // V0.8.0 B5：签发即绑定（authorize 时用户已登录带 UId——非空则落库）
             ExpiresAt = DateTime.UtcNow.AddMinutes(_options.TicketExpirationMinutes),
             CreateTime = DateTime.UtcNow
         };
@@ -162,7 +165,61 @@ internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketServic
                 TeacherVerified: false),
             ct);
 
+        // (i') 落登录授权（V0.8.0 写入点——Oracle P1-1 经 IAuthGrantCommandService 门面，OAuthTicketService
+        //      不直触 AuthGrantEntityDataService）。best-effort：写入失败不阻断 JWT 签发——token 独立有效，
+        //      grant 仅服务 /grants 查询；可接受降级（README 标注）。
+        try
+        {
+            await GrantCommandService.RecordLoginGrantAsync(entity.UserId, entity.AppId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "登录授权记录写入失败（UserId={UserId} AppId={AppId}）——不影响 JWT 签发（grant 降级，/grants 暂缺该授权）",
+                entity.UserId, entity.AppId);
+        }
+
         return new OAuthTicketExchangeResult(tokenResult.AccessToken, tokenResult.RefreshToken, tokenResult.ExpiresIn);
+    }
+
+    /// <summary>
+    /// 登录后补绑（V0.8.0 B5——Oracle P0-1 安全模型）：<b>已认证帧</b>调用，userId 取
+    /// <see cref="DomainServiceBase.User"/>（当前认证用户），<b>不接受请求体 userId 参数</b>——
+    /// 防票据泄漏后攻击者绑定任意 userId 实现账号接管。CAS 条件更新（Oracle P1-2）防并发双绑竞态。
+    /// </summary>
+    public async Task BindTicketAsync(string ticket, CancellationToken ct = default)
+    {
+        // 已认证帧守卫：无认证用户上下文（匿名游客帧/System）→ 拒绝（对齐"无帧抛守卫"语义——InvalidOperationException）
+        var userId = User.UserId;
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new InvalidOperationException(
+                "BindTicketAsync 须在已认证帧内调用（userId 取当前认证用户，不可为空）——拒绝匿名绑定。");
+
+        // (a) 票据存在性。
+        var entity = await DataService.GetByTicketAsync(ticket, ct);
+        if (entity is null)
+        {
+            throw new AuthenticationException("TICKET_NOT_FOUND");
+        }
+
+        // (b) 已消费（单次消费防重放）。
+        if (entity.IsConsumed)
+        {
+            throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
+        }
+
+        // (c) TTL 过期。
+        if (entity.ExpiresAt < DateTime.UtcNow)
+        {
+            throw new AuthenticationException(OAuthTicketErrorCodes.TicketExpired);
+        }
+
+        // (d) CAS 条件绑定（Oracle P1-2）：WHERE Id = ? AND UserId IS NULL → SET UserId。
+        //     先查仅用于友好错误码（a-c）；最终一致性由条件更新保证——并发双绑败者返回 false → TICKET_ALREADY_BOUND。
+        if (!await DataService.BindUserAsync(entity.Id, userId, ct))
+        {
+            throw new AuthenticationException(OAuthTicketErrorCodes.TicketAlreadyBound);
+        }
     }
 
     /// <summary>RFC 7636 code_verifier 校验——43~128 位 unreserved 字符（A-Z / a-z / 0-9 / - / . / _ / ~）。</summary>

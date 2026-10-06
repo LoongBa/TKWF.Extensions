@@ -88,6 +88,7 @@ public sealed class AuthCenterWebExtensionTests
     [Fact]
     public async Task SmsSendCode_InvalidScene_400()
     {
+        AuthCenterEndpointHost.SmsVerification.Reset(); // 共享宿主——负向断言前置重置（V0.8.0）
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/send-code", new SendSmsCodeRequest("13800138000", "hack"));
@@ -155,6 +156,104 @@ public sealed class AuthCenterWebExtensionTests
         Assert.True(AuthCenterEndpointHost.Ticket.ExchangeInvoked);
     }
 
+    // ═══════════════════ V0.8.0 认证 API 补全（3 端点冒烟——共享宿主模式 A） ═══════════════════
+
+    [Fact]
+    public async Task Verify_WithBearer_ReturnsSnapshot()
+    {
+        // 已认证内省：判别器 = 中间件验签产物 Items[TokenValidationResult]——FakeTokenVerifier 验签 →
+        // Items 写入 → handler 映射快照（零二次验签）
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "valid-token");
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/verify");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<VerifyResponse>();
+        Assert.NotNull(body);
+        Assert.True(body!.Valid);
+        Assert.Equal("u-100", body.UserId);                     // FakeTokenVerifier 载荷
+        Assert.Equal(AuthTypes.Sms, body.AuthType);
+        Assert.Equal((int)AuthLevel.Phone, body.AuthLevel);
+        Assert.False(body.TeacherVerified);
+        Assert.Equal("jti-test", body.Jti);
+        Assert.True(body.Exp > 0);                              // ExpiresAtUtc → unix 秒
+    }
+
+    [Fact]
+    public async Task Verify_NoBearer_401()
+    {
+        // 无效/缺失 Bearer → 中间件透传匿名（Items 无 TokenValidationResult）→ handler 401 显式拒绝
+        // （非 RFC 7662 200{active:false}——已认证内省语义，README/指南标注）
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/verify");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Grants_WithBearer_ReturnsList()
+    {
+        // /grants：已认证帧 + app_id → FakeAuthGrantQueryService 返回 app-1 授权行 → GrantsResponse
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "valid-token");
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/grants?app_id=app-1");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<GrantsResponse>();
+        Assert.NotNull(body);
+        var grant = Assert.Single(body!.Grants);
+        Assert.Equal("app-1", grant.AppId);
+        Assert.Equal(new[] { "a", "b" }, grant.Scopes);         // 逗号串拆分（Web 层 GrantView 构造器）
+        Assert.Equal(AuthGrantSources.Login, grant.Source);
+        Assert.Equal(0, grant.Status);
+        Assert.True(AuthCenterEndpointHost.Grants.Invoked);
+    }
+
+    [Fact]
+    public async Task Grants_NoBearer_401()
+    {
+        AuthCenterEndpointHost.Grants.Reset(); // 共享宿主——负向断言前置重置（V0.8.0）
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/grants");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        Assert.False(AuthCenterEndpointHost.Grants.Invoked);
+    }
+
+    [Fact]
+    public async Task SmsVerify_ValidScene_200()
+    {
+        // 匿名游客帧（AllowAnonymous）：合法 scene → VerifyCodeAsync（Fake 恒 true）→ 200 verified
+        AuthCenterEndpointHost.SmsVerification.Reset(); // 共享宿主——负向断言前置重置（V0.8.0）
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/verify",
+            new SmsVerifyRequest("13800138000", "123456", SmsScenes.Bind));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<SmsVerifyResponse>();
+        Assert.NotNull(body);
+        Assert.True(body!.Verified);
+        Assert.True(AuthCenterEndpointHost.SmsVerification.SendCodeInvoked is false); // 独立校验不触发发送
+    }
+
+    [Fact]
+    public async Task SmsVerify_InvalidScene_400()
+    {
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/verify",
+            new SmsVerifyRequest("13800138000", "123456", "hack"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.Equal("INVALID_SCENE", body!.Code);
+    }
+
     // ═══════════════════ 配置绑定（RoutePrefix/端点开关可配性——DomainHost 单例禁多宿主黑盒） ═══════════════════
 
     [Fact]
@@ -163,14 +262,31 @@ public sealed class AuthCenterWebExtensionTests
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["TKWF:AuthCenter:Web:RoutePrefix"] = "/custom",
-            ["TKWF:AuthCenter:Web:SmsLoginEndpointEnabled"] = "false"
+            ["TKWF:AuthCenter:Web:SmsLoginEndpointEnabled"] = "false",
+            ["TKWF:AuthCenter:Web:TokenVerifyEndpointEnabled"] = "false",   // V0.8.0 新开关
+            ["TKWF:AuthCenter:Web:GrantsEndpointEnabled"] = "false",         // V0.8.0 新开关
+            ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false"       // V0.8.0 新开关
         }).Build();
         var options = new AuthCenterEndpointOptions();
         config.GetSection("TKWF:AuthCenter:Web").Bind(options);
 
         Assert.Equal("/custom", options.RoutePrefix);
         Assert.False(options.SmsLoginEndpointEnabled);      // 配置覆盖
+        Assert.False(options.TokenVerifyEndpointEnabled);   // V0.8.0 新开关配置覆盖
+        Assert.False(options.GrantsEndpointEnabled);
+        Assert.False(options.SmsVerifyEndpointEnabled);
         Assert.True(options.SmsSendCodeEndpointEnabled);    // 未配置保持默认
+        Assert.True(options.TicketExchangeEndpointEnabled); // 未配置保持默认
+    }
+
+    [Fact]
+    public void ConfigBinding_NewEndpointOptions_DefaultTrue()
+    {
+        // V0.8.0 3 新开关默认 true = 暴露面默认开放（领域 EnabledAuthTypes 未启用 Provider 时领域层 fail-closed 拒绝）
+        var options = new AuthCenterEndpointOptions();
+        Assert.True(options.TokenVerifyEndpointEnabled);
+        Assert.True(options.GrantsEndpointEnabled);
+        Assert.True(options.SmsVerifyEndpointEnabled);
     }
 
     [Fact]

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
@@ -69,7 +71,7 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         app.UseMiddleware<JwtAuthenticationMiddleware<TUserInfo>>(RestoreUser);
     }
 
-    /// <summary>端点映射（AfterRouting 排空）——内建标准对内端点（V0.6.0 T4），路径/开关经 <see cref="AuthCenterEndpointOptions"/> 可配置。</summary>
+    /// <summary>端点映射（AfterRouting 排空）——内建标准对内端点（V0.6.0 T4 + V0.8.0 认证 API 补全），路径/开关经 <see cref="AuthCenterEndpointOptions"/> 可配置。</summary>
     public void ConfigureEndpoints(IEndpointRouteBuilder endpoints, DomainWebOptions options)
     {
         var endpointOptions = ResolveOptions(endpoints.ServiceProvider);
@@ -77,6 +79,8 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
 
         if (endpointOptions.SmsSendCodeEndpointEnabled)
             endpoints.MapPost($"{prefix}/sms/send-code", HandleSendSmsCode).AllowAnonymous();
+        if (endpointOptions.SmsVerifyEndpointEnabled)
+            endpoints.MapPost($"{prefix}/sms/verify", HandleSmsVerify).AllowAnonymous();  // V0.8.0 验证码独立校验
         if (endpointOptions.SmsLoginEndpointEnabled)
             endpoints.MapPost($"{prefix}/login/sms", HandleSmsLogin).AllowAnonymous();
         if (endpointOptions.WechatLoginEndpointEnabled)
@@ -85,6 +89,10 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
             endpoints.MapPost($"{prefix}/refresh", HandleRefresh).AllowAnonymous();
         if (endpointOptions.LogoutEndpointEnabled)
             endpoints.MapPost($"{prefix}/logout", HandleLogout);          // 不 AllowAnonymous——需 Bearer 认证
+        if (endpointOptions.TokenVerifyEndpointEnabled)
+            endpoints.MapGet($"{prefix}/verify", HandleVerify);           // V0.8.0 已认证内省——不 AllowAnonymous（Bearer 必需）
+        if (endpointOptions.GrantsEndpointEnabled)
+            endpoints.MapGet($"{prefix}/grants", HandleGrants);           // V0.8.0 应用授权状态——不 AllowAnonymous（Bearer 必需）
         if (endpointOptions.TicketExchangeEndpointEnabled)
             endpoints.MapPost($"{prefix}/ticket/exchange", HandleTicketExchange).AllowAnonymous();
     }
@@ -212,6 +220,71 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         }
     }
 
+    // ─────────────────────────── V0.8.0 认证 API 补全（3 端点） ───────────────────────────
+
+    private static IResult HandleVerify(HttpContext ctx)
+    {
+        // 已认证内省（V0.8.0）：判别器 = 中间件验签产物 Items["AuthCenter.TokenValidationResult"]（唯一验签标记——
+        // 非 DomainUser——UseWebSession 装配下匿名游客也是 DomainUser<TUserInfo>(IsAuthenticated=false)，
+        // 只查 DomainUser 无法区分；TokenValidationResult 仅成功验签后写入，缺即未认证 → 401 显式拒绝）。
+        // ⚠️ 401 语义：已认证内省（authenticated introspection）——无效 Bearer 返回 401 而非 RFC 7662 200{active:false}。
+        if (ctx.Items[JwtAuthenticationMiddleware<TUserInfo>.TokenValidationResultKey] is not TokenValidationResult tr)
+            return Results.Unauthorized();
+
+        return Results.Ok(new VerifyResponse(
+            Valid: true,                       // 到达即已验签
+            UserId: tr.UserId,
+            AuthType: tr.AuthType,
+            AuthLevel: tr.AuthLevel,
+            TeacherVerified: tr.TeacherVerified,
+            Exp: new DateTimeOffset(tr.ExpiresAtUtc).ToUnixTimeSeconds(),
+            Jti: tr.Jti));
+    }
+
+    private static async Task<IResult> HandleGrants(HttpContext ctx, CancellationToken ct)
+    {
+        // 已认证端点（Bearer 必需，不 AllowAnonymous）：判别器 = 中间件验签产物 Items[TokenValidationResult]
+        // （唯一验签标记——仅成功验签后写入，缺即未认证 → 401 显式拒绝；对齐 HandleLogout 双检形态）
+        if (ctx.Items[JwtAuthenticationMiddleware<TUserInfo>.TokenValidationResultKey] is not TokenValidationResult tr)
+            return Results.Unauthorized();
+        if (ctx.Items["DomainUser"] is not DomainUser<TUserInfo> user)
+            return Results.Unauthorized();
+
+        var appId = ctx.Request.Query["app_id"].ToString();
+        // userId 取验签产物 sub（tr.UserId——JWT sub 与 AuthGrantEntity.UserId 同源，平台内部 id）
+        var grants = await user.Use<IAuthGrantQueryService>().GetGrantsAsync(
+            tr.UserId, string.IsNullOrWhiteSpace(appId) ? null : appId, ct);
+
+        return Results.Ok(new GrantsResponse(grants.Select(g => new GrantView(
+            AppId: g.AppId,
+            Scopes: g.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            ValidUntil: g.ValidUntil,
+            Source: g.Source,
+            Status: g.Status)).ToList()));
+    }
+
+    private static async Task<IResult> HandleSmsVerify(HttpContext ctx, [FromBody] SmsVerifyRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Phone) || string.IsNullOrWhiteSpace(req.Code))
+            return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "phone/code 必填"));
+        if (req.Scene is not (SmsScenes.Login or SmsScenes.Register or SmsScenes.Bind or SmsScenes.Reset))
+            return Results.BadRequest(new ErrorResponse("INVALID_SCENE", "scene 白名单：Login/Register/Bind/Reset"));
+
+        try
+        {
+            var verified = await GetGuest(ctx).Use<ISmsVerificationService>().VerifyCodeAsync(req.Phone, req.Code, req.Scene, ct);
+            return Results.Ok(new SmsVerifyResponse(verified));
+        }
+        catch (AuthenticationException ex) when (IsRateLimitedCode(ex.Message))
+        {
+            return Results.Json(new ErrorResponse(ex.Message, null), statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        catch (AuthenticationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message, null));
+        }
+    }
+
     // ─────────────────────────── 辅助 ───────────────────────────
 
     /// <summary>游客帧（V0.5.2 模式延伸）——匿名端点经 guest.Use&lt;门面&gt;() 调用守卫工厂门面。
@@ -277,3 +350,49 @@ public sealed record RefreshRequest(string RefreshToken);
 
 /// <summary>票据换令牌请求（PKCE code_verifier 可选——IssueAsync 时若生成则 Exchange 必传）。</summary>
 public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, string AppId, string? State);
+
+// ─────────────────────────── V0.8.0 认证 API 补全（Web DTO） ───────────────────────────
+
+/// <summary>令牌验签快照（/verify——已认证内省，非 RFC 7662 fanout；恒 200 于到达后，无效 Bearer → 401）。</summary>
+/// <param name="Valid">恒 true（到达即已验签）。</param>
+/// <param name="UserId">平台内部 id（JWT sub 同源）。</param>
+/// <param name="AuthType">认证方式（sms/wechat/...）。</param>
+/// <param name="AuthLevel">认证强度。</param>
+/// <param name="TeacherVerified">教师核实声明。</param>
+/// <param name="Exp">过期时间（unix 秒）。</param>
+/// <param name="Jti">令牌唯一 id。</param>
+public sealed record VerifyResponse(
+    bool Valid,
+    string UserId,
+    string AuthType,
+    int AuthLevel,
+    bool TeacherVerified,
+    long Exp,
+    string Jti);
+
+/// <summary>应用授权视图（/grants 列表项——Scopes 已拆为列表，拆分归 Web 层 Oracle P2-2 部分采纳）。</summary>
+/// <param name="AppId">授权应用 id。</param>
+/// <param name="Scopes">授权范围（逗号串拆分）。</param>
+/// <param name="ValidUntil">应用授权有效期（null = 持续至吊销——非会话有效期）。</param>
+/// <param name="Source">授权来源（AuthGrantSources：login/redeem）。</param>
+/// <param name="Status">授权状态（0 Active / 1 Revoked）。</param>
+public sealed record GrantView(
+    string AppId,
+    IReadOnlyList<string> Scopes,
+    DateTime? ValidUntil,
+    string Source,
+    int Status);
+
+/// <summary>应用授权状态响应（/grants）。</summary>
+/// <param name="Grants">有效授权列表（app_id 可空 = 全部）。</param>
+public sealed record GrantsResponse(IReadOnlyList<GrantView> Grants);
+
+/// <summary>验证码独立校验请求（/sms/verify——匿名端点）。</summary>
+/// <param name="Phone">目标手机号。</param>
+/// <param name="Code">验证码。</param>
+/// <param name="Scene">场景（SmsScenes 白名单：Login/Register/Bind/Reset）。</param>
+public sealed record SmsVerifyRequest(string Phone, string Code, string Scene);
+
+/// <summary>验证码独立校验响应（/sms/verify——不返回令牌，独立校验非登录）。</summary>
+/// <param name="Verified">是否校验通过（单次消费语义）。</param>
+public sealed record SmsVerifyResponse(bool Verified);

@@ -52,4 +52,19 @@ namespace TKWF.Ext.AuthCenter;
      /// <summary>更新票据（签发方绑定用户 UserId 后写入——票据签发时用户未定，绑定后回填）。</summary>
      public async Task UpdateAsync(OAuthTicketEntity entity, CancellationToken ct = default)
          => await EntityUpdateAsync(entity, ct);
-}
+
+     /// <summary>
+     /// CAS 条件绑定用户（V0.8.0 B5——Oracle P1-2）：单语句条件更新 <c>WHERE Id = ? AND UserId IS NULL</c> →
+     /// SET UserId（ADR89 原子原语）。镜像 <see cref="MarkConsumedAsync"/> 条件 select-then-update 模式的
+     /// 原子化升级——防并发双绑竞态：先查仅用于友好错误码（调用方），最终一致性由条件更新保证；
+     /// 返回 false = 已绑定/不存在（败者）→ 调用方抛 TICKET_ALREADY_BOUND。
+     /// </summary>
+     public async Task<bool> BindUserAsync(long id, string userId, CancellationToken ct = default)
+     {
+         var affected = await EntityUpdateWhereAsync(
+             e => e.Id == id && e.UserId == null,
+             e => new OAuthTicketEntity { UserId = userId },
+             ct);
+         return affected == 1;
+     }
+ }

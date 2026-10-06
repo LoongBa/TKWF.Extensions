@@ -230,6 +230,9 @@
   <Folder Name="/_Framework/Federation.Microsoft/">
     <Project Path="_Framework/Federation.Microsoft/TKWF.Federation.Microsoft.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Federation.DingTalk/">
+    <Project Path="_Framework/Federation.DingTalk/TKWF.Federation.DingTalk.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>
@@ -241,6 +244,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Microsoft.Tests/">
     <Project Path="_Tests/Extension.Federation.Microsoft.Tests/TKWF.Federation.Microsoft.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.DingTalk.Tests/">
+    <Project Path="_Tests/Extension.Federation.DingTalk.Tests/TKWF.Federation.DingTalk.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />

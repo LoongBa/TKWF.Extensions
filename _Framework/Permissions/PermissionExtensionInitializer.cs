@@ -25,6 +25,7 @@ namespace TKWF.Ext.Permissions
     /// <para>命名空间 <c>TKWF.Ext.Permissions</c>（D17 §5.1 设计 + 包名约定 §4.6）。</para>
     /// </summary>
     [TKWFExtension("Permissions")]
+    [TKWFExtensionCapability(ServiceType = typeof(IPermissionChecker), QuerySurface = "FullIQueryable")]
     public class PermissionExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
         where TUserInfo : class, IUserInfo, new()
     {

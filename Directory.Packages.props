@@ -65,38 +65,36 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         版本对齐主框架 v4.10.61（2026-10-06 E4 密钥管理配套——ISymmetricKeyProvider/FileSymmetricKeyProvider
-         落 Core/Domain、DevKeyCache<TKey> 落 Utility.Caching、AeadEncryptionUtil byte[] 重载、
-         SymmetricKeyProviderKeys 常量；keyed DI 首次引入（ADR96）——C4 端到端实证
-         ActivatorUtilities 守卫工厂对 [FromKeyedServices] 生效，扩展侧 T1-T5 径直接 keyed 路径）；
-         主框架发新版后同步提升。
-         ⚠️ TKWF.CodeGeneration（SG1 纯 Analyzer 包）+ CodeGeneration.Abstractions（SG 契约族）
-         本迭代零 SG 变更——保持 4.10.57 不变（框架 v4.10.61 未发新 Analyzer 包，见
-         转达-v4.10.61-E4密钥管理配套发布 §二.3）。
-         4.10.57 上一版 SG Analyzer 正式号锁（4.10.56-local 本地过渡结束）；4.10.55 上上版
-         ADR92 多实现集合守卫工厂（T3 方案 A），见 AGENTS §6 注记。
+         全量 lockstep v4.10.65（2026-10-06，V5 Iter-3 M1 能力目录 + Iter-4 M3 依赖版本门控——
+         TKWFExtensionCapability/TKWFExtensionDependency 新特性 + SG1b CapabilityCatalog/DEP 诊断；
+         解除 4.10.57 SG Analyzer 桥接——CodeGeneration/CodeGeneration.Abstractions 全量 4.10.65；
+         OIDC 归并（OAuthClient/IdTokenDecoder/JwksManager/OidcDiscoveryClient——Federation.Oidc 委托）
+         亦含于本线）。本地开发 DLL 模式消费部署根 build\refs 4.10.65（UseLocalFw=true 零 restore）。
+         ⚠️ 框架发布 4.10.65 前 CI（UseLocalFw=false）restore 依赖 nuget.org 就绪（当前最新 4.10.64——
+         待框架发布后 CI 自动通过，本地验证不受影响）。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.61" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.61" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.61" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.61" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.61" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.61" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.61" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.61" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.61" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.65" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.65" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.65" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.61" />
-    <!-- ✅ 4.10.61 lockstep（2026-10-06，E4 密钥管理配套——11 运行时包 4.10.57→4.10.61；
-         CodeGeneration/CodeGeneration.Abstractions 保持 4.10.57——SG 零变更） -->
-  <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.57" />
-  <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.57" />
-    <!-- ✅ 4.10.57 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.65" />
+    <!-- ✅ 4.10.65 全量 lockstep（2026-10-06，V5 Iter-3/Iter-4——13 包 4.10.61/4.10.57→4.10.65；
+         解除 CodeGeneration 4.10.57 桥接——CapabilityCatalog/DEP 门控新特性需要 4.10.65 Analyzer；
+         CodeGeneration.Abstractions NU1605 修复（Domain nuspec 硬依赖 ≥4.10.61）随 lockstep 一并化解） -->
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.65" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.65" />
+    <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.61" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.65" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Core.AuthController;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -18,6 +19,7 @@ namespace TKWF.Ext.Account
     /// <para>注意：<see cref="IAccountPasswordManager"/> 由消费方实现并注册（扩展不提供默认实现）。</para>
     /// </summary>
     [TKWFExtension("Account")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.SecurityLog.ISecurityLogQueryService), MinVersion = "0.1.0")]
     public class AccountExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
         where TUserInfo : class, IUserInfo, new()
     {

@@ -253,9 +253,11 @@ Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 - **P1（推荐）**：**20 扩展已实施**（后台任务/功能管理/通知+SignalR/限流/健康检查/安全日志/组织单元/文件管理/审批/导入导出/日历/仪表盘/打印模板/指标/标签存储/数据字典/用户中心/多因素认证/分析服务）；剩余 14 项按需推进（OpenIddict/SSO/LDAP/后台服务/安全防护/媒体库/搜索/动态表单/动态字段/工作流/文本模板/报表/文档管理/ApiDocs）。
 - **P2（待定）**：20 项全部按需启用（CMS/支付/订阅/聊天/GraphQL/可观测性/数据分析BI 等）。
 
-## NuGet 发布（2026-09-15）
+## NuGet 发布（2026-09-15 + 2026-10-06 增量）
 
 - **30 包已发布 nuget.org**（`TKWF.Ext.*`，v0.1.x–v0.9.x，依赖主框架稳定包 4.10.24）——经 GitHub Actions + **Trusted Publishing**（OIDC 免 API key：`NuGet/login@v1` + nuget.org policy + `NUGET_USER` secret）自动发布，CI run 34897984278 30/30 pushed 确认。
+- **2026-10-06 增量发布**（run 37439864527，`AuthCenter/v0.8.0` tag 移绿树 3038d40 触发）：**AuthCenter 0.8.0（stable）已上架** + AuthCenter.Abstractions 0.1.1-preview.0.19 / Federation 0.2.1-preview.0.12 首发 + 全部已发布扩展新 preview（`--skip-duplicate` 幂等 no-op）。
+- ⚠️ **`TKWF.Federation.*` 平台库（WeChat/Oidc/Google/Microsoft/DingTalk/WeCom/QQ 7 个）未发布**——nuget.org 推送账户权限/Trusted Publishing 策略仅覆盖 `TKWF.Ext.*` 前缀（403 Forbidden 实证）；待 nuget.org 侧补前缀/所有权后重触发任一 Federation tag 即补齐（`--skip-duplicate` 对已发布 no-op）。Permissions.Validation（Analyzer）`IsPackable=false` 不发布。
 - **后续版本发布**：各扩展打 `{扩展名}/v{x.y.z}` tag（patch bump 指向目标 commit）→ push tag 即触发 CI 全量重建 + 发布（--skip-duplicate 幂等）。
 
 > 设计思路与 ABP 兼容策略（最优设计为默认、兼容 ABP 为特殊需求、碰巧兼容只记录）+ 各扩展设计分类见 [`docs/扩展模块设计思路与ABP兼容策略.md`](./docs/扩展模块设计思路与ABP兼容策略.md)；状态跟踪见主框架私有 [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](https://github.com/LoongBa/TKW.Framework/blob/master/docs/03_扩展模块/总览和跟踪.md)。

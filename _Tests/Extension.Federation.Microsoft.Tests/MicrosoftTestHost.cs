@@ -91,7 +91,7 @@ internal static class MicrosoftTestHost
         {
             ["code"] = withCode ? "ms-code-1" : null,
             ["redirect_uri"] = "https://app.example.com/callback",
-            ["code_verifier"] = withVerifier ? OidcAuthFlow.GenerateCodeVerifier() : null,
+            ["code_verifier"] = withVerifier ? OidcChannelFlow.GenerateCodeVerifier() : null,
         });
 
     internal static string B64(byte[] data) =>

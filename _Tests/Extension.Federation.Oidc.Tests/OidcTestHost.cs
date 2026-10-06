@@ -269,7 +269,7 @@ public sealed class TestDerivedChannel : OidcChannelBase
 {
     private readonly OidcPlatformConfig _config;
 
-    public TestDerivedChannel(IDomainUser user, OidcAuthFlow flow, IOptions<TestDerivedOptions> options)
+    public TestDerivedChannel(IDomainUser user, OidcChannelFlow flow, IOptions<TestDerivedOptions> options)
         : base(user, flow)
     {
         var cfg = options.Value.Channels[0];

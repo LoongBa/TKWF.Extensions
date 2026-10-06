@@ -68,7 +68,7 @@ builder.Services.AddMicrosoftFederationChannels(o =>
 ### 3. 编排（装配层——authorize 构造 + state 校验归装配层）
 
 ```csharp
-// 装配层：构造 authorize URL（基座 OidcAuthFlow.BuildAuthorizeUrl——{tenant} 模板化 + scope=openid profile email + state + PKCE S256）
+// 装配层：构造 authorize URL（基座 OidcChannelFlow.BuildAuthorizeUrl——{tenant} 模板化 + scope=openid profile email + state/PKCE verifier 引擎生成，装配层持久化）
 // → 回调 code → 帧内 User.Use<ISsoLogin>().LoginAsync("microsoft_oidc", context)
 // → MicrosoftOidcChannel.AuthenticateAsync → id_token JWKS 验签 → (microsoft_oidc:{client_id}, sub) → token2
 ```
@@ -91,6 +91,6 @@ builder.Services.AddMicrosoftFederationChannels(o =>
 
 | 版本 | 内容 |
 |------|------|
-| V0.1.0（2026-10-06） | M2 Microsoft 平台网关：MicrosoftOidcChannel（pairwise 复合编码 `microsoft_oidc:{client_id}` + tenant 配置化端点模板 + TokenIssuer 正则白名单）+ MicrosoftOptions/MicrosoftChannelConfig（Tenant 字段）+ AddMicrosoftFederationChannels（经 Oidc 基座）；11 测试全绿（pairwise 复合编码断言/tenant iss 含 GUID 正则匹配/OAuth 正负/evil iss 拒/注册枚举）；slnx 已接线 |
+| V0.1.0（2026-10-06） | M2 Microsoft 平台网关：MicrosoftOidcChannel（pairwise 复合编码 `microsoft_oidc:{client_id}` + tenant 配置化端点模板 + TokenIssuer 正则白名单）+ MicrosoftOptions/MicrosoftChannelConfig（Tenant 字段）+ AddMicrosoftFederationChannels（经 Oidc 基座）；11 测试全绿（pairwise 复合编码断言/tenant iss 含 GUID 正则匹配/OAuth 正负/evil iss 拒/注册枚举）；slnx 已接线。**OIDC 归并配套（2026-10-06，基座 V0.2.0）**：ctor 类型同步 `OidcAuthFlow` → `OidcChannelFlow`（委托引擎薄层）——API 不变，行为委托 `Utility.OAuthClient` |
 
 <!-- EOF -->

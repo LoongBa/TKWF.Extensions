@@ -66,7 +66,7 @@ builder.Services.AddGoogleFederationChannels(o =>
 ### 3. 编排（装配层——authorize 构造 + state 校验归装配层）
 
 ```csharp
-// 装配层：构造 authorize URL（基座 OidcAuthFlow.BuildAuthorizeUrl——scope=openid email profile + state + PKCE S256）
+// 装配层：构造 authorize URL（基座 OidcChannelFlow.BuildAuthorizeUrl——scope=openid email profile + state/PKCE verifier 引擎生成，装配层持久化）
 // → 回调 code → 帧内 User.Use<ISsoLogin>().LoginAsync("google_oidc", context)（context 带 code + redirect_uri + verifier）
 // → GoogleOidcChannel.AuthenticateAsync → id_token JWKS 验签（RS256 + iss/aud/azp/exp/nbf/sub）→ (google_oidc:*, sub) → token2
 ```
@@ -89,6 +89,6 @@ builder.Services.AddGoogleFederationChannels(o =>
 
 | 版本 | 内容 |
 |------|------|
-| V0.1.0（2026-10-06） | M2 Google 平台网关：GoogleOidcChannel（public sub 通配 `google_oidc:*` + Defaults 填 Google 端点 + MergeConfig 凭证合并）+ GoogleOptions/GoogleChannelConfig + AddGoogleFederationChannels（经 Oidc 基座）；9 测试全绿（OAuth 正负/id_token 篡改拒/public 通配断言/注册枚举）；slnx 已接线 |
+| V0.1.0（2026-10-06） | M2 Google 平台网关：GoogleOidcChannel（public sub 通配 `google_oidc:*` + Defaults 填 Google 端点 + MergeConfig 凭证合并）+ GoogleOptions/GoogleChannelConfig + AddGoogleFederationChannels（经 Oidc 基座）；9 测试全绿（OAuth 正负/id_token 篡改拒/public 通配断言/注册枚举）；slnx 已接线。**OIDC 归并配套（2026-10-06，基座 V0.2.0）**：ctor 类型同步 `OidcAuthFlow` → `OidcChannelFlow`（委托引擎薄层）——API 不变，行为委托 `Utility.OAuthClient` |
 
 <!-- EOF -->

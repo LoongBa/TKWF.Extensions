@@ -94,7 +94,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Equal("id_token alg 非 RS256（实际 HS256——算法混淆拒）", result.FailReason);
+        Assert.Contains("alg", result.FailReason);   // 引擎 unsupported_alg（白名单拒 / JWKS 路径仅 RS256）
     }
 
     [Fact]
@@ -141,29 +141,30 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
         Assert.Contains("iss", result.FailReason);   // TokenIssuer 白名单拒
     }
 
-    // ---- F2 issuer 容错：通配/正则白名单（Microsoft common tenant iss 含 GUID）----
+    // ---- F2 issuer 容错：通配/正则白名单（Microsoft common tenant iss 含 GUID）——委托引擎 IdTokenDecoder 匹配 ----
 
     [Fact]
-    public void IsIssuerAllowed_RegexPattern_MatchesTenantGuid()
+    public async Task AuthenticateAsync_RegexIssuerPattern_MatchingIssuer_Succeeds()
     {
-        Assert.True(OidcIdTokenValidator.IsIssuerAllowed(
-            "https://login.microsoftonline.com/1a2b3c4d-5e6f-7890-abcd-ef1234567890/v2.0",
-            ["^https://login\\.microsoftonline\\.com/[^/]+/v2\\.0$"]));
+        // TokenIssuers 正则形态（Microsoft common tenant iss 含实际租户 GUID）——引擎 IdTokenDecoder 正则匹配正向
+        ConfigureOptions = o => o.TokenIssuers = ["^https://stub\\.example\\.com$"];
+        var (_, channel) = Setup();
+
+        var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
+
+        Assert.True(result.Success);   // iss 正则白名单匹配 → 验签通过
     }
 
     [Fact]
-    public void IsIssuerAllowed_WildcardSuffix_Matches()
+    public async Task AuthenticateAsync_WildcardIssuerPattern_MatchingIssuer_Succeeds()
     {
-        Assert.True(OidcIdTokenValidator.IsIssuerAllowed(
-            "https://login.microsoftonline.com/whatever/v2.0",
-            ["https://login.microsoftonline.com/*"]));
-    }
+        // TokenIssuers 尾缀通配形态（Microsoft 租户 GUID 可变前缀）
+        ConfigureOptions = o => o.TokenIssuers = ["https://stub.example.com*"];
+        var (_, channel) = Setup();
 
-    [Fact]
-    public void IsIssuerAllowed_ExactMatch_Matches_And_Mismatch_Rejects()
-    {
-        Assert.True(OidcIdTokenValidator.IsIssuerAllowed(Issuer, [Issuer]));
-        Assert.False(OidcIdTokenValidator.IsIssuerAllowed("https://other.example.com", [Issuer]));
+        var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
+
+        Assert.True(result.Success);   // iss 通配白名单匹配 → 验签通过
     }
 
     // ---- F4：Discovery 配置驱动（token/userinfo/jwks 经 Discovery 解析覆盖）----
@@ -191,8 +192,8 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public void Pkce_VerifierChallenge_RoundTrip()
     {
-        var verifier = OidcAuthFlow.GenerateCodeVerifier();
-        var challenge = OidcAuthFlow.ComputeCodeChallenge(verifier);
+        var verifier = OidcChannelFlow.GenerateCodeVerifier();
+        var challenge = OidcChannelFlow.ComputeCodeChallenge(verifier);
         Assert.NotEmpty(verifier);
         Assert.NotEqual(verifier, challenge);
         Assert.True(challenge.Length is > 20 and < 100);   // base64url(32) ≈ 43 字符
@@ -201,7 +202,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_PkceEnabled_MissingVerifier_Rejected()
     {
-        // UsePkce 默认 true——context 无 code_verifier → 拒绝（OidcAuthFlow 校验）
+        // UsePkce 默认 true——context 无 code_verifier → 拒绝（OidcChannelFlow 校验）
         var (_, channel) = Setup();
 
         var result = await channel.AuthenticateAsync(CreateCode(includeVerifier: false), CancellationToken.None);
@@ -216,5 +217,5 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
         => OidcTestHost.CreateContext(
             ("code", "valid-code-1"),
             ("redirect_uri", "https://app.example.com/callback"),
-            includeVerifier ? ("code_verifier", OidcAuthFlow.GenerateCodeVerifier()) : ("code_verifier", null));
+            includeVerifier ? ("code_verifier", OidcChannelFlow.GenerateCodeVerifier()) : ("code_verifier", null));
 }

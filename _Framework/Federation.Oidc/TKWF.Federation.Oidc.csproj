@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Federation.Oidc</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Federation.Oidc/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.Oidc</PackageId>
+    <Description>TKWF 平台网关基座库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：通用 OIDC 通道基座（Discovery 配置驱动 + JWKS 管理 + id_token 验签 RS256 + PKCE S256 + sub 语义策略）——派生平台库（Google/Microsoft/LinkedIn/Slack）继承基座仅填配置，自托管 IdP（Keycloak/Okta/Auth0）直配接入</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Oracle P1-1（平台网关设计铁律）：基座引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
+         派生平台库引本基座经传递获得 ISsoChannel） -->
+    <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- DiContractIgnore 所在（TKW.Framework.CodeGeneration——通道运行时手写注册豁免 DI001 误报，对齐 WeChat 先例） -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+    <!-- HttpClient 注入（IHttpClientFactory——Microsoft.Extensions.Http；不引 AspNetCore，入站端点归装配层） -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- ⚠️ 不引 AspNetCore：纯逻辑 + HttpClient；验签收 byte[]/string；Discovery 配置驱动（LinkedIn 非标路径/Apple issuer 容错） -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Federation.Oidc.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -221,8 +221,14 @@
   <Folder Name="/_Framework/Federation.WeChat/">
     <Project Path="_Framework/Federation.WeChat/TKWF.Federation.WeChat.csproj" />
   </Folder>
+  <Folder Name="/_Framework/Federation.Oidc/">
+    <Project Path="_Framework/Federation.Oidc/TKWF.Federation.Oidc.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.Oidc.Tests/">
+    <Project Path="_Tests/Extension.Federation.Oidc.Tests/TKWF.Federation.Oidc.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />

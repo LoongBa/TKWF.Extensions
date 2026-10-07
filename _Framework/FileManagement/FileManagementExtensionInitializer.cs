@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
@@ -35,6 +36,8 @@ namespace TKWF.Ext.FileManagement
     /// <c>[TKWFEnabledExtension(typeof(FileManagementExtensionInitializer&lt;&gt;))]</c> 白名单声明，三钩子才执行。</para>
     /// </summary>
     [TKWFExtension("FileManagement")]
+    [TKWFExtensionCapability(ServiceType = typeof(IFileManager), QuerySurface = "FullIQueryable")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.BlobStoring.IBlobStorageService), MinVersion = "0.1.1")]
     public class FileManagementExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
         where TUserInfo : class, IUserInfo, new()
     {

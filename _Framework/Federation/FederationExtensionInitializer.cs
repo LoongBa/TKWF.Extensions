@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
@@ -26,7 +27,9 @@ namespace TKWF.Ext.Federation;
 /// 由 Authentication 主包注册，Federation 经 <c>User.Use&lt;契约&gt;()</c> 帧内解析）。</para>
 /// </summary>
 [TKWFExtension("Federation")]
-public class FederationExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
+    [TKWFExtensionCapability(ServiceType = typeof(IToken2Service), QuerySurface = "FullIQueryable")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.AuthCenter.ISsoAccountQueryService), MinVersion = "0.1.0")]
+    public class FederationExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
     /// <summary>扩展名称。</summary>

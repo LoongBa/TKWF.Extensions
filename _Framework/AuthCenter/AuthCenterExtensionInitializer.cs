@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
@@ -29,7 +30,9 @@ namespace TKWF.Ext.AuthCenter;
 /// </list>
 /// </summary>
 [TKWFExtension("AuthCenter")]
-public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
+    [TKWFExtensionCapability(ServiceType = typeof(ITokenService), QuerySurface = "FullIQueryable")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.UserCenter.IUserProfileSource), MinVersion = "0.1.0")]
+    public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
     /// <summary>扩展名称。</summary>

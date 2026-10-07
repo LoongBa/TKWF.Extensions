@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 
@@ -25,7 +26,10 @@ namespace TKWF.Ext.Notifications;
 /// <para>IUserEmailProvider 不注册——由消费方提供（Email 通道收件地址来源，V0.2.0）。</para>
 /// </summary>
 [TKWFExtension("Notifications")]
-public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
+    [TKWFExtensionCapability(ServiceType = typeof(INotificationPublisher), QuerySurface = "FullIQueryable")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Emailing.IEmailSender), MinVersion = "0.1.1")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Permissions.Abstractions.IPermissionBatchChecker), MinVersion = "0.2.1")]
+    public class NotificationsExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
     /// <summary>扩展名称。</summary>

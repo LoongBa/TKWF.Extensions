@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Account;
@@ -19,6 +20,9 @@ namespace TKWF.Ext.Identity
     /// </list>
     /// </summary>
     [TKWFExtension("Identity")]
+    [TKWFExtensionCapability(ServiceType = typeof(IUserManager), QuerySurface = "FullIQueryable")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Account.IAccountPasswordManager), MinVersion = "0.1.2")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Permissions.Abstractions.IPermissionChecker), MinVersion = "0.2.1")]
     public class IdentityExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
         where TUserInfo : class, IUserInfo, new()
     {

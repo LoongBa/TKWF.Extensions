@@ -131,10 +131,16 @@ public class RedemptionCommandServiceTests
         Assert.Equal(RedemptionErrorCodes.CodeExpired, ex.Message);
 
         // ⚠️ SQLite DateTime 读回偏移（FreeSql SQLite provider 已知限制——UTC 列读回 +7h）：
-        // 门面 C# 过期判定受偏移影响不走进度分支（MarkExpired 未调），CAS 谓词（SQL 侧）兜底拒绝——
-        // 拒绝语义验证靠异常断言（生产 PG DateTime 无偏移，门面判定 + CAS 一致走翻转）。
+        // 该偏移行为随框架版本/驱动组合而异——4.10.68（CI nuget 模式）下门面 C# 判定过期
+        // （exp <= UtcNow 成立）→ MarkExpired 惰性翻转 Status=2；4.10.69-preview（本地 DLL）下
+        // 偏移存在 → 门面判定不走近过期分支 → CAS 谓词（SQL 侧）兜底拒绝 → Status 保持 0。
+        // 两种路径的**拒绝语义均由异常保证**（上方 CodeExpired 断言）——Status 翻转与否是
+        // 框架版本相关实现细节，断言可接受 0（Available，偏移兜底）或 2（Expired，惰性翻转）：
+        // 生产 PG/SQL Server 无偏移，门面判定 + CAS 一致走翻转（Status=2）。
         var table = fsql.Ado.ExecuteDataTable(@"SELECT ""Status"" FROM ""TKWF_RedemptionCode""");
-        Assert.Equal(0, Convert.ToInt32(table.Rows[0][0]));  // SQLite 偏移下 MarkExpired 未调——Status 保持 Available（拒绝语义由异常保证）
+        var status = Convert.ToInt32(table.Rows[0][0]);
+        Assert.True(status is 0 or 2,
+            $"过期码兑换拒绝后 Status 应为 0（SQLite 偏移下 CAS 兜底）或 2（惰性翻转），实际 {status}");
     }
 
     // ── UC-3：并发双兑——CAS 单胜 ──

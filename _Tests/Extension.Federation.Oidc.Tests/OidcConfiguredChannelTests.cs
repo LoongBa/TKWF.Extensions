@@ -11,9 +11,10 @@ namespace TKWF.Federation.Oidc.Tests;
 
 /// <summary>
 /// 直配通道测试（<c>AddOidcFederationChannel</c>——自托管 IdP：Keycloak/Okta 形态）——
-/// 生产路径宿主（真实 DI + 探针门面帧内枚举）+ Stub OIDC IdP（本机 RSA 签发 id_token + JWKS）。
+/// 生产路径宿主（真实 DI + <see cref="ISsoChannelFactory"/> 按 channelId 构造 + 探针门面帧内枚举）
+/// + Stub OIDC IdP（本机 RSA 签发 id_token + JWKS）。
 /// <para>覆盖验收：F2（id_token JWKS 验签正负 + issuer 容错）、F3（sub 语义）、F4（Discovery 配置驱动）、
-/// F6（PKCE）、F4（注册进集合——探针枚举）。</para>
+/// F6（PKCE）、F4（注册进集合——探针枚举 + 工厂构造）。</para>
 /// </summary>
 public class OidcConfiguredChannelTests : OidcChannelTestHost
 {
@@ -21,37 +22,46 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     private const string ClientId = "stub-client";
     private const string TestSub = "oidc_stub_sub";
     private const string Kid = "test-kid";
+    private const string DefaultChannelId = "test-oidc";   // AddOidcFederationChannel name——注册表选区键
 
     private RSA _privateKey = RSA.Create(2048);
     private StubOidcHandler.OidcStubOptions _stub = new(Issuer, ClientId, TestSub);
 
-    private (DomainUser<TestUserInfo> User, ISsoChannel Channel) Setup(Func<StubOidcHandler.OidcStubOptions, StubOidcHandler.OidcStubOptions>? mutate = null)
+    private async Task<(DomainUser<TestUserInfo> User, ISsoChannel Channel)> Setup(
+        Func<StubOidcHandler.OidcStubOptions, StubOidcHandler.OidcStubOptions>? mutate = null,
+        string? channelId = null)
     {
         if (mutate != null) _stub = mutate(_stub);
         TestOidcHandler = new StubOidcHandler(_privateKey, Kid, () => _stub);
         var (_, user) = BindScope();
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证从 registry 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(channelId ?? DefaultChannelId, "oidc_oidc");
+        return (user, Assert.IsType<OidcConfiguredChannel>(channel));
+    }
+
+    // ---- F4：注册进集合（模板枚举 + 工厂构造）----
+
+    [Fact]
+    public async Task Registration_ChannelType_OidcOidc_And_ChannelId_FromConfig()
+    {
+        ConfigureOptions = o => o.ChannelId = "keycloak-corp";
+        var (_, user) = BindScope();
         var probe = user.Use<IOidcChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "stub_oidc");
-        return (user, channel);
+        // 模板实例：ChannelType 稳定 = "oidc_oidc"（集合索引源——工厂按类型匹配）
+        var template = Assert.Single(probe.Channels, c => c.ChannelType == "oidc_oidc");
+        Assert.Equal("oidc_oidc", template.ChannelType);
+        // 真实实例经工厂构造（ChannelId = 注册表选区键——配置直填默认 BuildChannelId）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("keycloak-corp", "oidc_oidc");
+        Assert.NotNull(channel);
+        Assert.Equal("keycloak-corp", channel!.ChannelId);
     }
 
     // ---- F2：id_token JWKS 验签正负 ----
 
     [Fact]
-    public void Registration_ChannelType_StubOidc_And_ChannelId_FromConfig()
-    {
-        ConfigureOptions = o => o.ChannelId = "keycloak-corp";
-        var (_, user) = BindScope();
-        var probe = user.Use<IOidcChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "stub_oidc");
-        Assert.Equal("stub_oidc", channel.ChannelType);      // ChannelType = {Platform}_oidc
-        Assert.Equal("keycloak-corp", channel.ChannelId);    // ChannelId = 配置直填（默认 BuildChannelId）
-    }
-
-    [Fact]
     public async Task AuthenticateAsync_ValidCode_ReturnsSub_Success()
     {
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -64,7 +74,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_MissingCode_Fails()
     {
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(
             OidcTestHost.CreateContext(("state", "abc")), CancellationToken.None);
@@ -77,7 +87,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_TamperedIdToken_Rejected()
     {
-        var (_, channel) = Setup(s => s with { Tampered = true });   // 篡改 sub → 验签失败
+        var (_, channel) = await Setup(s => s with { Tampered = true });   // 篡改 sub → 验签失败
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -89,7 +99,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_AlgMismatch_Rejected()
     {
-        var (_, channel) = Setup(s => s with { AlgOverride = "HS256" });   // 算法混淆拒
+        var (_, channel) = await Setup(s => s with { AlgOverride = "HS256" });   // 算法混淆拒
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -100,7 +110,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_ExpiredIdToken_Rejected()
     {
-        var (_, channel) = Setup(s => s with { ExpOverrideSecs = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeSeconds() });
+        var (_, channel) = await Setup(s => s with { ExpOverrideSecs = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeSeconds() });
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -111,7 +121,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_NbfInFuture_Rejected()
     {
-        var (_, channel) = Setup(s => s with { NbfOverride = DateTimeOffset.UtcNow.AddMinutes(2).ToUnixTimeSeconds() });
+        var (_, channel) = await Setup(s => s with { NbfOverride = DateTimeOffset.UtcNow.AddMinutes(2).ToUnixTimeSeconds() });
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -122,7 +132,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_WrongAudience_Rejected()
     {
-        var (_, channel) = Setup(s => s with { AudOverride = "other-app" });
+        var (_, channel) = await Setup(s => s with { AudOverride = "other-app" });
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -133,7 +143,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     [Fact]
     public async Task AuthenticateAsync_IssuerNotInWhitelist_Rejected()
     {
-        var (_, channel) = Setup(s => s with { Issuer = "https://evil.example.com" });
+        var (_, channel) = await Setup(s => s with { Issuer = "https://evil.example.com" });
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -148,7 +158,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     {
         // TokenIssuers 正则形态（Microsoft common tenant iss 含实际租户 GUID）——引擎 IdTokenDecoder 正则匹配正向
         ConfigureOptions = o => o.TokenIssuers = ["^https://stub\\.example\\.com$"];
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -160,7 +170,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     {
         // TokenIssuers 尾缀通配形态（Microsoft 租户 GUID 可变前缀）
         ConfigureOptions = o => o.TokenIssuers = ["https://stub.example.com*"];
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -180,7 +190,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
             o.JwksUri = "";
             o.AuthorizeUri = "";
         };
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
@@ -203,7 +213,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     public async Task AuthenticateAsync_PkceEnabled_MissingVerifier_Rejected()
     {
         // UsePkce 默认 true——context 无 code_verifier → 拒绝（OidcChannelFlow 校验）
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(CreateCode(includeVerifier: false), CancellationToken.None);
 

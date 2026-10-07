@@ -15,34 +15,38 @@ public class WeChatOauthChannelTests : WeChatChannelTestHost
 {
     private const string TestAppId = "wx0000000000000000";
     private const string TestOpenId = "oa_test_openid_1";
+    private const string TestChannelId = "mp-main";
 
-    private (DomainUser<TestUserInfo> User, WeChatOauthChannel Channel) Setup(bool failOauth = false)
+    private async Task<(DomainUser<TestUserInfo> User, WeChatOauthChannel Channel)> Setup(bool failOauth = false)
     {
         Handler = WeChatTestHost.CreateStubHandler(TestOpenId, failOauth);
-        ConfigureOptions = o => o.Channels = [WeChatTestHost.CreateChannelConfig(appId: TestAppId)];
+        ConfigureOptions = o => o.Channels = [WeChatTestHost.CreateChannelConfig(channelId: TestChannelId, appId: TestAppId)];
         var (_, user) = BindTestScope();
-        var probe = user.Use<IChannelProbe>();
-        var channel = Assert.IsType<WeChatOauthChannel>(
-            Assert.Single(probe.Channels, c => c.ChannelType == "wechat_oauth"));
-        return (user, channel);
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证从 registry 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wechat_oauth");
+        return (user, Assert.IsType<WeChatOauthChannel>(channel));
     }
 
     [Fact]
-    public void ChannelType_IsWechatOauth_AndChannelIdFromOptions()
+    public async Task ChannelType_IsWechatOauth_AndChannelId_FromFactory()
     {
-        ConfigureOptions = o => o.Channels = [WeChatTestHost.CreateChannelConfig(channelId: "mp-main", appId: TestAppId)];
+        ConfigureOptions = o => o.Channels = [WeChatTestHost.CreateChannelConfig(channelId: TestChannelId, appId: TestAppId)];
         var (_, user) = BindTestScope();
+        // 探针枚举集合（模板实例——ChannelType 标识注册）……
         var probe = user.Use<IChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "wechat_oauth");
-        Assert.Equal("wechat_oauth", channel.ChannelType);
-        Assert.Equal("mp-main", channel.ChannelId); // ChannelId = 配置公众号 id（Options.Channels 选区）
+        var template = Assert.Single(probe.Channels, c => c.ChannelType == "wechat_oauth");
+        Assert.Equal("wechat_oauth", template.ChannelType);
+        // ……真实实例经工厂构造（ChannelId = 注册表选区键）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wechat_oauth");
+        Assert.NotNull(channel);
+        Assert.Equal(TestChannelId, channel!.ChannelId);
     }
 
     [Fact]
     public async Task AuthenticateAsync_ValidCode_ReturnsOpenId_Success()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
         var context = WeChatTestHost.CreateContext(("code", "oauth-code-123"));
 
         var result = await channel.AuthenticateAsync(context, CancellationToken.None);
@@ -57,7 +61,7 @@ public class WeChatOauthChannelTests : WeChatChannelTestHost
     public async Task AuthenticateAsync_MissingCode_Fails_WECHAT_CODE_REQUIRED()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(
             WeChatTestHost.CreateContext(("state", "abc")), CancellationToken.None);
@@ -72,7 +76,7 @@ public class WeChatOauthChannelTests : WeChatChannelTestHost
     {
         // 微信 API 返回 errcode（code 非法/已消费）→ 失败 + FailReason 携带错误消息
         using var _ = this;
-        var (_, channel) = Setup(failOauth: true);
+        var (_, channel) = await Setup(failOauth: true);
 
         var result = await channel.AuthenticateAsync(
             WeChatTestHost.CreateContext(("code", "stale-code")), CancellationToken.None);

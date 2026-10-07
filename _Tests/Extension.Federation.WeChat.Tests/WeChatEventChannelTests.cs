@@ -19,17 +19,18 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     private const string TestAppId = "wx0000000000000000";
     private const string TestAesKey = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"; // 43 字符
     private const string TestOpenId = "oa_openid_event_1";
+    private const string TestChannelId = "mp-event";
 
-    private WeChatEventChannel Setup()
+    private async Task<WeChatEventChannel> Setup()
     {
         ConfigureOptions = o => o.Channels =
         [
-            WeChatTestHost.CreateChannelConfig(appId: TestAppId, token: TestToken, encodingAESKey: TestAesKey),
+            WeChatTestHost.CreateChannelConfig(channelId: TestChannelId, appId: TestAppId, token: TestToken, encodingAESKey: TestAesKey),
         ];
         var (_, user) = BindTestScope();
-        var probe = user.Use<IChannelProbe>();
-        return Assert.IsType<WeChatEventChannel>(
-            Assert.Single(probe.Channels, c => c.ChannelType == "wechat_event"));
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证 Token/EncodingAESKey 从 registry Extra 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wechat_event");
+        return Assert.IsType<WeChatEventChannel>(channel);
     }
 
     /// <summary>构造合法事件推送样本（msg_encrypt + msg_signature），openid 嵌入 FromUserName。</summary>
@@ -47,7 +48,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     public async Task AuthenticateAsync_ValidSignatureAndCipher_ReturnsOpenId()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
 
         var result = await channel.AuthenticateAsync(
@@ -66,7 +67,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     {
         // 兼容 "signature" 参数名（装配层可能透传该命名）
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
 
         var result = await channel.AuthenticateAsync(
@@ -82,7 +83,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     public async Task AuthenticateAsync_TamperedSignature_Rejected_WECHAT_SIGNATURE_INVALID()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
         // 篡改签名末位——信任根一票否决
         var tampered = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
@@ -101,7 +102,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     public async Task AuthenticateAsync_WrongLengthSignature_Rejected_NoThrow()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, _) = BuildValidEvent();
 
         var result = await channel.AuthenticateAsync(
@@ -117,7 +118,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     public async Task AuthenticateAsync_MissingParams_Rejected_WECHAT_EVENT_PARAMS_MISSING()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
 
         var result = await channel.AuthenticateAsync(
             WeChatTestHost.CreateContext(("timestamp", "1234567890")), CancellationToken.None);
@@ -130,7 +131,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     public async Task AuthenticateAsync_ValidSignatureTamperedCipher_DecryptFails()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
         // 篡改密文（换首字符）——重签指向篡改密文（验签通过）→ 解密失败（填充/格式损坏）
         var tamperedCipher = (msgEncrypt[0] == 'A' ? 'B' : 'A') + msgEncrypt[1..];

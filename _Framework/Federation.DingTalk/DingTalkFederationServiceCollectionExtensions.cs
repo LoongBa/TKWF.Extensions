@@ -39,6 +39,9 @@ public static class DingTalkFederationServiceCollectionExtensions
         // 出站客户端：HttpClient 经 typed client 注入（AddHttpClient<DingTalkApiClient>——ctor 收 HttpClient）
         services.AddHttpClient<DingTalkApiClient>();
 
+        // 多通道联邦（v0.3.0）：静态通道来源——钉钉 Channels 投影为统一 ChannelConfig（StaticChannelRegistry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, DingTalkChannelSource>());
+
         // ISsoChannel 多实现集合守卫工厂（ADR92）——OAuth 通道 + 事件通道
         services.TryAddEnumerableConstructible<ISsoChannel, DingTalkOauthChannel>();
         services.TryAddEnumerableConstructible<ISsoChannel, DingTalkEventChannel>();

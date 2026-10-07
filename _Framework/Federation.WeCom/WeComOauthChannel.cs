@@ -1,10 +1,8 @@
 using System;
-using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -23,59 +21,82 @@ namespace TKWF.Federation.WeCom;
 /// <para>敏感信息（Oracle 评审 P1-4/P1-5）：<c>EnableSensitiveInfo</c> 启用时 <see cref="WeComApiClient.GetIdentityAsync"/>
 /// 条件性透出 <c>UserTicket</c>（自建 96442 + 三方 98179 返回；扫码 98177 不返回降级仅身份）——<b>channel 内不拉取
 /// 敏感信息</b>（数据流闭环归装配层：编排层按需 <see cref="WeComApiClient.GetSensitiveInfoAsync"/> 即用即弃不落库）；
-/// 启用且 <see cref="WeComChannelConfig.AgentId"/> 缺 → ctor fail-fast（P1-5，启动即失败不静默降级）。</para>
+/// 启用且 AgentId 缺 → ctor fail-fast（P1-5，构造即失败不静默降级）。</para>
+/// <para>多通道联邦（v0.3.0）：channel 由 <see cref="ChannelConfig"/>（<see cref="ISsoChannelFactory"/> 按 channelId
+/// 经 <see cref="IChannelRegistry"/> 预取传入，POCO 非域服务）——<c>null</c> = 集合模板实例（工厂类型索引源，
+/// 不直接认证——v0.3.0 多通道）。凭证（CorpId/CorpSecret 法人级标识，方案 M7：WeCom 无标准 AppId——进
+/// <see cref="ChannelConfig.Extra"/>，不挤占公共列 <c>AppId</c>）在 <c>AuthenticateAsync</c> 从 cfg.Extra 使用。
+/// <see cref="WeComApiClient"/> 不自持凭证解析（gettoken 缓存键 = corpid+":"+corpsecret——P1-2）——通道只传必要参数。</para>
 /// <para>边界（Oracle 评审 P2-5）：redirect_uri 一致性校验归装配层（authorize 时记录、回调比对；库不感知，对齐 N3 P1-3）；
 /// state 会话绑定归装配层——库 AuthenticateAsync 只收 code。</para>
 /// <para>注册：库扩展方法 <c>AddWeComFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92
-/// 集合版守卫工厂）；channel 业务参数经 Options 注入不占 ctor IDomainUser 槽。<c>[DiContractIgnore]</c> 豁免 DI001。</para>
+/// 集合版守卫工厂）；集合元素 = 模板实例（channel=null），真实实例由工厂帧内 <c>ActivatorUtilities</c> 构造
+/// （IDomainUser + ChannelConfig 显式传入）。<c>[DiContractIgnore]</c> 豁免 DI001。</para>
 /// </summary>
 [DiContractIgnore]
 public sealed class WeComOauthChannel : DomainServiceBase, ISsoChannel
 {
     private readonly WeComApiClient _weComApi;
-    private readonly WeComChannelConfig _channel;
+    private readonly ChannelConfig? _channel;
 
-    /// <summary>构造——channel 由配置选区（Channels 首项为默认应用）；EnableSensitiveInfo 且 AgentId 缺 → fail-fast（P1-5）。</summary>
+    /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
+    /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
+    /// EnableSensitiveInfo 且 AgentId 缺 → fail-fast（P1-5，仅真实实例——模板实例无配置不可校验）。</summary>
     public WeComOauthChannel(
         IDomainUser user,
         WeComApiClient weComApi,
-        IOptions<WeComOptions> options)
+        ChannelConfig? channel = null)
         : base(user)
     {
         _weComApi = weComApi ?? throw new ArgumentNullException(nameof(weComApi));
-        _channel = options?.Value.Channels.FirstOrDefault()
-            ?? throw new InvalidOperationException("企业微信 OAuth channel 未配置：TKWF:Federation:WeCom 节 Channels 为空");
+        _channel = channel;
 
-        // Oracle 评审 P1-5：snsapi_privateinfo 敏感增强须 AgentId（授权必填）——启用且缺 → 启动 fail-fast（不静默降级）
-        if (_channel.EnableSensitiveInfo && string.IsNullOrEmpty(_channel.AgentId))
-            throw new InvalidOperationException($"企业微信 OAuth channel（{_channel.ChannelId}）EnableSensitiveInfo=true 但 AgentId 未配置——snsapi_privateinfo 授权必填 AgentId");
+        // Oracle 评审 P1-5：snsapi_privateinfo 敏感增强须 AgentId（授权必填）——启用且缺 → 构造 fail-fast（不静默降级）
+        if (channel is not null
+            && IsTrue(channel, "EnableSensitiveInfo")
+            && string.IsNullOrEmpty(GetExtra(channel, "AgentId")))
+            throw new InvalidOperationException($"企业微信 OAuth channel（{channel.ChannelId}）EnableSensitiveInfo=true 但 AgentId 未配置——snsapi_privateinfo 授权必填 AgentId");
     }
 
     /// <inheritdoc />
     public string ChannelType => "wecom_oauth";
 
     /// <inheritdoc />
-    public string ChannelId => _channel.ChannelId;
+    public string ChannelId => _channel?.ChannelId ?? "";
 
     /// <inheritdoc />
     public async Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
     {
+        if (_channel is null)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0);   // 模板实例不可直接认证
+        if (!_channel.IsEnabled)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0);
+
         if (context.Parameters == null
             || !context.Parameters.TryGetValue("code", out var code)
             || string.IsNullOrWhiteSpace(code))
             return new SsoChannelAuthResult(false, null, "WECOM_CODE_REQUIRED", 0);
 
+        // 凭证从 ChannelConfig.Extra 读取（M7：CorpId 法人级标识进 Extra——WeCom 无标准 AppId；CorpSecret 亦进 Extra，
+        // 因 WeComApiClient 不自持凭证解析，按缓存键 corpid:corpsecret 使用）
+        var corpId = GetExtra(_channel, "CorpId");
+        var corpSecret = GetExtra(_channel, "CorpSecret");
+        if (string.IsNullOrEmpty(corpId) || string.IsNullOrEmpty(corpSecret))
+            return new SsoChannelAuthResult(false, null, "WECOM_CONFIG_MISSING", 0);
+
+        var isThirdParty = IsTrue(_channel, "IsThirdParty");
+
         try
         {
             // code 直接换身份（无独立 token 端点）——按应用类型选 getuserinfo / getuserinfo3rd
-            var identity = await _weComApi.GetIdentityAsync(_channel.CorpId, _channel.CorpSecret, code, _channel.IsThirdParty, ct);
+            var identity = await _weComApi.GetIdentityAsync(corpId, corpSecret, code, isThirdParty, ct);
 
             // external_uid 双策略（Oracle 评审 P0-1）——三方成员 open_userid / 自建成员 {CorpId}:{userid} 复合 / 非成员 openid
             string? externalUserId;
             if (!string.IsNullOrEmpty(identity.OpenUserid))
                 externalUserId = identity.OpenUserid;                       // 三方应用成员：全局唯一最佳稳定键
             else if (!string.IsNullOrEmpty(identity.UserId))
-                externalUserId = $"{_channel.CorpId}:{identity.UserId}";    // 自建应用成员：互联企业 CorpId 复合消歧
+                externalUserId = $"{corpId}:{identity.UserId}";             // 自建应用成员：互联企业 CorpId 复合消歧
             else if (!string.IsNullOrEmpty(identity.OpenId))
                 externalUserId = identity.OpenId;                           // 非企业成员：对当前企业唯一
             else
@@ -91,4 +112,10 @@ public sealed class WeComOauthChannel : DomainServiceBase, ISsoChannel
             return new SsoChannelAuthResult(false, null, ex.Message, 0);
         }
     }
+
+    private static string? GetExtra(ChannelConfig cfg, string key)
+        => cfg.Extra.TryGetValue(key, out var v) ? v : null;
+
+    private static bool IsTrue(ChannelConfig cfg, string key)
+        => string.Equals(GetExtra(cfg, key), "true", StringComparison.OrdinalIgnoreCase);
 }

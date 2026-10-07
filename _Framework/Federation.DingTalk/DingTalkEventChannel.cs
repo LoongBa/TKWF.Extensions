@@ -1,8 +1,6 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -25,29 +23,43 @@ namespace TKWF.Federation.DingTalk;
 /// 主参数名；兼容 "msg_signature" 别名）/<c>["timestamp"]</c>/<c>["nonce"]</c>/<c>["msg_encrypt"]</c>。</para>
 /// <para>边界：本通道只管"验签+解密+receiveid 校验+取 FromUserId"，不负责事件业务处理/异步编排（归装配层）。</para>
 /// <para>注册：库扩展方法 <c>AddDingTalkFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92）；
-/// channel 业务参数（CorpId/Token/EncodingAESKey）经 Options 注入不占 ctor IDomainUser 槽。</para>
+/// channel 业务参数（CorpId/Token/EncodingAESKey）经工厂预取的 <see cref="ChannelConfig"/> 传入
+/// （多通道联邦 v0.3.0——不占 ctor IDomainUser 槽）。</para>
 /// </summary>
 [DiContractIgnore]
 public sealed class DingTalkEventChannel : DomainServiceBase, ISsoChannel
 {
-    private readonly DingTalkChannelConfig _channel;
+    private readonly ChannelConfig? _channel;
 
-    /// <summary>构造——channel 由配置选区（Channels 首项默认；多实例归后续迭代）。</summary>
-    public DingTalkEventChannel(IDomainUser user, IOptions<DingTalkOptions> options) : base(user)
+    /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
+    /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
+    /// 凭证（CorpId/Token/EncodingAESKey——事件验签三道闸门信任根）在 <c>AuthenticateAsync</c> 从 cfg.Extra 使用。</summary>
+    public DingTalkEventChannel(IDomainUser user, ChannelConfig? channel = null) : base(user)
     {
-        _channel = options?.Value.Channels.FirstOrDefault()
-            ?? throw new InvalidOperationException("钉钉事件 channel 未配置：TKWF:Federation:DingTalk 节 Channels 为空");
+        _channel = channel;
     }
 
     /// <inheritdoc />
     public string ChannelType => "dingtalk_event";
 
     /// <inheritdoc />
-    public string ChannelId => _channel.ChannelId;
+    public string ChannelId => _channel?.ChannelId ?? "";
 
     /// <inheritdoc />
     public Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
     {
+        if (_channel is null)
+            return Task.FromResult(new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0));   // 模板实例不可直接认证
+        if (!_channel.IsEnabled)
+            return Task.FromResult(new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0));
+
+        // 平台特定负载（Extra——CorpId/Token/EncodingAESKey 事件验签三道闸门信任根）
+        _channel.Extra.TryGetValue("CorpId", out var corpId);
+        _channel.Extra.TryGetValue("Token", out var token);
+        _channel.Extra.TryGetValue("EncodingAESKey", out var encodingAesKey);
+        if (string.IsNullOrEmpty(corpId) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(encodingAesKey))
+            return Task.FromResult(new SsoChannelAuthResult(false, null, "DINGTALK_EVENT_CONFIG_MISSING", 0));
+
         if (context.Parameters == null)
             return Task.FromResult(new SsoChannelAuthResult(false, null, "DINGTALK_EVENT_PARAMS_MISSING", 0));
 
@@ -62,14 +74,14 @@ public sealed class DingTalkEventChannel : DomainServiceBase, ISsoChannel
             return Task.FromResult(new SsoChannelAuthResult(false, null, "DINGTALK_EVENT_PARAMS_MISSING", 0));
 
         // 信任根一票否决：验签失败 → 拒绝（绝不解密伪造密文）
-        if (!DingTalkEventCrypto.VerifySignature(_channel.Token, timestamp!, nonce!, msgEncrypt!, signature!))
+        if (!DingTalkEventCrypto.VerifySignature(token!, timestamp!, nonce!, msgEncrypt!, signature!))
             return Task.FromResult(new SsoChannelAuthResult(false, null, "DINGTALK_SIGNATURE_INVALID", 0));
 
         try
         {
             // 安全模式 AES 解密 + receiveid 校验（第二道闸门——corpId 不匹配抛）→ 事件体 JSON → FromUserId(openId)
             // ⚠️ CPU-only 无出站调用（1200ms 硬约束 P1-2——库侧 <50ms，落库归装配层）
-            var json = DingTalkEventCrypto.DecryptMsg(_channel.EncodingAESKey, msgEncrypt!, _channel.CorpId);
+            var json = DingTalkEventCrypto.DecryptMsg(encodingAesKey!, msgEncrypt!, corpId!);
             var fromUserId = DingTalkEventCrypto.ExtractFromUserId(json);
             return Task.FromResult(new SsoChannelAuthResult(true, fromUserId, null, 2));  // AuthLevel=2 对齐微信便捷语义
         }

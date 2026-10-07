@@ -1,10 +1,8 @@
 using System;
-using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -28,35 +26,48 @@ namespace TKWF.Federation.DingTalk;
 /// clientSecret 对称换取）。</para>
 /// <para>注册：库扩展方法 <c>AddDingTalkFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92
 /// 集合版守卫工厂）——集合元素 ctor 注入 IDomainUser 由帧内 CurrentAopUser 供给；channel 业务参数
-/// （ChannelId/凭证）经 Options 注入不占 ctor IDomainUser 槽。<c>[DiContractIgnore]</c>：运行时手写注册豁免 DI001。</para>
+/// （ChannelId/凭证）经工厂预取的 <see cref="ChannelConfig"/> 传入（多通道联邦 v0.3.0——不占 ctor
+/// IDomainUser 槽）。<c>[DiContractIgnore]</c>：运行时手写注册豁免 DI001。</para>
 /// </summary>
 [DiContractIgnore]
 public sealed class DingTalkOauthChannel : DomainServiceBase, ISsoChannel
 {
     private readonly DingTalkApiClient _dingTalkApi;
-    private readonly DingTalkChannelConfig _channel;
+    private readonly ChannelConfig? _channel;
 
-    /// <summary>构造——channel 由配置选区（Channels 首项为默认应用；多应用按 <see cref="ISsoChannel.ChannelId"/> 选区）。</summary>
+    /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
+    /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
+    /// 凭证（AppKey——钉钉凭证解析键；AppSecret 公共列由 <see cref="DingTalkApiClient"/> 自解析）
+    /// 在 <c>AuthenticateAsync</c> 从 cfg 使用（懒加载——Oracle M1 意图保持）。</summary>
     public DingTalkOauthChannel(
         IDomainUser user,
         DingTalkApiClient dingTalkApi,
-        IOptions<DingTalkOptions> options)
+        ChannelConfig? channel = null)
         : base(user)
     {
         _dingTalkApi = dingTalkApi ?? throw new ArgumentNullException(nameof(dingTalkApi));
-        _channel = options?.Value.Channels.FirstOrDefault()
-            ?? throw new InvalidOperationException("钉钉 OAuth channel 未配置：TKWF:Federation:DingTalk 节 Channels 为空");
+        _channel = channel;
     }
 
     /// <inheritdoc />
     public string ChannelType => "dingtalk_oauth";
 
     /// <inheritdoc />
-    public string ChannelId => _channel.ChannelId;
+    public string ChannelId => _channel?.ChannelId ?? "";
 
     /// <inheritdoc />
     public async Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
     {
+        if (_channel is null)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0);   // 模板实例不可直接认证
+        if (!_channel.IsEnabled)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0);
+
+        // 平台特定负载（Extra——AppKey 钉钉凭证解析键；AppSecret 公共列由 DingTalkApiClient 自解析）
+        _channel.Extra.TryGetValue("AppKey", out var appKey);
+        if (string.IsNullOrEmpty(appKey))
+            return new SsoChannelAuthResult(false, null, "DINGTALK_APPKEY_MISSING", 0);
+
         if (context.Parameters == null
             || !context.Parameters.TryGetValue("code", out var code)
             || string.IsNullOrWhiteSpace(code))
@@ -65,7 +76,7 @@ public sealed class DingTalkOauthChannel : DomainServiceBase, ISsoChannel
         try
         {
             // code 是钉钉 OAuth 授权码（与发起授权的 AppKey 绑定）——按本 channel 的 AppKey 换用户级 token
-            var token = await _dingTalkApi.GetUserAccessTokenAsync(_channel.AppKey, code, ct);
+            var token = await _dingTalkApi.GetUserAccessTokenAsync(appKey!, code, ct);
             if (string.IsNullOrEmpty(token.OpenId))
                 return new SsoChannelAuthResult(false, null, "DINGTALK_OPENID_MISSING", 0);
 

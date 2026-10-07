@@ -17,34 +17,39 @@ public class DingTalkOauthChannelTests : DingTalkChannelTestHost
 {
     private const string TestAppKey = "dingAppKey000000000000";
     private const string TestOpenId = "oa_test_openid_1";
+    private const string TestChannelId = "dingtalk-main";
 
-    private (DomainUser<TestUserInfo> User, DingTalkOauthChannel Channel) Setup(bool failOauth = false, string? openId = TestOpenId)
+    private async Task<(DomainUser<TestUserInfo> User, DingTalkOauthChannel Channel)> Setup(bool failOauth = false, string? openId = TestOpenId)
     {
         Handler = DingTalkTestHost.CreateStubHandler(openId, failOauth: failOauth);
-        ConfigureOptions = o => o.Channels = [DingTalkTestHost.CreateChannelConfig(appKey: TestAppKey)];
+        ConfigureOptions = o => o.Channels = [DingTalkTestHost.CreateChannelConfig(channelId: TestChannelId, appKey: TestAppKey)];
         var (_, user) = BindTestScope();
-        var probe = user.Use<IChannelProbe>();
-        var channel = Assert.IsType<DingTalkOauthChannel>(
-            Assert.Single(probe.Channels, c => c.ChannelType == "dingtalk_oauth"));
-        return (user, channel);
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证从 registry 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "dingtalk_oauth");
+        return (user, Assert.IsType<DingTalkOauthChannel>(channel));
     }
 
     [Fact]
-    public void ChannelType_IsDingtalkOauth_AndChannelIdFromOptions()
+    public async Task ChannelType_IsDingtalkOauth_AndChannelId_FromFactory()
     {
+        using var _ = this;
         ConfigureOptions = o => o.Channels = [DingTalkTestHost.CreateChannelConfig(channelId: "dingtalk-app-1", appKey: TestAppKey)];
         var (_, user) = BindTestScope();
+        // 探针枚举集合（模板实例——ChannelType 标识注册）……
         var probe = user.Use<IChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "dingtalk_oauth");
-        Assert.Equal("dingtalk_oauth", channel.ChannelType);
-        Assert.Equal("dingtalk-app-1", channel.ChannelId); // ChannelId = 配置应用 id（Options.Channels 选区）
+        var template = Assert.Single(probe.Channels, c => c.ChannelType == "dingtalk_oauth");
+        Assert.Equal("dingtalk_oauth", template.ChannelType);
+        // ……真实实例经工厂构造（ChannelId = 注册表选区键）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("dingtalk-app-1", "dingtalk_oauth");
+        Assert.NotNull(channel);
+        Assert.Equal("dingtalk-app-1", channel!.ChannelId);
     }
 
     [Fact]
     public async Task AuthenticateAsync_ValidCode_ReturnsOpenId_Success()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
         var context = DingTalkTestHost.CreateContext(("code", "oauth-code-123"));
 
         var result = await channel.AuthenticateAsync(context, CancellationToken.None);
@@ -59,7 +64,7 @@ public class DingTalkOauthChannelTests : DingTalkChannelTestHost
     public async Task AuthenticateAsync_MissingCode_Fails_DINGTALK_CODE_REQUIRED()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(
             DingTalkTestHost.CreateContext(("state", "abc")), CancellationToken.None);
@@ -74,7 +79,7 @@ public class DingTalkOauthChannelTests : DingTalkChannelTestHost
     {
         // 钉钉 API 返回 400（code 非法/已消费）→ 失败 + FailReason 携带错误消息
         using var _ = this;
-        var (_, channel) = Setup(failOauth: true);
+        var (_, channel) = await Setup(failOauth: true);
 
         var result = await channel.AuthenticateAsync(
             DingTalkTestHost.CreateContext(("code", "stale-code")), CancellationToken.None);
@@ -89,7 +94,7 @@ public class DingTalkOauthChannelTests : DingTalkChannelTestHost
     {
         // 响应缺 openId 字段（scope 未含 openid）→ 失败（external_uid 恒 = openId 不可缺失）
         using var _ = this;
-        var (_, channel) = Setup(openId: null);
+        var (_, channel) = await Setup(openId: null);
 
         var result = await channel.AuthenticateAsync(
             DingTalkTestHost.CreateContext(("code", "scope-code")), CancellationToken.None);

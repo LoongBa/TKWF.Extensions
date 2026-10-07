@@ -21,17 +21,18 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     private const string TestCorpId = "ding_test_corp";
     private const string TestAesKey = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"; // 43 字符
     private const string TestOpenId = "oa_scan_openid_1";
+    private const string TestChannelId = "dingtalk-event";
 
-    private DingTalkEventChannel Setup()
+    private async Task<DingTalkEventChannel> Setup()
     {
         ConfigureOptions = o => o.Channels =
         [
-            DingTalkTestHost.CreateChannelConfig(appKey: TestAppKey, corpId: TestCorpId, token: TestToken, encodingAESKey: TestAesKey),
+            DingTalkTestHost.CreateChannelConfig(channelId: TestChannelId, appKey: TestAppKey, corpId: TestCorpId, token: TestToken, encodingAESKey: TestAesKey),
         ];
         var (_, user) = BindTestScope();
-        var probe = user.Use<IChannelProbe>();
-        return Assert.IsType<DingTalkEventChannel>(
-            Assert.Single(probe.Channels, c => c.ChannelType == "dingtalk_event"));
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证 CorpId/Token/EncodingAESKey 从 registry Extra 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "dingtalk_event");
+        return Assert.IsType<DingTalkEventChannel>(channel);
     }
 
     /// <summary>构造合法事件推送样本（msg_encrypt + signature），openId 嵌入 FromUserId、receiveid=corpId。</summary>
@@ -50,7 +51,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     public async Task AuthenticateAsync_ValidSignatureAndCipher_ReturnsFromUserId()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
 
         var result = await channel.AuthenticateAsync(
@@ -69,7 +70,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     {
         // 兼容 "msg_signature" 参数名（装配层可能透传该命名）
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
 
         var result = await channel.AuthenticateAsync(
@@ -85,7 +86,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     public async Task AuthenticateAsync_TamperedSignature_Rejected_DINGTALK_SIGNATURE_INVALID()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
         // 篡改签名末位——信任根一票否决
         var tampered = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
@@ -104,7 +105,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     public async Task AuthenticateAsync_WrongLengthSignature_Rejected_NoThrow()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, _) = BuildValidEvent();
 
         var result = await channel.AuthenticateAsync(
@@ -120,7 +121,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     public async Task AuthenticateAsync_MissingParams_Rejected_DINGTALK_EVENT_PARAMS_MISSING()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
 
         var result = await channel.AuthenticateAsync(
             DingTalkTestHost.CreateContext(("timestamp", "1234567890")), CancellationToken.None);
@@ -133,7 +134,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
     public async Task AuthenticateAsync_ValidSignatureTamperedCipher_DecryptFails()
     {
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
         // 篡改密文（换首字符）——重签指向篡改密文（验签通过）→ 解密失败（填充/格式损坏）
         var tamperedCipher = (msgEncrypt[0] == 'A' ? 'B' : 'A') + msgEncrypt[1..];
@@ -154,7 +155,7 @@ public class DingTalkEventChannelTests : DingTalkChannelTestHost
         // Oracle 评审 P1-1 第二道闸门——合法密文但 receiveid≠corpId（forged org-change event 防御）：
         // 用错误 corpId 加密 → 重签指向该密文（验签通过）→ 解密 receiveid 校验失败 → 拒
         using var _ = this;
-        var channel = Setup();
+        var channel = await Setup();
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent(receiveId: "ding_forged_corp");
 
         var result = await channel.AuthenticateAsync(

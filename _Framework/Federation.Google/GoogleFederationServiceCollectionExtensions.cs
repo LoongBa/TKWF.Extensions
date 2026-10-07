@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using TKW.Framework.Domain;
+using TKWF.Ext.Federation;
 using TKWF.Federation.Oidc;
 
 namespace TKWF.Federation.Google;
@@ -21,6 +22,9 @@ public static class GoogleFederationServiceCollectionExtensions
     {
         services.AddOptions<GoogleOptions>().Configure(o => configure?.Invoke(o));
         services.AddOidcDerivedChannels<GoogleOidcChannel>();   // 基座注册 OidcChannelFlow + 通道入集合
+
+        // 多通道联邦（v0.3.0）：静态通道来源——Google Channels 投影为统一 ChannelConfig（registry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, GoogleChannelSource>());
         return services;
     }
 }

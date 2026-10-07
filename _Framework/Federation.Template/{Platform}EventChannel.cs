@@ -1,8 +1,6 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -27,24 +25,35 @@ namespace TKWF.Federation.{Namespace};
 [DiContractIgnore]
 public sealed class {Platform}EventChannel : DomainServiceBase, ISsoChannel
 {
-    private readonly {Platform}ChannelConfig _channel;
+    private readonly ChannelConfig? _channel;
 
-    /// <summary>构造——channel 由配置选区（Channels 首项默认；多实例归后续迭代）。</summary>
-    public {Platform}EventChannel(IDomainUser user, IOptions<{Platform}Options> options) : base(user)
+    /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入；多通道联邦 v0.3.0）；
+    /// null = 集合模板实例（工厂类型索引源，不直接认证）。凭证（Token/EncodingAESKey）经 Extra 注入。</summary>
+    public {Platform}EventChannel(IDomainUser user, ChannelConfig? channel = null) : base(user)
     {
-        _channel = options?.Value.Channels.FirstOrDefault()
-            ?? throw new InvalidOperationException($"{PlatformName} 事件 channel 未配置：TKWF:Federation:{Namespace} 节 Channels 为空");
+        _channel = channel;
     }
 
     /// <inheritdoc />
     public string ChannelType => "{platform}_event";
 
     /// <inheritdoc />
-    public string ChannelId => _channel.ChannelId;
+    public string ChannelId => _channel?.ChannelId ?? "";
 
     /// <inheritdoc />
     public Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
     {
+        if (_channel is null)
+            return Task.FromResult(new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0));   // 模板实例不可直接认证
+        if (!_channel.IsEnabled)
+            return Task.FromResult(new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0));
+
+        // 平台特定负载（Extra——Token/EncodingAESKey 事件验签信任根）
+        _channel.Extra.TryGetValue("Token", out var token);
+        _channel.Extra.TryGetValue("EncodingAESKey", out var encodingAesKey);
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(encodingAesKey))
+            return Task.FromResult(new SsoChannelAuthResult(false, null, $"{PlatformName}_EVENT_CONFIG_MISSING", 0));
+
         if (context.Parameters == null)
             return Task.FromResult(new SsoChannelAuthResult(false, null, $"{PlatformName}_EVENT_PARAMS_MISSING", 0));
 
@@ -59,13 +68,13 @@ public sealed class {Platform}EventChannel : DomainServiceBase, ISsoChannel
             return Task.FromResult(new SsoChannelAuthResult(false, null, $"{PlatformName}_EVENT_PARAMS_MISSING", 0));
 
         // 信任根一票否决：验签失败 → 拒绝（绝不解密伪造密文）
-        if (!{Platform}EventCrypto.VerifySignature(_channel.Token, timestamp!, nonce!, msgEncrypt!, signature!))
+        if (!{Platform}EventCrypto.VerifySignature(token!, timestamp!, nonce!, msgEncrypt!, signature!))
             return Task.FromResult(new SsoChannelAuthResult(false, null, $"{PlatformName}_SIGNATURE_INVALID", 0));
 
         try
         {
             // 解密 → FromUserName(external_uid)
-            var xml = {Platform}EventCrypto.DecryptMsg(_channel.EncodingAESKey, msgEncrypt!);
+            var xml = {Platform}EventCrypto.DecryptMsg(encodingAesKey!, msgEncrypt!);
             var externalUserId = {Platform}EventCrypto.ExtractFromUserName(xml);
             return Task.FromResult(new SsoChannelAuthResult(true, externalUserId, null, 2));  // AuthLevel=2
         }

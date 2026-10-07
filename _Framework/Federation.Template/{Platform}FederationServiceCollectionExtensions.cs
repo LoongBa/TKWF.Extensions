@@ -47,6 +47,9 @@ public static class {Platform}FederationServiceCollectionExtensions
         // 有入站回调平台追加：
         // services.TryAddEnumerableConstructible<ISsoChannel, {Platform}EventChannel>();
 
+        // 多通道联邦（v0.3.0）：静态通道来源——{Platform} Channels 投影为统一 ChannelConfig（StaticChannelRegistry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, {Platform}ChannelSource>());
+
         return services;
     }
 }

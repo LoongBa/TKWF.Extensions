@@ -17,34 +17,38 @@ public class QqOauthChannelTests : QqChannelTestHost
 {
     private const string TestAppId = "test-appid";
     private const string TestOpenId = "test_openid_1";
+    private const string TestChannelId = "qq-main";
 
-    private (DomainUser<TestUserInfo> User, QqOauthChannel Channel) Setup(bool failOauth = false, bool failMe = false, bool redirectMismatch = false)
+    private async Task<(DomainUser<TestUserInfo> User, QqOauthChannel Channel)> Setup(bool failOauth = false, bool failMe = false, bool redirectMismatch = false)
     {
         Handler = QqTestHost.CreateStubHandler(TestOpenId, failOauth: failOauth, failMe: failMe, redirectMismatch: redirectMismatch);
-        ConfigureOptions = o => o.Channels = [QqTestHost.CreateChannelConfig(appId: TestAppId)];
+        ConfigureOptions = o => o.Channels = [QqTestHost.CreateChannelConfig(channelId: TestChannelId, appId: TestAppId)];
         var (_, user) = BindTestScope();
-        var probe = user.Use<IChannelProbe>();
-        var channel = Assert.IsType<QqOauthChannel>(
-            Assert.Single(probe.Channels, c => c.ChannelType == "qq_oauth"));
-        return (user, channel);
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证从 registry 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "qq_oauth");
+        return (user, Assert.IsType<QqOauthChannel>(channel));
     }
 
     [Fact]
-    public void ChannelType_IsQqOauth_AndChannelIdFromOptions()
+    public async Task ChannelType_IsQqOauth_AndChannelId_FromFactory()
     {
-        ConfigureOptions = o => o.Channels = [QqTestHost.CreateChannelConfig(channelId: "qq-main", appId: TestAppId)];
+        ConfigureOptions = o => o.Channels = [QqTestHost.CreateChannelConfig(channelId: TestChannelId, appId: TestAppId)];
         var (_, user) = BindTestScope();
+        // 探针枚举集合（模板实例——ChannelType 标识注册）……
         var probe = user.Use<IChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "qq_oauth");
-        Assert.Equal("qq_oauth", channel.ChannelType);
-        Assert.Equal("qq-main", channel.ChannelId); // ChannelId = 配置 channel id（Options.Channels 选区）
+        var template = Assert.Single(probe.Channels, c => c.ChannelType == "qq_oauth");
+        Assert.Equal("qq_oauth", template.ChannelType);
+        // ……真实实例经工厂构造（ChannelId = 注册表选区键）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "qq_oauth");
+        Assert.NotNull(channel);
+        Assert.Equal(TestChannelId, channel!.ChannelId);
     }
 
     [Fact]
     public async Task AuthenticateAsync_ValidCode_ReturnsOpenId_Success()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
         var context = QqTestHost.CreateContext(
             ("code", "qq-oauth-code-123"),
             ("redirect_uri", QqTestHost.TestRedirectUri));
@@ -61,7 +65,7 @@ public class QqOauthChannelTests : QqChannelTestHost
     public async Task AuthenticateAsync_MissingCode_Fails_QQ_CODE_REQUIRED()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(
             QqTestHost.CreateContext(
@@ -79,7 +83,7 @@ public class QqOauthChannelTests : QqChannelTestHost
     {
         // P1-4：redirect_uri 必填——缺省拒（防 code 窃取后换 token 攻击面：无 redirect_uri 不发出换取）
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(
             QqTestHost.CreateContext(("code", "qq-oauth-code-123")),
@@ -95,7 +99,7 @@ public class QqOauthChannelTests : QqChannelTestHost
     {
         // P1-4 验收「redirect_uri 不一致拒」：QQ 服务端比对失败（stub 模拟 error 100030）→ 通道失败
         using var _ = this;
-        var (_, channel) = Setup(redirectMismatch: true);
+        var (_, channel) = await Setup(redirectMismatch: true);
 
         var result = await channel.AuthenticateAsync(
             QqTestHost.CreateContext(
@@ -114,7 +118,7 @@ public class QqOauthChannelTests : QqChannelTestHost
     {
         // QQ 出站换取链第一步（token 端点）返回 error 模型错误（code 非法/已消费）→ 失败 + FailReason 携带错误消息
         using var _ = this;
-        var (_, channel) = Setup(failOauth: true);
+        var (_, channel) = await Setup(failOauth: true);
 
         var result = await channel.AuthenticateAsync(
             QqTestHost.CreateContext(
@@ -133,7 +137,7 @@ public class QqOauthChannelTests : QqChannelTestHost
     {
         // 换取链第二步（/me 端点）失败——token 有效但 openid 换取被拒
         using var _ = this;
-        var (_, channel) = Setup(failMe: true);
+        var (_, channel) = await Setup(failMe: true);
 
         var result = await channel.AuthenticateAsync(
             QqTestHost.CreateContext(

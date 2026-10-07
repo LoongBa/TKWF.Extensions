@@ -39,7 +39,11 @@ public static class WeComFederationServiceCollectionExtensions
         // 出站客户端：HttpClient 经 typed client 注入（AddHttpClient<WeComApiClient>——ctor 收 HttpClient）
         services.AddHttpClient<WeComApiClient>();
 
+        // 多通道联邦（v0.3.0）：静态通道来源——企业微信 Channels 投影为统一 ChannelConfig（StaticChannelRegistry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, WeComChannelSource>());
+
         // ISsoChannel 多实现集合守卫工厂（ADR92）——OAuth 通道 + 事件通道
+        // （v0.3.0 多通道：集合元素 = 模板实例——SsoChannelFactory 按 ChannelType 匹配具体类型 + 按 channelId 按需构造）
         services.TryAddEnumerableConstructible<ISsoChannel, WeComOauthChannel>();
         services.TryAddEnumerableConstructible<ISsoChannel, WeComEventChannel>();
 

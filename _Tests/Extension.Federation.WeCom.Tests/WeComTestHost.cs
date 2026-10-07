@@ -216,6 +216,15 @@ public class WeComChannelTestHost : TestHostBase
         // 通道注册（TryAddEnumerableConstructible）——真实生产注册形态
         services.AddWeComFederationChannels(ConfigureOptions);
 
+        // 多通道联邦核心门面（v0.3.0）——平台库测试宿主不启动 FederationExtensionInitializer，
+        // 需补注册"已启用 Federation"的最小生产等价面（对齐 FederationExtensionInitializer.ConfigureServices
+        // 对应片段）：StaticChannelRegistry + CompositeChannelRegistry + SsoChannelFactory + SsoLogin
+        services.AddOptions<FederationStaticChannelOptions>();
+        services.AddScoped<StaticChannelRegistry>();
+        services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
+        services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
+        services.AddConstructibleService<ISsoLogin, SsoLogin>();
+
         // 探针门面——帧内枚举 ISsoChannel 集合（守卫工厂供给）
         services.AddConstructibleService<IChannelProbe, ChannelProbe>();
 

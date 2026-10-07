@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -235,10 +236,21 @@ public class OidcChannelTestHost : TestHostBase
         else
         {
             // 派生通道测试（M2 形态预验证）——TestDerivedChannel ctor 经 AddOidcDerivedChannels
-            services.AddSingleton<IOptions<TestDerivedOptions>>(_ => Microsoft.Extensions.Options.Options.Create(
+            services.AddSingleton<IOptions<TestDerivedOptions>>(_ => Options.Create(
                 new TestDerivedOptions { Channels = [new TestDerivedConfig { ChannelId = "derived-1", ClientId = "derived-client" }] }));
             services.AddOidcDerivedChannels<TestDerivedChannel>();
+            // 测试派生通道静态来源（TestDerivedOptions.Channels 投影——registry 聚合选区）
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, TestDerivedChannelSource>());
         }
+
+        // 多通道联邦核心门面（v0.3.0）——平台库测试宿主不启动 FederationExtensionInitializer，
+        // 需补注册"已启用 Federation"的最小生产等价面（对齐 FederationExtensionInitializer.ConfigureServices
+        // 对应片段）：StaticChannelRegistry + CompositeChannelRegistry + SsoChannelFactory + SsoLogin
+        services.AddOptions<FederationStaticChannelOptions>();
+        services.AddScoped<StaticChannelRegistry>();
+        services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
+        services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
+        services.AddConstructibleService<ISsoLogin, SsoLogin>();
 
         services.AddConstructibleService<IOidcChannelProbe, OidcChannelProbe>();
         services.AddSingleton<IHttpClientFactory>(_ => new StubHttpClientFactory(TestOidcHandler));
@@ -265,27 +277,55 @@ public sealed class TestDerivedOptions
     public List<TestDerivedConfig> Channels { get; set; } = [];
 }
 
+/// <summary>
+/// 测试派生通道静态来源（多通道联邦 v0.3.0）——<see cref="TestDerivedOptions.Channels"/> 投影为统一
+/// <see cref="ChannelConfig"/>（ClientId→公共列 AppId、TokenIssuers 进 Extra），供 registry 聚合选区。
+/// PlatformType = "derived"（与 <c>derived_oidc</c> 前缀匹配——工厂 null 选区推导兼容）。
+/// </summary>
+public sealed class TestDerivedChannelSource : IChannelSource
+{
+    private readonly IOptions<TestDerivedOptions> _options;
+
+    public TestDerivedChannelSource(IOptions<TestDerivedOptions> options)
+    {
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+    }
+
+    public string PlatformType => "derived";
+
+    public IReadOnlyList<ChannelConfig> GetChannels()
+        => _options.Value.Channels
+            .Select(c => new ChannelConfig
+            {
+                ChannelId = c.ChannelId,
+                PlatformType = PlatformType,
+                AppId = string.IsNullOrWhiteSpace(c.ClientId) ? null : c.ClientId,
+                Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    [OidcChannelConfigKeys.Platform] = "derived",
+                    [OidcChannelConfigKeys.TokenIssuers] = JsonSerializer.Serialize(c.TokenIssuers),
+                },
+            })
+            .ToList();
+}
+
 public sealed class TestDerivedChannel : OidcChannelBase
 {
-    private readonly OidcPlatformConfig _config;
-
-    public TestDerivedChannel(IDomainUser user, OidcChannelFlow flow, IOptions<TestDerivedOptions> options)
-        : base(user, flow)
+    /// <summary>构造——channel 由工厂预取（POCO 非域服务）；null = 集合模板实例（Defaults 填端点）。</summary>
+    public TestDerivedChannel(IDomainUser user, OidcChannelFlow flow, ChannelConfig? channel = null)
+        : base(user, flow, channel)
     {
-        var cfg = options.Value.Channels[0];
-        _config = MergeConfig(new OidcPlatformConfig
-        {
-            Platform = "derived",
-            TokenUri = "https://stub.example.com/token",
-            JwksUri = "https://stub.example.com/jwks",
-            AuthorizeUri = "https://stub.example.com/authorize",
-            Scopes = ["openid"],
-            TokenIssuers = ["https://stub.example.com"],
-        }, new OidcPlatformConfig { ChannelId = cfg.ChannelId, ClientId = cfg.ClientId, TokenIssuers = cfg.TokenIssuers });
     }
 
     public override string ChannelType => "derived_oidc";
-    protected override OidcPlatformConfig EffectiveConfig => _config;
     protected override string BuildChannelId(OidcPlatformConfig config) => $"{ChannelType}:{config.ClientId}";   // pairwise 复合编码
-    protected override OidcPlatformConfig Defaults() => new();
+    protected override OidcPlatformConfig Defaults() => new()
+    {
+        Platform = "derived",
+        TokenUri = "https://stub.example.com/token",
+        JwksUri = "https://stub.example.com/jwks",
+        AuthorizeUri = "https://stub.example.com/authorize",
+        Scopes = ["openid"],
+        TokenIssuers = ["https://stub.example.com"],
+    };
 }

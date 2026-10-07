@@ -26,35 +26,35 @@ public class OidcDerivedChannelTests : DerivedChannelTestHost
     private RSA _privateKey = RSA.Create(2048);
     private StubOidcHandler.OidcStubOptions _stub = new(Issuer, "derived-client", "oidc_stub_sub");
 
-    private (DomainUser<TestUserInfo> User, ISsoChannel Channel) SetupDerived()
+    private async Task<(DomainUser<TestUserInfo> User, ISsoChannel Channel)> SetupDerived()
     {
         TestOidcHandler = new StubOidcHandler(_privateKey, Kid, () => _stub);
         var (_, user) = BindScope();
-        var probe = user.Use<IOidcChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "derived_oidc");
-        return (user, channel);
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证从 registry 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("derived-1", "derived_oidc");
+        return (user, Assert.IsType<TestDerivedChannel>(channel));
     }
 
     // ---- F3：pairwise 复合编码断言（N2 §3.3 定案：channel_id = {platform}_oidc:{client_id}）----
 
     [Fact]
-    public void ChannelId_PairwiseComposite_ContainsClientId()
+    public async Task ChannelId_PairwiseComposite_ContainsClientId()
     {
         ClientId = "microsoft-app-1";   // 模拟 Microsoft App（pairwise sub 按 client_id 派生）
-        var (_, channel) = SetupDerived();
+        var (_, channel) = await SetupDerived();
 
         Assert.Equal("derived_oidc:microsoft-app-1", channel.ChannelId);
     }
 
     [Fact]
-    public void SameUser_DifferentClientId_DifferentChannelId_NoMerge()
+    public async Task SameUser_DifferentClientId_DifferentChannelId_NoMerge()
     {
         ClientId = "app-a";
-        var (_, channelA) = SetupDerived();
+        var (_, channelA) = await SetupDerived();
         Assert.Equal("derived_oidc:app-a", channelA.ChannelId);
 
         ClientId = "app-b";   // 同用户不同 App（pairwise 跨 App sub 不同→不同 channel_id）
-        var (_, channelB) = SetupDerived();
+        var (_, channelB) = await SetupDerived();
         Assert.Equal("derived_oidc:app-b", channelB.ChannelId);
 
         // channel_id 不同 → 映射表 (channel_id, sub) 不同行 → 不误并（N2 §3.2：各自映射，绑定并合经用户验证）
@@ -84,14 +84,15 @@ public class OidcDerivedChannelTests : DerivedChannelTestHost
         var probe = user.Use<IOidcChannelProbe>();
 
         Assert.Contains(probe.Channels, c => c.ChannelType == "derived_oidc");     // 派生通道在集合
-        Assert.Contains(probe.Channels, c => c.ChannelType == "keycloak_oidc");    // 直配通道在集合
+        Assert.Contains(probe.Channels, c => c.ChannelType == "oidc_oidc");        // 直配通道在集合（稳定类型）
         Assert.Equal(2, probe.Channels.Count);                                     // 两通道并存枚举
     }
 }
 
 /// <summary>
-/// 派生通道测试宿主——真实 DI（<c>AddOidcDerivedChannels</c> + 探针门面 + Stub HttpClientFactory），
-/// ClientId 可配（pairwise 复合编码断言前提）；ExtraConfigurator 支持追加注册（多 IdP 枚举）。
+/// 派生通道测试宿主——真实 DI（<c>AddOidcDerivedChannels</c> + 测试派生通道来源 + 多通道联邦核心门面 +
+/// 探针门面 + Stub HttpClientFactory），ClientId 可配（pairwise 复合编码断言前提）；ExtraConfigurator
+/// 支持追加注册（多 IdP 枚举）。
 /// </summary>
 public class DerivedChannelTestHost : TestHostBase
 {
@@ -115,7 +116,17 @@ public class DerivedChannelTestHost : TestHostBase
         services.AddSingleton<IOptions<TestDerivedOptions>>(_ => Options.Create(
             new TestDerivedOptions { Channels = [new TestDerivedConfig { ChannelId = "derived-1", ClientId = ClientId }] }));
         services.AddOidcDerivedChannels<TestDerivedChannel>();
+        // 测试派生通道静态来源（TestDerivedOptions.Channels 投影——registry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, TestDerivedChannelSource>());
         ExtraConfigurator?.Invoke(services);
+
+        // 多通道联邦核心门面（v0.3.0）——不启动 FederationExtensionInitializer 的最小生产等价面
+        services.AddOptions<FederationStaticChannelOptions>();
+        services.AddScoped<StaticChannelRegistry>();
+        services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
+        services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
+        services.AddConstructibleService<ISsoLogin, SsoLogin>();
+
         services.AddConstructibleService<IOidcChannelProbe, OidcChannelProbe>();
         services.AddSingleton<IHttpClientFactory>(_ => new StubHttpClientFactory(TestOidcHandler));
     }

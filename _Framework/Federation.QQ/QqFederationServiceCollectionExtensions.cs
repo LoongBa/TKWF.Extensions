@@ -34,15 +34,19 @@ public static class QqFederationServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // QqOptions：SG1 [Options("TKWF:Federation:QQ")] 消费方自动绑定 + AddOptions 兜底默认值 +
-        // 编程式 configure 覆盖（测试/装配动态注入）。
+// QqOptions：SG1 [Options("TKWF:Federation:QQ")] 消费方自动绑定 + AddOptions 兜底默认值 +
+        // 编程式 configure 覆盖（测试/动态装配注入）。
         // ⚠️ 禁止 BuildServiceProvider 提前解析（临时根容器 + Scoped 捕获异常）——延迟应用配置
         services.AddOptions<QqOptions>().Configure(o => configure?.Invoke(o));
 
         // 出站客户端：HttpClient 经 typed client 注入（AddHttpClient<QqApiClient>——ctor 收 HttpClient）
         services.AddHttpClient<QqApiClient>();
 
+        // 多通道联邦（v0.3.0）：静态通道来源——QQ Channels 投影为统一 ChannelConfig（StaticChannelRegistry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, QqChannelSource>());
+
         // ISsoChannel 多实现集合守卫工厂（ADR92）——仅 OAuth 通道（QQ 无入站回调，出站-only 形态）
+        // （v0.3.0 多通道：集合元素 = 模板实例——SsoChannelFactory 按 ChannelType 匹配 + 按 channelId 按需构造）
         services.TryAddEnumerableConstructible<ISsoChannel, QqOauthChannel>();
 
         return services;

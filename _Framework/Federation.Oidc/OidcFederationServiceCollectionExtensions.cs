@@ -20,7 +20,9 @@ namespace TKWF.Federation.Oidc;
 /// </summary>
 public static class OidcFederationServiceCollectionExtensions
 {
-    /// <summary>自托管 IdP 直配（免平台库）——<c>OidcConfiguredChannel</c> 具体包装通道注册。</summary>
+    /// <summary>自托管 IdP 直配（免平台库）——<c>OidcConfiguredChannel</c> 具体包装通道注册。
+    /// <para>v0.3.0 多通道联邦：直配形态保留（编程式向 <c>OidcOptions.Channels</c> 追加 + 注册通道），
+    /// 最终经 <c>OidcOptions.Channels → <see cref="OidcChannelSource"/></c> 投影（<see cref="StaticChannelRegistry"/> 聚合选区）。</para></summary>
     public static IServiceCollection AddOidcFederationChannel(
         this IServiceCollection services, string name, Action<OidcPlatformConfig>? configure = null)
     {
@@ -33,6 +35,9 @@ public static class OidcFederationServiceCollectionExtensions
             configure?.Invoke(cfg);
             o.Channels.Add(cfg);
         });
+
+        // 多通道联邦（v0.3.0）：静态通道来源——OidcOptions.Channels 投影为统一 ChannelConfig（registry 聚合选区）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, OidcChannelSource>());
 
         // OidcChannelFlow（typed client——OIDC 原语委托引擎后：流内自持 JwksManager 缓存 + 引擎协作，无独立 JwksManager/Validator 注册）
         services.AddHttpClient<OidcChannelFlow>();

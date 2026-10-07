@@ -13,6 +13,7 @@ namespace TKWF.Federation.WeCom.Tests;
 /// （真实 DI + <c>AddWeComFederationChannels</c> + 探针门面帧内枚举）+ Stub 企业微信 API。
 /// <para>验收（M4 方案 F2）：<b>external_uid 三路径双策略（Oracle 评审 P0-1）</b>——三方成员 open_userid /
 /// 自建成员 {CorpId}:{userid} 复合 / 非成员 openid；缺 code 拒；API 错误拒；AgentId fail-fast（P1-5）。</para>
+/// <para>v0.3.0 多通道：真实实例经 <see cref="ISsoChannelFactory"/> 按 channelId 构造（凭证从 registry Extra 懒加载）。</para>
 /// </summary>
 public class WeComOauthChannelTests : WeComChannelTestHost
 {
@@ -20,8 +21,9 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     private const string TestUserId = "usr_123";
     private const string TestOpenUserId = "ou_test_1";
     private const string TestOpenId = "oa_test_openid_1";
+    private const string TestChannelId = "wecom-main";
 
-    private (DomainUser<TestUserInfo> User, WeComOauthChannel Channel) Setup(
+    private async Task<(DomainUser<TestUserInfo> User, WeComOauthChannel Channel)> Setup(
         WeComMemberType memberType = WeComMemberType.SelfMember,
         bool isThirdParty = false,
         bool failOauth = false,
@@ -31,24 +33,27 @@ public class WeComOauthChannelTests : WeComChannelTestHost
         Handler = WeComTestHost.CreateStubHandler(memberType, corpId: TestCorpId, failOauth: failOauth);
         ConfigureOptions = o => o.Channels =
         [
-            WeComTestHost.CreateChannelConfig(corpId: TestCorpId, isThirdParty: isThirdParty, enableSensitiveInfo: enableSensitiveInfo, agentId: agentId),
+            WeComTestHost.CreateChannelConfig(channelId: TestChannelId, corpId: TestCorpId, isThirdParty: isThirdParty, enableSensitiveInfo: enableSensitiveInfo, agentId: agentId),
         ];
         var (_, user) = BindTestScope();
-        var probe = user.Use<IChannelProbe>();
-        var channel = Assert.IsType<WeComOauthChannel>(
-            Assert.Single(probe.Channels, c => c.ChannelType == "wecom_oauth"));
-        return (user, channel);
+        // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实通道（凭证从 registry Extra 懒加载）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth");
+        return (user, Assert.IsType<WeComOauthChannel>(channel));
     }
 
     [Fact]
-    public void ChannelType_IsWecomOauth_AndChannelIdFromOptions()
+    public async Task ChannelType_IsWecomOauth_AndChannelId_FromFactory()
     {
-        ConfigureOptions = o => o.Channels = [WeComTestHost.CreateChannelConfig(channelId: "wecom-app-1")];
+        ConfigureOptions = o => o.Channels = [WeComTestHost.CreateChannelConfig(channelId: TestChannelId)];
         var (_, user) = BindTestScope();
+        // 探针枚举集合（模板实例——ChannelType 标识注册）……
         var probe = user.Use<IChannelProbe>();
-        var channel = Assert.Single(probe.Channels, c => c.ChannelType == "wecom_oauth");
-        Assert.Equal("wecom_oauth", channel.ChannelType);
-        Assert.Equal("wecom-app-1", channel.ChannelId); // ChannelId = 配置应用 id（Options.Channels 选区）
+        var template = Assert.Single(probe.Channels, c => c.ChannelType == "wecom_oauth");
+        Assert.Equal("wecom_oauth", template.ChannelType);
+        // ……真实实例经工厂构造（ChannelId = 注册表选区键）
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth");
+        Assert.NotNull(channel);
+        Assert.Equal(TestChannelId, channel!.ChannelId);
     }
 
     [Fact]
@@ -56,7 +61,7 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     {
         // 自建应用企业成员——external_uid = {CorpId}:{userid} 复合（P0-1 双策略：互联企业 CorpId 消歧）
         using var _ = this;
-        var (_, channel) = Setup(WeComMemberType.SelfMember, isThirdParty: false);
+        var (_, channel) = await Setup(WeComMemberType.SelfMember, isThirdParty: false);
 
         var result = await channel.AuthenticateAsync(
             WeComTestHost.CreateContext(("code", "oauth-code-1")), CancellationToken.None);
@@ -72,7 +77,7 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     {
         // 三方应用企业成员——external_uid = open_userid（全局唯一零复用风险，直接作映射主键）
         using var _ = this;
-        var (_, channel) = Setup(WeComMemberType.ThirdPartyMember, isThirdParty: true);
+        var (_, channel) = await Setup(WeComMemberType.ThirdPartyMember, isThirdParty: true);
 
         var result = await channel.AuthenticateAsync(
             WeComTestHost.CreateContext(("code", "oauth-code-3rd")), CancellationToken.None);
@@ -87,7 +92,7 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     {
         // 非企业成员——external_uid = openid（对当前企业唯一）
         using var _ = this;
-        var (_, channel) = Setup(WeComMemberType.NonMember, isThirdParty: false);
+        var (_, channel) = await Setup(WeComMemberType.NonMember, isThirdParty: false);
 
         var result = await channel.AuthenticateAsync(
             WeComTestHost.CreateContext(("code", "oauth-code-openid")), CancellationToken.None);
@@ -101,7 +106,7 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     public async Task AuthenticateAsync_MissingCode_Fails_WECOM_CODE_REQUIRED()
     {
         using var _ = this;
-        var (_, channel) = Setup();
+        var (_, channel) = await Setup();
 
         var result = await channel.AuthenticateAsync(
             WeComTestHost.CreateContext(("state", "abc")), CancellationToken.None);
@@ -116,7 +121,7 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     {
         // 企业微信 API 返回 errcode（code 非法/已消费）→ 失败 + FailReason 携带错误消息
         using var _ = this;
-        var (_, channel) = Setup(failOauth: true);
+        var (_, channel) = await Setup(failOauth: true);
 
         var result = await channel.AuthenticateAsync(
             WeComTestHost.CreateContext(("code", "stale-code")), CancellationToken.None);
@@ -127,17 +132,16 @@ public class WeComOauthChannelTests : WeComChannelTestHost
     }
 
     [Fact]
-    public void Ctor_EnableSensitiveInfoWithoutAgentId_FailsFast()
+    public async Task Ctor_EnableSensitiveInfoWithoutAgentId_FailsFast()
     {
-        // Oracle 评审 P1-5：snsapi_privateinfo 授权必填 AgentId——启用且缺 → 启动 fail-fast（不静默降级）
+        // Oracle 评审 P1-5：snsapi_privateinfo 授权必填 AgentId——启用且缺 → 构造 fail-fast（不静默降级）。
+        // v0.3.0：模板实例（channel=null）无配置可校验；经工厂构造真实实例（channel 非空）时 ctor 抛
         ConfigureOptions = o => o.Channels =
         [
-            WeComTestHost.CreateChannelConfig(corpId: TestCorpId, enableSensitiveInfo: true, agentId: ""),
+            WeComTestHost.CreateChannelConfig(channelId: TestChannelId, corpId: TestCorpId, enableSensitiveInfo: true, agentId: ""),
         ];
-        Assert.ThrowsAny<Exception>(() =>
-        {
-            var (_, user) = BindTestScope();
-            user.Use<IChannelProbe>();  // 帧内枚举 ISsoChannel 集合 → WeComOauthChannel ctor 抛 fail-fast
-        });
+        var (_, user) = BindTestScope();
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth"));
     }
 }

@@ -1,8 +1,6 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -11,45 +9,52 @@ using TKWF.Ext.Federation;
 namespace TKWF.Federation.QQ;
 
 /// <summary>
-/// QQ 互联 OAuth 通道（`ISsoChannel: qq_oauth`）——QQ 网页授权身份获取（出站-only 形态，N3 T3）。
+/// QQ 互联 OAuth 通道（`ISsoChannel: qq_oauth`）——QQ 网页授权身份获取（出站-only 形态，N3 T3 + 多通道联邦 v0.3.0）。
 /// <para>流程：装配层构造 QQ authorize URL（graph.qq.com/oauth2.0/authorize——client_id + redirect_uri + state 必填
 /// + scope 默认 get_user_info + display；**authorize 构造归装配层、通道不感知 state——N3 P1-3**）→ 授权回调带 code →
 /// 本通道 <see cref="AuthenticateAsync"/> 经 <see cref="QqApiClient"/> code→access_token（redirect_uri 一致性校验
 /// ——N3 P1-4 + OAuth RFC 6749 §4.1.3）→/me→openid（一次性链，用户级 token 不缓存——N3 P1-5）→
 /// 返回 <see cref="SsoChannelAuthResult"/>（ExternalUserId=openid，**始终 = openid 稳定映射键——N3 P1-2**），
 /// 归一 <c>(channel_id, openid) → uid</c>（编排层/装配层）。AuthLevel=2。</para>
-/// <para>注册：库扩展方法 <c>AddQqFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92 集合版守卫工厂）——
-/// 集合元素 ctor 注入 IDomainUser 由帧内 CurrentAopUser 供给；channel 业务参数（ChannelId/凭证）经 Options 注入
-/// 不占 ctor IDomainUser 槽。<c>[DiContractIgnore]</c>：运行时手写注册豁免 DI001。
-/// 本实现继承 <see cref="DomainServiceBase"/>（经基类 <c>User</c> 取上下文——tkwf-extension §4.3 铁律）。</para>
+/// <para><b>多通道联邦（v0.3.0 选区机制，Oracle M1/M2/M8）</b>：ctor 收 <see cref="ChannelConfig"/>
+/// （<see cref="ISsoChannelFactory"/> 预取传入——POCO 非域服务规避 DI004 与 DomainHost 依赖）；凭证
+/// （AppId/AppSecret/EnableUnionId）在 <c>AuthenticateAsync</c> 从 <see cref="ChannelConfig"/> 使用
+/// （EnableUnionId 经 Extra 承载——QQ 特有开关，N3 §3.3）。<paramref name="channel"/> 为 null = 集合模板实例
+/// （工厂类型索引源，不直接认证）。</para>
+/// <para>注册：库扩展方法 <c>AddQqFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92 集合版守卫工厂）+
+/// <see cref="QqChannelSource"/>（IChannelSource——静态配置投影统一 ChannelConfig）。</para>
 /// </summary>
 [DiContractIgnore]
 public sealed class QqOauthChannel : DomainServiceBase, ISsoChannel
 {
     private readonly QqApiClient _api;
-    private readonly QqChannelConfig _channel;
+    private readonly ChannelConfig? _channel;
 
-    /// <summary>构造——channel 由配置选区（Channels 首项为默认；多实例按 <see cref="ISsoChannel.ChannelId"/> 选区归后续迭代）。</summary>
+    /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入）；null = 集合模板实例。</summary>
     public QqOauthChannel(
         IDomainUser user,
         QqApiClient api,
-        IOptions<QqOptions> options)
+        ChannelConfig? channel = null)
         : base(user)
     {
         _api = api ?? throw new ArgumentNullException(nameof(api));
-        _channel = options?.Value.Channels.FirstOrDefault()
-            ?? throw new InvalidOperationException("QQ OAuth channel 未配置：TKWF:Federation:QQ 节 Channels 为空");
+        _channel = channel;
     }
 
     /// <inheritdoc />
     public string ChannelType => "qq_oauth";
 
     /// <inheritdoc />
-    public string ChannelId => _channel.ChannelId;
+    public string ChannelId => _channel?.ChannelId ?? "";
 
     /// <inheritdoc />
     public async Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
     {
+        if (_channel is null)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0);   // 模板实例不可直接认证
+        if (!_channel.IsEnabled)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0);
+
         if (context.Parameters == null
             || !context.Parameters.TryGetValue("code", out var code)
             || string.IsNullOrWhiteSpace(code))
@@ -66,8 +71,8 @@ public sealed class QqOauthChannel : DomainServiceBase, ISsoChannel
 
             // QQ 换取链（一次性，用户级 token 不缓存 P1-5）：code→access_token→/me→openid
             // external_uid 始终 = openid（应用维度稳定映射键，P1-2）
-            var accessToken = await _api.GetAccessTokenAsync(_channel.AppId, code, redirectUri, ct);
-            var openId = await _api.GetOpenIdAsync(_channel.AppId, accessToken, ct);
+            var accessToken = await _api.GetAccessTokenAsync(_channel.AppId!, code, redirectUri, ct);
+            var openId = await _api.GetOpenIdAsync(_channel.AppId!, accessToken, ct);
             return new SsoChannelAuthResult(true, openId, null, 2);  // AuthLevel=2 平台便捷
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Net.Http.HttpRequestException or System.Text.Json.JsonException)

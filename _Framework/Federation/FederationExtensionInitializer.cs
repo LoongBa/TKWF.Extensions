@@ -71,6 +71,19 @@ namespace TKWF.Ext.Federation;
         services.AddConstructibleService<ISsoAccessCodeService, SsoAccessCodeService>();
         services.AddConstructibleService<ISsoClientService, SsoClientService>();
         services.AddConstructibleService<ISsoProfileService, SsoProfileService>();
+
+        // ── 多通道联邦（v0.3.0，方案 docs/Federation/多通道联邦-开发方案.md §3.2/3.4）──
+        // 通道注册表门面：Composite = 组合语义单点（Phase 1 内部仅 Static；Phase 2 注入 Db 零返工）；
+        // StaticChannelRegistry 具体类注册（普通 DI——Composite 守卫工厂 ActivatorUtilities 解析依赖）
+        services.AddScoped<StaticChannelRegistry>();
+        services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
+
+        // 通道工厂 + 登录编排门面（Oracle M8：Singleton 守卫工厂，CreateAsync 帧内构造供给 IDomainUser）
+        services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
+        services.AddConstructibleService<ISsoLogin, SsoLogin>();
+
+        // 多通道联邦静态配置节（TKWF:Federation:Channels——跨平台通用设置，平台凭证仍归各平台库节）
+        services.AddOptions<FederationStaticChannelOptions>();
     }
 
     /// <summary>

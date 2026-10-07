@@ -1,8 +1,6 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -27,30 +25,35 @@ namespace TKWF.Federation.WeChat;
 public sealed class WeChatOauthChannel : DomainServiceBase, ISsoChannel
 {
     private readonly WeChatApiClient _weChatApi;
-    private readonly WeChatChannelConfig _channel;
+    private readonly ChannelConfig? _channel;
 
-    /// <summary>构造——channel 由配置选区（Channels 首项为默认公众号；多公众号按 <see cref="ISsoChannel.ChannelId"/>
-    /// 选区——当前 v0.1.0 取 Channels[0] 默认，多实例选区增强归后续迭代）。</summary>
+    /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
+    /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
+    /// 凭证（AppId/AppSecret）在 <c>AuthenticateAsync</c> 从 cfg 使用（懒加载——Oracle M1 意图保持）。</summary>
     public WeChatOauthChannel(
         IDomainUser user,
         WeChatApiClient weChatApi,
-        IOptions<WeChatOptions> options)
+        ChannelConfig? channel = null)
         : base(user)
     {
         _weChatApi = weChatApi ?? throw new ArgumentNullException(nameof(weChatApi));
-        _channel = options?.Value.Channels.FirstOrDefault()
-            ?? throw new InvalidOperationException("微信 OAuth channel 未配置：TKWF:Federation:WeChat 节 Channels 为空");
+        _channel = channel;
     }
 
     /// <inheritdoc />
     public string ChannelType => "wechat_oauth";
 
     /// <inheritdoc />
-    public string ChannelId => _channel.ChannelId;
+    public string ChannelId => _channel?.ChannelId ?? "";
 
     /// <inheritdoc />
     public async Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
     {
+        if (_channel is null)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0);   // 模板实例不可直接认证
+        if (!_channel.IsEnabled)
+            return new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0);
+
         if (context.Parameters == null
             || !context.Parameters.TryGetValue("code", out var code)
             || string.IsNullOrWhiteSpace(code))
@@ -59,7 +62,7 @@ public sealed class WeChatOauthChannel : DomainServiceBase, ISsoChannel
         try
         {
             // code 是微信 OAuth 授权码（与发起授权的 AppId 绑定）——按本 channel 的 AppId 换 openid
-            var openId = await _weChatApi.GetOpenIdAsync(_channel.AppId, code, ct);
+            var openId = await _weChatApi.GetOpenIdAsync(_channel.AppId!, code, ct);
             return new SsoChannelAuthResult(true, openId, null, 2);  // AuthLevel=2 微信便捷
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Net.Http.HttpRequestException or System.Text.Json.JsonException)

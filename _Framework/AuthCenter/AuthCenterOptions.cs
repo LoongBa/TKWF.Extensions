@@ -137,4 +137,16 @@ public class PasswordPolicyOptions
 
     /// <summary>复杂度/历史/轮换校验是否启用（fail-closed——true 时单入口强制校验，false 时跳过校验但仍记录历史）。</summary>
     public bool EnforcePolicy { get; set; } = true;
+
+    /// <summary>重置码有效期（分钟，默认 30——SMS/Email 找回通道统一 TTL；v0.9.1 配置化替代原硬编码 30）。</summary>
+    public int ResetCodeValidityMinutes { get; set; } = 30;
+
+    /// <summary>Email 找回重发间隔（秒，默认 60——对齐 SMS 重发频控；Email 发起独立频控窗口）。</summary>
+    public int ResetEmailResendIntervalSeconds { get; set; } = 60;
+
+    /// <summary>Email 找回主题模板（默认 "找回密码验证码"——自建占位符纯文本，不引 PrintTemplates；支持 {code} 占位符）。</summary>
+    public string ResetEmailSubjectTemplate { get; set; } = "找回密码验证码";
+
+    /// <summary>Email 找回正文模板（默认含 {code}/{expiresInMinutes} 占位符——自建占位符纯文本，IsHtml=false）。</summary>
+    public string ResetEmailBodyTemplate { get; set; } = "您的找回密码验证码：{code}（{expiresInMinutes} 分钟内有效）";
 }

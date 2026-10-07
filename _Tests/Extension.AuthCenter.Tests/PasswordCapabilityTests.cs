@@ -400,7 +400,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<ISmsVerificationService>(new FakeSmsVerificationService(verifyResult: true));
         });
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-sms-reset", Phone = "13800000501", AuthLevel = (int)AuthLevel.Phone });
-        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), NullLogger<PasswordResetService>.Instance);
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var newSalt = NewSalt();
         await service.CompleteResetSmsAsync("u-sms-reset", "13800000501", "123456",
@@ -422,7 +422,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<ISmsVerificationService>(new FakeSmsVerificationService(verifyResult: false));
         });
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-sms-reset2", Phone = "13800000502", AuthLevel = (int)AuthLevel.Phone });
-        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), NullLogger<PasswordResetService>.Instance);
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var newSalt = NewSalt();
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.CompleteResetSmsAsync(
@@ -454,7 +454,7 @@ public class PasswordCapabilityTests
     {
         var stub = CreateStub(out _);
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-1", Phone = "13800000401", AuthLevel = (int)AuthLevel.Phone });
-        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), NullLogger<PasswordResetService>.Instance);
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var result = await service.InitiateEmailResetAsync("u-res-1");
 
@@ -472,11 +472,116 @@ public class PasswordCapabilityTests
         });
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-2", Phone = "13800000402", AuthLevel = (int)AuthLevel.Phone });
         // 无 UserProfile（未绑定邮箱）
-        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), NullLogger<PasswordResetService>.Instance);
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var result = await service.InitiateEmailResetAsync("u-res-2");
 
         Assert.Equal("EMAIL_NOT_BOUND", result);
+    }
+
+    // ── v0.9.1 Email 找回 6 项裁定（①模板 Options ③TTL 配置化 ④冻结互斥 ⑤独立频控） ──────────────────
+
+    /// <summary>v0.9.1 裁定①③：Email 模板 + TTL 走 PasswordPolicyOptions——Subject/Body 占位符替换 + 有效期配置化落库。</summary>
+    [Fact]
+    public async Task EmailReset_CustomTemplateAndTtl_FromOptions()
+    {
+        var stub = CreateStub(out _, register: (services, user) =>
+        {
+            services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
+            services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
+        });
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-tpl", Phone = "13800000403", AuthLevel = (int)AuthLevel.Phone });
+        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-tpl", Email = "tpl@test.dev" });
+
+        var options = new AuthCenterOptions();
+        options.PasswordPolicy.ResetCodeValidityMinutes = 15;                    // ③ TTL 配置化
+        options.PasswordPolicy.ResetEmailSubjectTemplate = "验证码 {code}";      // ① 模板 Options
+        options.PasswordPolicy.ResetEmailBodyTemplate = "码：{code}，{expiresInMinutes} 分钟内有效";
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(options), NullLogger<PasswordResetService>.Instance);
+
+        var result = await service.InitiateEmailResetAsync("u-res-tpl");
+
+        Assert.Equal("EMAIL_RESET_CODE_SENT", result);
+        var msg = FakeEmailSender.LastMessage!;
+        Assert.NotNull(msg);
+        Assert.Equal("tpl@test.dev", msg.To);
+        var code = System.Text.RegularExpressions.Regex.Match(msg.Body, @"(\d{8})").Groups[1].Value;
+        Assert.Contains(code, msg.Subject);                       // ① Subject 模板 {code} 替换
+        Assert.Contains(code, msg.Body);                          // ① Body 模板 {code} 替换
+        Assert.Contains("15 分钟内有效", msg.Body);               // ③ 占位符 {expiresInMinutes} 替换 = Options TTL
+        // ③ 落库 ExpireAt 按配置 TTL（15min）——用同表 CreateTime 抵消 SQLite DateTime 本地化 +8h 偏移
+        //（ExpireAt 与 CreateTime 同为 UtcNow 落库、同偏移；差值 = 精确 TTL）
+        var record = await stub.Use<PasswordResetCodeEntityDataService>().GetLastUnconsumedAsync("u-res-tpl", "email");
+        Assert.NotNull(record);
+        var ttl = record!.ExpireAt - record.CreateTime;
+        Assert.True(ttl > TimeSpan.FromMinutes(14) && ttl <= TimeSpan.FromMinutes(16),
+            $"ExpireAt 应按配置 TTL=15min 落库（相对 CreateTime），实际差值 {ttl.TotalMinutes:F1} min");
+    }
+
+    /// <summary>v0.9.1 裁定④：冻结账号禁止自助找回（InitiateEmailResetAsync 抛 ACCOUNT_FROZEN——fail-closed）。</summary>
+    [Fact]
+    public async Task EmailReset_FrozenAccount_ThrowsFrozen()
+    {
+        var stub = CreateStub(out _, register: (services, user) =>
+        {
+            services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
+            services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
+        });
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
+        {
+            UId = "u-res-frz", Phone = "13800000404", AuthLevel = (int)AuthLevel.Phone,
+            IsFrozen = true, FreezeEnd = null,   // 永久冻结
+        });
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
+            () => service.InitiateEmailResetAsync("u-res-frz"));
+        Assert.Equal("ACCOUNT_FROZEN", ex.Message);
+    }
+
+    /// <summary>v0.9.1 裁定④：冻结账号禁止完成找回（CompleteResetWithCodeAsync 抛 ACCOUNT_FROZEN）。</summary>
+    [Fact]
+    public async Task CompleteReset_FrozenAccount_ThrowsFrozen()
+    {
+        var stub = CreateStub(out _, register: (services, user) =>
+        {
+            services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
+            services.AddSingleton<IAuthAccountService>(CreateAuthAccountService(user));
+        });
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
+        {
+            UId = "u-res-frz2", Phone = "13800000405", AuthLevel = (int)AuthLevel.Phone,
+            IsFrozen = true, FreezeEnd = DateTime.UtcNow.AddHours(1),   // 临时冻结
+        });
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
+
+        var newSalt = NewSalt();
+        var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
+            () => service.CompleteResetWithCodeAsync("u-res-frz2", "12345678", ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt));
+        Assert.Equal("ACCOUNT_FROZEN", ex.Message);
+    }
+
+    /// <summary>v0.9.1 裁定⑤：Email 发起独立频控（pwd:reset-email:{uid} 重发间隔窗口——60s 内二次发起阻断）。</summary>
+    [Fact]
+    public async Task EmailReset_ResendWindow_ThrowsRateLimited()
+    {
+        var stub = CreateStub(out _, register: (services, user) =>
+        {
+            services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
+            services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
+        });
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-rl", Phone = "13800000406", AuthLevel = (int)AuthLevel.Phone });
+        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-rl", Email = "rl@test.dev" });
+
+        var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
+
+        var first = await service.InitiateEmailResetAsync("u-res-rl");
+        Assert.Equal("EMAIL_RESET_CODE_SENT", first);
+
+        // 60s 重发间隔窗口内二次发起 → PASSWORD_RESET_RATE_LIMITED（独立 key，不干扰 pwd:reset:{id} 统一频控）
+        var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
+            () => service.InitiateEmailResetAsync("u-res-rl"));
+        Assert.Equal("PASSWORD_RESET_RATE_LIMITED", ex.Message);
     }
 
     // ── UserProfile 档案读写（T3） ────────────────────────────────────
@@ -509,8 +614,14 @@ public class PasswordCapabilityTests
 
     private sealed class FakeEmailSender : TKWF.Ext.Emailing.IEmailSender
     {
+        /// <summary>最后发送的消息（v0.9.1 模板/TTL 断言用——单测试线程内捕获）。</summary>
+        public static TKWF.Ext.Emailing.EmailMessage? LastMessage { get; private set; }
+
         public Task SendAsync(TKWF.Ext.Emailing.EmailMessage message, System.Threading.CancellationToken ct = default)
-            => Task.CompletedTask;
+        {
+            LastMessage = message;
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>Fake ISmsVerificationService（P1-NEW-1 测试桩——verify 结果可配置；SendCode 直成功）。</summary>

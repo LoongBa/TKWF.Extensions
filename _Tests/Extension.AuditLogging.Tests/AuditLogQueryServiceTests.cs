@@ -575,7 +575,7 @@ public class AuditLogQueryServiceTests
         var indexes = type.GetCustomAttributes<FreeSql.DataAnnotations.IndexAttribute>(false).ToList();
 
         var match = indexes.FirstOrDefault(i =>
-            i.Name == "IX_AuditLog_ExecutionTime" && !i.IsUnique);
+            i.Name == "TKWFIX_AuditLog_ExecutionTime" && !i.IsUnique);
 
         Assert.NotNull(match);
     }
@@ -587,7 +587,7 @@ public class AuditLogQueryServiceTests
         var indexes = type.GetCustomAttributes<FreeSql.DataAnnotations.IndexAttribute>(false).ToList();
 
         var match = indexes.FirstOrDefault(i =>
-            i.Name == "IX_AuditLog_UserName" && !i.IsUnique);
+            i.Name == "TKWFIX_AuditLog_UserName" && !i.IsUnique);
 
         Assert.NotNull(match);
     }
@@ -599,7 +599,7 @@ public class AuditLogQueryServiceTests
         var indexes = type.GetCustomAttributes<FreeSql.DataAnnotations.IndexAttribute>(false).ToList();
 
         var match = indexes.FirstOrDefault(i =>
-            i.Name == "IX_AuditLog_CorrelationId" && !i.IsUnique);
+            i.Name == "TKWFIX_AuditLog_CorrelationId" && !i.IsUnique);
 
         Assert.NotNull(match);
     }
@@ -611,7 +611,7 @@ public class AuditLogQueryServiceTests
         var indexes = type.GetCustomAttributes<FreeSql.DataAnnotations.IndexAttribute>(false).ToList();
 
         var match = indexes.FirstOrDefault(i =>
-            i.Name == "IX_AuditLog_ServiceName" && !i.IsUnique);
+            i.Name == "TKWFIX_AuditLog_ServiceName" && !i.IsUnique);
 
         Assert.NotNull(match);
     }

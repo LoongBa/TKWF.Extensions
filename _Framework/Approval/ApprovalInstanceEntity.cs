@@ -10,10 +10,10 @@ namespace TKWF.Ext.Approval;
 /// <para>唯一约束 <c>UX_ApprovalInstance_Active</c>（BusinessType+BusinessId+IsActive）——活动实例（IsActive=true）同业务唯一防重复；
 /// 终态 IsActive=false 释放约束，允许重新提交新实例（评审 C2）。</para>
 /// </summary>
-[Table("ApprovalInstance")]
-[FreeSql.DataAnnotations.Index("UX_ApprovalInstance_Active",
+[Table("TKWF_ApprovalInstance")]
+[FreeSql.DataAnnotations.Index("TKWFIX_ApprovalInstance_Active",
     nameof(BusinessType) + "," + nameof(BusinessId) + "," + nameof(IsActive), IsUnique = true)]
-[FreeSql.DataAnnotations.Index("IX_ApprovalInstance_Status_Business", nameof(Status) + "," + nameof(BusinessType) + "," + nameof(BusinessId))]
+[FreeSql.DataAnnotations.Index("TKWFIX_ApprovalInstance_Status_Business", nameof(Status) + "," + nameof(BusinessType) + "," + nameof(BusinessId))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class ApprovalInstanceEntity
 {

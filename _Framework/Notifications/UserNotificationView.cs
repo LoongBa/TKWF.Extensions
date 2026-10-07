@@ -10,18 +10,18 @@ namespace TKWF.Ext.Notifications;
 /// 单查询完成跨表过滤 + 分页 + 排序，顺带返回通知名/严重级别/显示名（GraphQL 路径可用）。
 /// VEntity 只读：<c>IDomainViewEntity</c> 由 SG1 自动生成，禁 IEntityDAC 写操作。</para>
 /// </summary>
-[Table(Name = "vw_UserNotificationView", DisableSyncStructure = true)]
+[Table(Name = "TKWFV_UserNotificationView", DisableSyncStructure = true)]
 [DomainGenerateCode(IsView = true,
-    ViewSql = @"CREATE OR REPLACE VIEW ""vw_UserNotificationView"" AS
+    ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_UserNotificationView"" AS
 SELECT un.""Id"", un.""UserId"", un.""NotificationId"", un.""State"", un.""ReadTime"", un.""CreateTime"",
        n.""Name"", n.""Severity"", n.""DisplayName""
-FROM ""UserNotification"" un
-INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""",
-    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""vw_UserNotificationView"" AS
+FROM ""TKWF_UserNotification"" un
+INNER JOIN ""TKWF_Notification"" n ON un.""NotificationId"" = n.""Id""",
+    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserNotificationView"" AS
 SELECT un.""Id"", un.""UserId"", un.""NotificationId"", un.""State"", un.""ReadTime"", un.""CreateTime"",
        n.""Name"", n.""Severity"", n.""DisplayName""
-FROM ""UserNotification"" un
-INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""",
+FROM ""TKWF_UserNotification"" un
+INNER JOIN ""TKWF_Notification"" n ON un.""NotificationId"" = n.""Id""",
     ExposeGraphqlQuery = true,
     DefaultPageSize = 50)]
 public partial class UserNotificationView

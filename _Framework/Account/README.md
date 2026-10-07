@@ -1,6 +1,6 @@
 # TKWF.Ext.Account 账户管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0（领域自治根治，ADR90） | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0（领域自治根治，ADR90） | **框架**: .NET 10 | **表名前缀简称**: `Acct`（扩展仓命名规则 §8.3 自声明——撞名追尾方全责，本扩展 `PasswordResetCode` 表用 `TKWF_Acct_`）
 
 **核心约束**: 主框架缺口实现、FreeSql 持久化、异常静默处理、SG1 声明式实体、不重建 AuthController
 

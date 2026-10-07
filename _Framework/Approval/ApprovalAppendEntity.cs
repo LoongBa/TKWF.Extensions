@@ -10,8 +10,8 @@ namespace TKWF.Ext.Approval;
 /// <para>每加签人一行（Participate/Notify 均记录）；Participate 额外创建审批任务，Notify 仅记录 + 事件。
 /// 索引 UX_aa_instance_user（InstanceId+UserId，非唯一——同实例可多次加签同一人不同步骤）。</para>
 /// </summary>
-[Table("ApprovalAppend")]
-[FreeSql.DataAnnotations.Index("UX_aa_instance_user", nameof(InstanceId) + "," + nameof(UserId), IsUnique = false)]
+[Table("TKWF_ApprovalAppend")]
+[FreeSql.DataAnnotations.Index("TKWFIX_Aa_Instance_User", nameof(InstanceId) + "," + nameof(UserId), IsUnique = false)]
 [DomainGenerateCode(DefaultPageSize = 50, SubDomain = "Approval", SubDomainRoutePrefix = "/Approval")]
 public partial class ApprovalAppendEntity
 {

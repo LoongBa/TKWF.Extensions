@@ -11,22 +11,22 @@ namespace TKWF.Ext.Approval;
 /// VEntity 只读：<c>IDomainViewEntity</c> 由 SG1 自动生成，禁 IEntityDAC 写操作。
 /// ⚠️ 敏感视图（含审批人/审批意见列，C4）：ExposeGraphqlQuery = false，数据访问统一经 IApprovalQueryService 门面。</para>
 /// </summary>
-[Table(Name = "vw_ApprovalTaskView", DisableSyncStructure = true)]
+[Table(Name = "TKWFV_ApprovalTaskView", DisableSyncStructure = true)]
 [DomainGenerateCode(IsView = true,
-    ViewSql = @"CREATE OR REPLACE VIEW ""vw_ApprovalTaskView"" AS
+    ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_ApprovalTaskView"" AS
 SELECT t.""Id"", t.""InstanceId"", t.""StepIndex"", t.""StepName"", t.""ApproverType"", t.""ApproverValue"",
        t.""ApproverUserId"", t.""Status"", t.""ApprovedAt"", t.""ApprovedBy"", t.""Comment"", t.""TransferredTo"",
        t.""CreateTime"" AS ""TaskCreateTime"", i.""BusinessType"", i.""BusinessId"", i.""Status"" AS ""InstanceStatus"",
        i.""IsActive"", i.""CurrentStepIndex"", i.""Submitter"", i.""FlowCode"", i.""CreateTime"" AS ""InstanceCreateTime""
-FROM ""ApprovalTask"" t
-INNER JOIN ""ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""",
-    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""vw_ApprovalTaskView"" AS
+FROM ""TKWF_ApprovalTask"" t
+INNER JOIN ""TKWF_ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""",
+    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_ApprovalTaskView"" AS
 SELECT t.""Id"", t.""InstanceId"", t.""StepIndex"", t.""StepName"", t.""ApproverType"", t.""ApproverValue"",
        t.""ApproverUserId"", t.""Status"", t.""ApprovedAt"", t.""ApprovedBy"", t.""Comment"", t.""TransferredTo"",
        t.""CreateTime"" AS ""TaskCreateTime"", i.""BusinessType"", i.""BusinessId"", i.""Status"" AS ""InstanceStatus"",
        i.""IsActive"", i.""CurrentStepIndex"", i.""Submitter"", i.""FlowCode"", i.""CreateTime"" AS ""InstanceCreateTime""
-FROM ""ApprovalTask"" t
-INNER JOIN ""ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""",
+FROM ""TKWF_ApprovalTask"" t
+INNER JOIN ""TKWF_ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""",
     ExposeGraphqlQuery = false, // ⚠️ C4：敏感视图显式关闭（含审批人明细/意见列），默认 true 不关即裸暴露
     DefaultPageSize = 50)]
 public partial class ApprovalTaskView

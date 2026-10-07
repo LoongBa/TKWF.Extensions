@@ -13,18 +13,18 @@ namespace TKWF.Ext.DataDictionary;
 /// ⚠️ INNER JOIN 语义："定义存在但无项"返回零行——Manager 先单查定义（不存在→null），再走视图查项（零行=空项列表），
 /// "空字典"语义保留（oracle3 C-1/H1 方案 b）。</para>
 /// </summary>
-[Table(Name = "vw_DictionaryItemView", DisableSyncStructure = true)]
+[Table(Name = "TKWFV_DictionaryItemView", DisableSyncStructure = true)]
 [DomainGenerateCode(IsView = true,
-    ViewSql = @"CREATE OR REPLACE VIEW ""vw_DictionaryItemView"" AS
+    ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_DictionaryItemView"" AS
 SELECT i.""Id"", i.""DefinitionId"", d.""Code"" AS ""DefinitionCode"", i.""Code"", i.""DisplayName"", i.""Value"",
        i.""Order"", i.""IsEnabled"", i.""ParentCode"", i.""Level"", i.""Path"", d.""DisplayName"" AS ""DefinitionDisplayName""
-FROM ""DictionaryItem"" i
-INNER JOIN ""DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""",
-    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""vw_DictionaryItemView"" AS
+FROM ""TKWF_DictionaryItem"" i
+INNER JOIN ""TKWF_DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""",
+    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_DictionaryItemView"" AS
 SELECT i.""Id"", i.""DefinitionId"", d.""Code"" AS ""DefinitionCode"", i.""Code"", i.""DisplayName"", i.""Value"",
        i.""Order"", i.""IsEnabled"", i.""ParentCode"", i.""Level"", i.""Path"", d.""DisplayName"" AS ""DefinitionDisplayName""
-FROM ""DictionaryItem"" i
-INNER JOIN ""DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""",
+FROM ""TKWF_DictionaryItem"" i
+INNER JOIN ""TKWF_DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""",
     ExposeGraphqlQuery = false, // C4：裸平表绕过 BuildTree 树语义——数据访问经门面聚合，不直连 GraphQL
     DefaultPageSize = 50)]
 public partial class DictionaryItemView

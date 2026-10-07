@@ -35,11 +35,11 @@ internal static class OrganizationUnitTestSupport
         // V0.2.0 VEntity：建真实视图（SQLite 方言，同 UserOrganizationUnitView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync。
         // 注：视图只投影 OU/OUUser 业务列（无 DateTimeOffset），SQLite 直接引用真实列，无需 NULL 占位
         fsql.Ado.ExecuteNonQuery(
-            @"CREATE VIEW IF NOT EXISTS ""vw_UserOrganizationUnitView"" AS
+            @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserOrganizationUnitView"" AS
 SELECT ouu.""Id"", ouu.""OrganizationUnitId"", ouu.""UserId"", ou.""Path"" AS ""OUPath"", ou.""Code"" AS ""OUCode"",
        ou.""Level"" AS ""OULevel"", ou.""Name"" AS ""OUName""
-FROM ""OrganizationUnitUser"" ouu
-INNER JOIN ""OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""");
+FROM ""TKWF_OrganizationUnitUser"" ouu
+INNER JOIN ""TKWF_OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""");
     }
 }
 

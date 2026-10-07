@@ -8,7 +8,7 @@ namespace TKWF.Ext.FileManagement
     /// <summary>
     /// 受管文件实体——业务文件元数据（目录内同名唯一 + SHA256 去重 + 物理存储委托 BlobStoring，F4-F10）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("ManagedFile")]</c>；列映射用 FreeSql <c>[Column]</c>（全限定）。</para>
+    /// 保留 BCL <c>[Table("TKWF_ManagedFile")]</c>；列映射用 FreeSql <c>[Column]</c>（全限定）。</para>
     /// <para>StoredPath 为 <see cref="TKWF.Ext.BlobStoring.IBlobStorageService"/> 相对路径（形如 {guid}/{name}）——
     /// 物理文件操作全部经 Blob 契约委托，本实体为<b>唯一业务元数据</b>（P2 裁定：不注入 IBlobRecordStore）。</para>
     /// <para>删除语义：物理删除（不声明 IsDeleted，hasSoftDelete:false）；
@@ -17,10 +17,10 @@ namespace TKWF.Ext.FileManagement
     /// + <c>IX_ManagedFile_Sha256</c>（去重查询）。</para>
     /// <para>审计字段（D5）：<c>DateTime</c>（UTC）显式声明；不声明 IsDeleted（物理删除）。</para>
     /// </summary>
-    [Table("ManagedFile")]
-    [FreeSql.DataAnnotations.Index("UX_ManagedFile_Folder_Name", nameof(FolderId) + "," + nameof(Name), IsUnique = true)]
-    [FreeSql.DataAnnotations.Index("IX_ManagedFile_Sha256", nameof(Sha256))]
-    [FreeSql.DataAnnotations.Index("IX_ManagedFile_Owner", nameof(OwnerId))]   // V0.3.0：用户配额聚合查询（WHERE owner_id = @id）
+    [Table("TKWF_ManagedFile")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_ManagedFile_Folder_Name", nameof(FolderId) + "," + nameof(Name), IsUnique = true)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_ManagedFile_Sha256", nameof(Sha256))]
+    [FreeSql.DataAnnotations.Index("TKWFIX_ManagedFile_Owner", nameof(OwnerId))]   // V0.3.0：用户配额聚合查询（WHERE owner_id = @id）
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class ManagedFileEntity
     {

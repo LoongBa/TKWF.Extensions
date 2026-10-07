@@ -9,7 +9,7 @@ namespace TKWF.Ext.MFA;
 
 /// <summary>
 /// MFA 挑战票据实体——挑战-验证流状态承载（一次性 + TTL + 单次消费）。
-/// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("MfaChallenge")]</c>；
+/// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("TKWF_MfaChallenge")]</c>；
 /// 列映射用 FreeSql <c>[Column]</c>（全限定）。</para>
 /// <para>挑战票据模型（ADR-MFA-挑战票据与验证模型 定案）：SMS 场景 <c>CodeHash</c> 落 SHA256 码（明文不落库）；
 /// TOTP 场景 <c>CodeHash</c> null（无状态验证——票据仅作流程句柄 + 频控挂点 + 审计）。</para>
@@ -17,9 +17,9 @@ namespace TKWF.Ext.MFA;
 /// 尝试频控归内存滑动窗口（per-user×method，Oracle C4——本实体不设 Attempts 列）。</para>
 /// <para>索引：<c>IX_MfaChallenge_User_Method</c>（UserId+Method——按用户方法查活动挑战）+ <c>IX_MfaChallenge_Expire</c>（过期清理）。</para>
 /// </summary>
-[Table("MfaChallenge")]
-[FreeSql.DataAnnotations.Index("IX_MfaChallenge_User_Method", nameof(UserId) + "," + nameof(Method))]
-[FreeSql.DataAnnotations.Index("IX_MfaChallenge_Expire", nameof(ExpireAt))]
+[Table("TKWF_MfaChallenge")]
+[FreeSql.DataAnnotations.Index("TKWFIX_MfaChallenge_User_Method", nameof(UserId) + "," + nameof(Method))]
+[FreeSql.DataAnnotations.Index("TKWFIX_MfaChallenge_Expire", nameof(ExpireAt))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class MfaChallengeEntity
 {

@@ -10,8 +10,8 @@ namespace TKWF.Ext.OrganizationUnit
     /// <para>唯一约束 UX_OrganizationUnitUser_User_OU 防重复分配——并发重复分配冲突由
     /// <see cref="IOrganizationUnitManager.AssignUserAsync"/> 捕获数据库异常转业务异常。</para>
     /// </summary>
-    [Table("OrganizationUnitUser")]
-    [FreeSql.DataAnnotations.Index("UX_OrganizationUnitUser_User_OU",
+    [Table("TKWF_OrganizationUnitUser")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_OrganizationUnitUser_User_OU",
         nameof(OrganizationUnitId) + "," + nameof(UserId), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class OrganizationUnitUserEntity

@@ -10,8 +10,8 @@ namespace TKWF.Ext.Approval;
 /// <para>[DomainGenerateCode] 不指定 UserType（ADR42 D4——扩展不自建 UserInfo）；
 /// 审计字段用 DateTime（UTC）——FreeSql SQLite 不支持 DateTimeOffset。</para>
 /// </summary>
-[Table("ApprovalFlow")]
-[FreeSql.DataAnnotations.Index("UX_ApprovalFlow_Code", nameof(Code), IsUnique = true)]
+[Table("TKWF_ApprovalFlow")]
+[FreeSql.DataAnnotations.Index("TKWFIX_ApprovalFlow_Code", nameof(Code), IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class ApprovalFlowEntity
 {

@@ -510,7 +510,7 @@ public class OrganizationUnitManagerTests
         AssertCodes(subTree, "R", "C", "G");
 
         // 下推断言：GetByIdAsync 守卫（WHERE Id =）+ 子树查询（WHERE 精确前缀）——每条 SELECT 都带
-        // WHERE；若退回 GetAllAsync 全量拉取（无 WHERE 的裸 SELECT FROM "OrganizationUnit"）即断言失败
+        // WHERE；若退回 GetAllAsync 全量拉取（无 WHERE 的裸 SELECT FROM "TKWF_OrganizationUnit"）即断言失败
         var selectSqls = sqlLog.Where(s => s.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)).ToList();
         Assert.NotEmpty(selectSqls);
         Assert.All(selectSqls, sql =>

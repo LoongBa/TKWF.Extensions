@@ -12,8 +12,8 @@ namespace TKWF.Ext.Federation
     /// <c>used</c> 原子 CAS（<c>UPDATE ... WHERE used=false</c>）防重放；<c>code_verifier_hash</c> PKCE 可选
     /// （defense in depth——复用 IOAuthTicketService 既有 PKCE 资产语义，Oracle P2-1）。</para>
     /// </summary>
-    [Table("SsoAccessCode")]
-    [FreeSql.DataAnnotations.Index("UX_SsoAccessCode_CodeHash", nameof(CodeHash), IsUnique = true)]
+    [Table("TKWF_SsoAccessCode")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_SsoAccessCode_CodeHash", nameof(CodeHash), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class SsoAccessCodeEntity
     {

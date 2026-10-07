@@ -8,9 +8,9 @@ namespace TKWF.Ext.Account
     /// <summary>
     /// 账户锁定记录——用户名、失败计数与锁定截止时间。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("AccountLockout")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
+    /// 保留 BCL <c>[Table("TKWF_AccountLockout")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
     /// </summary>
-    [Table("AccountLockout")]
+    [Table("TKWF_AccountLockout")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AccountLockoutEntity
     {

@@ -43,11 +43,11 @@ internal static class DataDictionaryTestHost
     public static void CreateView(IFreeSql fsql)
     {
         fsql.Ado.ExecuteNonQuery(
-            @"CREATE VIEW IF NOT EXISTS ""vw_DictionaryItemView"" AS
+            @"CREATE VIEW IF NOT EXISTS ""TKWFV_DictionaryItemView"" AS
 SELECT i.""Id"", i.""DefinitionId"", d.""Code"" AS ""DefinitionCode"", i.""Code"", i.""DisplayName"", i.""Value"",
        i.""Order"", i.""IsEnabled"", i.""ParentCode"", i.""Level"", i.""Path"", d.""DisplayName"" AS ""DefinitionDisplayName""
-FROM ""DictionaryItem"" i
-INNER JOIN ""DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""");
+FROM ""TKWF_DictionaryItem"" i
+INNER JOIN ""TKWF_DictionaryDefinition"" d ON i.""DefinitionId"" = d.""Id""");
     }
 
     /// <summary>

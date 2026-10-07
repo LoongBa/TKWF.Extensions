@@ -11,10 +11,10 @@ namespace TKWF.Ext.BackgroundJobs;
 /// <para><c>[DomainGenerateCode]</c> 不指定 UserType（ADR42 D4——扩展不自建 UserInfo）；
 /// 审计字段用 DateTime（UTC）——FreeSql SQLite 不支持 DateTimeOffset（Oracle P1-1）。</para>
 /// </summary>
-[Table("JobExecution")]
-[FreeSql.DataAnnotations.Index("IX_JobExecution_JobId", nameof(JobId))]
-[FreeSql.DataAnnotations.Index("IX_JobExecution_Provider_Success", nameof(Provider) + "," + nameof(IsSuccess))]
-[FreeSql.DataAnnotations.Index("IX_JobExecution_StartedAt", nameof(StartedAtUtc))]
+[Table("TKWF_JobExecution")]
+[FreeSql.DataAnnotations.Index("TKWFIX_JobExecution_JobId", nameof(JobId))]
+[FreeSql.DataAnnotations.Index("TKWFIX_JobExecution_Provider_Success", nameof(Provider) + "," + nameof(IsSuccess))]
+[FreeSql.DataAnnotations.Index("TKWFIX_JobExecution_StartedAt", nameof(StartedAtUtc))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class JobExecutionEntity
 {

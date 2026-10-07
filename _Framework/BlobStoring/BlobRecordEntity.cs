@@ -9,10 +9,10 @@ namespace TKWF.Ext.BlobStoring
     /// Blob 记录表实体——存储二进制大对象的元数据（名称、路径、内容类型、大小、标签、上传者等）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
     /// SG1 自动生成 <see cref="TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("BlobRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// <para>保留 BCL <c>[Table("TKWF_BlobRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
-    [Table("BlobRecord")]
+    [Table("TKWF_BlobRecord")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class BlobRecordEntity
     {

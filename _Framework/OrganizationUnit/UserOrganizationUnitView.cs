@@ -12,18 +12,18 @@ namespace TKWF.Ext.OrganizationUnit;
 /// VEntity 只读：<c>IDomainViewEntity</c> 由 SG1 自动生成，禁 IEntityDAC 写操作。
 /// ⚠️ 敏感视图（含用户归属明细）：ExposeGraphqlQuery = false，数据访问统一经 IOrganizationUnitManager 门面。</para>
 /// </summary>
-[Table(Name = "vw_UserOrganizationUnitView", DisableSyncStructure = true)]
+[Table(Name = "TKWFV_UserOrganizationUnitView", DisableSyncStructure = true)]
 [DomainGenerateCode(IsView = true,
-    ViewSql = @"CREATE OR REPLACE VIEW ""vw_UserOrganizationUnitView"" AS
+    ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_UserOrganizationUnitView"" AS
 SELECT ouu.""Id"", ouu.""OrganizationUnitId"", ouu.""UserId"", ou.""Path"" AS ""OUPath"", ou.""Code"" AS ""OUCode"",
        ou.""Level"" AS ""OULevel"", ou.""Name"" AS ""OUName""
-FROM ""OrganizationUnitUser"" ouu
-INNER JOIN ""OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""",
-    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""vw_UserOrganizationUnitView"" AS
+FROM ""TKWF_OrganizationUnitUser"" ouu
+INNER JOIN ""TKWF_OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""",
+    ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserOrganizationUnitView"" AS
 SELECT ouu.""Id"", ouu.""OrganizationUnitId"", ouu.""UserId"", ou.""Path"" AS ""OUPath"", ou.""Code"" AS ""OUCode"",
        ou.""Level"" AS ""OULevel"", ou.""Name"" AS ""OUName""
-FROM ""OrganizationUnitUser"" ouu
-INNER JOIN ""OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""",
+FROM ""TKWF_OrganizationUnitUser"" ouu
+INNER JOIN ""TKWF_OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id""",
     ExposeGraphqlQuery = false, // ⚠️ 敏感视图显式关闭（含用户归属明细），默认 true 不关即裸暴露
     DefaultPageSize = 50)]
 public partial class UserOrganizationUnitView

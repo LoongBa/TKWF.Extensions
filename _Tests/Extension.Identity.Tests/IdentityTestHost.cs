@@ -31,11 +31,11 @@ internal static class IdentityTestHost
         // V0.2.0 VEntity：建真实视图（SQLite 方言，来自 UserRoleView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync。
         // 注意：SQLite 表无 CreateTime/UpdateTime 列（FreeSql SQLite provider 不支持 DateTimeOffset），视图用 NULL 占位对齐列
         fsql.Ado.ExecuteNonQuery(
-            @"CREATE VIEW IF NOT EXISTS ""vw_UserRoleView"" AS
+            @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserRoleView"" AS
 SELECT ur.""UserId"", r.""Id"", r.""Name"", r.""DisplayName"", r.""IsSystemRole"",
        NULL AS ""CreateTime"", NULL AS ""UpdateTime""
-FROM ""IdentityUserRole"" ur
-INNER JOIN ""IdentityRole"" r ON ur.""RoleId"" = r.""Id""");
+FROM ""TKWF_IdentityUserRole"" ur
+INNER JOIN ""TKWF_IdentityRole"" r ON ur.""RoleId"" = r.""Id""");
     }
 
     /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 UserStore（3 DataService 委托 + VEntity 只读 DataService）。</summary>

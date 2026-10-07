@@ -236,7 +236,7 @@ public class OrganizationUnitUserTests
         var viewSqlLog = new List<string>();
         host.Fsql.Aop.CommandBefore += (_, e) =>
         {
-            if (e.Command.CommandText.Contains("vw_UserOrganizationUnitView", StringComparison.OrdinalIgnoreCase))
+            if (e.Command.CommandText.Contains("TKWFV_UserOrganizationUnitView", StringComparison.OrdinalIgnoreCase))
                 viewSqlLog.Add(e.Command.CommandText);
         };
 
@@ -261,7 +261,7 @@ public class OrganizationUnitUserTests
         var viewSqlLog = new List<string>();
         host.Fsql.Aop.CommandBefore += (_, e) =>
         {
-            if (e.Command.CommandText.Contains("vw_UserOrganizationUnitView", StringComparison.OrdinalIgnoreCase))
+            if (e.Command.CommandText.Contains("TKWFV_UserOrganizationUnitView", StringComparison.OrdinalIgnoreCase))
                 viewSqlLog.Add(e.Command.CommandText);
         };
 

@@ -48,12 +48,12 @@ internal static class TemplateTestSupport
         // 注意：SQLite 表无 PublishedAt/CreateTime 列（FreeSql SQLite provider 不支持 DateTimeOffset 建表，Identity 先例注释确认），
         // 视图用 NULL 占位对齐 C# 属性；PublishedBy 亦随审计列一并 NULL 占位——查询只需 Content/Status/Version/Key/TemplateName，日期列 NULL 不影响断言。
         fsql.Ado.ExecuteNonQuery(
-            @"CREATE VIEW IF NOT EXISTS ""vw_PrintTemplateVersionView"" AS
+            @"CREATE VIEW IF NOT EXISTS ""TKWFV_PrintTemplateVersionView"" AS
 SELECT v.""Id"", v.""TemplateId"", t.""Key"", t.""Name"" AS ""TemplateName"", t.""Description"" AS ""TemplateDescription"",
        v.""Version"", v.""Content"", v.""Status"", v.""Description"",
        NULL AS ""PublishedAt"", NULL AS ""PublishedBy"", NULL AS ""CreateTime""
-FROM ""PrintTemplateVersion"" v
-INNER JOIN ""PrintTemplate"" t ON v.""TemplateId"" = t.""Id""");
+FROM ""TKWF_PrintTemplateVersion"" v
+INNER JOIN ""TKWF_PrintTemplate"" t ON v.""TemplateId"" = t.""Id""");
     }
 
     /// <summary>

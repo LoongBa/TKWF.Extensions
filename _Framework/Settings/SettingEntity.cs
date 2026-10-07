@@ -9,10 +9,10 @@ namespace TKWF.Ext.Settings
     /// 设置表实体——存储分层键值对设置（名称 + 提供者定位 + 值 + 描述）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
     /// SG1 自动生成 <see cref="TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("Setting")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// <para>保留 BCL <c>[Table("TKWF_Setting")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
-    [Table("Setting")]
+    [Table("TKWF_Setting")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class SettingEntity
     {

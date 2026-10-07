@@ -45,13 +45,13 @@ internal static class ApprovalTestSupport
         // V0.3.0 VEntity：建真实视图（SQLite 方言，来自 ApprovalTaskView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync。
         // 注意：Approval 全部 DateTime 列（非 DateTimeOffset），SQLite 直接引用真实列，无需 NULL 占位
         fsql.Ado.ExecuteNonQuery(
-            @"CREATE VIEW IF NOT EXISTS ""vw_ApprovalTaskView"" AS
+            @"CREATE VIEW IF NOT EXISTS ""TKWFV_ApprovalTaskView"" AS
 SELECT t.""Id"", t.""InstanceId"", t.""StepIndex"", t.""StepName"", t.""ApproverType"", t.""ApproverValue"",
        t.""ApproverUserId"", t.""Status"", t.""ApprovedAt"", t.""ApprovedBy"", t.""Comment"", t.""TransferredTo"",
        t.""CreateTime"" AS ""TaskCreateTime"", i.""BusinessType"", i.""BusinessId"", i.""Status"" AS ""InstanceStatus"",
        i.""IsActive"", i.""CurrentStepIndex"", i.""Submitter"", i.""FlowCode"", i.""CreateTime"" AS ""InstanceCreateTime""
-FROM ""ApprovalTask"" t
-INNER JOIN ""ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""");
+FROM ""TKWF_ApprovalTask"" t
+INNER JOIN ""TKWF_ApprovalInstance"" i ON t.""InstanceId"" = i.""Id""");
     }
 
     /// <summary>构造 ApprovalTestHost（V0.3.0 生产路径——真实 DI + BindScope + User.Use 解析）。</summary>

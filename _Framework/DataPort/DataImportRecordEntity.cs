@@ -9,13 +9,13 @@ namespace TKWF.Ext.DataPort
     /// 数据导入批次记录实体——记录每次导入的元数据（批次号/文件哈希/状态/统计/错误摘要）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
     /// SG1 自动生成 <see cref="TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("DataImportRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// <para>保留 BCL <c>[Table("TKWF_DataImportRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// <para>FileHash 唯一索引防重复导入（幂等检查入口）；BatchNo 供消费方按批次回滚。</para>
     /// </summary>
-    [Table("DataImportRecord")]
-    [FreeSql.DataAnnotations.Index("IX_dir_filehash", nameof(FileHash), IsUnique = true)]
-    [FreeSql.DataAnnotations.Index("IX_dir_batchno", nameof(BatchNo), IsUnique = true)]
+    [Table("TKWF_DataImportRecord")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Dir_Filehash", nameof(FileHash), IsUnique = true)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Dir_Batchno", nameof(BatchNo), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class DataImportRecordEntity
     {

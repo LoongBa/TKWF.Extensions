@@ -9,7 +9,7 @@ namespace TKWF.Ext.MFA;
 
 /// <summary>
 /// MFA 绑定实体——用户×方法绑定记录（启用 = 有已激活记录）。
-/// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("MfaSecret")]</c>；
+/// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("TKWF_MfaSecret")]</c>；
 /// 列映射用 FreeSql <c>[Column]</c>（全限定）。</para>
 /// <para>双方法一实体（Oracle Q5 裁决）：TOTP 场景 <c>SecretEncrypted</c>（AES-GCM 密文——DataService 边界加解密，
 /// 对齐 <c>PlatformCredentialKeyStore</c> 先例）；SMS 场景 <c>Phone</c>（绑手机）；另一列 null（列可空）。</para>
@@ -18,9 +18,9 @@ namespace TKWF.Ext.MFA;
 /// 激活后 <c>SecretEncrypted</c>/<c>Phone</c> 不可改（CanUpdate=false——解绑重绑走 Disable+Enroll，ADR 定案）。</para>
 /// <para>索引：<c>UX_MfaSecret_User_Method</c>（UserId+Method 联合唯一——每用户每方法一条绑定）。</para>
 /// </summary>
-[Table("MfaSecret")]
-[FreeSql.DataAnnotations.Index("UX_MfaSecret_User_Method", nameof(UserId) + "," + nameof(Method), IsUnique = true)]
-[FreeSql.DataAnnotations.Index("IX_MfaSecret_User", nameof(UserId))]
+[Table("TKWF_MfaSecret")]
+[FreeSql.DataAnnotations.Index("TKWFIX_MfaSecret_User_Method", nameof(UserId) + "," + nameof(Method), IsUnique = true)]
+[FreeSql.DataAnnotations.Index("TKWFIX_MfaSecret_User", nameof(UserId))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class MfaSecretEntity
 {

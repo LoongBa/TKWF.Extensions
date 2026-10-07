@@ -10,8 +10,8 @@ namespace TKWF.Ext.Approval;
 /// <para>StartAsync 带 ccUserIds / AddCCAsync 记录；实例提交/终态时发布事件，投递组装消费方 Notifications。
 /// 索引 IX_ac_instance（InstanceId，非唯一）。</para>
 /// </summary>
-[Table("ApprovalCC")]
-[FreeSql.DataAnnotations.Index("IX_ac_instance", nameof(InstanceId), IsUnique = false)]
+[Table("TKWF_ApprovalCC")]
+[FreeSql.DataAnnotations.Index("TKWFIX_Ac_Instance", nameof(InstanceId), IsUnique = false)]
 [DomainGenerateCode(DefaultPageSize = 50, SubDomain = "Approval", SubDomainRoutePrefix = "/Approval")]
 public partial class ApprovalCCEntity
 {

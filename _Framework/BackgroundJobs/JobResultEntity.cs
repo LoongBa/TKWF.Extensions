@@ -9,9 +9,9 @@ namespace TKWF.Ext.BackgroundJobs;
 /// 业务结果实体（V0.1.0）——作业内显式记录业务产出，经 <see cref="T:TKWF.Ext.BackgroundJobs.IJobResultRecorder"/> 落库。
 /// <para><c>[DomainGenerateCode]</c> 不指定 UserType（ADR42 D4）；v0.1.0 无 ExecutionId（Oracle C4 移除，YAGNI）。</para>
 /// </summary>
-[Table("JobResult")]
-[FreeSql.DataAnnotations.Index("IX_JobResult_JobId", nameof(JobId))]
-[FreeSql.DataAnnotations.Index("IX_JobResult_CreateTime", nameof(CreateTime))]
+[Table("TKWF_JobResult")]
+[FreeSql.DataAnnotations.Index("TKWFIX_JobResult_JobId", nameof(JobId))]
+[FreeSql.DataAnnotations.Index("TKWFIX_JobResult_CreateTime", nameof(CreateTime))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class JobResultEntity
 {

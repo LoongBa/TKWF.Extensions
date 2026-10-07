@@ -13,19 +13,19 @@ namespace TKWF.Ext.PrintTemplates
     /// <para>⚠️ 敏感视图（C4）：含模板正文 <c>Content</c>（商业资产）——<c>ExposeGraphqlQuery = false</c>，
     /// 数据访问统一经 <see cref="ITemplateManager"/> 门面（门面内已有状态机/权限语义）。</para>
     /// </summary>
-    [Table(Name = "vw_PrintTemplateVersionView", DisableSyncStructure = true)]
+    [Table(Name = "TKWFV_PrintTemplateVersionView", DisableSyncStructure = true)]
     [DomainGenerateCode(IsView = true,
-        ViewSql = @"CREATE OR REPLACE VIEW ""vw_PrintTemplateVersionView"" AS
+        ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_PrintTemplateVersionView"" AS
 SELECT v.""Id"", v.""TemplateId"", t.""Key"", t.""Name"" AS ""TemplateName"", t.""Description"" AS ""TemplateDescription"",
        v.""Version"", v.""Content"", v.""Status"", v.""Description"", v.""PublishedAt"", v.""PublishedBy"", v.""CreateTime""
-FROM ""PrintTemplateVersion"" v
-INNER JOIN ""PrintTemplate"" t ON v.""TemplateId"" = t.""Id""",
-        ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""vw_PrintTemplateVersionView"" AS
+FROM ""TKWF_PrintTemplateVersion"" v
+INNER JOIN ""TKWF_PrintTemplate"" t ON v.""TemplateId"" = t.""Id""",
+        ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_PrintTemplateVersionView"" AS
 SELECT v.""Id"", v.""TemplateId"", t.""Key"", t.""Name"" AS ""TemplateName"", t.""Description"" AS ""TemplateDescription"",
        v.""Version"", v.""Content"", v.""Status"", v.""Description"",
        NULL AS ""PublishedAt"", NULL AS ""PublishedBy"", NULL AS ""CreateTime""
-FROM ""PrintTemplateVersion"" v
-INNER JOIN ""PrintTemplate"" t ON v.""TemplateId"" = t.""Id""",
+FROM ""TKWF_PrintTemplateVersion"" v
+INNER JOIN ""TKWF_PrintTemplate"" t ON v.""TemplateId"" = t.""Id""",
         ExposeGraphqlQuery = false,   // ⚠️ 敏感视图显式关闭（C4，含模板正文 Content 商业资产）
         DefaultPageSize = 50)]
     public partial class PrintTemplateVersionView

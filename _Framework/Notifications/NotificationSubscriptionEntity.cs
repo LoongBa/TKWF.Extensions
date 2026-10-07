@@ -10,9 +10,9 @@ namespace TKWF.Ext.Notifications;
 /// <para>EntityTypeName/EntityId 均为 null = 定义级订阅（关注该通知全部发布）；
 /// 非 null = 实体级订阅（只关注某个具体实体实例）。</para>
 /// </summary>
-[Table("NotificationSubscription")]
-[FreeSql.DataAnnotations.Index("IX_NotificationSubscription_User", nameof(UserId), IsUnique = false)]
-[FreeSql.DataAnnotations.Index("UX_NotificationSubscription_Unique",
+[Table("TKWF_NotificationSubscription")]
+[FreeSql.DataAnnotations.Index("TKWFIX_NotificationSubscription_User", nameof(UserId), IsUnique = false)]
+[FreeSql.DataAnnotations.Index("TKWFIX_NotificationSubscription_Unique",
     nameof(UserId) + "," + nameof(NotificationName) + "," + nameof(EntityTypeName) + "," + nameof(EntityId),
     IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50)]

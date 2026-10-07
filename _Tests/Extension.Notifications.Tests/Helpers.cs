@@ -76,11 +76,11 @@ internal sealed class NotificationTestHost : IDisposable
         fsql.CodeFirst.SyncStructure<NotificationPreferenceEntity>();   // V0.3.0：偏好表
         // V0.2.0 VEntity：建真实视图（SQLite 方言，来自 UserNotificationView.ViewSqlSQLite）——不跑宿主 SyncViewsAsync
         fsql.Ado.ExecuteNonQuery(
-            @"CREATE VIEW IF NOT EXISTS ""vw_UserNotificationView"" AS
+            @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserNotificationView"" AS
 SELECT un.""Id"", un.""UserId"", un.""NotificationId"", un.""State"", un.""ReadTime"", un.""CreateTime"",
        n.""Name"", n.""Severity"", n.""DisplayName""
-FROM ""UserNotification"" un
-INNER JOIN ""Notification"" n ON un.""NotificationId"" = n.""Id""");
+FROM ""TKWF_UserNotification"" un
+INNER JOIN ""TKWF_Notification"" n ON un.""NotificationId"" = n.""Id""");
     }
 
     /// <summary>

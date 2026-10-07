@@ -10,9 +10,9 @@ namespace TKWF.Ext.Approval;
 /// <para>每步骤根据审批人解析结果建一条任务（User 直接建一条 / Role 解析多人建多条）；
 /// ApproverUserId 为解析结果快照（P1-4），避免 Role 模式重复查询。</para>
 /// </summary>
-[Table("ApprovalTask")]
-[FreeSql.DataAnnotations.Index("IX_ApprovalTask_Instance", nameof(InstanceId))]
-[FreeSql.DataAnnotations.Index("IX_ApprovalTask_Assignee", nameof(ApproverUserId) + "," + nameof(Status))]
+[Table("TKWF_ApprovalTask")]
+[FreeSql.DataAnnotations.Index("TKWFIX_ApprovalTask_Instance", nameof(InstanceId))]
+[FreeSql.DataAnnotations.Index("TKWFIX_ApprovalTask_Assignee", nameof(ApproverUserId) + "," + nameof(Status))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class ApprovalTaskEntity
 {

@@ -9,15 +9,15 @@ namespace TKWF.Ext.MFA;
 
 /// <summary>
 /// MFA 恢复码实体——防锁死（验证器/手机丢失时凭恢复码解绑重绑）。
-/// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("MfaRecoveryCode")]</c>；
+/// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("TKWF_MfaRecoveryCode")]</c>；
 /// 列映射用 FreeSql <c>[Column]</c>（全限定）。</para>
 /// <para>恢复码语义：8 位字母数字（去易混淆字符 0/O/1/I/l，Oracle P9）SHA256 落库（明文不落库）、单次消费
 /// （<c>IsConsumed</c> 翻转）、再生成 = 全量替换（删旧码插新码）；验证纳入 per-user×method 频控（Oracle C4）。</para>
 /// <para>索引：<c>UX_MfaRecovery_User_CodeHash</c>（UserId+CodeHash 联合唯一——码唯一防碰撞）。</para>
 /// </summary>
-[Table("MfaRecoveryCode")]
-[FreeSql.DataAnnotations.Index("UX_MfaRecovery_User_CodeHash", nameof(UserId) + "," + nameof(CodeHash), IsUnique = true)]
-[FreeSql.DataAnnotations.Index("IX_MfaRecovery_User", nameof(UserId))]
+[Table("TKWF_MfaRecoveryCode")]
+[FreeSql.DataAnnotations.Index("TKWFIX_MfaRecovery_User_CodeHash", nameof(UserId) + "," + nameof(CodeHash), IsUnique = true)]
+[FreeSql.DataAnnotations.Index("TKWFIX_MfaRecovery_User", nameof(UserId))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class MfaRecoveryCodeEntity
 {

@@ -12,8 +12,8 @@ namespace TKWF.Ext.Federation
     /// 对齐 PlatformCredentialEntity 先例）；<c>HmacSecretEncrypted</c> 为 per-channel + per-app HMAC 密钥
     /// （<c>/sso/issue</c> 验签密钥来源，Oracle P1-4——不复用 PlatformCredentialEntity）。</para>
     /// </summary>
-    [Table("SsoClient")]
-    [FreeSql.DataAnnotations.Index("UX_SsoClient_AppId", nameof(AppId), IsUnique = true)]
+    [Table("TKWF_SsoClient")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_SsoClient_AppId", nameof(AppId), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class SsoClientEntity
     {

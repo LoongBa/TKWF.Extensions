@@ -195,7 +195,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 |----|-----------|
 | `TKWF_AuthAccount`（**V0.9.0 改名**） | UId(32 唯一)/Phone(20 **可空**唯一——微信便捷账号无手机号)/PasswordHash?（**SecurePassword 协议 AES-GCM 密文**——ADR-密码策略 决策 1，服务端零明文；组装格式 `{iterations}.{b64salt}.{b64hash}` 经 `ICredentialProtector` 保护）/**FederationAnchorOpenId?**（V0.6.0 联盟锚点——联邦 SSO 账号锚定列，**唯一**）/**AuthLevel**（V0.9.0 泛化 1=手机号级/2=联邦快捷——剔 3=教师核实）/**IsFrozen + FreezeEnd?**（V0.9.0 密码策略 决策 3——账号冻结；FreezeEnd=null 永久冻结）/**MustChangePassword**（初始密码强制改密——认证成功返回信号）/TokenVersion/IsEnabled；**⚠️ V0.9.0 瘦身（A.1/A.8）**：删 Nickname/Avatar/TeacherVerified（迁 `TKWF_UserProfile`）+ WechatMpOpenId/WechatWebOpenId/UnionId（联邦归一化迁 `PlatformAccountMap`）——凭据白名单表；索引 `TKWFIX_` 前缀（ADR100） |
 | `TKWF_UserProfile`（**V0.9.0 新增**） | UId(32 **唯一 1:1**——凭据/档案表级分离 A.1)/Nickname/Avatar/Birthday?/Gender?（宽松自由文本 max32——A.7）/Email?（联系方式角色——非登录凭据，A.5/A.6） |
-| `TKWF_PasswordResetCode`（**V0.9.0 新增**） | UId(32)/Channel(SMS/Email——找回多通道 B.10)/CodeHash(SHA256 不存明文)/ExpireAt/IsConsumed——**UId-keyed 自建链路**（Account PasswordResetCode 为 userName-keyed，平行不互认） |
+| `TKWF_PasswordResetCode`（**V0.9.0 新增**） | UId(32)/Channel(SMS/Email——找回多通道 B.10)/CodeHash(SHA256 不存明文)/ExpireAt（**v0.9.1 TTL 配置化**——`PasswordPolicyOptions.ResetCodeValidityMinutes` 默认 30）/IsConsumed——**UId-keyed 自建链路**（Account PasswordResetCode 为 userName-keyed，平行不互认） |
 | `TKWF_PasswordHistory`（**V0.9.0 密码策略 决策 5 新增**） | UId(32)/ClientHash(明文组装格式——防重用比对源，服务端不接触密码明文)/CreateTime——**只增表**（保留最近 `PasswordPolicyOptions.HistoryRetentionCount` 代，门面 TrimHistoryAsync 清理；密码历史防重用 `PASSWORD_REUSE_REJECTED`） |
 | `AuthLoginAttempt` | UserIdentity(100)+AuthType(20)+IsSuccess+IpAddress?+FailReason?+AttemptTime；索引 (UserIdentity,AuthType,AttemptTime) |
 | `SmsRecord` | Phone+Scene+CodeHash(SHA256 不存明文)+IsVerified+ExpireAt；索引 (Phone,Scene,CreateTime)/(IpAddress,CreateTime) |
@@ -281,6 +281,12 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **EnabledAuthTypes fail-closed 生效（P1-1/P2-6）**：登录门面先 `EnabledAuthTypes.Contains(AuthType)` 过滤再选区；默认值修正 `["sms","wechat","password"]`——**破坏性（消费方显式配 ["sms"] 但用 wechat 须加 "wechat"，§七 迁移提示）**。
   - **/verify JSON 键名对齐（P1-2）**：`VerifyResponse.AuthLevel` 加 `[JsonPropertyName("auth_level")]`（README 文档 snake_case 对齐）。
   - 测试：**142 用例全绿**（123 既有适配 + 新增 `PasswordCapabilityTests` 19——Password Provider 正负/SetPassword CAS/ChangePassword 验旧/找回降级/频控分支/账号冻结/密码策略防重用/档案读写）；全 slnx 41 测试项目全量回归 0 失败（Federation 23 同步适配 UserProfile 档案）。
+- **V0.9.1（2026-10-07 Email 找回 6 项裁定落地——ADR-密码策略 转告调整 ②）**：
+  - **① Email 模板 Options**：`PasswordPolicyOptions.ResetEmailSubjectTemplate`/`ResetEmailBodyTemplate`（自建占位符纯文本，不引 PrintTemplates；`{code}`/`{expiresInMinutes}` 替换，IsHtml=false 起步——HTML 品牌化 v0.2.0 评估）。
+  - **③ TTL 配置化**：`PasswordPolicyOptions.ResetCodeValidityMinutes`（默认 30）替代硬编码 const——SMS/Email 统一。
+  - **④ 冻结与找回互斥（fail-closed）**：`InitiateSmsResetAsync`/`InitiateEmailResetAsync`/`CompleteResetWithCodeAsync`/`CompleteResetSmsAsync`/`CompleteResetVerifiedAsync` 入口 `IsFrozenEffective` 检查 → `ACCOUNT_FROZEN`（两步流程：工作人员解冻后自助找回）。
+  - **⑤ Email 发起独立频控**：`pwd:reset-email:{uid}`（重发间隔 `ResetEmailResendIntervalSeconds` 默认 60s）+ `pwd:reset-email-hour:{uid}`/`pwd:reset-email-day:{uid}` 小时/日上限；SMS 保持 `pwd:reset:{identifier}` 统一频控。
+  - 测试：**146 用例全绿**（+4：模板+TTL 配置化/Email 冻结互斥/完成冻结互斥/独立频控窗口）+ 全 slnx 40 项目零失败。
 - **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。**⚠️ V0.9.0 破坏性迁移**：AuthAccount 表 RENAME + 删 6 列 + UserProfile 拆分 + `teacher_verified` claim 移除 + EnabledAuthTypes fail-closed——消费方按开发方案 §七 迁移指引适配。
 
 <!-- EOF -->

@@ -8,11 +8,11 @@ namespace TKWF.Ext.Notifications;
 /// <summary>
 /// 通知实体——发布态（一份通知一次写入，收件箱行经 <see cref="UserNotificationEntity"/> 关联）。
 /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。</para>
-/// <para>保留 BCL <c>[Table("Notification")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+/// <para>保留 BCL <c>[Table("TKWF_Notification")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
 /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
 /// </summary>
-[Table("Notification")]
-[FreeSql.DataAnnotations.Index("IX_Notification_Name", nameof(Name), IsUnique = false)]
+[Table("TKWF_Notification")]
+[FreeSql.DataAnnotations.Index("TKWFIX_Notification_Name", nameof(Name), IsUnique = false)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class NotificationEntity
 {

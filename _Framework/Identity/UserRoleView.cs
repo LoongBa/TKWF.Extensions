@@ -9,17 +9,17 @@ namespace TKWF.Ext.Identity
     /// <para>V0.2.0：替代两步查询（先查 RoleId 集合再查 Role）——JOIN 下推 DB，单查询完成。
     /// VEntity 只读：<c>IDomainViewEntity</c> 由 SG1 自动生成，禁 IEntityDAC 写操作。</para>
     /// </summary>
-    [Table(Name = "vw_UserRoleView", DisableSyncStructure = true)]
+    [Table(Name = "TKWFV_UserRoleView", DisableSyncStructure = true)]
     [DomainGenerateCode(IsView = true,
-        ViewSql = @"CREATE OR REPLACE VIEW ""vw_UserRoleView"" AS
+        ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_UserRoleView"" AS
 SELECT ur.""UserId"", r.""Id"", r.""Name"", r.""DisplayName"", r.""IsSystemRole"", r.""CreateTime"", r.""UpdateTime""
-FROM ""IdentityUserRole"" ur
-INNER JOIN ""IdentityRole"" r ON ur.""RoleId"" = r.""Id""",
-        ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""vw_UserRoleView"" AS
+FROM ""TKWF_IdentityUserRole"" ur
+INNER JOIN ""TKWF_IdentityRole"" r ON ur.""RoleId"" = r.""Id""",
+        ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserRoleView"" AS
 SELECT ur.""UserId"", r.""Id"", r.""Name"", r.""DisplayName"", r.""IsSystemRole"",
        NULL AS ""CreateTime"", NULL AS ""UpdateTime""
-FROM ""IdentityUserRole"" ur
-INNER JOIN ""IdentityRole"" r ON ur.""RoleId"" = r.""Id""",
+FROM ""TKWF_IdentityUserRole"" ur
+INNER JOIN ""TKWF_IdentityRole"" r ON ur.""RoleId"" = r.""Id""",
         ExposeGraphqlQuery = true,
         DefaultPageSize = 50)]
     public partial class UserRoleView

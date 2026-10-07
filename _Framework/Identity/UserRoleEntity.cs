@@ -7,9 +7,9 @@ namespace TKWF.Ext.Identity
     /// <summary>
     /// 用户-角色映射实体——用户与角色的多对多关系。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("IdentityUserRole")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
+    /// 保留 BCL <c>[Table("TKWF_IdentityUserRole")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
     /// </summary>
-    [Table("IdentityUserRole")]
+    [Table("TKWF_IdentityUserRole")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class UserRoleEntity
     {

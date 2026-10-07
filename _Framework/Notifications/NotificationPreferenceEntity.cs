@@ -10,8 +10,8 @@ namespace TKWF.Ext.Notifications;
 /// <para>ChannelsJson 存通道列表 JSON（如 <c>["Email"]</c>；null = 回退定义级）。
 /// <c>UX_NotificationPreference_User_Notification</c>（UserId+NotificationName）唯一——每用户每通知至多一条偏好。</para>
 /// </summary>
-[Table("NotificationPreference")]
-[FreeSql.DataAnnotations.Index("UX_NotificationPreference_User_Notification",
+[Table("TKWF_NotificationPreference")]
+[FreeSql.DataAnnotations.Index("TKWFIX_NotificationPreference_User_Notification",
     nameof(UserId) + "," + nameof(NotificationName), IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class NotificationPreferenceEntity

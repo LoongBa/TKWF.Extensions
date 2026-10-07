@@ -7,7 +7,7 @@ namespace TKWF.Ext.FileManagement
 {
     /// <summary>
     /// 受管文件版本实体（V0.2.0）——文件版本历史（上传新内容生成新版本，保留历史可回滚可追溯）。
-    /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("ManagedFileVersion")]</c>；
+    /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；保留 BCL <c>[Table("TKWF_ManagedFileVersion")]</c>；
     /// 列映射用 FreeSql <c>[Column]</c>（全限定）。</para>
     /// <para>版本模型（Oracle P2-1 定稿）：不指定 SubDomain——对齐既有 <see cref="ManagedFileEntity"/> 风格；
     /// <c>Version</c> int 递增（首版 1，后续 max+1）；<c>UX_mfv_file_version</c>（FileId+Version）唯一——并发上传败者由 DB 约束兜底（P2-5）。</para>
@@ -15,9 +15,9 @@ namespace TKWF.Ext.FileManagement
     /// 不复制字节；回滚指针复用（不复制 Blob）。</para>
     /// <para>删除语义：物理删除（不声明 IsDeleted）——删除文件时版本行 + 版本 Blob 一并清理（Oracle P1-2）。</para>
     /// </summary>
-    [Table("ManagedFileVersion")]
-    [FreeSql.DataAnnotations.Index("UX_mfv_file_version", nameof(FileId) + "," + nameof(Version), IsUnique = true)]
-    [FreeSql.DataAnnotations.Index("IX_mfv_file", nameof(FileId))]
+    [Table("TKWF_ManagedFileVersion")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Mfv_File_Version", nameof(FileId) + "," + nameof(Version), IsUnique = true)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Mfv_File", nameof(FileId))]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class ManagedFileVersionEntity
     {

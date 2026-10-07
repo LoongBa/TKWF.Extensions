@@ -11,8 +11,8 @@ namespace TKWF.Ext.FeatureManagement;
 /// 应用层保证（预检 + 事务内二次校验，对齐 FileManagement C2 教训）。</para>
 /// <para>删除语义：物理删除（不声明 IsDeleted，hasSoftDelete:false）。</para>
 /// </summary>
-[Table("FeatureValue")]
-[FreeSql.DataAnnotations.Index("UX_FeatureValue_Name_Provider", nameof(Name) + "," + nameof(ProviderName) + "," + nameof(ProviderKey), IsUnique = true)]
+[Table("TKWF_FeatureValue")]
+[FreeSql.DataAnnotations.Index("TKWFIX_FeatureValue_Name_Provider", nameof(Name) + "," + nameof(ProviderName) + "," + nameof(ProviderKey), IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50, SubDomain = "FeatureManagement", SubDomainRoutePrefix = "/FeatureManagement")]
 public partial class FeatureValueEntity
 {

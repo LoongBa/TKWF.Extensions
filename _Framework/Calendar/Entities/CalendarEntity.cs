@@ -8,15 +8,15 @@ namespace TKWF.Ext.Calendar
     /// <summary>
     /// 日历实体——多日历隔离（Code 唯一索引，F1）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("Calendar")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// 保留 BCL <c>[Table("TKWF_Calendar")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// <para>删除语义：物理删除（硬删）——<b>不声明 IsDeleted</b>，DataService 基类 <c>hasSoftDelete:false</c>；
     /// 删除保护（无事件）由 Manager 层强制（D17）。</para>
     /// <para>审计字段（D5）：<c>DateTime</c>（UTC）显式声明（对齐 DataDictionary/Tagging 先例，
     /// FreeSql SQLite 不支持 DateTimeOffset）；不声明 IsDeleted（物理删除）。</para>
     /// </summary>
-    [Table("Calendar")]
-    [FreeSql.DataAnnotations.Index("UX_Calendar_Code", nameof(Code), IsUnique = true)]
+    [Table("TKWF_Calendar")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Calendar_Code", nameof(Code), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class CalendarEntity
     {

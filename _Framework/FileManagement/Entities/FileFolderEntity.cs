@@ -8,7 +8,7 @@ namespace TKWF.Ext.FileManagement
     /// <summary>
     /// 文件目录实体——树形目录（Code 唯一 + Level/Path 物化路径，对齐 OrganizationUnit 模式，F1）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("FileFolder")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// 保留 BCL <c>[Table("TKWF_FileFolder")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// <para>删除语义：物理删除（硬删）——<b>不声明 IsDeleted</b>，DataService 基类 <c>hasSoftDelete:false</c>；
     /// 删除保护（无子目录且无文件）由 Manager 层强制（D17）。</para>
@@ -17,8 +17,8 @@ namespace TKWF.Ext.FileManagement
     /// <para>审计字段（D5）：<c>DateTime</c>（UTC）显式声明（对齐 Calendar/DataDictionary 先例，
     /// FreeSql SQLite 不支持 DateTimeOffset）；不声明 IsDeleted（物理删除）。</para>
     /// </summary>
-    [Table("FileFolder")]
-    [FreeSql.DataAnnotations.Index("UX_FileFolder_Code", nameof(Code), IsUnique = true)]
+    [Table("TKWF_FileFolder")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_FileFolder_Code", nameof(Code), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class FileFolderEntity
     {

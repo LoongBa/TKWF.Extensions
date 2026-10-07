@@ -10,8 +10,8 @@ namespace TKWF.Ext.Tagging;
 /// <para>字段对齐 <c>TKW.Framework.Utility.Tags.TagRule</c>（算法输入模型）；<c>[DomainGenerateCode]</c> 不指定 UserType
 /// （ADR42 D4——扩展不自建 UserInfo）；审计字段用 DateTime（UTC）——FreeSql SQLite 不支持 DateTimeOffset（Oracle P1-1）。</para>
 /// </summary>
-[Table("TagRule")]
-[FreeSql.DataAnnotations.Index("UX_TagRule_Dimension_TagName_Pattern",
+[Table("TKWF_TagRule")]
+[FreeSql.DataAnnotations.Index("TKWFIX_TagRule_Dimension_TagName_Pattern",
     nameof(Dimension) + "," + nameof(TagName) + "," + nameof(Pattern), IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class TagRuleEntity

@@ -8,9 +8,9 @@ namespace TKWF.Ext.DataDictionary
     /// <summary>
     /// 数据字典项——归属某字典定义的具体选项（编码/显示名/值/排序/启用）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("DictionaryItem")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
+    /// 保留 BCL <c>[Table("TKWF_DictionaryItem")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
     /// </summary>
-    [Table("DictionaryItem")]
+    [Table("TKWF_DictionaryItem")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class DictionaryItemEntity
     {

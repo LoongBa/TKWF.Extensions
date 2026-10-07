@@ -9,14 +9,14 @@ namespace TKWF.Ext.AuditLogging
     /// 审计日志表实体——记录方法级调用事件（调用者、目标方法、参数脱敏 JSON、耗时、成功/异常、关联 ID）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
     /// SG1 自动生成 <see cref="TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("AuditLog")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// <para>保留 BCL <c>[Table("TKWF_AuditLog")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
-    [Table("AuditLog")]
-    [FreeSql.DataAnnotations.Index("IX_AuditLog_ExecutionTime", nameof(ExecutionTime), IsUnique = false)]
-    [FreeSql.DataAnnotations.Index("IX_AuditLog_UserName", nameof(UserName), IsUnique = false)]
-    [FreeSql.DataAnnotations.Index("IX_AuditLog_CorrelationId", nameof(CorrelationId), IsUnique = false)]
-    [FreeSql.DataAnnotations.Index("IX_AuditLog_ServiceName", nameof(ServiceName), IsUnique = false)]
+    [Table("TKWF_AuditLog")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuditLog_ExecutionTime", nameof(ExecutionTime), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuditLog_UserName", nameof(UserName), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuditLog_CorrelationId", nameof(CorrelationId), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuditLog_ServiceName", nameof(ServiceName), IsUnique = false)]
     [DomainGenerateCode(SubDomain = "AuditLogging", SubDomainRoutePrefix = "/AuditLogging", DefaultPageSize = 50)]   // V0.4.0：SubDomain——管理 API 路由前缀（对齐 Permissions G2）
     public partial class AuditLogEntity
     {

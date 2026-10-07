@@ -8,9 +8,9 @@ namespace TKWF.Ext.Identity
     /// <summary>
     /// 角色实体——角色名、显示名与系统角色标记。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("IdentityRole")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
+    /// 保留 BCL <c>[Table("TKWF_IdentityRole")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
     /// </summary>
-    [Table("IdentityRole")]
+    [Table("TKWF_IdentityRole")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class RoleEntity
     {

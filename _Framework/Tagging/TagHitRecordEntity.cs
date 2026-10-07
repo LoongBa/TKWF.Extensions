@@ -10,9 +10,9 @@ namespace TKWF.Ext.Tagging;
 /// <para>字段对齐 <c>TagHit</c> record（算法输出模型）+ 原文快照/时间戳；<c>[DomainGenerateCode]</c> 不指定 UserType
 /// （ADR42 D4）；HitTime 用 DateTime（UTC）——FreeSql SQLite 不支持 DateTimeOffset（Oracle P1-1）。</para>
 /// </summary>
-[Table("TagHit")]
-[FreeSql.DataAnnotations.Index("IX_TagHit_Dimension_Time", nameof(Dimension) + "," + nameof(HitTime), IsUnique = false)]
-[FreeSql.DataAnnotations.Index("IX_TagHit_TagName", nameof(TagName), IsUnique = false)]
+[Table("TKWF_TagHit")]
+[FreeSql.DataAnnotations.Index("TKWFIX_TagHit_Dimension_Time", nameof(Dimension) + "," + nameof(HitTime), IsUnique = false)]
+[FreeSql.DataAnnotations.Index("TKWFIX_TagHit_TagName", nameof(TagName), IsUnique = false)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class TagHitRecordEntity
 {

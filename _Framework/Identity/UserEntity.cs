@@ -9,11 +9,11 @@ namespace TKWF.Ext.Identity
     /// 用户实体——登录名、密码散列、联系方式与启用状态。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
     /// SG1 自动生成 <see cref="TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("IdentityUser")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// <para>保留 BCL <c>[Table("TKWF_IdentityUser")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
-    [Table("IdentityUser")]
-    [FreeSql.DataAnnotations.Index("UX_IdentityUser_NormalizedUserName", nameof(NormalizedUserName), IsUnique = true)]  // P1-1（Oracle）：重名竞态 DB 兜底
+    [Table("TKWF_IdentityUser")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_IdentityUser_NormalizedUserName", nameof(NormalizedUserName), IsUnique = true)]  // P1-1（Oracle）：重名竞态 DB 兜底
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class UserEntity
     {

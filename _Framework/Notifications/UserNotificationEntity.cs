@@ -9,9 +9,9 @@ namespace TKWF.Ext.Notifications;
 /// 用户通知实体——收件箱行（每收件人一条，关联 <see cref="NotificationEntity"/>）。
 /// <para>State：0=Unread，1=Read。UserId 对齐 Identity/Permissions 的 long 约定（m7）。</para>
 /// </summary>
-[Table("UserNotification")]
-[FreeSql.DataAnnotations.Index("IX_UserNotification_UserState", nameof(UserId) + "," + nameof(State), IsUnique = false)]
-[FreeSql.DataAnnotations.Index("IX_UserNotification_NotificationId", nameof(NotificationId), IsUnique = false)]
+[Table("TKWF_UserNotification")]
+[FreeSql.DataAnnotations.Index("TKWFIX_UserNotification_UserState", nameof(UserId) + "," + nameof(State), IsUnique = false)]
+[FreeSql.DataAnnotations.Index("TKWFIX_UserNotification_NotificationId", nameof(NotificationId), IsUnique = false)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class UserNotificationEntity
 {

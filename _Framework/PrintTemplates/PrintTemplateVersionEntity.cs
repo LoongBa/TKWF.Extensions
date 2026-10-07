@@ -9,10 +9,10 @@ namespace TKWF.Ext.PrintTemplates
     /// 打印模板版本表实体——关联模板（TemplateId）+ 版本号（SemVer 字符串）+ 正文 + 状态。
     /// <para>TemplateId + Version 唯一（并发发布防冲突——败者显式异常）。</para>
     /// </summary>
-    [Table("PrintTemplateVersion")]
-    [FreeSql.DataAnnotations.Index("IX_ptv_template_version", nameof(TemplateId) + "," + nameof(Version), IsUnique = true)]
-    [FreeSql.DataAnnotations.Index("IX_ptv_template_status", nameof(TemplateId) + "," + nameof(Status), IsUnique = false)]
-    [FreeSql.DataAnnotations.Index("IX_ptv_template", nameof(TemplateId), IsUnique = false)]
+    [Table("TKWF_PrintTemplateVersion")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Ptv_Template_Version", nameof(TemplateId) + "," + nameof(Version), IsUnique = true)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Ptv_Template_Status", nameof(TemplateId) + "," + nameof(Status), IsUnique = false)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_Ptv_Template", nameof(TemplateId), IsUnique = false)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class PrintTemplateVersionEntity
     {

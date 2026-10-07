@@ -43,7 +43,7 @@ public class FeatureValueEntityTests
             FeatureManagementTestSupport.SyncStructure(fsql);
 
             var colType = (string?)fsql.Ado.ExecuteScalar(
-                "SELECT type FROM pragma_table_info('FeatureValue') WHERE name = 'Value'");
+                "SELECT type FROM pragma_table_info('TKWF_FeatureValue') WHERE name = 'Value'");
 
             Assert.Equal("TEXT", colType);   // 无 MaxLength → FreeSql 默认映射 TEXT
         }
@@ -96,7 +96,7 @@ public class FeatureValueEntityTests
         try
         {
             fsql.Ado.ExecuteNonQuery("""
-                CREATE TABLE FeatureValue (
+                CREATE TABLE TKWF_FeatureValue (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     Name VARCHAR(128) NOT NULL,
                     Value VARCHAR(512) NULL,
@@ -112,7 +112,7 @@ public class FeatureValueEntityTests
             fsql.CodeFirst.SyncStructure<FeatureValueEntity>();
 
             var colType = (string?)fsql.Ado.ExecuteScalar(
-                "SELECT type FROM pragma_table_info('FeatureValue') WHERE name = 'Value'");
+                "SELECT type FROM pragma_table_info('TKWF_FeatureValue') WHERE name = 'Value'");
 
             // C2 实测结论：FreeSql SyncStructure（框架 SyncTables 底层机制）自动加宽存量 VARCHAR(512) → TEXT（SQLite 表重建）——
             // 存量库迁移路径成立；SQLite 实测 + DBA 手动 ALTER 兜底声明（跨方言视 FreeSql 实现，使用指南仍保留说明）

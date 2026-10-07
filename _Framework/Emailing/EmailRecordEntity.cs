@@ -9,10 +9,10 @@ namespace TKWF.Ext.Emailing
     /// 邮件记录表实体——存储发送邮件的记录（收件人、发件人、主题、正文、状态、错误信息等）。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
     /// SG1 自动生成 IDomainEntity 部分与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("EmailRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
+    /// <para>保留 BCL <c>[Table("TKWF_EmailRecord")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
-    [Table("EmailRecord")]
+    [Table("TKWF_EmailRecord")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class EmailRecordEntity
     {

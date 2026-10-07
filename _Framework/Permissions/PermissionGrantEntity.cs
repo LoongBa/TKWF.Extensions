@@ -10,11 +10,12 @@ namespace TKWF.Ext.Permissions
     /// ADR42 D4 扩展实体不自建 UserInfo，DataService 用非泛型 <c>DomainDataServiceBase&lt;TEntity,TDto&gt;</c>
     /// 接受消费方上下文）。SG1 自动生成 <see cref="IDomainEntity"/> 部分（含 <c>IsFromPersistentSource</c>
     /// 默认实现覆盖）与 DTO/DataService。</para>
-    /// <para>保留 BCL <c>[Table("PermissionGrant")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表，
+    /// <para>保留 BCL <c>[Table("TKWF_PermissionGrant")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表，
     /// V4.9.57+ 仅发现 BCL <c>[Table]</c>）；列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，
     /// 全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>
-    [Table("PermissionGrant")]
+    [Table("TKWF_PermissionGrant")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_PermissionGrant_Provider", "PermissionName,ProviderName,ProviderKey", IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50, SubDomain = "Permissions", SubDomainRoutePrefix = "/Permissions")]
     public partial class PermissionGrantEntity
     {

@@ -8,9 +8,9 @@ namespace TKWF.Ext.Account
     /// <summary>
     /// 密码重置码记录——用户名、重置码、过期时间与使用状态。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>；
-    /// 保留 BCL <c>[Table("PasswordResetCode")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
+    /// 保留 BCL <c>[Table("TKWF_Acct_PasswordResetCode")]</c>；列映射用 FreeSql <c>[Column]</c>。</para>
     /// </summary>
-    [Table("PasswordResetCode")]
+    [Table("TKWF_Acct_PasswordResetCode")]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class PasswordResetCodeEntity
     {

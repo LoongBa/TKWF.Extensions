@@ -12,8 +12,8 @@ namespace TKWF.Ext.AuthSurface;
 /// <para>⚠️ 软引用语义：<see cref="AppId"/> 与 <c>AuthGrant.AppId</c> / <c>RedemptionCode.TargetAppId</c> 为字符串约定
 /// （无 FK 约束）——删除前检查引用；建议 <c>SetEnabledAsync(false)</c> 软禁用而非物理删除（防 vm_UserApps 丢 AppName）。</para>
 /// </summary>
-[Table("AuthApp")]
-[FreeSql.DataAnnotations.Index("UX_AuthApp_AppId", nameof(AppId), IsUnique = true)]
+[Table("TKWF_AuthApp")]
+[FreeSql.DataAnnotations.Index("TKWFIX_AuthApp_AppId", nameof(AppId), IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class AuthAppEntity
 {

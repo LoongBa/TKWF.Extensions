@@ -1,4 +1,4 @@
-﻿using System.Security.Authentication;
+using System.Security.Authentication;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthSurface.Tests;
@@ -133,7 +133,7 @@ public class RedemptionCommandServiceTests
         // ⚠️ SQLite DateTime 读回偏移（FreeSql SQLite provider 已知限制——UTC 列读回 +7h）：
         // 门面 C# 过期判定受偏移影响不走进度分支（MarkExpired 未调），CAS 谓词（SQL 侧）兜底拒绝——
         // 拒绝语义验证靠异常断言（生产 PG DateTime 无偏移，门面判定 + CAS 一致走翻转）。
-        var table = fsql.Ado.ExecuteDataTable(@"SELECT ""Status"" FROM ""RedemptionCode""");
+        var table = fsql.Ado.ExecuteDataTable(@"SELECT ""Status"" FROM ""TKWF_RedemptionCode""");
         Assert.Equal(0, Convert.ToInt32(table.Rows[0][0]));  // SQLite 偏移下 MarkExpired 未调——Status 保持 Available（拒绝语义由异常保证）
     }
 

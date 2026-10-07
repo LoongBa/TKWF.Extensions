@@ -1,4 +1,4 @@
-# TKWF.Ext.AuthSurface
+﻿# TKWF.Ext.AuthSurface
 
 > TKWF 扩展：**授权面**——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合 + 授权快照候选。
 > **数据属主** = 兑换/授权记录（非账号）——行级身份引用一律 `AuthAccount.UId`（前置裁定 P4 白名单）。
@@ -11,7 +11,7 @@
 | 包名 | `TKWF.Ext.AuthSurface` |
 | 版本 | V0.1.0（独立起点——2026-10-07 立项，Oracle4 评审 PASS WITH CONDITIONS） |
 | 依赖 | `TKWF.Domain`（CPM）+ `TKWF.Utility`（v4.10.67 `IRateLimitCheck` 点检查原语——兑换频控）+ `TKWF.CodeGeneration`（SG1 纯 Analyzer）+ **ProjectReference `UserCenter.Abstractions`**（DTO 复用——`RedemptionRecordDto`/`UserAppDto` 页面零适配，L2 门控合规）+ FreeSql |
-| 数据 | 表 `RedemptionCode` + `AuthApp`（本扩展）；视图 `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`（跨扩展 JOIN AuthCenter `TKWF_AuthAccount`/`AuthGrant`——视图归本扩展，P3） |
+| 数据 | 表 `RedemptionCode` + `AuthApp`（本扩展）；视图 `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`（跨扩展 JOIN AuthCenter `TKWF_AuthAccount`/`TKWF_AuthGrant`——视图归本扩展，P3） |
 | 边界 | **零扩展间实现依赖**（ViewSql 字符串跨扩展引用 AuthCenter 表名，无代码引用——L2 零 TKWF0022） |
 
 ## 架构分层
@@ -49,7 +49,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 | API | 说明 |
 |-----|------|
-| `IUserAppsQueryService.GetAppsAsync(userId)` | 我的应用——`TKWFV_UserApps` 视图（JOIN `AuthGrant` + `TKWF_AuthAccount` + `AuthApp` LEFT JOIN 取 AppName）；**有效过滤在 DataService**（Status=Active 且 ValidUntil 未过——C# 侧 UtcNow 无方言风险）；返回 `UserAppDto`（`UsageSummary` 恒 null——儿童数据红线） |
+| `IUserAppsQueryService.GetAppsAsync(userId)` | 我的应用——`TKWFV_UserApps` 视图（JOIN `TKWF_AuthGrant` + `TKWF_AuthAccount` + `AuthApp` LEFT JOIN 取 AppName）；**有效过滤在 DataService**（Status=Active 且 ValidUntil 未过——C# 侧 UtcNow 无方言风险）；返回 `UserAppDto`（`UsageSummary` 恒 null——儿童数据红线） |
 | `IRedemptionQueryService.GetRedemptionsAsync(userId)` | 兑换历史——`TKWFV_UserRedemptionHistory` 视图（JOIN `RedemptionCode` + `TKWF_AuthAccount`——INNER JOIN 天然排除未兑换行）；返回 `RedemptionRecordDto`（code 已脱敏透传） |
 
 > ⚠️ **v0.1.0 业务语义（Oracle4 P1-3 明示）**：兑换成功后应用**不会**出现在"我的应用"列表——v0.1.0 兑换不写 `AuthGrant`（`Source=redeem` 预留 v0.2.0）；兑换历史可见。消费方页面应区分"兑换记录"与"应用授权"两栏。
@@ -114,7 +114,7 @@ AuthApp(id BIGINT PK, app_id VARCHAR(100) UNIQUE, app_name VARCHAR(100), icon VA
         is_enabled BOOLEAN, create_time, update_time)
 -- 视图（跨扩展——生产 DBA 手动建，依赖 AuthCenter 表）
 TKWFV_UserRedemptionHistory  = RedemptionCode INNER JOIN TKWF_AuthAccount (RedeemedByUId = UId)
-TKWFV_UserApps               = AuthGrant INNER JOIN TKWF_AuthAccount (UserId = UId) LEFT JOIN AuthApp (AppId)
+TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserId = UId) LEFT JOIN AuthApp (AppId)
 ```
 
 - 索引：`UX_RedemptionCode_CodeHash`（唯一——一码一兑）/ `UX_AuthApp_AppId`（唯一）。
@@ -133,6 +133,6 @@ TKWFV_UserApps               = AuthGrant INNER JOIN TKWF_AuthAccount (UserId = U
 
 ## 测试基线
 
-`Extension.AuthSurface.Tests`——**20 用例全绿**（兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言；跨扩展基表原生 SQL 模拟——AuthCenter V0.9.0 完成后切 ProjectReference + 双白名单集成）。
+`Extension.AuthSurface.Tests`——**20 用例全绿**（兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成（ProjectReference + 双白名单，Oracle4 P1-2 契约兑现）**）。
 
 <!-- EOF -->

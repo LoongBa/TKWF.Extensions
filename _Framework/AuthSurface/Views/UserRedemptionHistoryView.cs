@@ -18,12 +18,12 @@ namespace TKWF.Ext.AuthSurface;
     ViewSql = @"CREATE OR REPLACE VIEW ""TKWFV_UserRedemptionHistory"" AS
 SELECT rc.""Id"", rc.""RedeemedByUId"" AS ""UserId"", rc.""CodeMasked"", rc.""ProductName"", rc.""TargetAppId"",
        rc.""RedeemedAtUtc"", rc.""Status"", ac.""UId""
-FROM ""RedemptionCode"" rc
+FROM ""TKWF_RedemptionCode"" rc
 INNER JOIN ""TKWF_AuthAccount"" ac ON rc.""RedeemedByUId"" = ac.""UId""",
     ViewSqlSQLite = @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserRedemptionHistory"" AS
 SELECT rc.""Id"", rc.""RedeemedByUId"" AS ""UserId"", rc.""CodeMasked"", rc.""ProductName"", rc.""TargetAppId"",
        rc.""RedeemedAtUtc"", rc.""Status"", ac.""UId""
-FROM ""RedemptionCode"" rc
+FROM ""TKWF_RedemptionCode"" rc
 INNER JOIN ""TKWF_AuthAccount"" ac ON rc.""RedeemedByUId"" = ac.""UId""",
     ExposeGraphqlQuery = false,
     DefaultPageSize = 50)]

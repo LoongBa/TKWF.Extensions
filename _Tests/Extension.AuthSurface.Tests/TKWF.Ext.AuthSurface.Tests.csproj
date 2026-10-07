@@ -41,10 +41,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 本仓库扩展（AuthSurface 主包 + UserCenter.Abstractions DTO 契约）。
-         ⚠️ AuthCenter 主包暂不 ProjectReference——其源码处 V0.9.0 身份域重构进行中（半成品编译失败）；
-         vm 视图 JOIN 的跨扩展基表（TKWF_AuthAccount/AuthGrant）由测试宿主原生 SQL 建表模拟（AuthCenter V0.9.0 完成后再切 ProjectReference + 双白名单集成） -->
+    <!-- 本仓库扩展（AuthSurface 主包 + AuthCenter 跨扩展基表 + UserCenter.Abstractions DTO 契约）。
+         ✅ AuthCenter V0.9.0 已提交（5bd2f0c——编译通过）——切 ProjectReference + 双白名单集成（Oracle4 P1-2 契约兑现） -->
     <ProjectReference Include="..\..\_Framework\AuthSurface\TKWF.Ext.AuthSurface.csproj" />
+    <ProjectReference Include="..\..\_Framework\AuthCenter\TKWF.Ext.AuthCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
     <!-- C 基座（2026-10-04）：共享测试设施 -->
     <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />

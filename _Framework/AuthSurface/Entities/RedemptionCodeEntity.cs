@@ -12,8 +12,8 @@ namespace TKWF.Ext.AuthSurface;
 /// <para>🔒 安全：code 明文<b>不落库</b>——<see cref="CodeHash"/>（SHA256 十六进制 64，唯一，防库泄露即任意兑换）；
 /// 展示经 <see cref="CodeMasked"/>（脱敏值）。行级 FK = <c>AuthAccount.UId</c>（前置裁定 P4——<see cref="RedeemedByUId"/>）。</para>
 /// </summary>
-[Table("RedemptionCode")]
-[FreeSql.DataAnnotations.Index("UX_RedemptionCode_CodeHash", nameof(CodeHash), IsUnique = true)]
+[Table("TKWF_RedemptionCode")]
+[FreeSql.DataAnnotations.Index("TKWFIX_RedemptionCode_CodeHash", nameof(CodeHash), IsUnique = true)]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class RedemptionCodeEntity
 {

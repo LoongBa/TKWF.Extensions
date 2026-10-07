@@ -15,9 +15,6 @@ namespace TKWF.Ext.Settings
         /// <summary>默认设置值提供者名称（默认 "Global"）。</summary>
         public string DefaultSettingValueProvider { get; set; } = "Global";
 
-        /// <summary>是否启用设置管理（默认 true）。</summary>
-        public bool IsEnabled { get; set; } = true;
-
         /// <summary>缓存过期时间（秒），默认 300 秒（5 分钟）。</summary>
         public int CacheExpirationSeconds { get; set; } = 300;
     }

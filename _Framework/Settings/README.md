@@ -100,7 +100,6 @@ public class MyService : DomainServiceBase
   "TKWF": {
     "Settings": {
       "DefaultSettingValueProvider": "Global",
-      "IsEnabled": true,
       "CacheExpirationSeconds": 300
     }
   }

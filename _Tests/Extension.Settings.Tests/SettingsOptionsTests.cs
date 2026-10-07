@@ -19,24 +19,10 @@ public class SettingsOptionsTests
     }
 
     [Fact]
-    public void Default_IsEnabled_IsTrue()
-    {
-        var options = new SettingsOptions();
-        Assert.True(options.IsEnabled);
-    }
-
-    [Fact]
     public void Custom_DefaultSettingValueProvider_IsRespected()
     {
         var options = new SettingsOptions { DefaultSettingValueProvider = "Tenant" };
         Assert.Equal("Tenant", options.DefaultSettingValueProvider);
-    }
-
-    [Fact]
-    public void Custom_IsEnabled_CanBeDisabled()
-    {
-        var options = new SettingsOptions { IsEnabled = false };
-        Assert.False(options.IsEnabled);
     }
 
     [Fact]
@@ -75,7 +61,6 @@ public class SettingsOptionsTests
             .Add(new InMemoryConfigurationSource(new Dictionary<string, string?>
             {
                 ["TKWF:Settings:DefaultSettingValueProvider"] = "Global",
-                ["TKWF:Settings:IsEnabled"] = "true",
                 ["TKWF:Settings:CacheExpirationSeconds"] = "600"
             }))
             .Build();
@@ -85,7 +70,6 @@ public class SettingsOptionsTests
 
         Assert.NotNull(options);
         Assert.Equal("Global", options!.DefaultSettingValueProvider);
-        Assert.True(options.IsEnabled);
         Assert.Equal(600, options.CacheExpirationSeconds);
     }
 

@@ -18,10 +18,11 @@ namespace TKWF.Ext.Federation.Tests;
 /// </summary>
 internal static class SsoTestHost
 {
-    /// <summary>SSO 2 实体 + 认证内核 3 实体（SSO profile 消费 ISsoAccountQueryService 需 AuthAccount + UserProfile（V0.9.0 凭据/档案分离——档案从 1:1 表读））。</summary>
+    /// <summary>SSO 2 实体 + 认证内核 3 实体（SSO profile 消费 ISsoAccountQueryService 需 AuthAccount + UserProfile（V0.9.0 凭据/档案分离——档案从 1:1 表读））+ 通道注册表实体（多通道联邦 Phase 2 DB 动态权威层）。</summary>
     private static readonly Type[] EntityTypes =
     [
         typeof(SsoClientEntity), typeof(SsoAccessCodeEntity),
+        typeof(SsoChannelRegistryEntity),
         typeof(AuthAccountEntity), typeof(PlatformAccountMapEntity), typeof(UserProfileEntity)
     ];
 

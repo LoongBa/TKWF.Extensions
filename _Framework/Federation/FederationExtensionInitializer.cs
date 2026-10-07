@@ -73,10 +73,18 @@ namespace TKWF.Ext.Federation;
         services.AddConstructibleService<ISsoProfileService, SsoProfileService>();
 
         // ── 多通道联邦（v0.3.0，方案 docs/Federation/多通道联邦-开发方案.md §3.2/3.4）──
-        // 通道注册表门面：Composite = 组合语义单点（Phase 1 内部仅 Static；Phase 2 注入 Db 零返工）；
+        // 通道注册表门面：Composite = 组合语义单点（DB 命中优先 → Static 回退）；
         // StaticChannelRegistry 具体类注册（普通 DI——Composite 守卫工厂 ActivatorUtilities 解析依赖）
         services.AddScoped<StaticChannelRegistry>();
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
+
+        // ── 多通道联邦 Phase 2：DB 动态权威层（P2-2/P2-3）──
+        // DbChannelRegistry：DomainServiceBase 派生（ctor 含 IDomainUser + keyed ISymmetricKeyProvider，不可直接 DI 解析）——
+        // Composite 经基类 User.Use<DbChannelRegistry>() 帧内 NoAop 直建；DI 注册守卫工厂形态（防直取/ValidateOnBuild 安全）
+        services.Add(ServiceDescriptor.Scoped(typeof(DbChannelRegistry), _ => throw new InvalidOperationException(
+            "[领域架构守卫] DbChannelRegistry 必须经 User.Use<DbChannelRegistry>() 解析（Composite 帧内 NoAop 直建）")));
+        // 通道注册表写入门面（Register/Update/Unregister + AES-GCM 加解密——管理端点不建，服务层方法保留）
+        services.AddConstructibleService<ISsoChannelRegistryService, SsoChannelRegistryService>();
 
         // 通道工厂 + 登录编排门面（Oracle M8：Singleton 守卫工厂，CreateAsync 帧内构造供给 IDomainUser）
         services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();

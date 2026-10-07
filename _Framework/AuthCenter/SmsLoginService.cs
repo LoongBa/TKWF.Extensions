@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -23,6 +24,7 @@ namespace TKWF.Ext.AuthCenter;
 internal sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
 {
     private readonly IReadOnlyList<IAuthenticationProvider> _providers;
+    private readonly IOptions<AuthCenterOptions> _options;
     private readonly ILogger<SmsLoginService> _logger;
 
     // DI004 铁律：领域服务间调用经 User.Use<T>() 懒加载（禁构造注入——IAuthAccountQueryService/ITokenService 为守卫工厂，
@@ -35,17 +37,25 @@ internal sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
     public SmsLoginService(
         IDomainUser user,
         IEnumerable<IAuthenticationProvider> providers,
+        IOptions<AuthCenterOptions> options,
         ILogger<SmsLoginService> logger)
         : base(user)
     {
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    /// <summary>EnabledAuthTypes fail-closed 判定（V0.9.0 P1-1/P2-6——集合外 Provider 不接线；先过滤再选区）。</summary>
+    private bool IsEnabled(string authType)
+        => _options.Value.EnabledAuthTypes.Contains(authType, StringComparer.Ordinal);
 
     /// <inheritdoc />
     public async Task<LoginResult> LoginAsync(string phone, string code, CancellationToken ct = default)
     {
-        var provider = _providers.FirstOrDefault(p => p.AuthType == AuthTypes.Sms);
+        // V0.9.0 (P2-6 顺序裁定)：先按 EnabledAuthTypes.Contains(AuthType) 过滤集合 → 再 AuthType match（fail-closed）
+        var provider = _providers.FirstOrDefault(p =>
+            p.AuthType == AuthTypes.Sms && IsEnabled(p.AuthType));
         if (provider == null)
         {
             var fail = new LoginResult(false, null, null, "SMS_PROVIDER_NOT_ENABLED");
@@ -62,7 +72,7 @@ internal sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
             return new LoginResult(false, null, null, result.FailReason);
         }
 
-        // 取持久化账号字段（TeacherVerified/AuthLevel——Provider 建账号后回读；缺失视为编排异常）
+        // 取持久化账号字段（AuthLevel——Provider 建账号后回读；缺失视为编排异常）
         var account = await AccountQueryService.GetByUIdAsync(result.UserId, ct);
         if (account is null)
         {
@@ -71,7 +81,7 @@ internal sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
         }
 
         var token = await TokenService.IssueTokenAsync(new TokenIssueRequest(
-            account.UId, AuthTypes.Sms, account.AuthLevel, account.TeacherVerified), ct);
+            account.UId, AuthTypes.Sms, account.AuthLevel), ct);
         _logger.LogDebug("短信登录成功——UserId={UserId}", account.UId);
         return new LoginResult(true, account.UId, token, null);
     }

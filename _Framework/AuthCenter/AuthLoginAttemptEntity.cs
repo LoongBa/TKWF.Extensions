@@ -10,8 +10,8 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>认证中心实例自身库的登录尝试计数（含 authType 维度），与 SecurityLog 事件日志 / Account 锁定 / RateLimiting 中间件互补不重叠。</para>
     /// </summary>
-    [Table("AuthLoginAttempt")]
-    [FreeSql.DataAnnotations.Index("IX_AuthLoginAttempt_UserAuthTime", nameof(UserIdentity) + "," + nameof(AuthType) + "," + nameof(AttemptTime))]
+    [Table("TKWF_AuthLoginAttempt")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuthLoginAttempt_UserAuthTime", nameof(UserIdentity) + "," + nameof(AuthType) + "," + nameof(AttemptTime))]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuthLoginAttemptEntity
     {

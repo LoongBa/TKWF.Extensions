@@ -10,9 +10,9 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>令牌明文不落库——仅存 SHA256 hex；刷新时校验 TokenVersion 匹配（不匹配 → 拒绝，闭环 DMP 缺口）。</para>
     /// </summary>
-    [Table("AuthRefreshToken")]
-    [FreeSql.DataAnnotations.Index("UX_AuthRefreshToken_TokenHash", nameof(TokenHash), IsUnique = true)]
-    [FreeSql.DataAnnotations.Index("IX_AuthRefreshToken_UserVersion", nameof(UserId) + "," + nameof(TokenVersion))]
+    [Table("TKWF_AuthRefreshToken")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuthRefreshToken_TokenHash", nameof(TokenHash), IsUnique = true)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuthRefreshToken_UserVersion", nameof(UserId) + "," + nameof(TokenVersion))]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuthRefreshTokenEntity
     {

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 7475843b4532fa07e16d516f1410dc75876508c9ffa9d71f9b41bb55967a0e1e]
 // 模型: OAuthTicketEntity (TKWF.Ext.AuthCenter.OAuthTicketEntity)
-// 生成时间: 2026-10-06 05:00:32
+// 生成时间: 2026-10-07 16:11:19
 // </auto-generated>
 #nullable enable
 using System;

@@ -43,6 +43,7 @@ public abstract class AuthenticationUserHelperBase<TUserInfo> : DomainUserHelper
         var account = await accountDataService.GetByPhoneAsync(userName);
         if (account == null) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
         if (!account.IsEnabled) throw new AuthenticationException("ACCOUNT_DISABLED");
+        if (account.IsFrozenEffective) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3）
 
         return CreateUserInfoFromAccount(account, []);
     }

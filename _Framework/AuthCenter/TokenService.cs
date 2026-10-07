@@ -87,7 +87,6 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
             ["userId"] = request.UserId,
             ["authType"] = request.AuthType,
             ["auth_level"] = request.AuthLevel,
-            ["teacher_verified"] = request.TeacherVerified,
             ["exp"] = new DateTimeOffset(exp).ToUnixTimeSeconds(),
             ["iat"] = new DateTimeOffset(now).ToUnixTimeSeconds(),
             ["jti"] = jti,
@@ -173,7 +172,6 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
         var authType = root.TryGetProperty("authType", out var atEl) ? atEl.GetString() : AuthTypes.Sms;
         var authLevel = root.TryGetProperty("auth_level", out var alEl) && alEl.TryGetInt32(out var alVal) ? alVal : (int)AuthLevel.Phone;
-        var teacherVerified = root.TryGetProperty("teacher_verified", out var tvEl) && tvEl.ValueKind == JsonValueKind.True;
 
         var claims = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var prop in root.EnumerateObject())
@@ -189,7 +187,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
         }
 
         return new TokenValidationResult(
-            userId, authType, authLevel, teacherVerified, jti,
+            userId, authType, authLevel, jti,
             DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime, claims);
     }
 
@@ -212,6 +210,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
         var account = await AccountDataService.GetByUIdAsync(row.UserId, ct);
         if (account == null || !account.IsEnabled) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
+        if (account.IsFrozenEffective) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3——refresh 续期拦截）
 
         // TokenVersion 闭环：刷新时校验（不匹配 → 拒绝——密码/绑定变更后旧 refresh 失效）
         if (row.TokenVersion != account.TokenVersion) throw new AuthenticationException("REFRESH_STALE");
@@ -226,7 +225,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
         }
 
         var result = await IssueTokenAsync(new TokenIssueRequest(
-            row.UserId, row.AuthType, account.AuthLevel, account.TeacherVerified, row.DeviceInfo), ct);
+            row.UserId, row.AuthType, account.AuthLevel, row.DeviceInfo), ct);
 
         return new TokenRefreshResult(result.AccessToken, result.RefreshToken, result.ExpiresIn);
     }

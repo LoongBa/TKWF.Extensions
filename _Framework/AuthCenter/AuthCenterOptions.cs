@@ -50,6 +50,12 @@ public class LoginProtectionOptions
 
     /// <summary>口令兑换每小时尝试上限（默认 5）。</summary>
     public int RedeemPerHour { get; set; } = 5;
+
+    /// <summary>密码登录每分钟每 UId/Phone 尝试上限（默认 10——V0.9.0 B.9，AuthLoginAttempt 计数）。</summary>
+    public int PasswordPerMinutePerSubject { get; set; } = 10;
+
+    /// <summary>密码登录每小时每 IP 尝试上限（默认 20——V0.9.0 B.9，AuthLoginAttempt 计数）。</summary>
+    public int PasswordPerHourPerIp { get; set; } = 20;
 }
 
 /// <summary>
@@ -88,8 +94,10 @@ public class AuthCenterOptions
     /// <summary>一次性票据有效期（分钟，默认 5）。</summary>
     public int TicketExpirationMinutes { get; set; } = 5;
 
-    /// <summary>启用认证方式（fail-closed——集合外 Provider 不接线；默认 ["sms"]）。</summary>
-    public string[] EnabledAuthTypes { get; set; } = ["sms"];
+    /// <summary>启用认证方式（fail-closed——集合外 Provider 不接线；默认 ["sms","wechat","password"]——V0.9.0 P1-1 修正：
+    /// 历史仅 ["sms"] 但 EnabledAuthTypes 为 no-op（wechat 恒可用）；修复 fail-closed 过滤后默认须含既有可用 Provider，
+    /// 防显式配 ["sms"] 却用 wechat 的消费方被静默打断（消费方显式装配仍可裁剪）。</summary>
+    public string[] EnabledAuthTypes { get; set; } = ["sms", "wechat", "password"];
 
     /// <summary>票据换取 redirect_uri 白名单（app_id 校验 + 白名单——防跨应用抢先消费）。</summary>
     public string[] RedirectUriWhitelist { get; set; } = [];
@@ -103,6 +111,30 @@ public class AuthCenterOptions
     /// <summary>登录保护策略（各认证方式窗口/阈值）。</summary>
     public LoginProtectionOptions LoginProtection { get; set; } = new();
 
+    /// <summary>密码策略（V0.9.0 ADR-密码策略与口令协议 决策 5——领域配置节 <c>TKWF:AuthCenter:PasswordPolicy</c>，
+    /// Web 层不存在对应开关——安全行为不可由表现层关闭）。</summary>
+    public PasswordPolicyOptions PasswordPolicy { get; set; } = new();
+
     /// <summary>生产标记（true = fail-fast 门——缺密钥/默认值拒绝启动；开发自动生成 + Warning）。</summary>
     public bool IsProduction { get; set; }
+}
+
+/// <summary>密码策略配置（V0.9.0 ADR-密码策略与口令协议 决策 5——复杂度/历史/轮换/初始密码，领域节挂
+/// <see cref="AuthCenterOptions.PasswordPolicy"/> <c>TKWF:AuthCenter:PasswordPolicy</c>）。</summary>
+public class PasswordPolicyOptions
+{
+    /// <summary>最小密码长度（默认 8——复杂度校验下限）。</summary>
+    public int MinLength { get; set; } = 8;
+
+    /// <summary>密码类别最低数（默认 2——大写/小写/数字/符号中至少含 N 类；0 = 不强制类别）。</summary>
+    public int MinCategories { get; set; } = 2;
+
+    /// <summary>历史密码保留代数（默认 3——防重用：新密码不得与最近 N 代相同；0 = 不查历史）。</summary>
+    public int HistoryRetentionCount { get; set; } = 3;
+
+    /// <summary>强制轮换周期（天，默认 0 = 关闭——按历史表最近改密时间判定过期）。</summary>
+    public int RotationDays { get; set; }
+
+    /// <summary>复杂度/历史/轮换校验是否启用（fail-closed——true 时单入口强制校验，false 时跳过校验但仍记录历史）。</summary>
+    public bool EnforcePolicy { get; set; } = true;
 }

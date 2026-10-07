@@ -33,15 +33,17 @@ public sealed class AuthAccountUserProfileSource : IUserProfileSource
         // ⚠️ 以账号 UId 为准，不信任传入 userId（数据源为准防误读）
         var account = await Accounts.GetByUIdAsync(userId, ct);
         if (account is null) return null;
+        // V0.9.0 A.1 凭据/档案分离：档案字段（Nickname/Avatar）改读 UserProfile 1:1 表；IsWechatBound 改查
+        // PlatformAccountMap（A.8 联邦归一化，经门面 IsWechatBoundAsync）；IsTeacherVerified 迁出（A.4——档案面不再披露，恒 false）
+        var profile = await Accounts.GetProfileByUIdAsync(account.UId, ct);
+        var wechatBound = await Accounts.IsWechatBoundAsync(account.UId, ct);
         return new UserProfileDto(
             UserId: account.UId,               // 数据源为准（account.UId）——非透传 userId
             Phone: account.Phone,              // 原始值——门面脱敏
-            IsWechatBound: !string.IsNullOrEmpty(account.WechatMpOpenId)
-                || !string.IsNullOrEmpty(account.WechatWebOpenId)
-                || !string.IsNullOrEmpty(account.UnionId),
-            Nickname: account.Nickname,
-            AvatarUrl: account.Avatar,
-            IsTeacherVerified: account.TeacherVerified,
+            IsWechatBound: wechatBound,        // PlatformAccountMap wechat_mp/wechat_web 行存在性
+            Nickname: profile?.Nickname,       // UserProfile 1:1 档案
+            AvatarUrl: profile?.Avatar,        // UserProfile 1:1 档案
+            IsTeacherVerified: false,          // TeacherVerified 迁出（V0.9.0 A.4）——档案面不再披露，教育线业务扩展自建
             AuthLevel: account.AuthLevel);
     }
 }

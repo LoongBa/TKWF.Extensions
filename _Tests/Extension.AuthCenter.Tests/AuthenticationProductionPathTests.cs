@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.UserCenter;
@@ -53,6 +54,9 @@ public class AuthenticationProductionPathTests
         services.AddSingleton<UnitOfWorkManager>();
         AuthenticationTestHost.RegisterEntityDacs(services);
 
+        // 凭据保护器（消费方主框架注入 AesGcmCredentialProtector；测试宿主用 base64 Fake——PasswordAuthenticationProvider ctor 依赖）
+        services.AddSingleton<ICredentialProtector, FakeCredentialProtector>();
+
         configure?.Invoke(services);
 
         return services.BuildServiceProvider();
@@ -73,7 +77,7 @@ public class AuthenticationProductionPathTests
         var account = new AuthAccountEntity { UId = "u-1001", Phone = "13800138000", AuthLevel = 1, TokenVersion = 0 };
         await user.Use<AuthAccountEntityDataService>().CreateAsync(account, CancellationToken.None);
 
-        var issued = await tokenService.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false), CancellationToken.None);
+        var issued = await tokenService.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), CancellationToken.None);
         var validation = await tokenService.ValidateTokenAsync(issued.AccessToken, CancellationToken.None);
         Assert.Equal(account.UId, validation.UserId);
         Assert.Equal(AuthTypes.Sms, validation.AuthType);

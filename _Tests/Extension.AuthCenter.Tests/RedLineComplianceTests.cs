@@ -37,12 +37,17 @@ public class RedLineComplianceTests
         var partialFiles = Directory.GetFiles(root, "*.cs")
             .Where(f => !f.EndsWith(".g.cs", StringComparison.Ordinal))
             .ToList();
-        Assert.Equal(9, partialFiles.Count); // 9 实体 DataService 分部（V0.8.0 增 AuthGrantEntityDataService）
+        Assert.Equal(12, partialFiles.Count); // 12 实体 DataService 分部（V0.9.0 增 UserProfile + PasswordResetCode——凭据/档案分离 + 找回链路；ADR-密码策略 增 PasswordHistory——历史防重用）
 
         foreach (var file in partialFiles)
         {
             var content = File.ReadAllText(file);
-            Assert.DoesNotContain("IFreeSql", content);
+            // 只查实际注入（排除注释——"零 IFreeSql/IEntityDAC 直注入" 类文档声明不构成违规，对齐上方 ServiceFiles 判定）；
+            // DataService 分部不应以字段/参数/局部变量形态引入 IFreeSql（代码行过滤后再扫）
+            var codeOnly = string.Join("\n", content.Split('\n')
+                .Where(l => !l.TrimStart().StartsWith("///", StringComparison.Ordinal)
+                         && !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+            Assert.DoesNotContain("IFreeSql", codeOnly);
         }
     }
 }

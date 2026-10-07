@@ -46,6 +46,11 @@ namespace TKWF.Ext.AuthCenter;
     public async Task<List<PlatformAccountMapEntity>> GetByUnionIdAsync(string unionId, CancellationToken ct = default)
         => await EntitySelectAsync(m => m.UnionId == unionId, 0, 10_000, null, ct);
 
+    /// <summary>按平台内部 id + channel 前缀查询联邦映射行集合（V0.9.0 A.8——微信绑定判定：
+    /// <c>PlatformAccountId==uid &amp;&amp; ChannelId 前缀匹配</c>；wechat_mp/wechat_web 由 ChannelId 精确段判定）。</summary>
+    public async Task<List<PlatformAccountMapEntity>> GetChannelsByPlatformIdAsync(string platformAccountId, CancellationToken ct = default)
+        => await EntitySelectAsync(m => m.PlatformAccountId == platformAccountId && m.ChannelId != null, 0, 10_000, null, ct);
+
     /// <summary>更新映射（Link upsert 更新分支；先设 UpdateTime）。</summary>
     public async Task UpdateAsync(PlatformAccountMapEntity entity, CancellationToken ct = default)
     {

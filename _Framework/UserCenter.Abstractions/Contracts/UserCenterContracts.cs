@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,7 +9,11 @@ namespace TKWF.Ext.UserCenter;
 /// 公共档案源——数据属主（认证中心 v0.2.0+）或装配实例（过渡期）实现。
 /// <para>属主扩展在本扩展 Initializer 的 ConfigureServices 中 <c>TryAddScoped</c> 注册实现；
 /// 装配实例（过渡期）继承 <c>UserProfileSourceBase</c> 最小适配（模板基类，见 UserCenter 主包）。</para>
+/// <para>⚠️ <b>V0.9.0 退役（ADR-AuthCenter-身份域数据模型与密码能力边界 C.14）</b>：UserCenter 零存储聚合层退役——
+/// 本接口 DEPRECATE（V0.9.0 标 Obsolete + 保留实现，V1.0.0 移除）；档案读改经 AuthCenter
+/// <c>IAuthAccountQueryService.GetProfileByUIdAsync</c>（UserProfile 1:1 表）或业务扩展 VEntity。</para>
 /// </summary>
+[Obsolete("UserCenter 聚合层退役（ADR C.14）——V1.0.0 移除；档案读改经 AuthCenter IAuthAccountQueryService.GetProfileByUIdAsync 或业务扩展 VEntity")]
 public interface IUserProfileSource
 {
     /// <summary>

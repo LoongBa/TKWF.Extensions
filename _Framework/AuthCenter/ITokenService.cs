@@ -11,13 +11,11 @@ namespace TKWF.Ext.AuthCenter;
 /// <param name="UserId">平台内部 id（JWT sub=user:{UserId}）。</param>
 /// <param name="AuthType">认证方式（AuthTypes 常量）。</param>
 /// <param name="AuthLevel">认证强度（AuthLevel 枚举值）。</param>
-/// <param name="TeacherVerified">教师核实声明（身份声明，非业务角色）。</param>
 /// <param name="DeviceInfo">签发设备信息（可选，随 Refresh Token 落库）。</param>
 public sealed record TokenIssueRequest(
     string UserId,
     string AuthType,
     int AuthLevel,
-    bool TeacherVerified,
     string? DeviceInfo = null);
 
 /// <summary>签发结果（方案 §5.4）。</summary>
@@ -33,7 +31,6 @@ public sealed record TokenRefreshResult(string AccessToken, string RefreshToken,
 /// <param name="UserId">平台内部 id（sub）。</param>
 /// <param name="AuthType">认证方式。</param>
 /// <param name="AuthLevel">认证强度。</param>
-/// <param name="TeacherVerified">教师核实声明。</param>
 /// <param name="Jti">令牌唯一 id（撤销/黑名单关联键）。</param>
 /// <param name="ExpiresAtUtc">过期时间（UTC）。</param>
 /// <param name="Claims">令牌载荷完整声明（iss/sub/iat/kid 等，供 IAuthorizationMapper 消费）。</param>
@@ -41,7 +38,6 @@ public sealed record TokenValidationResult(
     string UserId,
     string AuthType,
     int AuthLevel,
-    bool TeacherVerified,
     string Jti,
     DateTime ExpiresAtUtc,
     IReadOnlyDictionary<string, string> Claims);

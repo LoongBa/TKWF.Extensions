@@ -50,7 +50,7 @@ public class TokenServiceTests
         var account = CreateAccount();
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
 
         var parts = result.AccessToken.Split('.');
         Assert.Equal(3, parts.Length);
@@ -60,7 +60,8 @@ public class TokenServiceTests
         Assert.Equal(account.UId, payload.GetProperty("userId").GetString());
         Assert.Equal(AuthTypes.Sms, payload.GetProperty("authType").GetString());
         Assert.Equal((int)AuthLevel.Phone, payload.GetProperty("auth_level").GetInt32());
-        Assert.False(payload.GetProperty("teacher_verified").GetBoolean());
+        // V0.9.0（A.4）：teacher_verified claim 移除——令牌不再携带业务声明（教师核实走教育线业务扩展）
+        Assert.False(payload.TryGetProperty("teacher_verified", out _));
         Assert.True(payload.TryGetProperty("exp", out _) && payload.TryGetProperty("iat", out _));
         Assert.True(payload.TryGetProperty("jti", out _) && !string.IsNullOrEmpty(payload.GetProperty("jti").GetString()));
         Assert.Equal("test-key-1", payload.GetProperty("kid").GetString());
@@ -83,7 +84,7 @@ public class TokenServiceTests
         var account = CreateAccount();
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
 
         var refreshDs = stub.Use<AuthRefreshTokenEntityDataService>();
         // 明文 refresh 不应作为 TokenHash 出现
@@ -101,13 +102,13 @@ public class TokenServiceTests
         var account = CreateAccount();
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, true));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         var validation = await service.ValidateTokenAsync(result.AccessToken);
 
         Assert.Equal(account.UId, validation.UserId);
         Assert.Equal(AuthTypes.Sms, validation.AuthType);
         Assert.Equal((int)AuthLevel.Phone, validation.AuthLevel);
-        Assert.True(validation.TeacherVerified);
+        // V0.9.0（A.4）：teacher_verified 属性移除——令牌不再携带业务声明
         Assert.True(validation.Claims.ContainsKey("iss"));
     }
 
@@ -118,7 +119,7 @@ public class TokenServiceTests
         var account = CreateAccount();
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         // ⚠️ 篡改末组第一字符（X 位）而非末位字符——末位是 base64url 对的第二字符（Y 位），其低 4 位被解码丢弃，
         //    末位 A↔B 翻转可能落入 padding 位（解码逐字节相同 → 验签合法通过 → 测试 ~25% 概率误报失败）。
         var tampered = result.AccessToken[..^2] + (result.AccessToken[^2] == 'A' ? 'B' : 'A') + result.AccessToken[^1];
@@ -149,7 +150,7 @@ public class TokenServiceTests
         var account = CreateAccount();
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateTokenAsync(result.AccessToken));
         Assert.Equal("TOKEN_EXPIRED", ex.Message);
     }
@@ -174,7 +175,7 @@ public class TokenServiceTests
         var account = CreateAccount();
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         var validation = await service.ValidateTokenAsync(result.AccessToken);
 
         await service.RevokeTokenAsync(validation.Jti, "logout");
@@ -192,7 +193,7 @@ public class TokenServiceTests
         var accountDs = stub.Use<AuthAccountEntityDataService>();
         await accountDs.CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         var oldRefresh = result.RefreshToken;
 
         var refreshed = await service.RefreshTokenAsync(oldRefresh);
@@ -211,7 +212,7 @@ public class TokenServiceTests
         var accountDs = stub.Use<AuthAccountEntityDataService>();
         await accountDs.CreateAsync(account);
 
-        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
 
         // 密码/绑定变更 → TokenVersion++（闭环）
         await accountDs.IncrementTokenVersionAsync(account.UId);
@@ -229,8 +230,8 @@ public class TokenServiceTests
         await accountDs.CreateAsync(account);
 
         // 签发两个 refresh（同账号）
-        var r1 = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
-        var r2 = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var r1 = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
+        var r2 = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
 
         // 正常刷新 r2（旧 r2 变 revoked）
         await service.RefreshTokenAsync(r2.RefreshToken);
@@ -273,7 +274,7 @@ public class TokenServiceTests
         var account = CreateAccount();
         stub.Use<AuthAccountEntityDataService>().CreateAsync(account).GetAwaiter().GetResult();
 
-        var result = service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false))
+        var result = service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone))
             .GetAwaiter().GetResult();
         Assert.Equal(3, result.AccessToken.Split('.').Length);
     }

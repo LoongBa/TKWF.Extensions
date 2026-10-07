@@ -1,6 +1,6 @@
 # TKWF.Ext.AuthCenter 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.8.0（2026-10-06 认证 API 补全——内建 3 端点 `/verify`（已认证内省）`/grants`（应用授权状态）`/sms/verify`（验证码独立校验）+ **B5 票据绑定缺口闭环**（`OAuthTicketIssueRequest.UserId` 签发即绑 + `BindTicketAsync` 已认证帧补绑 + CAS 条件更新）；**`AuthGrantEntity` 应用授权数据底座**（唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`——`IAuthGrantQueryService`/`IAuthGrantCommandService` 双门面，exchange 成功经写入门面落登录授权）+ 配置分层（3 端点开关进 `AuthCenterEndpointOptions` `TKWF:AuthCenter:Web`）；Oracle 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.0（2026-10-07 身份域重构与密码能力——**ADR-AuthCenter-身份域数据模型与密码能力边界 落地**：A.1-A.8 凭据/档案表级分离（`AuthAccount` 瘦身凭据白名单 + `UserProfile` 1:1 档案，表名 `TKWF_AuthAccount`/`TKWF_UserProfile`）/ AuthLevel 泛化（1=手机号/2=联邦快捷，剔 3=教师核实）/ TeacherVerified 迁出（令牌不再携带 `teacher_verified` claim）/ 联邦 Id 归一化（微信 3 列删，openid 绑定迁 `PlatformAccountMap`）/ **密码能力（ADR-密码策略与口令协议 覆盖）**：SecurePassword（客户端算 clientHash+salt PBKDF2 600000，服务端零明文、AES-GCM 密文落库）+ 密码策略面 + 账号冻结 + `IRateLimitCheck` 频控（v4.10.67）+ 找回三通道（SMS/Email/扫码——自带投递，不实现 IAccountPasswordManager 第二实现）/ C.14 UserCenter 退役启动（`IUserProfileSource` 标 Obsolete）/ EnabledAuthTypes fail-closed 生效；Oracle(oracle4) 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.8.0 认证 API 补全、V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）+ **Emailing.Abstractions（V0.9.0 可空依赖——Email 找回通道）** + **SecurityLog.Abstractions（V0.9.0 可空依赖——冻结/解冻 SecurityLog 直写）** | **表名前缀简称**: `AuthC`（扩展仓命名规则 §8.3 自声明——本表名前缀批次为先规范化者保留默认名；`AuthC` 预留备未来追尾场景）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -30,11 +30,12 @@
 ```json
 { "iss": "<auth-instance-id>", "sub": "user:<平台内部id>", "userId": "u_xxxx",
   "authType": "sms | wechat | password | redeem", "auth_level": 1,
-  "teacher_verified": false, "exp": 1722243600, "iat": 1722240000,
+  "exp": 1722243600, "iat": 1722240000,
   "jti": "unique-token-id", "kid": "rsa-key-2026-07" }
 ```
 
 - **不含业务角色**——令牌只回答「你是谁」；业务角色由各业务系统 `IAuthorizationMapper.MapRoles(sub, claims)` 本地映射。
+- **⚠️ V0.9.0 契约变更（ADR-AuthCenter-身份域数据模型与密码能力边界 A.4）**：`teacher_verified` claim 已移除——令牌不再携带业务声明（教师核实迁出至教育线业务扩展，自建声明/表）。存量 token 仍可解析（Claims 通配容错），新 token 不含该键；消费方从 `Claims["teacher_verified"]` 取值将得 null（V1.0.0 前建议过渡期发 `false` 占位，见开发方案 P2-8）。
 - **签名**：RS256（RSA PKCS#1 v1.5 SHA-256）；`kid` 标识密钥版本（JWK RFC 7517 语义），支持轮换。
 - **生命周期**：Access 2h / Long-lived 7d（壳端低敏）/ Refresh 30d rotation（SHA256 落库，新旧不可复用）/ 一次性票据 5min 单次。
 - **🔒 验签安全加固（Oracle C1）**：alg 强制 RS256（拒 none/HS256）/ `CryptographicOperations.FixedTimeEquals` / RSA≥2048 fail-fast / exp·iat 校验 / kid 白名单（防注入）/ iss 校验（多实例隔离）/ Base64Url 边界。
@@ -166,39 +167,46 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | **`IPlatformAccountMapService`** | 跨系统映射（Link upsert / 双向 / UnionId） | `PlatformAccountMapService`（本扩展） |
 | **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 加密在**服务层**——V0.7.0 自 DataService 边界上移，密钥经 keyed `ISymmetricKeyProvider`） | `PlatformCredentialService`（本扩展） |
 | **`IWeChatApiClient`** | 微信 API（access_token 缓存 + 并发锁 + 凭证解析） | `WeChatApiClient`（本扩展） |
-| **9 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential/**AuthGrant（V0.8.0 应用授权）** | SG1 + xCodeGen（.g.cs 入库） |
-| **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone/ByWechatMpOpenId/ByWechatWebOpenId——返回完整 `AuthAccountEntity`） | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
-| **`IAuthAccountService`（V0.2.0）** | 对外写契约（Create/Update/IncrementTokenVersion/GetByUId——DMP 渐进替换影子账号 upsert，ADR-Authentication-账号写契约） | `AuthAccountService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService`） |
+| **11 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential/**AuthGrant（V0.8.0 应用授权）**/**UserProfile + PasswordResetCode（V0.9.0 身份域重构）**/**PasswordHistory（ADR-密码策略 决策 5——历史防重用）**——共 12 实体 | SG1 + xCodeGen（.g.cs 入库） |
+| **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone + **V0.9.0：GetProfileByUIdAsync（档案 1:1）+ IsWechatBoundAsync（PlatformAccountMap 通道行判定）；删 GetByWechat\***——联邦归一化）——返回完整 `AuthAccountEntity` | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService` + `UserProfileEntityDataService`） |
+| **`IAuthAccountService`（V0.2.0）** | 对外写契约（Create/Update/IncrementTokenVersion/GetByUId + **V0.9.0：SetPasswordAsync/ChangePasswordAsync（SecurePassword 协议）+ FreezeAsync/UnfreezeAsync（账号冻结）**——DMP 渐进替换影子账号 upsert，ADR-Authentication-账号写契约） | `AuthAccountService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService` + `PasswordHistoryEntityDataService`） |
+| **`IPasswordLoginService`（V0.9.0）** | 密码登录编排门面（Identifier+ClientHash+Salt → `PasswordAuthenticationProvider` → 取账号 → 签发——镜像 SmsLoginService，B.9；**SecurePassword 协议：客户端算 clientHash+salt（PBKDF2 600000），服务端零明文**；前缀 `IRateLimitCheck` 频控） | `PasswordLoginService`（internal sealed，本扩展） |
+| **`IPasswordResetService`（V0.9.0）** | 找回密码多通道（SMS `SmsScenes.Reset` 现成 / Email `IEmailSender` 可空降级 / 扫码 OAuthTicket 前置——**UId-keyed，不实现 IAccountPasswordManager，自带投递 B.11**） | `PasswordResetService`（internal sealed，本扩展） |
 | **`IAuthGrantQueryService`（V0.8.0）** | 应用授权**查询**门面（只读——`/grants` 端点数据底座：`GetGrantsAsync(userId, appId?)` 按用户/应用查询有效授权，Status=Active 按 CreateTime 倒序） | `AuthGrantQueryService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
 | **`IAuthGrantCommandService`（V0.8.0）** | 应用授权**写入**门面（`RecordLoginGrantAsync` upsert 幂等——`OAuthTicketService.ExchangeAsync` 成功经 `User.Use` 落登录授权；唯一约束 `UX_AuthGrant_User_App_Source` 兜底 TOCTOU；[AllowAnonymousFlag] 匿名面） | `AuthGrantCommandService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
-| **`IUserProfileSource`（V0.2.0）** | UserCenter 档案读取契约（AuthAccount 属主终态承接——`GetProfileAsync` 返回 `UserProfileDto`） | `AuthAccountUserProfileSource`（public sealed，本扩展） |
+| **`IUserProfileSource`（V0.2.0，⚠️ V0.9.0 Obsolete）** | UserCenter 档案读取契约（**V0.9.0 起标 `[Obsolete]`（ADR C.14）——V1.0.0 移除；实现保留（改读 UserProfile 表）**） | `AuthAccountUserProfileSource`（public sealed，本扩展） |
 
 ## 四之二、V0.2.0 查询契约与 UserCenter 承接
 
-**`IAuthAccountQueryService`（查询契约）**——对外只读查询 4 方法（`GetByUIdAsync`/`GetByPhoneAsync`/`GetByWechatMpOpenIdAsync`/`GetByWechatWebOpenIdAsync`），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService`——**红线合规**（零 IFreeSql/IEntityDAC 直注入）。
+**`IAuthAccountQueryService`（查询契约）**——对外只读查询方法（`GetByUIdAsync`/`GetByPhoneAsync` + **V0.9.0** `GetProfileByUIdAsync`（档案 1:1 表）/`IsWechatBoundAsync`（PlatformAccountMap 通道行）），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService` + `UserProfileEntityDataService`——**红线合规**（零 ORM 直注入）。
 
-**`IAuthAccountService`（写契约）**——对外写契约（`CreateAsync`/`UpdateAsync`/`IncrementTokenVersionAsync`/`GetByUIdAsync`——upsert 流单注入便利），实现 `AuthAccountService`（internal sealed）委托 `AuthAccountEntityDataService`；**DMP 渐进替换路径**（ADR-Authentication-账号写契约）：平台管理员影子 AuthAccount（`UId=PlatformAdmin.UId`，`IsEnabled=true`，Phone 可空）由消费端创建/更新/失效——扩展 `TokenService.RefreshTokenAsync`（L196-200）强依赖 AuthAccount 记录。**`AdminDeleteAsync` 不暴露**（破坏性，管理 API 迭代）。
+**`IAuthAccountService`（写契约）**——对外写契约（`CreateAsync`/`UpdateAsync`/`IncrementTokenVersionAsync`/`GetByUIdAsync` + **V0.9.0** `SetPasswordAsync`/`ChangePasswordAsync`——upsert 流单注入便利），实现 `AuthAccountService`（internal sealed）委托 `AuthAccountEntityDataService`；**DMP 渐进替换路径**（ADR-Authentication-账号写契约）：平台管理员影子 AuthAccount（`UId=PlatformAdmin.UId`，`IsEnabled=true`，Phone 可空）由消费端创建/更新/失效——扩展 `TokenService.RefreshTokenAsync` 强依赖 AuthAccount 记录。**`AdminDeleteAsync` 不暴露**（破坏性，管理 API 迭代）。
 
-**`AuthAccountUserProfileSource`（UserCenter 终态承接）**——public sealed，实现 `IUserProfileSource`：
-- **映射矩阵**：UserId←UId / Phone←Phone（**原始值**——UserCenter 门面强制脱敏，实现方不得自行 Mask）/ Nickname / AvatarUrl←Avatar / IsTeacherVerified←TeacherVerified / AuthLevel←AuthLevel
-- **微信绑定推导**：`WechatMpOpenId ?? WechatWebOpenId ?? UnionId` **任一非空 = 已绑定**（AuthAccount 无显式 IsWechatBound 字段）
+**`AuthAccountUserProfileSource`（UserCenter 终态承接）**——public sealed，实现 `IUserProfileSource`（**⚠️ V0.9.0 起接口标 `[Obsolete]`（ADR C.14）**——V0.9.0 保留实现、V1.0.0 移除）：
+- **映射矩阵（V0.9.0 更新）**：UserId←UId / Phone←Phone（**原始值**——UserCenter 门面强制脱敏，实现方不得自行 Mask）/ **Nickname、AvatarUrl 改读 UserProfile 1:1 表（A.1 凭据/档案分离）** / ~~IsTeacherVerified~~（**V0.9.0 恒 false——迁出教育线，A.4**） / AuthLevel←AuthAccount.AuthLevel（泛化）
+- **微信绑定推导（V0.9.0 更新）**：`IsWechatBound` = **PlatformAccountMap 存在 wechat_mp/wechat_web 通道行**（A.8 联邦归一化——替代原 `WechatMpOpenId ?? WechatWebOpenId ?? UnionId` 三列 OR）
 - **注册**：`AuthCenterExtensionInitializer.ConfigureServices`——`IAuthAccountQueryService` 经 **AddConstructibleService**（门面，`User.Use<接口>()` 解析）+ `IUserProfileSource` 经 **TryAddScoped**（接线型，UserCenter 门面 GetService 解析）——消费方白名单声明认证中心 + UserCenter 后 `IUserCenterQueryService.GetProfileAsync` 自动获得真实档案；新装配实例**无需写桥接类**
 - **依赖**：引 `TKWF.Ext.UserCenter.Abstractions`（**契约包非主包**——L2 门控合规）
 - **边界**：两契约**不可合并**——查询服务返回完整 `AuthAccountEntity`（含 TokenVersion/IsEnabled，供 TokenService/装配桥接），档案源返回 `UserProfileDto`（公共档案子集，无敏感字段，Phone 门面脱敏）
 
-## 五、实体表结构（9 张）
+## 五、实体表结构（12 张）
 
 | 表 | 关键列/约束 |
 |----|-----------|
-| `AuthAccount` | UId(32 唯一)/Phone(20 **可空**唯一——微信便捷账号无手机号)/PasswordHash?/WechatMpOpenId(唯一)/WechatWebOpenId(唯一)/UnionId?/TeacherVerified/AuthLevel/TokenVersion/IsEnabled/**FederationAnchorOpenId?**（V0.6.0 联盟锚点——联邦 SSO 账号锚定列，**唯一**；保留 UnionId 微信开放平台原语义，见 Federation 联盟锚点数据模型） |
+| `TKWF_AuthAccount`（**V0.9.0 改名**） | UId(32 唯一)/Phone(20 **可空**唯一——微信便捷账号无手机号)/PasswordHash?（**SecurePassword 协议 AES-GCM 密文**——ADR-密码策略 决策 1，服务端零明文；组装格式 `{iterations}.{b64salt}.{b64hash}` 经 `ICredentialProtector` 保护）/**FederationAnchorOpenId?**（V0.6.0 联盟锚点——联邦 SSO 账号锚定列，**唯一**）/**AuthLevel**（V0.9.0 泛化 1=手机号级/2=联邦快捷——剔 3=教师核实）/**IsFrozen + FreezeEnd?**（V0.9.0 密码策略 决策 3——账号冻结；FreezeEnd=null 永久冻结）/**MustChangePassword**（初始密码强制改密——认证成功返回信号）/TokenVersion/IsEnabled；**⚠️ V0.9.0 瘦身（A.1/A.8）**：删 Nickname/Avatar/TeacherVerified（迁 `TKWF_UserProfile`）+ WechatMpOpenId/WechatWebOpenId/UnionId（联邦归一化迁 `PlatformAccountMap`）——凭据白名单表；索引 `TKWFIX_` 前缀（ADR100） |
+| `TKWF_UserProfile`（**V0.9.0 新增**） | UId(32 **唯一 1:1**——凭据/档案表级分离 A.1)/Nickname/Avatar/Birthday?/Gender?（宽松自由文本 max32——A.7）/Email?（联系方式角色——非登录凭据，A.5/A.6） |
+| `TKWF_PasswordResetCode`（**V0.9.0 新增**） | UId(32)/Channel(SMS/Email——找回多通道 B.10)/CodeHash(SHA256 不存明文)/ExpireAt/IsConsumed——**UId-keyed 自建链路**（Account PasswordResetCode 为 userName-keyed，平行不互认） |
+| `TKWF_PasswordHistory`（**V0.9.0 密码策略 决策 5 新增**） | UId(32)/ClientHash(明文组装格式——防重用比对源，服务端不接触密码明文)/CreateTime——**只增表**（保留最近 `PasswordPolicyOptions.HistoryRetentionCount` 代，门面 TrimHistoryAsync 清理；密码历史防重用 `PASSWORD_REUSE_REJECTED`） |
 | `AuthLoginAttempt` | UserIdentity(100)+AuthType(20)+IsSuccess+IpAddress?+FailReason?+AttemptTime；索引 (UserIdentity,AuthType,AttemptTime) |
 | `SmsRecord` | Phone+Scene+CodeHash(SHA256 不存明文)+IsVerified+ExpireAt；索引 (Phone,Scene,CreateTime)/(IpAddress,CreateTime) |
 | `AuthRefreshToken` | Jti/UserId+TokenHash(SHA256 唯一)/TokenVersion/ExpiresAt/IsRevoked/RevokedAt?；索引 (UserId,TokenVersion) |
 | `AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
 | `OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
 | `AuthGrant`（**V0.8.0**） | UserId(50)/AppId(100)/Scopes(500 逗号分隔)/**ValidUntil?（应用授权有效期——null=持续至吊销，非会话有效期）**/Source(20：login/redeem)/Status(int 0 Active/1 Revoked)/CreateTime/UpdateTime；**唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**（防并发 exchange 重复 grant 行——写入门面 upsert 以此复合键冲突判定） |
-| `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留） |
+| `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留；**V0.9.0 A.8 起微信 openid 绑定归一化落此列**） |
 | `PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore 不外泄)/IsEnabled |
+
+> ⚠️ **V0.9.0 破坏性迁移提示（消费方适配）**：`AuthAccount` **表名变更**（→ `TKWF_AuthAccount`）+ **删 6 列**（档案 3 列迁 `TKWF_UserProfile` + 微信 3 列归一化 `PlatformAccountMap`）+ `teacher_verified` claim 移除——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA：RENAME 表 + 迁档案数据 + 回填 PlatformAccountMap 微信绑定）；`EnabledAuthTypes` fail-closed 生效（显式配 `["sms"]` 但用 wechat 的消费方须加 `"wechat"`）。
 
 > ⚠️ **V0.6.0 升级迁移提示（EduPlatform 实证 2026-10-05）**：`AuthAccount` 新增 `FederationAnchorOpenId` 列、`PlatformAccountMap` 新增 `ChannelId`/`ExternalUserId` 列（+ `UX_PlatformAccountMap_Channel` 索引）——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA），否则 Federation 联邦流 sms/login 相关路径 500（列缺失）。
 
@@ -261,7 +269,18 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **`AuthGrantEntity` 应用授权数据底座（Oracle P0-2/P1-1/P1-3/P2-1/P2-4）**：OAuth2 authorization grant 语义（UserId/AppId/Scopes/ValidUntil/Source/Status + **唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**）；`IAuthGrantQueryService`（只读）+ `IAuthGrantCommandService`（写入——`RecordLoginGrantAsync` upsert 幂等，唯一冲突 catch→重查转 update）双门面 `AddConstructibleService` 注册；**写入点**：`ExchangeAsync` 成功（签发 JWT 对后）经 `User.Use<IAuthGrantCommandService>()` 落登录授权（**best-effort**——写入失败不阻断 JWT 签发，grant 仅服务 `/grants` 查询，可接受降级标注）；`Source="redeem"` 预留 B-口令兑换产品线。**⚠️ `ValidUntil` 语义**：应用授权有效期（null=持续至吊销，跨会话），**非会话有效期**（2h access/30d refresh 与 grant 正交）。
   - **配置分层（AGENTS §8）**：`AuthCenterEndpointOptions`（`TKWF:AuthCenter:Web`）增 `TokenVerifyEndpointEnabled`/`GrantsEndpointEnabled`/`SmsVerifyEndpointEnabled`（默认 true，纯暴露面；领域侧零新增——verify 验签模式已由 `AuthCenterOptions.VerifyMode` 承载、grant 无开关、sms 频控由 `LoginProtection` 承载）；`SmsScenes.Bind` 复用（转告"缺绑定场景"偏差——已天然满足）。
   - 测试：**124 用例全绿**（103→124：+3 端点冒烟×6 + grants 查询 Fake + sms/verify 2 + verify 2 + 配置断言 2 + `AuthGrantCommandServiceTests` 4（创建/幂等/并发唯一/多 app）+ `OAuthTicketServiceTests` BindTicketAsync 全矩阵 6（成功/无帧/消费/过期/已绑/CAS 并发））；9 实体 DataService 红线断言同步。
-- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**注：认证中心 v0.2.0 已实现 `IUserProfileSource`（终态落地）**——`AuthAccountUserProfileSource` 经 TryAddScoped 注册（接线型），装配实例零桥接。
-- **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。
+- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**⚠️ V0.9.0 退役启动（ADR C.14）**：`IUserProfileSource` 标 `[Obsolete]`（保留实现——改读 UserProfile 表），V1.0.0 移除；`IRedemptionHistorySource`/`IUserAppsSource` FREEZE；`IUserCenterQueryService`/`PhoneMasker` KEEP。认证中心 v0.2.0 实现的 `AuthAccountUserProfileSource`（终态落地）继续经 TryAddScoped 注册。
+- **V0.9.0（2026-10-07 身份域重构与密码能力——ADR-AuthCenter-身份域数据模型与密码能力边界 落地，Oracle(oracle4) PASS WITH CONDITIONS）**：
+  - **A.1 凭据/档案表级分离**：`AuthAccount` 瘦身——删 Nickname/Avatar/TeacherVerified（迁新 `UserProfileEntity`）/WechatMpOpenId/WechatWebOpenId/UnionId（联邦归一化）；仅留凭据白名单（UId/Phone/PasswordHash/FederationAnchorOpenId/AuthLevel/TokenVersion/IsEnabled/CreateTime/UpdateTime）；表名 `TKWF_AuthAccount`（ADR100 表前缀批次）→ 11 实体（+UserProfile/PasswordResetCode）。
+  - **A.3/A.4**：`AuthLevel` 泛化（`Phone=1`/`Federated=2`，删 `Teacher=3`——`Wechat` 改名 `Federated`）；`teacher_verified` claim 移除（TokenIssueRequest/TokenValidationResult/VerifyResponse 删字段，4 构造点同步）。
+  - **A.8 联邦归一化**：`WeChatAuthenticationProvider` 查号/建号改走 `ISsoChannelMapService`（channelId=wechat_mp/wechat_web + openId → PlatformAccountMap）；`LinkAsync` 硬化（UX 双索引冲突 catch 重查——P1-3）；`IsWechatBound` 推导改查通道行。
+  - **B.9-B.11 密码三件套（ADR-密码策略与口令协议 决策 1 覆盖——SecurePassword）**：`PasswordAuthenticationProvider`（`AuthTypes.Password`，**SecurePassword 协议**——客户端算 `clientHash+盐`（PBKDF2 600000，`DomainOptions.Auth.Pbkdf2Iterations` 单一来源），服务端**解保护存储 + 组装解析 + FixedTimeEquals 比对**，服务端零明文；`ICredentialProtector` AES-GCM）+ `IPasswordLoginService`（镜像 Sms 门面，`ClientHash+Salt` 输入）+ `IAuthAccountService.SetPasswordAsync(uid, clientHash, salt)`/`ChangePasswordAsync(uid, oldClientHash, oldSalt, newClientHash, newSalt)`（`EntityUpdateWhereAsync` CAS + TokenVersion++ + 密码历史追加 + MustChangePassword 清）+ `IPasswordResetService`（SMS `/SmsScenes.Reset` 现成/Email `IEmailSender` 可空降级/扫码 OAuthTicket 前置——**UId-keyed，不实现 IAccountPasswordManager 第二实现，自带投递 B.11**）+ `PasswordResetCodeEntity` 重置码底册 + `PasswordHistoryEntity` 历史防重用。
+  - **密码策略面（决策 6）**：`PasswordPolicyOptions`（`TKWF:AuthCenter:PasswordPolicy`——MinLength/MinCategories/HistoryRetentionCount/RotationDays/EnforcePolicy）+ `MustChangePassword`（初始强制改密——认证成功返回信号）+ 策略单入口 fail-closed（复杂度由客户端 SecurePassword 契约承担——服务端校验 32 字节 clientHash 长度 + 历史防重用 + 轮换）+ `PASSWORD_REUSE_REJECTED`。
+  - **账号冻结（决策 3/6/7）**：`IsFrozen`/`FreezeEnd` 列 + `FreezeAsync`/`UnfreezeAsync`（`ACCOUNT_FROZEN` 拦截新签发；SecurityLog 直写 `Freeze`/`Unfreeze`）+ 认证路径旁补冻结检查 5 处。
+  - **频控（决策 ②/③，IRateLimitCheck v4.10.67 落地）**：密码链路走既有 `AuthLoginAttempt` COUNT 模式（补 `AuthTypes.Password` 分支 + `LoginProtectionOptions.PasswordPerMinutePerSubject/PasswordPerHourPerIp` 充当审计从域）+ **`IRateLimitCheck` 点检查（不 defer）**：`PasswordLoginService`/`PasswordResetService` ctor 注入 `IRateLimitCheck`（Initializer fallback `MemoryRateLimitCheck`），`pwd:login:{identifier}`/`pwd:reset:{identifier}` TryAcquire（5 次/10min）→ `PASSWORD_RATE_LIMITED`；锁定=限流语义贯通。
+  - **EnabledAuthTypes fail-closed 生效（P1-1/P2-6）**：登录门面先 `EnabledAuthTypes.Contains(AuthType)` 过滤再选区；默认值修正 `["sms","wechat","password"]`——**破坏性（消费方显式配 ["sms"] 但用 wechat 须加 "wechat"，§七 迁移提示）**。
+  - **/verify JSON 键名对齐（P1-2）**：`VerifyResponse.AuthLevel` 加 `[JsonPropertyName("auth_level")]`（README 文档 snake_case 对齐）。
+  - 测试：**142 用例全绿**（123 既有适配 + 新增 `PasswordCapabilityTests` 19——Password Provider 正负/SetPassword CAS/ChangePassword 验旧/找回降级/频控分支/账号冻结/密码策略防重用/档案读写）；全 slnx 41 测试项目全量回归 0 失败（Federation 23 同步适配 UserProfile 档案）。
+- **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。**⚠️ V0.9.0 破坏性迁移**：AuthAccount 表 RENAME + 删 6 列 + UserProfile 拆分 + `teacher_verified` claim 移除 + EnabledAuthTypes fail-closed——消费方按开发方案 §七 迁移指引适配。
 
 <!-- EOF -->

@@ -2,7 +2,12 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using TKW.Framework.Core.Hosting;
+using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.FreeSql;
+using TKWF.Ext.SecurityLog;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
@@ -10,14 +15,24 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// <para>DMP OI7 转达缺口闭环：公开写契约使消费端可建/维护影子 AuthAccount（成本端编译器 typeof 可引用），
 /// 解除 TokenService.RefreshTokenAsync（L196-200 ACCOUNT_NOT_FOUND/REFRESH_STALE）对 DMP P1 令牌替换的阻塞。</para>
 /// <para>V4.10.53（领域自治根治后重写）：门面继承 DomainServiceBase——StubDomainUser 直构（经基类 User 取上下文），
-/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para></summary>
+/// DataService 经 User.Use&lt;具体类&gt;() NoAop 直建（IEntityDAC 从 DI 解析）。业务断言语义不变。</para>
+/// <para>V0.9.0（ADR-密码策略与口令协议）：AuthAccountService ctor 扩参（SecurityLog Options + DomainOptions +
+/// AuthCenterOptions + ICredentialProtector + ILogger——SecurePassword 协议依赖）。</para></summary>
 public class AuthAccountServiceTests
 {
+    /// <summary>测试 AES-256-GCM 密钥（32 bytes——AesGcmCredentialProtector ctor 校验长度）。</summary>
+    private static readonly byte[] TestProtectionKey = new byte[32] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 };
     private static (AuthAccountService Service, AuthAccountEntityDataService Ds) CreateService()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var stub = AuthenticationTestHost.CreateStub(fsql);
-        var service = new AuthAccountService(stub);
+        var service = new AuthAccountService(
+            stub,
+            Options.Create(new SecurityLoggingOptions()),           // SecurityLog Options（冻结事件门控）
+            Options.Create(new DomainOptions()),                    // DomainOptions.Auth.Pbkdf2Iterations=600000（SecurePassword 单一来源）
+            Options.Create(AuthenticationTestHost.CreateOptions()), // AuthCenterOptions（PasswordPolicy/LoginProtection）
+            new FakeCredentialProtector(),       // ICredentialProtector（AES-256-GCM）
+            NullLogger<AuthAccountService>.Instance);
         return (service, stub.Use<AuthAccountEntityDataService>());
     }
 

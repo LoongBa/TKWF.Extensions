@@ -40,11 +40,27 @@ public class UserCenterIntegrationTests
         {
             UId = "u-1001",
             Phone = "13812345678",
+            AuthLevel = (int)AuthLevel.Federated,
+        });
+
+        // V0.9.0（T3/A.1 凭据/档案分离）：档案（Nickname/Avatar）迁 UserProfile 1:1 表；微信绑定经
+        // PlatformAccountMap 通道行（IsWechatBoundAsync）——经 ISsoChannelMapService 映射种入 wechat_mp 通道
+        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity
+        {
+            UId = "u-1001",
             Nickname = "测试用户",
             Avatar = "https://cdn.example.com/a.png",
-            TeacherVerified = true,
-            AuthLevel = 3,
-            WechatMpOpenId = "mp-1",
+            Email = "test@example.com",
+        });
+        await stub.Use<PlatformAccountMapEntityDataService>().CreateAsync(new PlatformAccountMapEntity
+        {
+            PlatformAccountId = "u-1001",
+            BusinessAppId = "wechat_mp",
+            BusinessLocalId = "mp-1",
+            ChannelId = "wechat_mp",
+            ExternalUserId = "mp-1",
+            CreateTime = System.DateTime.UtcNow,
+            UpdateTime = System.DateTime.UtcNow,
         });
 
         // 档案源实现（接线型：ctor(IServiceProvider) + C1 延迟解析 IAuthAccountQueryService）
@@ -63,11 +79,11 @@ public class UserCenterIntegrationTests
         Assert.NotNull(profile);
         Assert.Equal("u-1001", profile!.UserId);
         Assert.Equal("138****5678", profile.Phone);   // PhoneMasker head3/tail4——证明终态装配零桥接 + 门面强制脱敏
-        Assert.True(profile.IsWechatBound);
-        Assert.Equal("测试用户", profile.Nickname);
+        Assert.True(profile.IsWechatBound);           // PlatformAccountMap wechat_mp 通道行（A.8 联邦归一化）
+        Assert.Equal("测试用户", profile.Nickname);    // UserProfile 1:1 档案
         Assert.Equal("https://cdn.example.com/a.png", profile.AvatarUrl);
-        Assert.True(profile.IsTeacherVerified);
-        Assert.Equal(3, profile.AuthLevel);
+        Assert.False(profile.IsTeacherVerified);      // V0.9.0（A.4）：TeacherVerified 迁出——档案面恒 false
+        Assert.Equal((int)AuthLevel.Federated, profile.AuthLevel);   // AuthLevel 泛化（2=联邦快捷）
 
         // 未知 userId → null（档案不存在降级）
         Assert.Null(await gate.GetProfileAsync("u-unknown"));

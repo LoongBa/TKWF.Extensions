@@ -12,8 +12,8 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>摒弃 DMP 纯 POCO 裸 FreeSql——SG1 化 + DataService 委托；加密在 DataService 边界（Service 层只见明文）。</para>
     /// </summary>
-    [Table("PlatformCredential")]
-    [FreeSql.DataAnnotations.Index("UX_PlatformCredential", nameof(Platform) + "," + nameof(AppType) + "," + nameof(AppId), IsUnique = true)]
+    [Table("TKWF_PlatformCredential")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_PlatformCredential", nameof(Platform) + "," + nameof(AppType) + "," + nameof(AppId), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class PlatformCredentialEntity
     {

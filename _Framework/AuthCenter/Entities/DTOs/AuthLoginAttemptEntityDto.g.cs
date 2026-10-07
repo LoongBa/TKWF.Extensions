@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 179a2d66be2d54656a4267815f0a457562b4216013f99e99074008c099bc49a6]
 // 模型: AuthLoginAttemptEntity (TKWF.Ext.AuthCenter.AuthLoginAttemptEntity)
-// 生成时间: 2026-10-06 05:00:32
+// 生成时间: 2026-10-07 16:11:19
 // </auto-generated>
 #nullable enable
 using System;

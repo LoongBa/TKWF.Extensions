@@ -123,6 +123,7 @@ public class SecurityAuditService : DomainServiceBase
 | Lockout | `LoginByContextAsync` 锁定分支 | **判定（C4）**：`AuthenticationException` 消息含"锁定"关键字 |
 | Register | `RegisterSecureAsync` | 返回值 `RegisterResult.Success` |
 | Challenge | `RequestChallengeAsync` | 正常返回 = Success |
+| **Freeze / Unfreeze** | **（扩展直写——非过滤器采集）** AuthCenter 冻结/解冻门面经 `User.Use<ISecurityLogStore>()` 直写（ADR-AuthCenter-密码策略与口令协议 决策 7——`UserName` 填被冻结账号，操作者在 `Detail`） | 直写方自控 |
 
 **Result 判定细则**：
 - 异常路径仅 `AuthenticationException` 记 Failed；**其他异常不记录**（保持原异常语义，不吞不遮蔽）。
@@ -134,7 +135,8 @@ public class SecurityAuditService : DomainServiceBase
 ## 四、只增不改语义（Oracle C2）
 
 - `SecurityLogEntity` / `SecurityLogEntityDataService` **无 Update/Delete 业务方法**、**不标 `[GenerateController(FromDataService=true)]`**——不生成任何管理端点。
-- 唯一写路径：`SecurityLogFilterAttribute` → `ISecurityLogStore.SaveAsync` → `SecurityLogEntityDataService.EntityCreateAsync`（追加写）。
+- 写路径一（过滤器采集主路径）：`SecurityLogFilterAttribute` → `ISecurityLogStore.SaveAsync` → `SecurityLogEntityDataService.EntityCreateAsync`（追加写）。
+- 写路径二（扩展直写——V0.3.1+，ADR-AuthCenter-密码策略与口令协议 决策 6/7）：扩展可经 `User.Use<ISecurityLogStore>()` 直写安全事件（须自读 `IOptions<SecurityLoggingOptions>` 门控：`Enabled=false` 或 `EventTypes` 非空且不含目标事件类型时跳过写入——绕过过滤器内 `SecurityLogFilterAttribute` L110 门控，补齐语义对齐）。先例：AuthCenter 冻结/解冻门面直写 `Freeze`/`Unfreeze` 事件。
 - `CreateTime` 列 `[Column(CanUpdate = false)]` 列级兜底。
 - 数据访问红线合规：Store/QueryService **不注入 IFreeSql / IEntityDAC**，全走 SG1 DataService。
 
@@ -145,7 +147,7 @@ public class SecurityAuditService : DomainServiceBase
 | 列名 | 类型 | 说明 |
 |------|------|------|
 | Id | BIGINT (PK, Identity) | 主键 |
-| EventType | NVARCHAR(32) | Login/Logout/PasswordChange/PasswordReset/Lockout/Register/Challenge |
+| EventType | NVARCHAR(32) | Login/Logout/PasswordChange/PasswordReset/Lockout/Register/Challenge/Freeze/Unfreeze（后二者扩展直写） |
 | EventCategory | NVARCHAR(32) | Authentication（v0.1.0 均为 Authentication） |
 | UserName | NVARCHAR(128) | 尝试用户名（登录失败 = 请求输入） |
 | UserId | BIGINT? | 认证成功后回填 |

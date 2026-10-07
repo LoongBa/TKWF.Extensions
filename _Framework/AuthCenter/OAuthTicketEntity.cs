@@ -10,8 +10,8 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>回调承载铁律（用户裁定 + Oracle B1）：URL 只带一次性票据 + redirect_uri，绝不带敏感信息；纯前端静态站走公网 /oauth/exchange + PKCE code_verifier。</para>
     /// </summary>
-    [Table("OAuthTicket")]
-    [FreeSql.DataAnnotations.Index("UX_OAuthTicket_Ticket", nameof(Ticket), IsUnique = true)]
+    [Table("TKWF_OAuthTicket")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_OAuthTicket_Ticket", nameof(Ticket), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class OAuthTicketEntity
     {

@@ -10,11 +10,11 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>DMP V4.0 管理员走映射表、会员走外键——Ext 以本表统一承载；DMP 迁移时会员映射迁入本表（需求 §6 约束 1）。</para>
     /// </summary>
-    [Table("PlatformAccountMap")]
-    [FreeSql.DataAnnotations.Index("UX_PlatformAccountMap", nameof(PlatformAccountId) + "," + nameof(BusinessAppId) + "," + nameof(BusinessLocalId), IsUnique = true)]
+    [Table("TKWF_PlatformAccountMap")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_PlatformAccountMap", nameof(PlatformAccountId) + "," + nameof(BusinessAppId) + "," + nameof(BusinessLocalId), IsUnique = true)]
     // SSO 联邦映射（channel_id + external_user_id → uid）专用唯一索引——既有 UX 保留不变（V0.5.x 消费方零回归），
     // 新索引对 NULL 放行（既有行 ChannelId/ExternalUserId 为空不冲突，ADR-SSO Oracle P1-3）
-    [FreeSql.DataAnnotations.Index("UX_PlatformAccountMap_Channel", nameof(ChannelId) + "," + nameof(ExternalUserId), IsUnique = true)]
+    [FreeSql.DataAnnotations.Index("TKWFIX_PlatformAccountMap_Channel", nameof(ChannelId) + "," + nameof(ExternalUserId), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class PlatformAccountMapEntity
     {

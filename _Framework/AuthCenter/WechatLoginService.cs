@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -22,6 +23,7 @@ namespace TKWF.Ext.AuthCenter;
 internal sealed class WechatLoginService : DomainServiceBase, IWechatLoginService
 {
     private readonly IReadOnlyList<IAuthenticationProvider> _providers;
+    private readonly IOptions<AuthCenterOptions> _options;
     private readonly ILogger<WechatLoginService> _logger;
 
     // DI004 铁律：领域服务间调用经 User.Use<T>() 懒加载（禁构造注入——IAuthAccountQueryService/ITokenService 为守卫工厂，
@@ -34,17 +36,25 @@ internal sealed class WechatLoginService : DomainServiceBase, IWechatLoginServic
     public WechatLoginService(
         IDomainUser user,
         IEnumerable<IAuthenticationProvider> providers,
+        IOptions<AuthCenterOptions> options,
         ILogger<WechatLoginService> logger)
         : base(user)
     {
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    /// <summary>EnabledAuthTypes fail-closed 判定（V0.9.0 P2-6——先过滤再选区）。</summary>
+    private bool IsEnabled(string authType)
+        => _options.Value.EnabledAuthTypes.Contains(authType, StringComparer.Ordinal);
 
     /// <inheritdoc />
     public async Task<LoginResult> LoginAsync(string wechatCode, string wechatScope, CancellationToken ct = default)
     {
-        var provider = _providers.FirstOrDefault(p => p.AuthType == AuthTypes.Wechat);
+        // V0.9.0 (P2-6 顺序裁定)：先按 EnabledAuthTypes.Contains(AuthType) 过滤集合 → 再 AuthType match（fail-closed）
+        var provider = _providers.FirstOrDefault(p =>
+            p.AuthType == AuthTypes.Wechat && IsEnabled(p.AuthType));
         if (provider == null)
         {
             var fail = new LoginResult(false, null, null, "WECHAT_PROVIDER_NOT_ENABLED");
@@ -61,7 +71,7 @@ internal sealed class WechatLoginService : DomainServiceBase, IWechatLoginServic
             return new LoginResult(false, null, null, result.FailReason);
         }
 
-        // 取持久化账号字段（TeacherVerified/AuthLevel——Provider 建账号后回读；缺失视为编排异常）
+        // 取持久化账号字段（AuthLevel——Provider 建账号后回读；缺失视为编排异常）
         var account = await AccountQueryService.GetByUIdAsync(result.UserId, ct);
         if (account is null)
         {
@@ -70,7 +80,7 @@ internal sealed class WechatLoginService : DomainServiceBase, IWechatLoginServic
         }
 
         var token = await TokenService.IssueTokenAsync(new TokenIssueRequest(
-            account.UId, AuthTypes.Wechat, account.AuthLevel, account.TeacherVerified), ct);
+            account.UId, AuthTypes.Wechat, account.AuthLevel), ct);
         _logger.LogDebug("微信登录成功——UserId={UserId}", account.UId);
         return new LoginResult(true, account.UId, token, null);
     }

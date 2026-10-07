@@ -122,9 +122,17 @@ public class SsoProductionPathTests : TestHostBase
         // 种子账号经 NoAop 直建 DataService（认证内核实体）
         var account = new AuthAccountEntity
         {
-            UId = "u-100", Phone = "13800138000", Nickname = "张三", Avatar = "https://cdn.example.com/a.png", AuthLevel = 2,
+            UId = "u-100", Phone = "13800138000", AuthLevel = 2,
         };
         await user.Use<AuthAccountEntityDataService>().CreateAsync(account, CancellationToken.None);
+
+        // V0.9.0（A.1 凭据/档案分离）：SSO 档案（Nickname/Avatar）从 UserProfile 1:1 表读——种子档案经其 DataService
+        await user.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity
+        {
+            UId = "u-100",
+            Nickname = "张三",
+            Avatar = "https://cdn.example.com/a.png",
+        }, CancellationToken.None);
 
         var profileService = user.Use<ISsoProfileService>();
         var full = await profileService.GetProfileAsync("app-1", "u-100", ["profile:basic"], "1.2.3.4", CancellationToken.None);

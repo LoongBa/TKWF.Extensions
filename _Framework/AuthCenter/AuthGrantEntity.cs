@@ -11,8 +11,8 @@ namespace TKWF.Ext.AuthCenter
     /// <para>语义：记录"用户授权某应用访问其数据的持久授权"（应用授权有效期 <see cref="ValidUntil"/>，跨会话），
     /// 与令牌生命周期（2h access / 30d refresh）正交；唯一约束 UX(UserId,AppId,Source) 防并发 exchange 产生重复 grant 行。</para>
     /// </summary>
-    [Table("AuthGrant")]
-    [FreeSql.DataAnnotations.Index("UX_AuthGrant_User_App_Source",
+    [Table("TKWF_AuthGrant")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuthGrant_User_App_Source",
         nameof(UserId) + "," + nameof(AppId) + "," + nameof(Source), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuthGrantEntity

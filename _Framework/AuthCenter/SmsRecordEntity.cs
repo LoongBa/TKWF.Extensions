@@ -10,9 +10,9 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>验证码单向散列（SHA256）落库，不存明文；校验成功后 IsVerified=true 单次消费。</para>
     /// </summary>
-    [Table("SmsRecord")]
-    [FreeSql.DataAnnotations.Index("IX_SmsRecord_PhoneSceneTime", nameof(Phone) + "," + nameof(Scene) + "," + nameof(CreateTime))]
-    [FreeSql.DataAnnotations.Index("IX_SmsRecord_IpTime", nameof(IpAddress) + "," + nameof(CreateTime))]
+    [Table("TKWF_SmsRecord")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_SmsRecord_PhoneSceneTime", nameof(Phone) + "," + nameof(Scene) + "," + nameof(CreateTime))]
+    [FreeSql.DataAnnotations.Index("TKWFIX_SmsRecord_IpTime", nameof(IpAddress) + "," + nameof(CreateTime))]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class SmsRecordEntity
     {

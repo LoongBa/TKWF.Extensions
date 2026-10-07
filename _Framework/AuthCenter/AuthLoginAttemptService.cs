@@ -51,8 +51,12 @@ internal sealed class AuthLoginAttemptService : DomainServiceBase, IAuthLoginAtt
         await DataService.CreateAsync(attempt, ct);
     }
 
-    /// <inheritdoc />
-    public async Task<bool> IsRateLimitedAsync(string userIdentity, string authType, CancellationToken ct = default)
+    /// <inheritdoc cref="IAuthLoginAttemptService.IsRateLimitedAsync(string,string,System.Threading.CancellationToken)"/>
+    public Task<bool> IsRateLimitedAsync(string userIdentity, string authType, CancellationToken ct = default)
+        => IsRateLimitedAsync(userIdentity, null, authType, ct);
+
+    /// <inheritdoc cref="IAuthLoginAttemptService.IsRateLimitedAsync(string,string?,string,System.Threading.CancellationToken)"/>
+    public async Task<bool> IsRateLimitedAsync(string userIdentity, string? ipAddress, string authType, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
         var protection = _options.Value.LoginProtection;
@@ -68,6 +72,15 @@ internal sealed class AuthLoginAttemptService : DomainServiceBase, IAuthLoginAtt
             AuthTypes.Redeem =>
                 await DataService.CountInWindowAsync(userIdentity, authType, now.AddMinutes(-60), ct)
                     >= protection.RedeemPerHour,
+
+            // 密码（V0.9.0 B.9）：双维度（P0-NEW-2 修订闭环）——
+            //   ① 60s 滑窗按 UId/Phone ≥ PasswordPerMinutePerSubject（防单账号爆破）
+            //   ② 60min 滑窗按 IP ≥ PasswordPerHourPerIp（防分布式多账号单 IP 爆破；ipAddress 空则退化单维度）
+            AuthTypes.Password =>
+                (await DataService.CountInWindowAsync(userIdentity, authType, now.AddSeconds(-60), ct)
+                    >= protection.PasswordPerMinutePerSubject)
+                || (await DataService.CountInWindowByIpAsync(ipAddress, authType, now.AddMinutes(-60), ct)
+                    >= protection.PasswordPerHourPerIp),
 
             // 短信：返回 false——短信发送/校验频控由 SmsVerificationService 经 SmsRecordEntity 拥有
             //（SmsResendIntervalSeconds=60 / SmsHourlyLimitPerPhone=5 / SmsDailyLimitPerPhone=20 /

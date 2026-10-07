@@ -12,31 +12,39 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// </summary>
 public class SsoContractTests
 {
-    private static (AuthAccountQueryService AccountService, PlatformAccountMapService MapService, AuthAccountEntityDataService AuthDs, PlatformAccountMapEntityDataService MapDs) CreateServices()
+    private static (AuthAccountQueryService AccountService, PlatformAccountMapService MapService, AuthAccountEntityDataService AuthDs, PlatformAccountMapEntityDataService MapDs, UserProfileEntityDataService ProfileDs) CreateServices()
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var stub = AuthenticationTestHost.CreateStub(fsql);
         var accountService = new AuthAccountQueryService(stub);
         var mapService = new PlatformAccountMapService(stub, NullLogger<PlatformAccountMapService>.Instance);
-        return (accountService, mapService, stub.Use<AuthAccountEntityDataService>(), stub.Use<PlatformAccountMapEntityDataService>());
+        return (accountService, mapService,
+            stub.Use<AuthAccountEntityDataService>(), stub.Use<PlatformAccountMapEntityDataService>(),
+            stub.Use<UserProfileEntityDataService>());   // V0.9.0（T3）：档案 DataService（凭据/档案分离）
     }
 
     [Fact]
     public async Task SsoAccountQuery_ReturnsDto_WithoutSensitiveFields()
     {
-        var (service, _, authDs, _) = CreateServices();
+        var (service, _, authDs, _, profileDs) = CreateServices();
         var entity = new AuthAccountEntity
         {
             UId = "u-100",
             Phone = "13800138000",
             FederationAnchorOpenId = "anchor-abc",
-            Nickname = "张三",
-            Avatar = "https://cdn.example.com/a.png",
             AuthLevel = 2,
             TokenVersion = 5,           // 敏感字段——DTO 不得含
             IsEnabled = true,           // 敏感字段——DTO 不得含
         };
         await authDs.EntityCreateAsync(entity, default);
+
+        // V0.9.0（T3/A.1）：档案（Nickname/Avatar）从 AuthAccount 迁 UserProfile 1:1 表——SSO DTO 档案经档案表读
+        await profileDs.CreateOrUpdateAsync(new UserProfileEntity
+        {
+            UId = "u-100",
+            Nickname = "张三",
+            Avatar = "https://cdn.example.com/a.png",
+        }, default);
 
         var dto = await service.GetByUIdAsync("u-100");   // IAuthAccountQueryService（实体形态，既有）
         var ssoDto = await ((ISsoAccountQueryService)service).GetByUIdAsync("u-100", default);  // SSO 消费面（DTO 形态，显式实现）
@@ -47,7 +55,7 @@ public class SsoContractTests
         Assert.NotNull(ssoDto);
         Assert.Equal("u-100", ssoDto!.UId);
         Assert.Equal("anchor-abc", ssoDto.FederationAnchorOpenId);
-        Assert.Equal("张三", ssoDto.Nickname);
+        Assert.Equal("张三", ssoDto.Nickname);              // 档案经 UserProfile 读（V0.9.0 凭据/档案分离）
         Assert.Equal("https://cdn.example.com/a.png", ssoDto.AvatarUrl);
         Assert.Equal(2, ssoDto.AuthLevel);
     }
@@ -55,7 +63,7 @@ public class SsoContractTests
     [Fact]
     public async Task SsoAccountQuery_UnknownUid_ReturnsNull()
     {
-        var (service, _, _, _) = CreateServices();
+        var (service, _, _, _, _) = CreateServices();
         var ssoDto = await ((ISsoAccountQueryService)service).GetByUIdAsync("u-not-exist", default);
         Assert.Null(ssoDto);
     }
@@ -63,7 +71,7 @@ public class SsoContractTests
     [Fact]
     public async Task SsoChannelMap_Link_CreatesAndIdempotentUpsert()
     {
-        var (_, service, _, mapDs) = CreateServices();
+        var (_, service, _, mapDs, _) = CreateServices();
 
         var created = await ((ISsoChannelMapService)service).LinkAsync("u-100", "mp-account-1", "openid2-aaa", default);
         Assert.Equal("u-100", created.UId);
@@ -81,7 +89,7 @@ public class SsoContractTests
     [Fact]
     public async Task SsoChannelMap_GetByChannel_ReturnsDto()
     {
-        var (_, service, _, _) = CreateServices();
+        var (_, service, _, _, _) = CreateServices();
         await ((ISsoChannelMapService)service).LinkAsync("u-100", "mp-account-1", "openid2-aaa", default);
 
         var found = await ((ISsoChannelMapService)service).GetByChannelAsync("mp-account-1", "openid2-aaa", default);

@@ -131,7 +131,7 @@ public class AuthCenterInitializerTests
         new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         var descriptors = services.Where(d => d.ServiceType == typeof(IAuthenticationProvider)).ToList();
-        Assert.Equal(2, descriptors.Count);
+        Assert.Equal(3, descriptors.Count);   // V0.9.0（B.9）：+PasswordAuthenticationProvider（短信 + 微信 + 密码）
         // TryAddEnumerableConstructible：工厂委托形态（ImplementationType=null + ImplementationFactory 非空）——
         // 帧内（User.Use 链）经 CurrentAopUser 供给构造；实现类 SmsAuthenticationProvider 另有 throw-factory 描述符
         Assert.DoesNotContain(descriptors, d => d.ImplementationType != null);

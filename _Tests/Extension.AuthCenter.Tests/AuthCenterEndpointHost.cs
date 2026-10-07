@@ -142,7 +142,7 @@ internal static class AuthCenterEndpointHost
     {
         public Task<TokenValidationResult> VerifyAsync(string token, CancellationToken ct = default)
             => Task.FromResult(new TokenValidationResult(
-                "u-100", AuthTypes.Sms, (int)AuthLevel.Phone, false,
+                "u-100", AuthTypes.Sms, (int)AuthLevel.Phone,
                 "jti-test", DateTime.UtcNow.AddHours(2),
                 new Dictionary<string, string> { ["iss"] = "auth-test" }));
     }

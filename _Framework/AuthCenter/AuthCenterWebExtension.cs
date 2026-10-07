@@ -85,6 +85,8 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
             endpoints.MapPost($"{prefix}/login/sms", HandleSmsLogin).AllowAnonymous();
         if (endpointOptions.WechatLoginEndpointEnabled)
             endpoints.MapPost($"{prefix}/login/wechat", HandleWechatLogin).AllowAnonymous();
+        if (endpointOptions.PasswordLoginEndpointEnabled)
+            endpoints.MapPost($"{prefix}/login/password", HandlePasswordLogin).AllowAnonymous();  // V0.9.0 B.9（P1-NEW-2 对称补全）
         if (endpointOptions.RefreshEndpointEnabled)
             endpoints.MapPost($"{prefix}/refresh", HandleRefresh).AllowAnonymous();
         if (endpointOptions.LogoutEndpointEnabled)
@@ -115,6 +117,30 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         {
             return Results.Json(new ErrorResponse("SMS_SENDER_NOT_CONFIGURED", ex.Message),
                 statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (AuthenticationException ex) when (IsRateLimitedCode(ex.Message))
+        {
+            return Results.Json(new ErrorResponse(ex.Message, null), statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        catch (AuthenticationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message, null));
+        }
+    }
+
+    private static async Task<IResult> HandlePasswordLogin(HttpContext ctx, [FromBody] PasswordLoginRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Identifier)
+            || string.IsNullOrWhiteSpace(req.ClientHash) || string.IsNullOrWhiteSpace(req.Salt))
+            return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "identifier/clientHash/salt 必填"));
+
+        try
+        {
+            // V0.9.0（B.9 + ADR 决策 1）：密码登录编排门面（帧内经游客帧 Use）——SecurePassword 协议（客户端算 clientHash+salt，服务端零明文）
+            var result = await GetGuest(ctx).Use<IPasswordLoginService>().LoginAsync(req.Identifier, req.ClientHash, req.Salt, ct);
+            return result.Success
+                ? Results.Ok(ToTokenResponse(result.Token!))
+                : Results.BadRequest(new ErrorResponse(result.FailReason ?? "LOGIN_FAILED", null));
         }
         catch (AuthenticationException ex) when (IsRateLimitedCode(ex.Message))
         {
@@ -236,7 +262,6 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
             UserId: tr.UserId,
             AuthType: tr.AuthType,
             AuthLevel: tr.AuthLevel,
-            TeacherVerified: tr.TeacherVerified,
             Exp: new DateTimeOffset(tr.ExpiresAtUtc).ToUnixTimeSeconds(),
             Jti: tr.Jti));
     }
@@ -341,6 +366,9 @@ public sealed record SendSmsCodeRequest(string Phone, string Scene);
 
 /// <summary>短信登录请求。</summary>
 public sealed record SmsLoginRequest(string Phone, string Code);
+    /// <summary>密码登录请求（V0.9.0 B.9 + ADR 决策 1——SecurePassword 协议：Identifier 为 UId 或 Phone 凭据标识；
+    /// ClientHash/Salt 为客户端算的 PBKDF2 产物，服务端零明文）。</summary>
+    public sealed record PasswordLoginRequest(string Identifier, string ClientHash, string Salt);
 
 /// <summary>微信登录请求（scope：snsapi_base 网页 / snsapi_login 扫码——透传）。</summary>
 public sealed record WechatLoginRequest(string Code, string? Scope);
@@ -358,15 +386,13 @@ public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, 
 /// <param name="UserId">平台内部 id（JWT sub 同源）。</param>
 /// <param name="AuthType">认证方式（sms/wechat/...）。</param>
 /// <param name="AuthLevel">认证强度。</param>
-/// <param name="TeacherVerified">教师核实声明。</param>
 /// <param name="Exp">过期时间（unix 秒）。</param>
 /// <param name="Jti">令牌唯一 id。</param>
 public sealed record VerifyResponse(
     bool Valid,
     string UserId,
     string AuthType,
-    int AuthLevel,
-    bool TeacherVerified,
+    [property: System.Text.Json.Serialization.JsonPropertyName("auth_level")] int AuthLevel,  // P1-2：Results.Ok 默认 camelCase（authLevel）与 README snake_case（auth_level）对齐——局部显式指定
     long Exp,
     string Jti);
 

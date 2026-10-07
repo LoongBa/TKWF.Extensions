@@ -40,6 +40,18 @@ namespace TKWF.Ext.AuthCenter;
     public async Task<int> CountInWindowAsync(string userIdentity, string authType, DateTime fromUtc, CancellationToken ct = default)
         => (int)await CountAsync(e => e.UserIdentity == userIdentity && e.AuthType == authType && e.AttemptTime >= fromUtc, ct);
 
+    /// <summary>窗口内尝试次数计数——按 IP 维度（V0.9.0 P0-NEW-2：密码链路分布式爆破防护——同 IP 多账号 60min 窗口）。
+    /// <paramref name="ipAddress"/> 空时返回 0（不参与限流——退化单维度）。</summary>
+    /// <param name="ipAddress">客户端 IP（AuthLoginAttempt.IpAddress 列）。</param>
+    /// <param name="authType">认证方式（<see cref="AuthTypes"/> 常量）。</param>
+    /// <param name="fromUtc">窗口起始时间（UTC，AttemptTime &gt;=）。</param>
+    /// <param name="ct">取消令牌。</param>
+    public async Task<int> CountInWindowByIpAsync(string? ipAddress, string authType, DateTime fromUtc, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(ipAddress)) return 0;
+        return (int)await CountAsync(e => e.IpAddress == ipAddress && e.AuthType == authType && e.AttemptTime >= fromUtc, ct);
+    }
+
     /// <summary>最近尝试记录（AttemptTime 降序，限流窗口/审计展示下界内）。</summary>
     /// <param name="userIdentity">登录标识（手机号/openid/用户名）。</param>
     /// <param name="authType">认证方式（<see cref="AuthTypes"/> 常量）。</param>

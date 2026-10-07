@@ -102,17 +102,47 @@ public sealed class PlatformAccountMapService : DomainServiceBase, IPlatformAcco
         if (existing != null)
             return new SsoChannelMapDto(existing.PlatformAccountId, channelId, externalUserId);
 
-        var created = new PlatformAccountMapEntity
+        try
         {
-            PlatformAccountId = uid,
-            BusinessAppId = channelId,
-            BusinessLocalId = externalUserId,
-            ChannelId = channelId,
-            ExternalUserId = externalUserId,
-            CreateTime = DateTime.UtcNow,
-            UpdateTime = DateTime.UtcNow,
-        };
-        await DataService.EntityCreateAsync(created, ct);
-        return new SsoChannelMapDto(uid, channelId, externalUserId);
+            var created = new PlatformAccountMapEntity
+            {
+                PlatformAccountId = uid,
+                BusinessAppId = channelId,
+                BusinessLocalId = externalUserId,
+                ChannelId = channelId,
+                ExternalUserId = externalUserId,
+                CreateTime = DateTime.UtcNow,
+                UpdateTime = DateTime.UtcNow,
+            };
+            await DataService.EntityCreateAsync(created, ct);
+            return new SsoChannelMapDto(uid, channelId, externalUserId);
+        }
+        catch (Exception ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // V0.9.0 P1-3 硬化：concurrent (ChannelId,ExternalUserId) 或 (BusinessAppId,BusinessLocalId) 双索引冲突
+            // → 重查返回既有（不抛——幂等语义；微信登录 Provider 并发建号兜底，不再自包 catch）
+            var winner = await DataService.EntityGetAsync(
+                m => m.ChannelId == channelId && m.ExternalUserId == externalUserId, ct);
+            if (winner != null)
+                return new SsoChannelMapDto(winner.PlatformAccountId, channelId, externalUserId);
+            throw; // 理论不可达（冲突后重查无 = 行被删）——抛原异常 fail-fast
+        }
+    }
+
+    /// <summary>
+    /// 判定异常链是否含数据库唯一约束冲突（对齐 IAuthGrantCommandService.IsUniqueConstraintViolation 先例）。
+    /// <para>SSO LinkAsync 同时写 BusinessAppId/BusinessLocalId（UX_PlatformAccountMap）与 ChannelId/ExternalUserId
+    /// （UX_PlatformAccountMap_Channel）两套列——任一唯一索引冲突都须 catch（P1-3）。</para>
+    /// </summary>
+    private static bool IsUniqueConstraintViolation(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            var message = current.Message;
+            if (message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase)) return true;
+            if (message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)) return true;
+            if (message.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 }

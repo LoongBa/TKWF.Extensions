@@ -10,15 +10,21 @@ namespace TKWF.Ext.AuthCenter;
 /// <param name="Code">短信验证码（sms）。</param>
 /// <param name="WechatCode">微信授权 code（wechat）。</param>
 /// <param name="WechatScope">微信授权 scope：snsapi_base（网页）/snsapi_login（扫码）。</param>
-/// <param name="Password">密码（password Provider 扩展点）。</param>
+/// <param name="Password">密码（password Provider——V0.9.0 SecurePassword：客户端算 clientHash+salt，服务端零明文）。</param>
 /// <param name="DeviceInfo">设备信息（可选，透传签发）。</param>
+/// <param name="Identifier">凭据标识（password Provider——UId 或 Phone，V0.9.0 B.9 新增；仅密码链路使用）。</param>
+/// <param name="ClientHash">客户端算的密码散列（hex(PBKDF2(password, salt, iterations, 32bytes))——SecurePassword 协议，V0.9.0 ADR 决策 1）。</param>
+/// <param name="Salt">客户端算的盐（hex(salt 32bytes)——SecurePassword 协议；与 <see cref="ClientHash"/> 配套）。</param>
 public sealed record ProviderAuthenticateContext(
     string? Phone = null,
     string? Code = null,
     string? WechatCode = null,
     string? WechatScope = null,
     string? Password = null,
-    string? DeviceInfo = null);
+    string? DeviceInfo = null,
+    string? Identifier = null,
+    string? ClientHash = null,
+    string? Salt = null);
 
 /// <summary>认证结果（方案 §5.5）。</summary>
 /// <param name="Success">是否成功。</param>

@@ -39,7 +39,7 @@ public class DevRsaKeyCacheTests
         await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, default);
 
         var issued = await issuer.IssueTokenAsync(
-            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false), default);
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), default);
 
         // 核心断言：跨实例验签成功（同一 DevKeyCache 密钥集——缺陷消除的唯一证明）
         var validation = await verifier.ValidateTokenAsync(issued.AccessToken, default);
@@ -56,7 +56,7 @@ public class DevRsaKeyCacheTests
         var account = CreateAccount();
         await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, default);
         var issued = await issuer.IssueTokenAsync(
-            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false), default);
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), default);
 
         // 隔离：新实例使用独立 DevKeyCache（另一密钥集——工厂独立生成）——验签旧 token 必须失败
         //（密钥集不共享 → 隔离有效；等价于原 ResetForTests 清场后重建密钥集的隔离语义）

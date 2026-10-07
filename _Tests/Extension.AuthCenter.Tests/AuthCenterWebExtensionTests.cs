@@ -175,7 +175,6 @@ public sealed class AuthCenterWebExtensionTests
         Assert.Equal("u-100", body.UserId);                     // FakeTokenVerifier 载荷
         Assert.Equal(AuthTypes.Sms, body.AuthType);
         Assert.Equal((int)AuthLevel.Phone, body.AuthLevel);
-        Assert.False(body.TeacherVerified);
         Assert.Equal("jti-test", body.Jti);
         Assert.True(body.Exp > 0);                              // ExpiresAtUtc → unix 秒
     }

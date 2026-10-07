@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: ec6c2b51f606344ed1d31655864c3aeb71d44c7991d1414811b3a82f60176b89]
 // 模型: AuthTokenBlacklistEntity (TKWF.Ext.AuthCenter.AuthTokenBlacklistEntity)
-// 生成时间: 2026-10-06 05:00:32
+// 生成时间: 2026-10-07 16:11:19
 // </auto-generated>
 #nullable enable
 using System;

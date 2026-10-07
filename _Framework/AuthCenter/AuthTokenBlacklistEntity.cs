@@ -10,8 +10,8 @@ namespace TKWF.Ext.AuthCenter
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// <para>条目 TTL = 该 token 自然过期时间；验签时查 jti 命中 → 拒绝（经 IMemoryCache 短 TTL 前置过滤）。</para>
     /// </summary>
-    [Table("AuthTokenBlacklist")]
-    [FreeSql.DataAnnotations.Index("UX_AuthTokenBlacklist_Jti", nameof(Jti), IsUnique = true)]
+    [Table("TKWF_AuthTokenBlacklist")]
+    [FreeSql.DataAnnotations.Index("TKWFIX_AuthTokenBlacklist_Jti", nameof(Jti), IsUnique = true)]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class AuthTokenBlacklistEntity
     {

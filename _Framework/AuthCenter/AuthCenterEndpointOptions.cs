@@ -28,6 +28,9 @@ public class AuthCenterEndpointOptions
     /// <summary>微信登录端点开关（POST {prefix}/login/wechat）。</summary>
     public bool WechatLoginEndpointEnabled { get; set; } = true;
 
+    /// <summary>密码登录端点开关（POST {prefix}/login/password——V0.9.0 B.9，P1-NEW-2 对称补全）。</summary>
+    public bool PasswordLoginEndpointEnabled { get; set; } = true;
+
     /// <summary>刷新端点开关（POST {prefix}/refresh）。</summary>
     public bool RefreshEndpointEnabled { get; set; } = true;
 

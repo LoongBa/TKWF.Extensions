@@ -45,6 +45,18 @@
     <ProjectReference Include="..\AuthCenter.Abstractions\TKWF.Ext.AuthCenter.Abstractions.csproj" />
   </ItemGroup>
 
+  <!-- V0.9.0（B.10/P2-3）：Email 找回通道投递——引 Emailing.Abstractions 契约包（L2 门控；可选依赖：
+       未接 Emailing 时 Email 通道禁用降级 EMAIL_SENDER_NOT_CONFIGURED，SMS/扫码不受影响；不引主包） -->
+  <ItemGroup>
+    <ProjectReference Include="..\Emailing.Abstractions\TKWF.Ext.Emailing.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- V0.9.0（ADR-密码策略与口令协议 决策 6/7）：账号冻结/解冻 SecurityLog 事件直写——引 SecurityLog.Abstractions 契约包
+       （L2 门控；冻结门面经 User.Use<ISecurityLogStore>() 直写 Freeze/Unfreeze，自读 IOptions<SecurityLoggingOptions> 门控） -->
+  <ItemGroup>
+    <ProjectReference Include="..\SecurityLog.Abstractions\TKWF.Ext.SecurityLog.Abstractions.csproj" />
+  </ItemGroup>
+
   <!-- 实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations）+ TokenService 黑名单 IMemoryCache 缓存（Oracle C3） -->
   <ItemGroup>
     <PackageReference Include="FreeSql" />

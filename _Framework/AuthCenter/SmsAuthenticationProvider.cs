@@ -54,6 +54,7 @@ internal sealed class SmsAuthenticationProvider : DomainServiceBase, IAuthentica
         if (account != null)
         {
             if (!account.IsEnabled) return new ProviderAuthenticateResult(false, null, "ACCOUNT_DISABLED");
+            if (account.IsFrozenEffective) return new ProviderAuthenticateResult(false, null, "ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3）
             return new ProviderAuthenticateResult(true, account.UId, null, AuthLevel.Phone);
         }
 

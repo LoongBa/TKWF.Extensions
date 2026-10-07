@@ -32,6 +32,7 @@ namespace TKWF.Ext.AuthCenter;
 [TKWFExtension("AuthCenter")]
     [TKWFExtensionCapability(ServiceType = typeof(ITokenService), QuerySurface = "FullIQueryable")]
     [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.UserCenter.IUserProfileSource), MinVersion = "0.1.0")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Emailing.IEmailSender), MinVersion = "0.1.1")]
     public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
@@ -93,6 +94,11 @@ namespace TKWF.Ext.AuthCenter;
         // 缓存：TokenService 黑名单 IMemoryCache 短 TTL 前置过滤（Oracle C3）——TryAddSingleton 消费方可覆盖
         services.TryAddSingleton<IMemoryCache, MemoryCache>();
 
+        // V0.9.0（ADR-密码策略与口令协议 决策 2——频控接线 T9 恢复）：点检查限流原语 fallback——
+        // MemoryRateLimitCheck（框架 v4.10.67 已发布）——未启用扩展限流时密码频控"始终在"（fail-closed）；
+        // 消费方显式注册 SqlCountRateLimitCheck（RateLimiting 扩展 R2）得 DB 跨实例版（TryAdd 语义业务可覆盖）。
+        services.TryAddSingleton<TKW.Framework.Utility.RateLimitChecks.IRateLimitCheck, TKW.Framework.Utility.RateLimitChecks.MemoryRateLimitCheck>();
+
         // V4.10.53（领域自治根治）：11 门面 TryAddScoped → AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory
         services.AddConstructibleService<ITokenService, TokenService>();
         services.AddConstructibleService<IAuthLoginAttemptService, AuthLoginAttemptService>();
@@ -132,14 +138,23 @@ namespace TKWF.Ext.AuthCenter;
         // 集合元素以守卫工厂形态注册，帧内（登录门面 User.Use<ISmsLoginService>() 等调用链）经 CurrentAopUser
         // 供给 IDomainUser 构造；帧外枚举（如控制器 [FromServices] IEnumerable<IAuthenticationProvider>）抛守卫
         // （禁止形态——表现层必须经登录编排门面消费，见 tkwf-use-extension §4.6 集合行）
+        // V0.9.0（B.9）：追加 PasswordAuthenticationProvider——密码登录扩展点实现（EnabledAuthTypes fail-closed 过滤 P2-6）
         services.TryAddEnumerableConstructible<IAuthenticationProvider, SmsAuthenticationProvider>();
         services.TryAddEnumerableConstructible<IAuthenticationProvider, WeChatAuthenticationProvider>();
+        services.TryAddEnumerableConstructible<IAuthenticationProvider, PasswordAuthenticationProvider>();
 
         // V4.10.55 (ADR92/T3 闭环)：登录编排门面——表现层零编排终态（EduPlatform 3 端点修复配套）。
         // 控制器改 User.Use<ISmsLoginService>().LoginAsync(...) / User.Use<IWechatLoginService>().LoginAsync(...)，
         // 门面内帧内枚举 IAuthenticationProvider 集合（ctor 注入 IEnumerable——守卫工厂经 CurrentAopUser 供给）。
         services.AddConstructibleService<ISmsLoginService, SmsLoginService>();
         services.AddConstructibleService<IWechatLoginService, WechatLoginService>();
+
+        // V0.9.0（B.9）：密码登录编排门面——镜像 SmsLoginService（Identifier+Password → Password Provider → 签发）
+        services.AddConstructibleService<IPasswordLoginService, PasswordLoginService>();
+
+        // V0.9.0（B.10/B.11）：找回密码多通道门面——SMS（SmsScenes.Reset 现成）/ Email（IEmailSender 可空降级）/
+        // 扫码（OAuthTicket 前置，编排归装配层）；UId-keyed 不实现 IAccountPasswordManager 第二实现
+        services.AddConstructibleService<IPasswordResetService, PasswordResetService>();
     }
 
     /// <summary>

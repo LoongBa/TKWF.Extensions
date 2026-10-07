@@ -33,7 +33,7 @@ public class IdentityAdapterTests
     public void UserHelperBase_CreateUserInfoFromToken_FillsRoles()
     {
         var token = new TokenValidationResult(
-            "u-200", AuthTypes.Wechat, (int)AuthLevel.Wechat, false,
+            "u-200", AuthTypes.Wechat, (int)AuthLevel.Federated,
             "jti-1", DateTime.UtcNow.AddHours(2),
             new Dictionary<string, string> { ["iss"] = "auth-test" });
         var helper = new TestAuthUserHelper();
@@ -50,13 +50,13 @@ public class IdentityAdapterTests
     {
         var mapper = new TestAuthorizationMapper();
         var token = new TokenValidationResult(
-            "u-300", AuthTypes.Sms, (int)AuthLevel.Phone, true,
+            "u-300", AuthTypes.Sms, (int)AuthLevel.Phone,
             "jti-2", DateTime.UtcNow.AddHours(2),
-            new Dictionary<string, string> { ["teacher_verified"] = "true" });
+            new Dictionary<string, string> { ["role"] = "Teacher" });   // V0.9.0：teacher_verified claim 移除——角色走本地映射（MapRoles 从通用 Claims 读业务声明）
 
         var roles = await mapper.MapRolesAsync(token.UserId, token);
 
-        // teacher_verified 身份声明 → 本地教师角色映射（Oracle I4 语义）
+        // V0.9.0（A.4）：teacher_verified 迁出——令牌不再携带业务声明；角色本地映射经通用 Claims（消费方自定业务键）
         Assert.Contains("Teacher", roles);
     }
 
@@ -83,7 +83,7 @@ public class IdentityAdapterTests
         var account = new AuthAccountEntity { UId = "u-400", Phone = "13900139000", AuthLevel = (int)AuthLevel.Phone, TokenVersion = 0 };
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
-        var issued = await stub.GetService<ITokenService>().IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, false));
+        var issued = await stub.GetService<ITokenService>().IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         var result = await verifier.VerifyAsync(issued.AccessToken);
 
         Assert.Equal(account.UId, result.UserId);
@@ -110,8 +110,11 @@ public class IdentityAdapterTests
     {
         public Task<IReadOnlyList<string>> MapRolesAsync(string sub, TokenValidationResult token, System.Threading.CancellationToken ct = default)
         {
-            // 教师核实身份声明 → 本地教师角色（Oracle I4——业务角色不进令牌，本地映射）
-            var roles = token.TeacherVerified ? new List<string> { "Teacher" } : new List<string> { "Member" };
+            // V0.9.0（A.4）：teacher_verified 迁出（令牌不再携带业务声明）——本地角色映射经通用 Claims 业务键
+            //（TestAuthorizationMapper 消费方约定业务键 "role"；教师核实走教育线业务扩展）
+            var roles = token.Claims.TryGetValue("role", out var role) && role == "Teacher"
+                ? new List<string> { "Teacher" }
+                : new List<string> { "Member" };
             return Task.FromResult<IReadOnlyList<string>>(roles);
         }
     }

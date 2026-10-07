@@ -156,13 +156,12 @@ internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketServic
 
         // (i) 签发 JWT 对。
         // 说明：票据换取是认证完成路径，调用方在签发时已绑定用户；此处认证方式取默认登录方式 sms，
-        //      认证强度取手机号级（AuthLevel.Phone），教师核实声明默认 false（身份声明，非业务角色）。
+        //      认证强度取手机号级（AuthLevel.Phone）。V0.9.0：teacher_verified 声明移除（A.4 ——令牌不再携带业务声明）。
         var tokenResult = await TokenService.IssueTokenAsync(
             new TokenIssueRequest(
                 entity.UserId,
                 AuthTypes.Sms,
-                (int)AuthLevel.Phone,
-                TeacherVerified: false),
+                (int)AuthLevel.Phone),
             ct);
 
         // (i') 落登录授权（V0.8.0 写入点——Oracle P1-1 经 IAuthGrantCommandService 门面，OAuthTicketService

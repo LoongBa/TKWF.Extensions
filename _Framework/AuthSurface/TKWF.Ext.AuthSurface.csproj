@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.AuthSurface</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>AuthSurface/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.AuthSurface</PackageId>
+    <Description>TKWF 扩展：授权面——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合（跨扩展 VEntity）+ 授权快照候选；行级 FK=AuthAccount.UId（P4）；P2 FREEZE（不实现 UserCenter 两 Source 契约，自建跨扩展 VEntity）；兑换码 SHA256 哈希存储 + CAS 原子兑换 + 频控</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- v4.10.67 适配：IRateLimitCheck 点检查原语（兑换尝试频控——TKW.Framework.Utility.RateLimitChecks；DLL 模式集中块含 Utility） -->
+    <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
+
+    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+
+    <!-- SG1 分析器：纯 Analyzer 包（analyzers/dotnet/cs/，Roslyn 自动加载）——恒用 NuGet 包（AGENTS §6 裁定） -->
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- v0.1.0：DTO 复用 UserCenter.Abstractions（RedemptionRecordDto/UserAppDto——消费方页面零适配；
+       P2 FREEZE 不实现其 Source 契约（IRedemptionHistorySource/IUserAppsSource）；L2 门控合规（契约包非主包）） -->
+  <ItemGroup>
+    <ProjectReference Include="..\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- 实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->
+  <ItemGroup>
+    <PackageReference Include="FreeSql" />
+  </ItemGroup>
+
+  <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- SG1 化：xCodeGen 配置路径（D1 集中化） -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\authsurface.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
+
+  <!-- 测试项目访问 internal -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.AuthSurface.Tests" />
+  </ItemGroup>
+
+</Project>

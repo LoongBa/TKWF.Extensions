@@ -121,6 +121,13 @@
   <Folder Name="/_Framework/UserCenter/">
     <Project Path="_Framework/UserCenter/TKWF.Ext.UserCenter.csproj" />
   </Folder>
+  <!-- v0.1.0（2026-10-07 授权面立项——Oracle4 评审 PASS WITH CONDITIONS）：AuthSurface 主包 + 测试项目 -->
+  <Folder Name="/_Framework/AuthSurface/">
+    <Project Path="_Framework/AuthSurface/TKWF.Ext.AuthSurface.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.AuthSurface.Tests/">
+    <Project Path="_Tests/Extension.AuthSurface.Tests/TKWF.Ext.AuthSurface.Tests.csproj" />
+  </Folder>
   <Folder Name="/_Tests/" />
   <Folder Name="/_Tests/Extension.Tagging.Tests/">
     <Project Path="_Tests/Extension.Tagging.Tests/TKWF.Ext.Tagging.Tests.csproj" />

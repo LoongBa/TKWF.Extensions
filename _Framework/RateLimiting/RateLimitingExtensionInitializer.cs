@@ -31,14 +31,21 @@ namespace TKWF.Ext.RateLimiting
         public override string Description => "Web 层限流接线（ASP.NET Core AddRateLimiter 中间件——固定/滑动窗口/令牌桶 + IP/用户分区 + 429/Retry-After + TKWF:RateLimiting 配置节；与 Domain 层 [RateLimit] AOP 双层互补；零第三方依赖）";
 
         /// <summary>
-        /// 注册 RateLimitingOptions 配置绑定（消费方经 <c>TKWF:RateLimiting</c> 配置节即可配置）。
-        /// <para>无状态注册（Options 单例），不注册任何服务实现——限流状态由 ASP.NET Core
-        /// RateLimiter 中间件管理（进程内）。</para>
+        /// 注册 Options + 数据访问门面（SG1 DataService 经 v4.10.8 ADR61 基类类型判定 + 消费方聚合自动注册）。
+        /// <para>v0.3.0（点检查原语 DB Provider）：<see cref="IRateLimitCounterDataService"/> 经
+        /// <c>AddConstructibleService</c>（接口可构造守卫工厂 + 实现类 throw-factory）——<see cref="SqlCountRateLimitCheck"/>
+        /// （接线型，消费方显式 <c>AddSingleton&lt;IRateLimitCheck, SqlCountRateLimitCheck&gt;()</c>）在域作用域帧内
+        /// <c>GetRequiredService&lt;IRateLimitCounterDataService&gt;()</c> 解析，守卫工厂从 CurrentAopUser 供给 ctor
+        /// IDomainUser；帧外解析抛守卫（正确 fail）。<see cref="SqlCountRateLimitCheck"/> 不在此注册（RC1：消费方显式
+        /// 注册为确定性路径——依赖扩展自动注册序不可靠）。</para>
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
             // Options 默认值 + 配置节绑定（SG1 [Options] 特性已在消费方自动绑定 TKWF:RateLimiting 节；此处兜底）
             services.AddOptions<RateLimitingOptions>().BindConfiguration(RateLimitingOptions.SectionName);
+
+            // v0.3.0：限流计数表数据访问门面（AddConstructibleService——SqlCountRateLimitCheck 帧内解析通道）
+            services.AddConstructibleService<IRateLimitCounterDataService, RateLimitCounterDataService>();
         }
     }
 }

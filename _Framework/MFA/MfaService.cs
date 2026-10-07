@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.MFA;
 
@@ -21,8 +22,10 @@ namespace TKWF.Ext.MFA;
 /// <para>防枚举统一响应（Oracle Q6）：<see cref="VerifyChallengeAsync"/>/<see cref="VerifyRecoveryCodeAsync"/> 失败统一
 /// false；未启用用户 <see cref="RequestChallengeAsync"/> 统一"已发起"（随机假 challengeId 验证必败）；
 /// 已启用用户 <see cref="EnrollAsync"/> 统一响应（空 EnrollToken）。</para>
-/// <para>尝试频控归本服务（per-user×method 内存滑动窗口——Oracle C4：恢复码验证同窗口原语）；发送侧频控
-/// （SmsMaxPerHour）归 <see cref="SmsMfaMethod"/>。异常自然传播（唯一约束/业务异常）。</para>
+/// <para>尝试频控归本服务（per-user×method 窗口——Oracle C4：恢复码验证同窗口原语；V4.10.67 起经 DI 注入
+/// <see cref="IRateLimitCheck"/> 点检查原语，key 规范 <c>{policy}:{partitionBy}:{subject}</c>——Initializer fallback
+/// <c>MemoryRateLimitCheck</c>（未启用 RateLimiting 扩展时频控"始终在"）；发送侧频控（SmsMaxPerHour）
+/// 归 <see cref="SmsMfaMethod"/>。异常自然传播（唯一约束/业务异常）。</para>
 /// <para>V4.10.53（领域自治根治，ADR90 正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
 /// 获取用户上下文（IDomainUser 永不注册 DI——D01 领域自治，构造注入 IDomainUser 生产解析必失败）；
 /// DataService 经 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 懒加载（DI004 零豁免）。注册形态由
@@ -43,24 +46,24 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
     private MfaRecoveryCodeEntityDataService? _recoveryCodes;
     private readonly IEnumerable<IMfaMethod> _methods;
     private readonly IOptions<MfaOptions> _options;
+    private readonly IRateLimitCheck _rateLimit;
     private readonly ILogger<MfaService> _logger;
 
     private MfaSecretEntityDataService Secrets => _secrets ??= User.Use<MfaSecretEntityDataService>();
     private MfaChallengeEntityDataService Challenges => _challenges ??= User.Use<MfaChallengeEntityDataService>();
     private MfaRecoveryCodeEntityDataService RecoveryCodes => _recoveryCodes ??= User.Use<MfaRecoveryCodeEntityDataService>();
 
-    /// <summary>验证尝试频控器（进程级静态——频控须跨请求生效，不随 scope 重建；单实例语义 Oracle C4/Q3）。</summary>
-    private static readonly MfaRateLimiter VerifyLimiter = new();
-
     public MfaService(
         IDomainUser user,
         IEnumerable<IMfaMethod> methods,
         IOptions<MfaOptions> options,
+        IRateLimitCheck rateLimit,
         ILogger<MfaService> logger)
         : base(user)
     {
         _methods = methods ?? throw new ArgumentNullException(nameof(methods));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _rateLimit = rateLimit ?? throw new ArgumentNullException(nameof(rateLimit));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -160,11 +163,14 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
         var opt = _options.Value;
 
         // 先频控（per-user×method 滑动窗口——Oracle C4：成功/失败均计入，每次验证都计；超限抛异常含剩余等待）
-        var verifyKey = "mfa:verify:" + userId + ":" + method;
+        // key 规范（方案 §五决策点3：{policy}:{partitionBy}:{subject}——policy=mfa:verify, partitionBy=user, subject={userId}:{method}；
+        // V4.10.67 IRateLimitCheck 迁移：DI 注入 IEntityDAC 之外的框架 Utility 契约，Initializer TryAddSingleton fallback MemoryRateLimitCheck——
+        // 消费方显式注册 SqlCountRateLimitCheck 时静默替换（首注册胜出）；未启用 RateLimiting 扩展时频控"始终在"，安全不降级）
+        var verifyKey = $"mfa:verify:user:{userId}:{method}";
         var verifyWindow = TimeSpan.FromMinutes(opt.VerifyAttemptWindowMinutes);
-        if (!VerifyLimiter.IsAllowed(verifyKey, opt.MaxVerifyAttemptsPerWindow, verifyWindow, out _))
+        if (!_rateLimit.TryAcquire(verifyKey, opt.MaxVerifyAttemptsPerWindow, verifyWindow, out _))
         {
-            var retryAfter = VerifyLimiter.GetRetryAfter(verifyKey, verifyWindow);
+            var retryAfter = _rateLimit.GetRetryAfter(verifyKey, verifyWindow);
             throw new InvalidOperationException($"MFA 验证尝试过于频繁——请 {Math.Max(1, (int)retryAfter.TotalSeconds)} 秒后重试");
         }
 
@@ -210,11 +216,12 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
         var opt = _options.Value;
 
         // 恢复码验证纳入同一频控原语（per-(UserId,"recovery")——Oracle C4：8 码 × 无限尝试可枚举，必须限流）
-        var verifyKey = "mfa:verify:" + userId + ":recovery";
+        // key 规范（方案 §五决策点3：{policy}:{partitionBy}:{subject}——policy=mfa:verify, partitionBy=user, subject={userId}:recovery）
+        var verifyKey = $"mfa:verify:user:{userId}:recovery";
         var verifyWindow = TimeSpan.FromMinutes(opt.VerifyAttemptWindowMinutes);
-        if (!VerifyLimiter.IsAllowed(verifyKey, opt.MaxVerifyAttemptsPerWindow, verifyWindow, out _))
+        if (!_rateLimit.TryAcquire(verifyKey, opt.MaxVerifyAttemptsPerWindow, verifyWindow, out _))
         {
-            var retryAfter = VerifyLimiter.GetRetryAfter(verifyKey, verifyWindow);
+            var retryAfter = _rateLimit.GetRetryAfter(verifyKey, verifyWindow);
             throw new InvalidOperationException($"恢复码验证尝试过于频繁——请 {Math.Max(1, (int)retryAfter.TotalSeconds)} 秒后重试");
         }
 

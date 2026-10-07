@@ -24,6 +24,9 @@
          UseLocalFw=true（本地，默认）→ 集中 DLL 引用（Directory.Build.props _LocalFwRefsDir）+ 本块按需 Reference；
          UseLocalFw=false（CI/发布）→ PackageReference 主框架 NuGet 包（CPM 集中版本）。 -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- v4.10.67（v0.3.0 点检查原语 R3 迁移）：IRateLimitCheck 契约所在程序集（TKW.Framework.Utility.RateLimitChecks；
+         DLL 模式集中块已含 Utility，NuGet 模式显式声明） -->
+    <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
@@ -53,7 +56,7 @@
     <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\mfa.xCodeGen.json</_XCG_ConfigPath>
   </PropertyGroup>
 
-  <!-- 测试项目访问 internal（MfaService/DataService 分部/MfaSecretKeyStore/MfaRateLimiter 等） -->
+  <!-- 测试项目访问 internal（MfaService/DataService 分部/MfaSecretKeyStore 等） -->
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.MFA.Tests" />
   </ItemGroup>

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.MFA;
 
@@ -36,21 +37,21 @@ internal sealed class SmsMfaMethod : DomainServiceBase, IMfaMethod
     private MfaChallengeEntityDataService? _challenges;
     private readonly IOptions<MfaOptions> _options;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IRateLimitCheck _rateLimit;
 
     private MfaSecretEntityDataService Secrets => _secrets ??= User.Use<MfaSecretEntityDataService>();
     private MfaChallengeEntityDataService Challenges => _challenges ??= User.Use<MfaChallengeEntityDataService>();
 
-    /// <summary>发送频控器（进程级静态——频控须跨请求生效，不随 scope 重建；单实例语义 Oracle C8）。</summary>
-    private static readonly MfaRateLimiter SendLimiter = new();
-
     public SmsMfaMethod(
         IDomainUser user,
         IOptions<MfaOptions> options,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IRateLimitCheck rateLimit)
         : base(user)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _rateLimit = rateLimit ?? throw new ArgumentNullException(nameof(rateLimit));
     }
 
     /// <inheritdoc />
@@ -182,12 +183,14 @@ internal sealed class SmsMfaMethod : DomainServiceBase, IMfaMethod
         if (activeChallenges.Count > 0)
             throw new InvalidOperationException("短信验证码已发送——请等待当前验证码过期或消费后重试");
 
-        // ② per-user 小时窗口（内存滑动窗口；⚠️ 多实例不跨实例——Oracle C8 单实例部署或外部限流器前置）
-        var limiterKey = "mfa:sms:" + userId;
+        // ② per-user 小时窗口（V4.10.67 IRateLimitCheck 迁移——DI 注入点检查原语，Initializer fallback MemoryRateLimitCheck；
+        //    ⚠️ 多实例不跨实例——Oracle C8 单实例部署或外部限流器前置）
+        //    key 规范（方案 §五决策点3：{policy}:{partitionBy}:{subject}——policy=mfa:sms, partitionBy=user, subject={userId}）
+        var limiterKey = $"mfa:sms:user:{userId}";
         var hourWindow = TimeSpan.FromHours(1);
-        if (!SendLimiter.IsAllowed(limiterKey, opt.SmsMaxPerHour, hourWindow, out _))
+        if (!_rateLimit.TryAcquire(limiterKey, opt.SmsMaxPerHour, hourWindow, out _))
         {
-            var retryAfter = SendLimiter.GetRetryAfter(limiterKey, hourWindow);
+            var retryAfter = _rateLimit.GetRetryAfter(limiterKey, hourWindow);
             throw new InvalidOperationException($"短信发送过于频繁——请 {Math.Max(1, (int)retryAfter.TotalSeconds)} 秒后重试");
         }
 

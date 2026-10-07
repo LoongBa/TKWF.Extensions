@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Utility.RateLimitChecks;
+using TKWF.Ext.MFA;
 
 namespace TKWF.Ext.MFA.Tests;
 
@@ -120,6 +122,39 @@ public class MfaInitializerTests
     }
 
     [Fact]
+    public void ConfigureServices_Registers_RateLimitCheck_Fallback_MemoryRateLimitCheck()
+    {
+        var services = new ServiceCollection();
+        new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
+
+        // V4.10.67 R3（IRateLimitCheck 迁移，Oracle7 C1 方案 B + RC1 排序裁定）：TryAddSingleton fallback——
+        // 首注册胜出——消费方显式注册 SqlCountRateLimitCheck 时静默替换；依赖扩展自动注册序不可靠，
+        // 消费方显式注册为确定性路径；未启用 RateLimiting 扩展时频控"始终在"（安全语义不降级）
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IRateLimitCheck));
+        Assert.NotNull(descriptor);
+        Assert.Equal(typeof(MemoryRateLimitCheck), descriptor!.ImplementationType);
+        Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+
+        // 真实 DI 下 ctor 注入自动解析（MfaService/SmsMfaMethod 均注入 IRateLimitCheck）
+        var provider = services.BuildServiceProvider();
+        Assert.IsType<MemoryRateLimitCheck>(provider.GetRequiredService<IRateLimitCheck>());
+    }
+
+    [Fact]
+    public void ConfigureServices_TryAdd_RateLimitCheck_ConsumerExplicitWins()
+    {
+        var services = new ServiceCollection();
+
+        // 消费方显式注册在先（如 SqlCountRateLimitCheck 跨实例 DB 频控）→ TryAddSingleton 不覆盖（首注册胜出）
+        var sentinel = new SentinelRateLimitCheck();
+        services.AddSingleton<IRateLimitCheck>(sentinel);
+        new MFAExtensionInitializer<MfaUserInfo>().ConfigureServices(services);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Same(sentinel, provider.GetRequiredService<IRateLimitCheck>());
+    }
+
+    [Fact]
     public void Host_Di_Resolves_MfaService_WithTwoMethods_And_DefaultOptions()
     {
         using var host = MfaTestHost.Create();
@@ -166,4 +201,20 @@ public class MfaInitializerTests
         Assert.NotNull(attr);
         Assert.Equal(typeof(MFAExtensionInitializer<>), attr!.InitializerType);
     }
+}
+
+/// <summary>
+/// 消费方显式注册哨兵实现——验证 TryAddSingleton 首注册胜出（消费方显式注册为确定性路径）。
+/// </summary>
+internal sealed class SentinelRateLimitCheck : IRateLimitCheck
+{
+    public bool TryAcquire(string key, int maxAttempts, TimeSpan window, out int remaining)
+    {
+        remaining = maxAttempts;
+        return true;
+    }
+
+    public TimeSpan GetRetryAfter(string key, TimeSpan window) => TimeSpan.Zero;
+
+    public int GetRemaining(string key, int maxAttempts, TimeSpan window) => maxAttempts;
 }

@@ -1,10 +1,12 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.MFA;
 
@@ -62,6 +64,12 @@ public class MFAExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo
         });
 
         // 2. SG1 DataService——ADR61 起自动注册（可构造工厂），不再手动 TryAddScoped
+
+        // 2.1 IRateLimitCheck fallback（V4.10.67 R3 迁移，Oracle7 C1 方案 B + RC1 排序裁定）：
+        //     TryAddSingleton 首注册胜出——消费方显式注册 SqlCountRateLimitCheck 等实现时静默替换；
+        //     MFA 依赖扩展（RateLimiting）自动注册序不可靠，消费方显式注册为确定性路径；
+        //     未启用 RateLimiting 扩展时频控"始终在"（MemoryRateLimitCheck 进程级单例，安全语义不降级）
+        services.TryAddSingleton<IRateLimitCheck, MemoryRateLimitCheck>();
 
         // 3. 门面注册（V4.10.53 领域自治根治）：AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory；
         //    消费方统一经 User.Use<IMfaService>() 解析（旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）

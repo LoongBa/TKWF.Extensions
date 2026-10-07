@@ -24,7 +24,8 @@ IMfaService / MfaService                      # 门面（绑定管理 + 挑战-�
 └── MfaRecoveryCodeEntityDataService          # 恢复码（SHA256 + 单次消费）
 
 IMfaSmsSender / MfaSmsMessage                 # 消费方实现（TryAdd 无默认——对齐 ISmsSender 先例）
-MfaRateLimiter                              # internal 设施（内存滑动窗口频控）
+IRateLimitCheck（框架 Utility v4.10.67）      # 频控契约（DI 注入 + Initializer TryAddSingleton fallback MemoryRateLimitCheck——
+                                               # 消费方显式注册 SqlCountRateLimitCheck 等实现时静默替换；未启用 RateLimiting 扩展频控"始终在"）
 ```
 
 - **数据访问红线**：Service 层只依赖 SG1 DataService（ADR61 自动注册，零手动注册）——零 IFreeSql/IEntityDAC 直注入。
@@ -79,6 +80,7 @@ MfaRateLimiter                              # internal 设施（内存滑动窗�
 - **恒定时间比较**：SMS 码/恢复码/TOTP 比对经 `CryptographicOperations.FixedTimeEquals`。
 - **secret 加密（ADR-MFA-TOTP自研与密钥存储）**：TOTP 自研 RFC 6238（HMAC-SHA1 + 30s + 6 位 + Base32 + ±1 窗口，附录 B 向量锚定）；secret AES-GCM 密文落库（`SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）；解密异常语义：**格式非法（单段 blob 结构损坏）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`**。
 - **频控单实例（Oracle Q3/C8）**：v0.1.0 内存滑动窗口仅本实例生效——TOTP/SMS 验证暴力多实例可忽略（6 位码 + 单次消费）；**SMS 发码多实例 = 短信计费滥用 → 外部限流器/单实例前置**；DB 化跨实例频控 v0.2.0 候选。⚠️ **TTL 内重发拒绝在单实例极端并发下存在理论 TOCTOU 窗口**（两并发请求可同时过活动挑战检查 → 同时创建挑战双发 SMS）——`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
+- **频控 Provider 切换注记（V4.10.67 R3，Oracle7 RC2）**：频控经 DI 注入 `IRateLimitCheck`（Initializer fallback `MemoryRateLimitCheck` 滑动窗口）——消费方显式注册 `SqlCountRateLimitCheck` 时窗口边界行为由 sliding 变为 fixed，窗口边界突发差异（fixed 窗口边界重计可能瞬时放行）MFA 验证低频可接受；R4 文档统一成文。
 - **恢复码**：SHA256 落库（明文不落库）、单次消费、验证纳入频控、再生成全量替换；丢失恢复码 + 设备丢失 = 锁死（防锁死是恢复码的意义）。
 - **零扩展间依赖**：`SmsMfaMethod` 与 Authentication `SmsVerificationService` 逻辑重叠但语义不同（第二因素 per-user×method vs 首因素 per-phone×scene + IP）——独立实现正确（Oracle Q1 裁决）；收敛出口 = 后续评估 `Authentication.Abstractions` 拆包（独立迭代）。
 

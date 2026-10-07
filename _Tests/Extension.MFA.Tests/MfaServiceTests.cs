@@ -11,8 +11,9 @@ namespace TKWF.Ext.MFA.Tests;
 /// MfaService 门面核心测试（public IMfaService 驱动）——覆盖方案 §五 MfaService 行：
 /// TOTP/SMS 绑定全流程、EnrollToken 过期/重放（Oracle C3）、挑战-验证编排（统一 false）、
 /// 尝试频控 + 恢复码同窗口（Oracle C4）、恢复码（P9/C1 明文不落库 + 并发单次消费）、防枚举（Oracle Q6）。
-/// <para>⚠️ 进程级静态频控器（MfaService.VerifyLimiter/SmsMfaMethod.SendLimiter）测试间共享——
-/// 每用例独立 userId（key = mfa:verify:{userId}:{method} / mfa:sms:{userId}）保证隔离。</para>
+/// <para>V4.10.67 R3（IRateLimitCheck 迁移）：频控经 DI 注入点检查原语——生产路径 host 走
+/// MFAExtensionInitializer TryAddSingleton fallback（MemoryRateLimitCheck，每宿主独立实例）；
+/// 每用例独立 userId（key = mfa:verify:user:{userId}:{method} / mfa:sms:user:{userId}）保证隔离。</para>
 /// </summary>
 public class MfaServiceTests
 {

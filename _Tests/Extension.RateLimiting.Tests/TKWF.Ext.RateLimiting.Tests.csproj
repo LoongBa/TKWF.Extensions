@@ -24,6 +24,12 @@
     <!-- TestServer（HTTP 级限流验证）。VersionOverride：CPM 未收录 ASP.NET Core 测试包——按 CSP 规则
          本条目显式覆盖版本（对齐 Microsoft.Extensions 10.0.11），不改 Directory.Packages.props（no CPM 接线） -->
     <PackageReference Include="Microsoft.AspNetCore.TestHost"  />
+    <!-- SqlCountRateLimitCheck 测试（v0.3.0）：FreeSql SQLite 内存/文件库 + 真实 FreeSqlEntityDAC 驱动 -->
+    <PackageReference Include="FreeSql" />
+    <PackageReference Include="FreeSql.Extensions.Linq" />
+    <PackageReference Include="FreeSql.DbContext" />
+    <PackageReference Include="FreeSql.Provider.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
   </ItemGroup>
 
   <ItemGroup>
@@ -44,8 +50,12 @@
     <ProjectReference Include="..\..\_Framework\RateLimiting\TKWF.Ext.RateLimiting.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
   <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- FreeSqlEntityDAC + UnitOfWorkManager：测试经真实 FreeSql DAC 驱动 DataService（红线合规委托路径） -->
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
   </ItemGroup>
 
   <ItemGroup>

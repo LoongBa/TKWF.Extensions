@@ -65,36 +65,35 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         全量 lockstep v4.10.65（2026-10-06，V5 Iter-3 M1 能力目录 + Iter-4 M3 依赖版本门控——
-         TKWFExtensionCapability/TKWFExtensionDependency 新特性 + SG1b CapabilityCatalog/DEP 诊断；
-         解除 4.10.57 SG Analyzer 桥接——CodeGeneration/CodeGeneration.Abstractions 全量 4.10.65；
-         OIDC 归并（OAuthClient/IdTokenDecoder/JwksManager/OidcDiscoveryClient——Federation.Oidc 委托）
-         亦含于本线）。本地开发 DLL 模式消费部署根 build\refs 4.10.65（UseLocalFw=true 零 restore）。
-         ⚠️ 框架发布 4.10.65 前 CI（UseLocalFw=false）restore 依赖 nuget.org 就绪（当前最新 4.10.64——
-         待框架发布后 CI 自动通过，本地验证不受影响）。
+         全量 lockstep v4.10.68（2026-10-07——RateLimiting v0.3.0 / AuthSurface v0.1.0 /
+         AuthCenter V0.9.x 消费 v4.10.67 `IRateLimitCheck`（TKW.Framework.Utility.RateLimitChecks）,
+         CI（UseLocalFw=false）nuget 模式 restore 4.10.65 编译失败（AuthSurface CS0234/CS0246）——
+         锁定 nuget.org 最新 4.10.68 解除；含 v4.10.66 表名前缀批次（TKWF_/TKWFV_/TKWFIX_ ADR100）、
+         v4.10.67 RateLimitCheck 点检查原语、v4.10.68 修补。本地开发 DLL 模式消费部署根 build\refs
+         （UseLocalFw=true 零 restore，部署根已至 4.10.69-preview 覆盖）。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.65" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.65" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.65" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.65" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.65" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.65" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.65" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.65" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.68" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.68" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.68" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.68" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.68" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.68" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.68" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.68" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.68" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.65" />
-    <!-- ✅ 4.10.65 全量 lockstep（2026-10-06，V5 Iter-3/Iter-4——13 包 4.10.61/4.10.57→4.10.65；
-         解除 CodeGeneration 4.10.57 桥接——CapabilityCatalog/DEP 门控新特性需要 4.10.65 Analyzer；
-         CodeGeneration.Abstractions NU1605 修复（Domain nuspec 硬依赖 ≥4.10.61）随 lockstep 一并化解） -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.65" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.68" />
+    <!-- ✅ 4.10.68 全量 lockstep（2026-10-07——修复 RateLimiting v0.3.0/AuthSurface v0.1.0/AuthCenter V0.9.x
+         消费 v4.10.67 IRateLimitCheck 后 CI nuget 模式 restore 4.10.65 编译失败的回归；
+         含 4.10.66 表名前缀批次 + 4.10.67 RateLimitCheck + 4.10.68 修补；版本锁 nuget.org 最新） -->
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.68" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.68" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.65" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.68" />
   </ItemGroup>
 </Project>

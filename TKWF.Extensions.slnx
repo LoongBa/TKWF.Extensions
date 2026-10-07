@@ -247,6 +247,10 @@
   <Folder Name="/_Framework/Federation.QQ/">
     <Project Path="_Framework/Federation.QQ/TKWF.Federation.QQ.csproj" />
   </Folder>
+  <!-- N4 支付宝平台网关库（出站-only + RSA2 双向签名——F1 验证 slnx 构建 0 错误） -->
+  <Folder Name="/_Framework/Federation.Alipay/">
+    <Project Path="_Framework/Federation.Alipay/TKWF.Federation.Alipay.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>
@@ -268,6 +272,10 @@
   <!-- N1 平台网关通用模板 T4：QQ 测试宿主壳（N3 填充用例） -->
   <Folder Name="/_Tests/Extension.Federation.QQ.Tests/">
     <Project Path="_Tests/Extension.Federation.QQ.Tests/TKWF.Federation.QQ.Tests.csproj" />
+  </Folder>
+  <!-- N4 支付宝平台网关库测试宿主（生产路径 + RSA2 签名桩） -->
+  <Folder Name="/_Tests/Extension.Federation.Alipay.Tests/">
+    <Project Path="_Tests/Extension.Federation.Alipay.Tests/TKWF.Federation.Alipay.Tests.csproj" />
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />

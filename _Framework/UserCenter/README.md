@@ -12,7 +12,7 @@
 
 企业应用普遍需要"用户中心档案面"——公共 Profile API + 用户中心页面数据（兑换历史/我的应用）。TKWF 扩展机制核心优势是"**扩展内自定义数据结构/对象 → 装配进消费方 DI/DomainHost**"——本扩展将这套机制用到极致：
 
-- **契约与实现分离**：档案数据属主 = 认证中心（AuthAccount）；兑换/授权数据属主 = 授权面（未立项）——本扩展只出**读取契约**（`IUserProfileSource`/`IRedemptionHistorySource`/`IUserAppsSource`），数据属主扩展在**自己**的 Initializer 内实现契约并 `TryAddScoped` 注册，消费方零手写桥接。
+- **契约与实现分离**：档案数据属主 = 认证中心（AuthAccount）；兑换/授权数据属主 = 授权面（**2026-10-07 已立项 `TKWF.Ext.AuthSurface`**）——本扩展只出**读取契约**（`IUserProfileSource`/`IRedemptionHistorySource`/`IUserAppsSource`），数据属主扩展在**自己**的 Initializer 内实现契约并 `TryAddScoped` 注册，消费方零手写桥接。**⚠️ P2 FREEZE（前置裁定 2026-10-07）**：`IRedemptionHistorySource`/`IUserAppsSource` 契约保留（装配层适配器向后兼容）但**授权面禁止实现**——自建跨扩展 VEntity（`TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`）+ 自有查询门面，消费方兑换/应用查询**不经本扩展门面**（`GetRedemptionsAsync`/`GetAppsAsync` 保持缺省降级空列表）；DTO（`RedemptionRecordDto`/`UserAppDto`）由授权面门面复用返回。
 - **领域逻辑进扩展**：门面（组合三 Source）+ 强制脱敏（PhoneMasker）+ 降级矩阵——单一真相源，实现方不需要也不得自行处理（防漏防重）。
 - **多业务线复用**：教育工具系列 + 生活服务电商 + 并行业务系统——装配复用同一用户中心骨架（需求来源：`LoongEduTools/docs/教育工具/` 认证中心与用户中心抽取需求 v1.0）。
 
@@ -74,8 +74,8 @@ TKWF.Ext.UserCenter.Abstractions（契约包）
 └── 零框架引用（纯 BCL——对齐 Emailing.Abstractions / Account.Abstractions 先例）
 
 实现方（终态）：
-  认证中心 v0.2.0+ ──▶ IUserProfileSource（经 Abstractions，TryAddScoped 注册）
-  授权面（未立项） ──▶ IRedemptionHistorySource / IUserAppsSource（经 Abstractions）
+  认证中心 v0.2.0+ ──▶ IUserProfileSource（经 Abstractions，TryAddScoped 注册）✅
+  授权面（未立项） ──▶ IRedemptionHistorySource / IUserAppsSource（经 Abstractions）→ **⛔ P2 FREEZE（2026-10-07 前置裁定）：授权面不实现**——自建跨扩展 VEntity + 自有查询门面（`TKWF.Ext.AuthSurface` V0.1.0）；本扩展两方法保持缺省降级（空列表）
   装配实例（过渡期）──▶ 继承 UserProfileSourceBase 等模板基类
 ```
 
@@ -204,7 +204,7 @@ public class UserCenterPage(IUserCenterQueryService userCenter)
 ### V0.2.0+（规划——最优解探索终态路径，见 `docs/框架实战教学/01-扩展模块最优解探索-Schema级数据组合-开篇.md` §八）
 - **组合视图 `vm_UserCenterProfile`**（首个跨扩展组合 VEntity 先例）：JOIN 认证中心基表（`AuthAccount` 等）——装配层单查询组装档案 + 项目定制字段；SQL 硬脱敏（投影下沉）直接作用于基表；`IGlobalQueryFilter` 按 UserId 过滤（仅本人，框架 F6 候选 / 方案 A）或 `ExposeGraphqlQuery=false` 经门面（方案 B）
 - 认证中心 v0.2.0+ 实现 `IUserProfileSource`（数据属主扩展内实现——删除装配实例桥接类）
-- 授权面立项后实现 `IRedemptionHistorySource`/`IUserAppsSource`
+- 授权面立项后实现 `IRedemptionHistorySource`/`IUserAppsSource` —— **⛔ 已被 P2 FREEZE 推翻（2026-10-07 前置裁定）**：授权面（`TKWF.Ext.AuthSurface` V0.1.0）**不实现**两 Source 契约——自建跨扩展 VEntity（`TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`）+ 自有查询门面；消费方兑换/应用查询改经授权面门面（DTO 复用本扩展契约包）；本扩展 `GetRedemptionsAsync`/`GetAppsAsync` 保持缺省降级（空列表，显式降级非静默失效）
 - 档案偏好持久化（写需求出现时按红线标准路径补充）
 
 ### 远期 / 评估

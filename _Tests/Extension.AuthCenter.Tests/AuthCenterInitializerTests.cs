@@ -4,7 +4,6 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
-using TKWF.Ext.UserCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -15,7 +14,6 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// <list type="bullet">
 /// <item>10 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
-/// <item><see cref="IUserProfileSource"/>（UserCenter.Abstractions 契约非 IDomainService）→ TryAddScoped 普通 DI（接线型）；</item>
 /// <item><see cref="IAuthenticationProvider"/> 双实现 → V4.10.55（ADR92）<c>TryAddEnumerableConstructible</c>
 ///     （集合版守卫工厂——工厂委托形态 + 帧内 CurrentAopUser 供给；帧外枚举抛守卫）。</item>
 /// <item><see cref="ISmsLoginService"/>/<see cref="IWechatLoginService"/> 登录编排门面（V4.10.55 ADR92/T3 闭环）→
@@ -103,24 +101,6 @@ public class AuthCenterInitializerTests
         var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITokenService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ITokenService", ex.Message);
-    }
-
-    /// <summary>接线型（IUserProfileSource 非 IDomainService）——TryAddScoped 普通 DI：实现映射 + Scoped + 普通可解析。</summary>
-    [Fact]
-    public void ConfigureServices_Registers_ProfileSource_Descriptor()
-    {
-        var services = new ServiceCollection();
-        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserProfileSource));
-
-        Assert.NotNull(descriptor);
-        Assert.Equal(typeof(AuthAccountUserProfileSource), descriptor!.ImplementationType);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
-
-        // 接线型：ctor(IServiceProvider)——普通 DI 可直接解析（无 CurrentAopUser 守卫）
-        var provider = services.BuildServiceProvider();
-        Assert.IsType<AuthAccountUserProfileSource>(provider.GetRequiredService<IUserProfileSource>());
     }
 
     /// <summary>多 Provider——V4.10.55（ADR92）改 TryAddEnumerableConstructible（集合版守卫工厂）：双实现以工厂委托形态注册（ImplementationType=null + ImplementationFactory 非空）。</summary>

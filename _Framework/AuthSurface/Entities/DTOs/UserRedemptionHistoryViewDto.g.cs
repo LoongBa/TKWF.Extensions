@@ -30,7 +30,7 @@ public partial record UserRedemptionHistoryViewDto : IDomainDto<UserRedemptionHi
     public long Id { get; init; }
     /// <summary> 兑换人平台内部 id——SQL AS 别名（<c>RedeemedByUId AS "UserId"</c>），对齐 AuthAccount.UId 语义。 </summary>
     public required string UserId { get; init; }
-    /// <summary> 脱敏 code（授权面已脱敏存储——UserCenter 契约 CodeMasked 透传）。 </summary>
+    /// <summary> 脱敏 code（授权面已脱敏存储——明文不落库，对应 RedemptionRecordDto.CodeMasked）。 </summary>
     public required string CodeMasked { get; init; }
     /// <summary>  </summary>
     public required string ProductName { get; init; }

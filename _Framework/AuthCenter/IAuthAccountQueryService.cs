@@ -8,13 +8,14 @@ using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuthCenter;
 
-/// <summary>账号查询服务——对外只读查询契约（UserCenter 桥接 / 装配实例 / 内部复用）。</summary>
+/// <summary>账号查询服务——对外只读查询契约（装配实例 / 内部复用）。</summary>
 public interface IAuthAccountQueryService : IDomainService
 {
     Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default);
     Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default);
 
-    /// <summary>按平台内部 id 查档案（V0.9.0 A.1 凭据/档案分离——档案 1:1 经 UserProfile 表；ProfileSource 消费面）。</summary>
+    /// <summary>按平台内部 id 查档案（V0.9.0 A.1 凭据/档案分离——档案 1:1 经 UserProfile 表；档案查询消费面）。
+    /// <para>2026-10-08（UserCenter 退役）：档案读统一经本方法——替代已删除的 UserCenter 契约实现。</para></summary>
     Task<UserProfileEntity?> GetProfileByUIdAsync(string uid, CancellationToken ct = default);
 
     /// <summary>微信绑定判定（V0.9.0 A.8 联邦归一化——wechat_mp/wechat_web channel 行存在性，替代原 AuthAccount 三列 OR 推导）。</summary>
@@ -50,7 +51,7 @@ internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQ
     public Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default)
         => DataService.GetByPhoneAsync(phone, ct);
 
-    /// <summary>按平台内部 id 查档案（1:1 True——UserProfile 属主；ProfileSource 消费面）。</summary>
+    /// <summary>按平台内部 id 查档案（1:1 True——UserProfile 属主；档案查询消费面）。</summary>
     public async Task<UserProfileEntity?> GetProfileByUIdAsync(string uid, CancellationToken ct = default)
         => await ProfileDataService.GetByUIdAsync(uid, ct);
 

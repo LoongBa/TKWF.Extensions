@@ -23,7 +23,7 @@ public sealed record SsoProfileAuditEntry(string AppId, string UId, string Scope
 /// SSO profile API 服务（server-to-server——scope 强制 + 审计）。
 /// <para>设计文档 §5.7：只返回 scope 允许字段（profile:basic → nickname/avatar 子集）；
 /// <b>永不返回</b> openid/channel_id/phone；经 Abstractions 契约 <c>ISsoAccountQueryService</c> 读
-/// <c>SsoAccountDto</c>（敏感字段不出契约包，Oracle P1-2）；不依赖 UserCenter。</para>
+/// <c>SsoAccountDto</c>（敏感字段不出契约包，Oracle P1-2）；独立于用户中心聚合层（已退役）。</para>
 /// </summary>
 public interface ISsoProfileService : IDomainService
 {

@@ -34,11 +34,6 @@
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- V0.2.0：UserCenter 契约承接——引契约包（Abstractions）非主包（L2 门控合规；ADR48 D7；扩展间依赖走 ProjectReference，打包自动转版本依赖） -->
-  <ItemGroup>
-    <ProjectReference Include="..\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
-  </ItemGroup>
-
   <!-- V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：SSO 消费面契约包——接口 + 不可变 DTO（零实体零 SG1）；
        实现类在本主包补实现 ISsoAccountQueryService / ISsoChannelMapService（AuthAccountQueryService / PlatformAccountMapService） -->
   <ItemGroup>

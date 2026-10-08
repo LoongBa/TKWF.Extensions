@@ -30,7 +30,7 @@ public partial record RedemptionCodeEntityDto : IDomainDto<RedemptionCodeEntity>
     public long Id { get; init; }
     /// <summary> SHA256(code 明文) 十六进制 64——唯一（一码一兑防重）。 </summary>
     public required string CodeHash { get; init; }
-    /// <summary> 展示脱敏值（如 "EDU-AB12-****-EF56"）——UserCenter 契约 <c>RedemptionRecordDto.CodeMasked</c> 已脱敏透传。 </summary>
+    /// <summary> 展示脱敏值（如 "EDU-AB12-****-EF56"）——对应 RedemptionRecordDto.CodeMasked 已脱敏透传。 </summary>
     public required string CodeMasked { get; init; }
     /// <summary> 商品/载体名。 </summary>
     public required string ProductName { get; init; }

@@ -37,7 +37,7 @@ public partial class UserRedemptionHistoryView
     [FreeSql.DataAnnotations.Column(Position = 2)]
     public string UserId { get; set; } = "";
 
-    /// <summary>脱敏 code（授权面已脱敏存储——UserCenter 契约 CodeMasked 透传）。</summary>
+    /// <summary>脱敏 code（授权面已脱敏存储——明文不落库，对应 <c>RedemptionRecordDto.CodeMasked</c>）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 3)]
     public string CodeMasked { get; set; } = "";
 

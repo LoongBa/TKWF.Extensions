@@ -91,7 +91,7 @@ public sealed class DbChannelRegistry : DomainServiceBase, IChannelRegistry
             IsEnabled = entity.IsEnabled,
         };
 
-    /// <summary>解密 AppSecret（空串 → null；解密失败记录 Warning + null——对齐 UserCenter 降级矩阵）。</summary>
+    /// <summary>解密 AppSecret（空串 → null；解密失败记录 Warning + null——对齐仓库降级矩阵惯例）。</summary>
     private string? DecryptNullable(string? ciphertext, string channelId)
     {
         if (string.IsNullOrEmpty(ciphertext)) return null;

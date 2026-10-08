@@ -112,14 +112,8 @@
   <Folder Name="/_Framework/AuthCenter/">
     <Project Path="_Framework/AuthCenter/TKWF.Ext.AuthCenter.csproj" />
   </Folder>
-  <Folder Name="/_Framework/AuthCenter.Abstractions/">
+<Folder Name="/_Framework/AuthCenter.Abstractions/">
     <Project Path="_Framework/AuthCenter.Abstractions/TKWF.Ext.AuthCenter.Abstractions.csproj" />
-  </Folder>
-  <Folder Name="/_Framework/UserCenter.Abstractions/">
-    <Project Path="_Framework/UserCenter.Abstractions/TKWF.Ext.UserCenter.Abstractions.csproj" />
-  </Folder>
-  <Folder Name="/_Framework/UserCenter/">
-    <Project Path="_Framework/UserCenter/TKWF.Ext.UserCenter.csproj" />
   </Folder>
   <!-- v0.1.0（2026-10-07 授权面立项——Oracle4 评审 PASS WITH CONDITIONS）：AuthSurface 主包 + 测试项目 -->
   <Folder Name="/_Framework/AuthSurface/">
@@ -216,11 +210,8 @@
   <Folder Name="/_Tests/Extension.FeatureManagement.Tests/">
     <Project Path="_Tests/Extension.FeatureManagement.Tests/TKWF.Ext.FeatureManagement.Tests.csproj" />
   </Folder>
-  <Folder Name="/_Tests/Extension.AuthCenter.Tests/">
+<Folder Name="/_Tests/Extension.AuthCenter.Tests/">
     <Project Path="_Tests/Extension.AuthCenter.Tests/TKWF.Ext.AuthCenter.Tests.csproj" />
-  </Folder>
-  <Folder Name="/_Tests/Extension.UserCenter.Tests/">
-    <Project Path="_Tests/Extension.UserCenter.Tests/TKWF.Ext.UserCenter.Tests.csproj" />
   </Folder>
   <Folder Name="/_Framework/Federation/">
     <Project Path="_Framework/Federation/TKWF.Ext.Federation.csproj" />

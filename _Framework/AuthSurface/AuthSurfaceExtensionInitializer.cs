@@ -20,7 +20,7 @@ public class AuthSurfaceExtensionInitializer<TUserInfo> : ExtensionInitializer<T
     public override string Name => "AuthSurface";
 
     public override string Description
-        => "授权面——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合 + 授权快照候选；行级 FK=AuthAccount.UId（P4）；P2 FREEZE（不实现 UserCenter 两 Source 契约，自建跨扩展 VEntity）；兑换码 SHA256 哈希存储 + CAS 原子兑换 + 频控";
+        => "授权面——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合 + 授权快照候选；行级 FK=AuthAccount.UId（P4）；兑换/应用查询经本扩展自有门面（跨扩展 VEntity——UserCenter 退役后唯一通道）；兑换码 SHA256 哈希存储 + CAS 原子兑换 + 频控";
 
     public override void ConfigureServices(IServiceCollection services)
     {

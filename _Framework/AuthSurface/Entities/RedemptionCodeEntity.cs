@@ -24,7 +24,7 @@ public partial class RedemptionCodeEntity
     [FreeSql.DataAnnotations.Column(Position = 2, StringLength = 64)]
     public string CodeHash { get; set; } = "";
 
-    /// <summary>展示脱敏值（如 "EDU-AB12-****-EF56"）——UserCenter 契约 <c>RedemptionRecordDto.CodeMasked</c> 已脱敏透传。</summary>
+    /// <summary>展示脱敏值（如 "EDU-AB12-****-EF56"）——对应 <c>RedemptionRecordDto.CodeMasked</c> 已脱敏透传。</summary>
     [FreeSql.DataAnnotations.Column(Position = 3, StringLength = 32)]
     public string CodeMasked { get; set; } = "";
 

@@ -20,7 +20,7 @@ namespace TKWF.Ext.Settings
     /// IEntityDAC 从 DI 解析——数据访问红线合规，零 ORM/零 IEntityDAC 直接注入）。</para>
     /// <para>注册形态由 TryAddScoped 改为 <c>AddConstructibleService&lt;ISettingManager, SettingManager&gt;</c>——
     /// 接口构造工厂 + CurrentAopUser 守卫（构造注入链在域作用域外解析即抛 InvalidOperationException，DI004 编译期门控零豁免）。</para>
-    /// <para>异常静默保留（对齐 UserCenter §5.3 降级矩阵仓库惯例）：数据访问失败记录 Warning，不阻塞业务调用。</para>
+    /// <para>异常静默保留（对齐仓库降级矩阵惯例）：数据访问失败记录 Warning，不阻塞业务调用。</para>
     /// </summary>
     internal sealed class SettingManager : DomainServiceBase, ISettingManager
     {

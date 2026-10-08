@@ -2,9 +2,11 @@
 
 ## 状态
 
-活跃
+**已废弃（2026-10-08——UserCenter 基础功能并入 AuthCenter，本承接形态终止）**
 
 > 本 ADR 为永久架构决策记录，不可删除。如后续决策被推翻（如授权面/组合视图 `vm_UserCenterProfile` 方案替换本承接形态），须在本 ADR 标注「已废弃」并引用新 ADR，而非删除本文件。
+>
+> **已废弃说明（2026-10-08）**：本 ADR 的决策（选项 A——认证中心实现 `IUserProfileSource` 承接 UserCenter 契约）曾实施（`AuthAccountUserProfileSource`，2026-10-07 AuthCenter V0.9.0 起 C.14 退役过渡）。**2026-10-08 落地**：UserCenter 基础功能并入 AuthCenter——`UserProfile` 1:1 档案表 + `IAuthAccountQueryService.GetProfileByUIdAsync` 档案查询门面已完全取代契约承接形态；`AuthAccountUserProfileSource` **已删除**，AuthCenter **不再引用** `UserCenter.Abstractions`。替代路径：`ADR-AuthCenter-身份域数据模型与密码能力边界`（C.14 UserCenter 退役）+ 消费方档案读经 `IAuthAccountQueryService.GetProfileByUIdAsync` 或业务扩展 VEntity。`IAuthAccountQueryService`（本 ADR 补强的对外查询契约）**继续活跃**（非废弃部分）。
 
 ## 一、目的与目标
 

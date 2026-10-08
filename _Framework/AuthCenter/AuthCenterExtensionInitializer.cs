@@ -10,7 +10,6 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
 using TKW.Framework.Utility.Caching;
-using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.AuthCenter;
 
@@ -19,10 +18,8 @@ namespace TKWF.Ext.AuthCenter;
 /// <list type="bullet">
 /// <item><see cref="ConfigureServices"/>——V4.10.53（领域自治根治，ADR90）三态注册：
 ///     <b>13 门面</b>（接口 : IDomainService）→ <c>AddConstructibleService</c>（接口可构造守卫工厂 + 实现类
-///     throw-factory，消费方经 <c>User.Use&lt;接口&gt;()</c> 解析）；<b>接线型</b>
-///     <see cref="IUserProfileSource"/>（UserCenter.Abstractions 契约非 IDomainService）→ <c>TryAddScoped</c>
-///     普通 DI（被 UserCenterQueryService 经 GetService 解析）；<b>多 Provider</b>（<see cref="IAuthenticationProvider"/>
-///     短信 + 微信）→ <c>TryAddEnumerable</c>（多实现集合，AddConstructibleService 单实现不适用）。
+///     throw-factory，消费方经 <c>User.Use&lt;接口&gt;()</c> 解析）；<b>多 Provider</b>（<see cref="IAuthenticationProvider"/>
+///     短信 + 微信 + 密码）→ <c>TryAddEnumerable</c>（多实现集合，AddConstructibleService 单实现不适用）。
 ///     <b>零 DataService 手动注册</b>——ADR61/D17 铁律，9 实体 DataService 经 SG1 消费方聚合自动注册；
 ///     Options（AuthCenterOptions）+ IMemoryCache（TokenService 黑名单前置过滤）兜底注册；</item>
 /// <item>ConfigureFilters——空（认证中心非过滤器扩展；AuthorityFilter 由主框架管线处理）；</item>
@@ -31,7 +28,6 @@ namespace TKWF.Ext.AuthCenter;
 /// </summary>
 [TKWFExtension("AuthCenter")]
     [TKWFExtensionCapability(ServiceType = typeof(ITokenService), QuerySurface = "FullIQueryable")]
-    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.UserCenter.IUserProfileSource), MinVersion = "0.1.0")]
     [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Emailing.IEmailSender), MinVersion = "0.1.1")]
     public class AuthCenterExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
@@ -53,9 +49,7 @@ namespace TKWF.Ext.AuthCenter;
     ///     ISmsLoginService / IWechatLoginService）→ 接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；
     ///     消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（AOP 路径先设 CurrentAopUser 再 GetRequiredService）。
     ///     旧形态 TryAddScoped 构造注入 <see cref="IDomainUser"/>（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）。</item>
-    /// <item><b>接线型（TryAddScoped 普通 DI）</b>——<see cref="IUserProfileSource"/>（UserCenter.Abstractions 契约，
-    ///     非 IDomainService 不可修改）：UserCenterQueryService 经 <c>GetService</c> 解析；TryAdd 语义扩展默认优先、消费方可覆盖。</item>
-    /// <item><b>多 Provider（TryAddEnumerable）</b>——<see cref="IAuthenticationProvider"/> 短信 + 微信：多实现集合
+    /// <item><b>多 Provider（TryAddEnumerable）</b>——<see cref="IAuthenticationProvider"/> 短信 + 微信 + 密码：多实现集合
     ///     （按实现类型去重），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase，内部 Use&lt;T&gt; 经基类 User。</item>
     /// </list>
     /// <para><see cref="ISmsSender"/> / <see cref="IAuthorizationMapper{TUserInfo}"/> 不注册默认实现——消费方实现
@@ -109,7 +103,7 @@ namespace TKWF.Ext.AuthCenter;
         services.AddConstructibleService<IWeChatApiClient, WeChatApiClient>();
         services.AddConstructibleService<ITokenVerifier, LocalJwtTokenVerifier>();
 
-        // V0.2.0：账号查询契约（对外只读查询——UserCenter 桥接 / 装配实例 / 内部复用；委托 DataService 红线合规）
+        // V0.2.0：账号查询契约（对外只读查询——装配实例 / 内部复用；委托 DataService 红线合规）
         services.AddConstructibleService<IAuthAccountQueryService, AuthAccountQueryService>();
 
         // V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：SSO 消费面契约——实现类复用既有（AuthAccountQueryService /
@@ -129,10 +123,6 @@ namespace TKWF.Ext.AuthCenter;
         // 查询只读（/grants 端点消费面）+ 写入门面（upsert 幂等，唯一约束 UX_AuthGrant_User_App_Source 兜底 TOCTOU）
         services.AddConstructibleService<IAuthGrantQueryService, AuthGrantQueryService>();
         services.AddConstructibleService<IAuthGrantCommandService, AuthGrantCommandService>();
-
-        // V0.2.0：UserCenter 公共档案源实现——接线型（IUserProfileSource 非 IDomainService 契约不可修改，
-        // 被 UserCenterQueryService 经普通 DI 解析）；TryAdd 语义消费方可覆盖（数据属主承接契约——装配实例零桥接）
-        services.TryAddScoped<IUserProfileSource, AuthAccountUserProfileSource>();
 
         // 多 Provider：V4.10.55 (ADR92) 改 TryAddEnumerableConstructible——集合版守卫工厂：
         // 集合元素以守卫工厂形态注册，帧内（登录门面 User.Use<ISmsLoginService>() 等调用链）经 CurrentAopUser

@@ -2,7 +2,7 @@
 
 > TKWF 扩展：**授权面**——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合 + 授权快照候选。
 > **数据属主** = 兑换/授权记录（非账号）——行级身份引用一律 `AuthAccount.UId`（前置裁定 P4 白名单）。
-> **P2 FREEZE**（前置裁定 §三）：不实现 UserCenter 预留 `IRedemptionHistorySource`/`IUserAppsSource` 契约——自建跨扩展 VEntity（`TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`）+ 授权面自有查询门面，消费方兑换/应用查询**不经 UserCenter 门面**。
+> **✅ UserCenter 退役（2026-10-08）**：UserCenter 独立扩展已完整删除——兑换/应用查询唯一通道 = 本扩展自有门面（跨扩展 VEntity `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`）；DTO（`RedemptionRecordDto`/`UserAppDto`）归本扩展主包（`Contracts/AuthSurfaceDtos.cs`）。原"P2 FREEZE（不实现 UserCenter Source 契约）"已随 UserCenter 删除完结——无契约可 Freeze。
 
 ## 定位
 
@@ -10,7 +10,7 @@
 |----|------|
 | 包名 | `TKWF.Ext.AuthSurface` |
 | 版本 | V0.1.0（独立起点——2026-10-07 立项，Oracle4 评审 PASS WITH CONDITIONS） |
-| 依赖 | `TKWF.Domain`（CPM）+ `TKWF.Utility`（v4.10.67 `IRateLimitCheck` 点检查原语——兑换频控）+ `TKWF.CodeGeneration`（SG1 纯 Analyzer）+ **ProjectReference `UserCenter.Abstractions`**（DTO 复用——`RedemptionRecordDto`/`UserAppDto` 页面零适配，L2 门控合规）+ FreeSql |
+| 依赖 | `TKWF.Domain`（CPM）+ `TKWF.Utility`（v4.10.67 `IRateLimitCheck` 点检查原语——兑换频控）+ `TKWF.CodeGeneration`（SG1 纯 Analyzer）+ FreeSql——**DTO 归本扩展主包**（`Contracts/AuthSurfaceDtos.cs`：`RedemptionRecordDto`/`UserAppDto`，零跨扩展契约依赖） |
 | 数据 | 表 `RedemptionCode` + `AuthApp`（本扩展）；视图 `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`（跨扩展 JOIN AuthCenter `TKWF_AuthAccount`/`TKWF_AuthGrant`——视图归本扩展，P3） |
 | 边界 | **零扩展间实现依赖**（ViewSql 字符串跨扩展引用 AuthCenter 表名，无代码引用——L2 零 TKWF0022） |
 
@@ -69,9 +69,9 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 ## 约束与语义
 
-- **P2 FREEZE（前置裁定 §三）**：`IRedemptionHistorySource`/`IUserAppsSource` 契约保留于 UserCenter.Abstractions（装配层适配器向后兼容）但**本扩展禁止实现**——`IUserCenterQueryService.GetRedemptionsAsync/GetAppsAsync` 保持缺省降级（空列表）；消费方查询经本扩展门面。
+- **✅ UserCenter 退役完结（2026-10-08）**：原 `IRedemptionHistorySource`/`IUserAppsSource` 契约随 UserCenter 完整删除——本扩展不再受"不实现他扩展契约"约束（契约已不存在）；消费方兑换/应用查询唯一通道 = 本扩展门面。
 - **行级 FK = `AuthAccount.UId`**（P4 白名单）——`RedemptionCode.RedeemedByUId`；`FederationAnchorOpenId` **不作引用键**（P2/P4——N2 anchor 冗余快查列）。
-- **兑换码安全**：明文不落库（SHA256 哈希唯一）——防库泄露即任意兑换；`CodeMasked` 契约脱敏透传（UserCenter 不存明文）。
+- **兑换码安全**：明文不落库（SHA256 哈希唯一）——防库泄露即任意兑换；`CodeMasked` 脱敏透传（本扩展 DTO `RedemptionRecordDto.CodeMasked`，明文不落库）。
 - **并发双兑**：CAS 原子兑换（ADR89 单语句 WHERE 谓词）——败者重查判定（已兑/过期）。
 - **视图前缀**：`TKWFV_` 暂用（前置裁定 P3 / ADR C.16——框架组前缀批次核查后视情况 rename，不影响实体/ViewSql 设计）。
 - **表名快照**：ViewSql 引用 `AuthGrant`/`TKWF_AuthAccount`（AuthCenter V0.9.0 身份域重构——ADR100 表名别名落地；`AuthAccount` 已改 `TKWF_AuthAccount` 凭据白名单列，档案列迁 `UserProfileEntity`）。
@@ -125,7 +125,7 @@ TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserI
 | 扩展 | 边界 |
 |------|------|
 | `TKWF.Ext.AuthCenter`（V0.9.0 重构中） | 身份锚 `AuthAccount.UId` = 本扩展行级 FK；`AuthGrant`（login 源）为"我的应用"数据底座；`AuthGrantSources.Redeem` 预留 v0.2.0 兑换授权写入（v0.1.0 不写——评估 AuthCenter 门面 Source 参数化 or 授权面委托） |
-| `TKWF.Ext.UserCenter` | **P2 FREEZE**：本扩展不实现两 Source 契约；UserCenter 两方法保持降级空列表；DTO 复用 UserCenter.Abstractions（页面零适配） |
+| ~~`TKWF.Ext.UserCenter`~~ | ~~**P2 FREEZE**：本扩展不实现两 Source 契约；UserCenter 两方法保持降级空列表；DTO 复用 UserCenter.Abstractions（页面零适配）~~——**✅ 已删除（2026-10-08，UserCenter 完整退役；DTO 归本扩展主包）** |
 
 ## 后续演进（v0.2.0+ 候选）
 

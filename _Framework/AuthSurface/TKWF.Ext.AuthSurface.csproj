@@ -33,11 +33,7 @@
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- v0.1.0：DTO 复用 UserCenter.Abstractions（RedemptionRecordDto/UserAppDto——消费方页面零适配；
-       P2 FREEZE 不实现其 Source 契约（IRedemptionHistorySource/IUserAppsSource）；L2 门控合规（契约包非主包）） -->
-  <ItemGroup>
-    <ProjectReference Include="..\UserCenter.Abstractions\TKWF.Ext.UserCenter.Abstractions.csproj" />
-  </ItemGroup>
+<!-- v0.1.0：DTO 归本扩展主包（RedemptionRecordDto/UserAppDto——2026-10-08 UserCenter 退役后迁入，消费方引本包即得）；P2 FREEZE 已随 UserCenter 退役完结（两 Source 契约已删） -->
 
   <!-- 实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->
   <ItemGroup>

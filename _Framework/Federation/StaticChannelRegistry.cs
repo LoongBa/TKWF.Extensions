@@ -68,7 +68,7 @@ public sealed class StaticChannelRegistry : IChannelRegistry
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // 单平台来源读取失败不阻断整体枚举（对齐 UserCenter 降级矩阵——Warning + 跳过）
+                // 单平台来源读取失败不阻断整体枚举（对齐仓库降级矩阵惯例——Warning + 跳过）
                 _logger.LogWarning(ex, "通道来源读取失败：PlatformType={PlatformType}（跳过该来源）", source.PlatformType);
             }
         }

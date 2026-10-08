@@ -1,6 +1,6 @@
 # TKWF.Ext.AuthCenter 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.0（2026-10-07 身份域重构与密码能力——**ADR-AuthCenter-身份域数据模型与密码能力边界 落地**：A.1-A.8 凭据/档案表级分离（`AuthAccount` 瘦身凭据白名单 + `UserProfile` 1:1 档案，表名 `TKWF_AuthAccount`/`TKWF_UserProfile`）/ AuthLevel 泛化（1=手机号/2=联邦快捷，剔 3=教师核实）/ TeacherVerified 迁出（令牌不再携带 `teacher_verified` claim）/ 联邦 Id 归一化（微信 3 列删，openid 绑定迁 `PlatformAccountMap`）/ **密码能力（ADR-密码策略与口令协议 覆盖）**：SecurePassword（客户端算 clientHash+salt PBKDF2 600000，服务端零明文、AES-GCM 密文落库）+ 密码策略面 + 账号冻结 + `IRateLimitCheck` 频控（v4.10.67）+ 找回三通道（SMS/Email/扫码——自带投递，不实现 IAccountPasswordManager 第二实现）/ C.14 UserCenter 退役启动（`IUserProfileSource` 标 Obsolete）/ EnabledAuthTypes fail-closed 生效；Oracle(oracle4) 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.8.0 认证 API 补全、V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）+ **Emailing.Abstractions（V0.9.0 可空依赖——Email 找回通道）** + **SecurityLog.Abstractions（V0.9.0 可空依赖——冻结/解冻 SecurityLog 直写）** | **表名前缀简称**: `AuthC`（扩展仓命名规则 §8.3 自声明——本表名前缀批次为先规范化者保留默认名；`AuthC` 预留备未来追尾场景）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.0（2026-10-07 身份域重构与密码能力——**ADR-AuthCenter-身份域数据模型与密码能力边界 落地**：A.1-A.8 凭据/档案表级分离（`AuthAccount` 瘦身凭据白名单 + `UserProfile` 1:1 档案，表名 `TKWF_AuthAccount`/`TKWF_UserProfile`）/ AuthLevel 泛化（1=手机号/2=联邦快捷，剔 3=教师核实）/ TeacherVerified 迁出（令牌不再携带 `teacher_verified` claim）/ 联邦 Id 归一化（微信 3 列删，openid 绑定迁 `PlatformAccountMap`）/ **密码能力（ADR-密码策略与口令协议 覆盖）**：SecurePassword（客户端算 clientHash+salt PBKDF2 600000，服务端零明文、AES-GCM 密文落库）+ 密码策略面 + 账号冻结 + `IRateLimitCheck` 频控（v4.10.67）+ 找回三通道（SMS/Email/扫码——自带投递，不实现 IAccountPasswordManager 第二实现）/ C.14 UserCenter 退役（**2026-10-08 落地：契约实现引用已移除**——档案读经 `IAuthAccountQueryService.GetProfileByUIdAsync`）/ EnabledAuthTypes fail-closed 生效；Oracle(oracle4) 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.8.0 认证 API 补全、V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）+ **Emailing.Abstractions（V0.9.0 可空依赖——Email 找回通道）** + **SecurityLog.Abstractions（V0.9.0 可空依赖——冻结/解冻 SecurityLog 直写）** | **表名前缀简称**: `AuthC`（扩展仓命名规则 §8.3 自声明——本表名前缀批次为先规范化者保留默认名；`AuthC` 预留备未来追尾场景）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -20,10 +20,9 @@
 | 跨系统映射 | `PlatformAccountMapEntity`（平台内部 id ↔ 业务 app + 业务本地 id + UnionId——统一 DMP 双机制） |
 | 平台凭证 | `PlatformCredentialEntity`（AppSecret **AES-GCM 加密**在服务层 `PlatformCredentialService`——经 keyed `ISymmetricKeyProvider`；DataService 纯持久化）+ `WeChatApiClient`（access_token 缓存 + 并发锁） |
 | 平台账号 | `AuthAccountEntity`（手机号主键 + 微信绑定 + 认证声明 teacher_verified/auth_level，**不含业务角色**） |
-| 账号查询契约（V0.2.0） | `IAuthAccountQueryService`——对外只读查询（4 方法），委托 DataService（红线合规） |
-| **UserCenter 终态承接（V0.2.0）** | 实现 `IUserProfileSource`（`AuthAccountUserProfileSource`）——数据属主扩展实现他扩展读取契约，装配实例零桥接 |
+| 账号查询契约（V0.2.0） | `IAuthAccountQueryService`——对外只读查询（ByUId/ByPhone/档案/微信绑定），委托 DataService（红线合规） |
 
-**用户中心（档案面）独立立项**（用户裁定 2026-09-30）——`TKWF.Ext.UserCenter` 另行立项（档案项目独立）；认证中心 **v0.2.0 实现其 `IUserProfileSource` 读取契约（终态承接）**。
+**用户中心（档案面）退役（2026-10-08）**——`TKWF.Ext.UserCenter` 基础功能已并入本扩展（`UserProfile` 1:1 档案表 + `IAuthAccountQueryService.GetProfileByUIdAsync` 档案查询门面——原 `AuthAccountUserProfileSource` 实现 `IUserProfileSource` 承接已**删除**，本扩展**不再引用** `UserCenter.Abstractions`；消费方档案读直接经 `IAuthAccountQueryService` 或业务扩展 VEntity）。
 
 ## 二、令牌契约（冻结）
 
@@ -68,8 +67,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
     //       IAuthAccountQueryService / IAuthAccountService
     //       + 应用授权双门面（V0.8.0）：IAuthGrantQueryService / IAuthGrantCommandService
     //       + 登录编排门面（V0.5.0）：ISmsLoginService / IWechatLoginService——控制器经此编排，禁 [FromServices] 集合
-    //   接线型（TryAddScoped 普通 DI）：IUserProfileSource（UserCenter 档案源——非 IDomainService 契约，被门面 GetService 解析）
-    //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 微信）
+    //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 微信 + 密码）
     //   + 8 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
 }
 ```
@@ -174,20 +172,12 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | **`IPasswordResetService`（V0.9.0）** | 找回密码多通道（SMS `SmsScenes.Reset` 现成 / Email `IEmailSender` 可空降级 / 扫码 OAuthTicket 前置——**UId-keyed，不实现 IAccountPasswordManager，自带投递 B.11**） | `PasswordResetService`（internal sealed，本扩展） |
 | **`IAuthGrantQueryService`（V0.8.0）** | 应用授权**查询**门面（只读——`/grants` 端点数据底座：`GetGrantsAsync(userId, appId?)` 按用户/应用查询有效授权，Status=Active 按 CreateTime 倒序） | `AuthGrantQueryService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
 | **`IAuthGrantCommandService`（V0.8.0）** | 应用授权**写入**门面（`RecordLoginGrantAsync` upsert 幂等——`OAuthTicketService.ExchangeAsync` 成功经 `User.Use` 落登录授权；唯一约束 `UX_AuthGrant_User_App_Source` 兜底 TOCTOU；[AllowAnonymousFlag] 匿名面） | `AuthGrantCommandService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
-| **`IUserProfileSource`（V0.2.0，⚠️ V0.9.0 Obsolete）** | UserCenter 档案读取契约（**V0.9.0 起标 `[Obsolete]`（ADR C.14）——V1.0.0 移除；实现保留（改读 UserProfile 表）**） | `AuthAccountUserProfileSource`（public sealed，本扩展） |
 
-## 四之二、V0.2.0 查询契约与 UserCenter 承接
+## 四之二、V0.2.0 查询契约与档案能力
 
-**`IAuthAccountQueryService`（查询契约）**——对外只读查询方法（`GetByUIdAsync`/`GetByPhoneAsync` + **V0.9.0** `GetProfileByUIdAsync`（档案 1:1 表）/`IsWechatBoundAsync`（PlatformAccountMap 通道行）），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService` + `UserProfileEntityDataService`——**红线合规**（零 ORM 直注入）。
+**`IAuthAccountQueryService`（查询契约）**——对外只读查询方法（`GetByUIdAsync`/`GetByPhoneAsync` + **V0.9.0** `GetProfileByUIdAsync`（档案 1:1 表）/`IsWechatBoundAsync`（PlatformAccountMap 通道行）），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService` + `UserProfileEntityDataService`——**红线合规**（零 ORM 直注入）。**2026-10-08（UserCenter 退役）**：档案读统一经 `GetProfileByUIdAsync`（原 UserCenter `IUserProfileSource` 契约实现已删除，本扩展不再引用 `UserCenter.Abstractions`）。
 
 **`IAuthAccountService`（写契约）**——对外写契约（`CreateAsync`/`UpdateAsync`/`IncrementTokenVersionAsync`/`GetByUIdAsync` + **V0.9.0** `SetPasswordAsync`/`ChangePasswordAsync`——upsert 流单注入便利），实现 `AuthAccountService`（internal sealed）委托 `AuthAccountEntityDataService`；**DMP 渐进替换路径**（ADR-Authentication-账号写契约）：平台管理员影子 AuthAccount（`UId=PlatformAdmin.UId`，`IsEnabled=true`，Phone 可空）由消费端创建/更新/失效——扩展 `TokenService.RefreshTokenAsync` 强依赖 AuthAccount 记录。**`AdminDeleteAsync` 不暴露**（破坏性，管理 API 迭代）。
-
-**`AuthAccountUserProfileSource`（UserCenter 终态承接）**——public sealed，实现 `IUserProfileSource`（**⚠️ V0.9.0 起接口标 `[Obsolete]`（ADR C.14）**——V0.9.0 保留实现、V1.0.0 移除）：
-- **映射矩阵（V0.9.0 更新）**：UserId←UId / Phone←Phone（**原始值**——UserCenter 门面强制脱敏，实现方不得自行 Mask）/ **Nickname、AvatarUrl 改读 UserProfile 1:1 表（A.1 凭据/档案分离）** / ~~IsTeacherVerified~~（**V0.9.0 恒 false——迁出教育线，A.4**） / AuthLevel←AuthAccount.AuthLevel（泛化）
-- **微信绑定推导（V0.9.0 更新）**：`IsWechatBound` = **PlatformAccountMap 存在 wechat_mp/wechat_web 通道行**（A.8 联邦归一化——替代原 `WechatMpOpenId ?? WechatWebOpenId ?? UnionId` 三列 OR）
-- **注册**：`AuthCenterExtensionInitializer.ConfigureServices`——`IAuthAccountQueryService` 经 **AddConstructibleService**（门面，`User.Use<接口>()` 解析）+ `IUserProfileSource` 经 **TryAddScoped**（接线型，UserCenter 门面 GetService 解析）——消费方白名单声明认证中心 + UserCenter 后 `IUserCenterQueryService.GetProfileAsync` 自动获得真实档案；新装配实例**无需写桥接类**
-- **依赖**：引 `TKWF.Ext.UserCenter.Abstractions`（**契约包非主包**——L2 门控合规）
-- **边界**：两契约**不可合并**——查询服务返回完整 `AuthAccountEntity`（含 TokenVersion/IsEnabled，供 TokenService/装配桥接），档案源返回 `UserProfileDto`（公共档案子集，无敏感字段，Phone 门面脱敏）
 
 ## 五、实体表结构（12 张——**全部 `TKWF_` 前缀**，ADR100 表前缀批次，迁移范围以源码 `[Table]` 为准）
 
@@ -230,7 +220,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 ## 八、架构演进路线
 
 - **V0.1.0（已实施）**：令牌体系 / 认证矩阵（短信 + 微信）/ 登录保护 / 票据换令牌（PKCE）/ 身份适配层 / 跨系统映射 / 平台凭证——通用内核 8 组件 + 41 测试全绿。
-- **V0.2.0（已实施：查询契约 + UserCenter 承接）**：`IAuthAccountQueryService` 查询契约（只读 4 方法委托 DataService）+ `AuthAccountUserProfileSource` 实现 `IUserProfileSource`（UserCenter 终态落地，装配实例零桥接）；N1-N5 用例全绿。**其余规划项待后续迭代**：管理端 API（账号/凭证管理端点）；按 UserId 批量黑名单撤销；黑名单过期清理任务（对齐 BackgroundJobs 清理范式）；高流量 Redis 分布式黑名单缓存。
+- **V0.2.0（已实施：查询契约 + UserCenter 承接）**：`IAuthAccountQueryService` 查询契约（只读 4 方法委托 DataService）+ `AuthAccountUserProfileSource` 实现 `IUserProfileSource`（UserCenter 终态落地，装配实例零桥接）；N1-N5 用例全绿。**其余规划项待后续迭代**：管理端 API（账号/凭证管理端点）；按 UserId 批量黑名单撤销；黑名单过期清理任务（对齐 BackgroundJobs 清理范式）；高流量 Redis 分布式黑名单缓存。**⚠️ 2026-10-08**：UserCenter 退役——`AuthAccountUserProfileSource` 已删除，档案读改经 `IAuthAccountQueryService.GetProfileByUIdAsync`（本条为历史记录）。
 - **V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线）**：12 个门面实现继承 `DomainServiceBase`（经基类 `User` 获取用户上下文——**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——v0.3.3 同根缺陷）+ `[DiContractIgnore]` 豁免 DI001；DataService/服务链仍经 `User.Use<T>()` 懒加载（DI004 零豁免）。10 门面注册改 `AddConstructibleService`（接口可构造守卫工厂 + 实现类 throw-factory，消费方统一 `User.Use<接口>()` 解析）；`AuthAccountUserProfileSource` 改**接线型**（ctor `IServiceProvider` + C1 延迟解析 `IAuthAccountQueryService`，修复 UserCenter 门面 GetService 构造失败——真实生产故障；注册保持 TryAddScoped）；两 Provider 保持 TryAddEnumerable（多实现集合）；Initializer 补 `AddOptions<AuthCenterOptions>` + `TryAddSingleton<IMemoryCache>` 兜底（守卫工厂经 ActivatorUtilities 解析剩余参数需可解析）。78 用例全绿（禁止 slnx 构建，仅 Authentication 项目 + 测试项目）。
 - **V0.5.0（V4.10.55 多实现集合守卫工厂，ADR92/T3 闭环）**：
   - **两 Provider 注册改 `TryAddEnumerableConstructible`**（集合版守卫工厂）——集合内继承 `DomainServiceBase` 的实现 ctor 注入 `IDomainUser` 由帧内 `CurrentAopUser` 供给（`User.Use` 调用链）；**帧外枚举（如控制器 `[FromServices] IEnumerable<IAuthenticationProvider>` 预绑定）抛守卫**（禁止形态）。修复 EduPlatform 实证 3 认证端点运行时 500（`CallSiteFactory.TryCreateEnumerable`——普通 `GetServices` 裸枚举无法供给 `IDomainUser`，D01 永不注册）。
@@ -269,7 +259,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **`AuthGrantEntity` 应用授权数据底座（Oracle P0-2/P1-1/P1-3/P2-1/P2-4）**：OAuth2 authorization grant 语义（UserId/AppId/Scopes/ValidUntil/Source/Status + **唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**）；`IAuthGrantQueryService`（只读）+ `IAuthGrantCommandService`（写入——`RecordLoginGrantAsync` upsert 幂等，唯一冲突 catch→重查转 update）双门面 `AddConstructibleService` 注册；**写入点**：`ExchangeAsync` 成功（签发 JWT 对后）经 `User.Use<IAuthGrantCommandService>()` 落登录授权（**best-effort**——写入失败不阻断 JWT 签发，grant 仅服务 `/grants` 查询，可接受降级标注）；`Source="redeem"` 预留 B-口令兑换产品线。**⚠️ `ValidUntil` 语义**：应用授权有效期（null=持续至吊销，跨会话），**非会话有效期**（2h access/30d refresh 与 grant 正交）。
   - **配置分层（AGENTS §8）**：`AuthCenterEndpointOptions`（`TKWF:AuthCenter:Web`）增 `TokenVerifyEndpointEnabled`/`GrantsEndpointEnabled`/`SmsVerifyEndpointEnabled`（默认 true，纯暴露面；领域侧零新增——verify 验签模式已由 `AuthCenterOptions.VerifyMode` 承载、grant 无开关、sms 频控由 `LoginProtection` 承载）；`SmsScenes.Bind` 复用（转告"缺绑定场景"偏差——已天然满足）。
   - 测试：**124 用例全绿**（103→124：+3 端点冒烟×6 + grants 查询 Fake + sms/verify 2 + verify 2 + 配置断言 2 + `AuthGrantCommandServiceTests` 4（创建/幂等/并发唯一/多 app）+ `OAuthTicketServiceTests` BindTicketAsync 全矩阵 6（成功/无帧/消费/过期/已绑/CAS 并发））；9 实体 DataService 红线断言同步。
-- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**⚠️ V0.9.0 退役启动（ADR C.14）**：`IUserProfileSource` 标 `[Obsolete]`（保留实现——改读 UserProfile 表），V1.0.0 移除；`IRedemptionHistorySource`/`IUserAppsSource` FREEZE；`IUserCenterQueryService`/`PhoneMasker` KEEP。认证中心 v0.2.0 实现的 `AuthAccountUserProfileSource`（终态落地）继续经 TryAddScoped 注册。
+- **用户中心（档案面）**：**独立立项 `TKWF.Ext.UserCenter`**（用户裁定 2026-09-30）——公共 Profile API/兑换历史/我的应用/页面另行立项。**⚠️ V0.9.0 退役启动（ADR C.14）**：`IUserProfileSource` 标 `[Obsolete]`（保留实现——改读 UserProfile 表），V1.0.0 移除；`IRedemptionHistorySource`/`IUserAppsSource` FREEZE；`IUserCenterQueryService`/`PhoneMasker` KEEP。认证中心 v0.2.0 实现的 `AuthAccountUserProfileSource`（终态落地）继续经 TryAddScoped 注册。**✅ 2026-10-08 退役落地**：UserCenter 基础功能并入本扩展（UserProfile 档案表 + `GetProfileByUIdAsync` 门面），`AuthAccountUserProfileSource` **已删除**、本扩展**不再引用** `UserCenter.Abstractions`（本条历史记录）。
 - **V0.9.0（2026-10-07 身份域重构与密码能力——ADR-AuthCenter-身份域数据模型与密码能力边界 落地，Oracle(oracle4) PASS WITH CONDITIONS）**：
   - **A.1 凭据/档案表级分离**：`AuthAccount` 瘦身——删 Nickname/Avatar/TeacherVerified（迁新 `UserProfileEntity`）/WechatMpOpenId/WechatWebOpenId/UnionId（联邦归一化）；仅留凭据白名单（UId/Phone/PasswordHash/FederationAnchorOpenId/AuthLevel/TokenVersion/IsEnabled/CreateTime/UpdateTime）；表名 `TKWF_AuthAccount`（ADR100 表前缀批次）→ 11 实体（+UserProfile/PasswordResetCode）。
   - **A.3/A.4**：`AuthLevel` 泛化（`Phone=1`/`Federated=2`，删 `Teacher=3`——`Wechat` 改名 `Federated`）；`teacher_verified` claim 移除（TokenIssueRequest/TokenValidationResult/VerifyResponse 删字段，4 构造点同步）。

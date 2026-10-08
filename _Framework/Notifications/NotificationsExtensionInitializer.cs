@@ -50,7 +50,7 @@ namespace TKWF.Ext.Notifications;
     /// <item><b>TryAddSingleton 定义管理</b>——<see cref="INotificationDefinitionManager"/>（m2：定义启动时收集后不可变）。</item>
     /// <item><b>TryAddScoped 接线型 + TryAddEnumerable 通道</b>——<see cref="InboxNotifier"/>/<see cref="EmailNotifier"/>
     ///      多实例收集（v0.2.0：InboxNotifier owns UserNotification 写入 C5；EmailNotifier 外部通道 best-effort M1，
-    ///      接线型 ctor(IServiceProvider,ILogger) 无 user 依赖——对齐 UserCenter 先例）。
+    ///      接线型 ctor(IServiceProvider,ILogger) 无 user 依赖——对齐仓库接线型先例）。
     ///      V4.10.55（ADR92，T3 闭环）：<see cref="InboxNotifier"/> 改 <b>TryAddEnumerableConstructible</b>
     ///      （集合版守卫工厂——帧内 CurrentAopUser 供给 ctor 的 IDomainUser，帧外枚举抛守卫）+ 继承
     ///      <see cref="DomainServiceBase"/>；<see cref="EmailNotifier"/> 保持接线型普通 DI（无 user 依赖，可解析）。</item>

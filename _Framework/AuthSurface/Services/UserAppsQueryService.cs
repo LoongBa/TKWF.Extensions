@@ -7,13 +7,12 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.AuthSurface;
 
 /// <summary>
-/// 我的应用查询门面——授权面自有（P2 FREEZE：消费方应用查询<b>不经</b> UserCenter 门面）。
-/// <para>仅本人：userId 显式参数（装配层强制）；DTO 复用 <see cref="UserAppDto"/>（UserCenter.Abstractions——
+/// 我的应用查询门面——授权面自有（UserCenter 退役后应用查询唯一通道）。
+/// <para>仅本人：userId 显式参数（装配层强制）；DTO 归本扩展主包（<see cref="UserAppDto"/>——
 /// <c>UsageSummary</c> 恒 null——v0.1.0 无使用情况，儿童数据红线"不含学习明细"天然满足，v0.2.0 使用聚合）。</para>
 /// </summary>
 public interface IUserAppsQueryService : IDomainService

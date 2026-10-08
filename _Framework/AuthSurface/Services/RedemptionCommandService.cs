@@ -8,7 +8,6 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.RateLimitChecks;
-using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.AuthSurface;
 
@@ -141,6 +140,6 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
             ProductName: code.ProductName,
             TargetAppId: code.TargetAppId,
             RedeemedAtUtc: redeemedAt,
-            Status: "redeemed");               // 授权面域字符串（UserCenter 透传不枚举化契约）
+            Status: "redeemed");               // 授权面域字符串（本扩展透传不枚举化）
     }
 }

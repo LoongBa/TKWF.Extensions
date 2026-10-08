@@ -8,7 +8,6 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.UserCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -141,23 +140,6 @@ public class AuthenticationProductionPathTests
         Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<TokenService>());
         Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<OAuthTicketService>());
         Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<AuthAccountQueryService>());
-    }
-
-    /// <summary>
-    /// 接线型契约（IUserProfileSource——UserCenter.Abstractions 非 IDomainService）经普通 DI 可构造——
-    /// 旧 ctor(IDomainUser)（永不注册 DI——D01）致 UserCenterQueryService.GetService 构造失败、档案读取静默降级
-    /// （真实生产故障）；改 ctor(IServiceProvider) 后全 DI 可解析（C1 延迟解析 IAuthAccountQueryService）。
-    /// </summary>
-    [Fact]
-    public void WiringContract_Resolvable_From_PlainDi()
-    {
-        using var fsql = CreateInMemoryFreeSql();
-        using var sp = CreateProvider(fsql);
-
-        // UserCenterQueryService 生产路径：sp.GetService<IUserProfileSource>()（普通 DI）
-        var source = sp.GetService<IUserProfileSource>();
-        Assert.NotNull(source);
-        Assert.IsType<AuthAccountUserProfileSource>(source);
     }
 
     // ═══════════════════════════════════════════════════════

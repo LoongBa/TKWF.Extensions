@@ -7,13 +7,12 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.UserCenter;
 
 namespace TKWF.Ext.AuthSurface;
 
 /// <summary>
-/// 兑换历史查询门面——授权面自有（P2 FREEZE：消费方兑换查询<b>不经</b> UserCenter 门面）。
-/// <para>仅本人：userId 显式参数（装配层强制）；DTO 复用 <see cref="RedemptionRecordDto"/>（UserCenter.Abstractions——页面零适配）。</para>
+/// 兑换历史查询门面——授权面自有（UserCenter 退役后兑换查询唯一通道）。
+/// <para>仅本人：userId 显式参数（装配层强制）；DTO 归本扩展主包（<see cref="RedemptionRecordDto"/>）。</para>
 /// </summary>
 public interface IRedemptionQueryService : IDomainService
 {

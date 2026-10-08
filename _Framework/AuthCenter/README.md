@@ -189,7 +189,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 - **依赖**：引 `TKWF.Ext.UserCenter.Abstractions`（**契约包非主包**——L2 门控合规）
 - **边界**：两契约**不可合并**——查询服务返回完整 `AuthAccountEntity`（含 TokenVersion/IsEnabled，供 TokenService/装配桥接），档案源返回 `UserProfileDto`（公共档案子集，无敏感字段，Phone 门面脱敏）
 
-## 五、实体表结构（12 张）
+## 五、实体表结构（12 张——**全部 `TKWF_` 前缀**，ADR100 表前缀批次，迁移范围以源码 `[Table]` 为准）
 
 | 表 | 关键列/约束 |
 |----|-----------|
@@ -197,14 +197,14 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | `TKWF_UserProfile`（**V0.9.0 新增**） | UId(32 **唯一 1:1**——凭据/档案表级分离 A.1)/Nickname/Avatar/Birthday?/Gender?（宽松自由文本 max32——A.7）/Email?（联系方式角色——非登录凭据，A.5/A.6） |
 | `TKWF_PasswordResetCode`（**V0.9.0 新增**） | UId(32)/Channel(SMS/Email——找回多通道 B.10)/CodeHash(SHA256 不存明文)/ExpireAt（**v0.9.1 TTL 配置化**——`PasswordPolicyOptions.ResetCodeValidityMinutes` 默认 30）/IsConsumed——**UId-keyed 自建链路**（Account PasswordResetCode 为 userName-keyed，平行不互认） |
 | `TKWF_PasswordHistory`（**V0.9.0 密码策略 决策 5 新增**） | UId(32)/ClientHash(明文组装格式——防重用比对源，服务端不接触密码明文)/CreateTime——**只增表**（保留最近 `PasswordPolicyOptions.HistoryRetentionCount` 代，门面 TrimHistoryAsync 清理；密码历史防重用 `PASSWORD_REUSE_REJECTED`） |
-| `AuthLoginAttempt` | UserIdentity(100)+AuthType(20)+IsSuccess+IpAddress?+FailReason?+AttemptTime；索引 (UserIdentity,AuthType,AttemptTime) |
-| `SmsRecord` | Phone+Scene+CodeHash(SHA256 不存明文)+IsVerified+ExpireAt；索引 (Phone,Scene,CreateTime)/(IpAddress,CreateTime) |
-| `AuthRefreshToken` | Jti/UserId+TokenHash(SHA256 唯一)/TokenVersion/ExpiresAt/IsRevoked/RevokedAt?；索引 (UserId,TokenVersion) |
-| `AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
-| `OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
-| `AuthGrant`（**V0.8.0**） | UserId(50)/AppId(100)/Scopes(500 逗号分隔)/**ValidUntil?（应用授权有效期——null=持续至吊销，非会话有效期）**/Source(20：login/redeem)/Status(int 0 Active/1 Revoked)/CreateTime/UpdateTime；**唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**（防并发 exchange 重复 grant 行——写入门面 upsert 以此复合键冲突判定） |
-| `PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留；**V0.9.0 A.8 起微信 openid 绑定归一化落此列**） |
-| `PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore 不外泄)/IsEnabled |
+| `TKWF_AuthLoginAttempt` | UserIdentity(100)+AuthType(20)+IsSuccess+IpAddress?+FailReason?+AttemptTime；索引 (UserIdentity,AuthType,AttemptTime) |
+| `TKWF_SmsRecord` | Phone+Scene+CodeHash(SHA256 不存明文)+IsVerified+ExpireAt；索引 (Phone,Scene,CreateTime)/(IpAddress,CreateTime) |
+| `TKWF_AuthRefreshToken` | Jti/UserId+TokenHash(SHA256 唯一)/TokenVersion/ExpiresAt/IsRevoked/RevokedAt?；索引 (UserId,TokenVersion) |
+| `TKWF_AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
+| `TKWF_OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
+| `TKWF_AuthGrant`（**V0.8.0**） | UserId(50)/AppId(100)/Scopes(500 逗号分隔)/**ValidUntil?（应用授权有效期——null=持续至吊销，非会话有效期）**/Source(20：login/redeem)/Status(int 0 Active/1 Revoked)/CreateTime/UpdateTime；**唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**（防并发 exchange 重复 grant 行——写入门面 upsert 以此复合键冲突判定） |
+| `TKWF_PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留；**V0.9.0 A.8 起微信 openid 绑定归一化落此列**） |
+| `TKWF_PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore 不外泄)/IsEnabled |
 
 > ⚠️ **V0.9.0 破坏性迁移提示（消费方适配）**：`AuthAccount` **表名变更**（→ `TKWF_AuthAccount`）+ **删 6 列**（档案 3 列迁 `TKWF_UserProfile` + 微信 3 列归一化 `PlatformAccountMap`）+ `teacher_verified` claim 移除——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA：RENAME 表 + 迁档案数据 + 回填 PlatformAccountMap 微信绑定）；`EnabledAuthTypes` fail-closed 生效（显式配 `["sms"]` 但用 wechat 的消费方须加 `"wechat"`）。
 
@@ -283,10 +283,12 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - 测试：**142 用例全绿**（123 既有适配 + 新增 `PasswordCapabilityTests` 19——Password Provider 正负/SetPassword CAS/ChangePassword 验旧/找回降级/频控分支/账号冻结/密码策略防重用/档案读写）；全 slnx 41 测试项目全量回归 0 失败（Federation 23 同步适配 UserProfile 档案）。
 - **V0.9.1（2026-10-07 Email 找回 6 项裁定落地——ADR-密码策略 转告调整 ②）**：
   - **① Email 模板 Options**：`PasswordPolicyOptions.ResetEmailSubjectTemplate`/`ResetEmailBodyTemplate`（自建占位符纯文本，不引 PrintTemplates；`{code}`/`{expiresInMinutes}` 替换，IsHtml=false 起步——HTML 品牌化 v0.2.0 评估）。
+  - **②（内容未记录——原始转告未列明，待确认）**
   - **③ TTL 配置化**：`PasswordPolicyOptions.ResetCodeValidityMinutes`（默认 30）替代硬编码 const——SMS/Email 统一。
   - **④ 冻结与找回互斥（fail-closed）**：`InitiateSmsResetAsync`/`InitiateEmailResetAsync`/`CompleteResetWithCodeAsync`/`CompleteResetSmsAsync`/`CompleteResetVerifiedAsync` 入口 `IsFrozenEffective` 检查 → `ACCOUNT_FROZEN`（两步流程：工作人员解冻后自助找回）。
   - **⑤ Email 发起独立频控**：`pwd:reset-email:{uid}`（重发间隔 `ResetEmailResendIntervalSeconds` 默认 60s）+ `pwd:reset-email-hour:{uid}`/`pwd:reset-email-day:{uid}` 小时/日上限；SMS 保持 `pwd:reset:{identifier}` 统一频控。
+  - **⑥ Email 投递 best-effort**：`SendAsync` 静默吞失败（Emailing 既有语义）——`EMAIL_RESET_CODE_SENT` 成功 ≠ 已送达；投递状态事后经 Emailing 扩展 `EmailRecord` 表查询（运维侧）。
   - 测试：**146 用例全绿**（+4：模板+TTL 配置化/Email 冻结互斥/完成冻结互斥/独立频控窗口）+ 全 slnx 40 项目零失败。
-- **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见开发方案 §九）。**⚠️ V0.9.0 破坏性迁移**：AuthAccount 表 RENAME + 删 6 列 + UserProfile 拆分 + `teacher_verified` claim 移除 + EnabledAuthTypes fail-closed——消费方按开发方案 §七 迁移指引适配。
+- **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见使用指南 §六 DMP-Lite 迁移指引）。**⚠️ V0.9.0 破坏性迁移**：AuthAccount 表 RENAME + 删 6 列 + UserProfile 拆分 + `teacher_verified` claim 移除 + EnabledAuthTypes fail-closed——消费方按开发方案 §七 迁移指引适配。
 
 <!-- EOF -->

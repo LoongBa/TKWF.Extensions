@@ -1,9 +1,11 @@
 # 05-倒推优化开发方案：认证中心 v0.2.0 查询契约与 UserCenter 承接
 
+> **🚫 历史方案（2026-10-08 标注）**：本方案描述的 **UserCenter 终态承接（`AuthAccountUserProfileSource` 实现 `IUserProfileSource`）已于 2026-10-08 完整删除**——UserCenter 退役（聚合层透传反模式），档案读改经 AuthCenter `IAuthAccountQueryService.GetProfileByUIdAsync`。**本方案为历史教学记录（展示 2026-09 的查询契约补强 + 契约承接设计思路），不可作为当前装配指引**；当前档案能力见 `docs/AuthCenter/认证中心-使用指南.md` §档案查询。
+>
 > **系列**：框架实战教学（开篇见 [`01-扩展模块最优解探索-Schema级数据组合-开篇.md`](./01-扩展模块最优解探索-Schema级数据组合-开篇.md)）
 > **案例定位**：认证中心（Authentication）v0.1.0 实施后**首个能力补强**——补对外查询契约缺口 + 承接 UserCenter 终态路径（实现 `IUserProfileSource`）
 > **涉及扩展**：`TKWF.Ext.Authentication`（当前 v0.1.0）→ 目标 v0.2.0；消费 `TKWF.Ext.UserCenter.Abstractions`（契约）
-> **状态**：✅ 方案已评审 → **已实施**（v0.2.0 落地，2026-09-30——Oracle 评审 PASS WITH CONDITIONS 后全量实施）
+> **状态**：✅ 方案已评审 → **已实施**（v0.2.0 落地，2026-09-30——Oracle 评审 PASS WITH CONDITIONS 后全量实施）→ **2026-10-08 UserCenter 退役，承接形态作废（历史）**
 > **版本**：v0.1.1-draft
 
 ---

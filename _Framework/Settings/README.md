@@ -38,7 +38,7 @@
 
 ### 2. 安全语义
 
-- **异常静默**：读写失败时记录 Warning 日志，不抛出异常（不阻塞业务调用——对齐 UserCenter 降级矩阵）。
+- **异常静默**：读写失败时记录 Warning 日志，不抛出异常（不阻塞业务调用——对齐仓库降级矩阵惯例）。
 
 - **域作用域守卫**：`ISettingManager` 经 `AddConstructibleService` 注册——DI 中唯一可解析的是接口本身，且解析必须处于 `User.Use<T>()` 调用链内（`CurrentAopUser` 守卫）；实现类注册为 throw-factory（禁直接 DI 解析）。
 

@@ -5,18 +5,22 @@ namespace TKWF.Ext.AuthSurface;
 /// <summary>
 /// 兑换历史 DTO——授权面「兑换历史」API 的返回载体（UserCenter 退役后归本扩展属主）。
 /// <para><paramref name="CodeMasked"/> 为<b>已脱敏</b>兑换码——库中仅存脱敏值 + SHA256 哈希（明文不落库）。</para>
+/// <para><paramref name="Payload"/> 为<b>核验业务信息明文</b>（v0.2.0——门面解密取回；库中仅存 AES-GCM 密文
+/// <c>PayloadEncrypted</c>，含 PII 不落库明文；无附加信息为 null）。</para>
 /// </summary>
 /// <param name="CodeMasked">脱敏 code（本扩展保证脱敏——明文不落库）。</param>
 /// <param name="ProductName">商品/载体名。</param>
 /// <param name="TargetAppId">兑换目标应用 id。</param>
 /// <param name="RedeemedAtUtc">兑换时间（UTC）。</param>
 /// <param name="Status">状态（redeemed/expired...——授权面域，本扩展枚举化语义透传）。</param>
+/// <param name="Payload">核验业务信息明文（门面解密——人工核验展示/自动核验匹配；无则 null）。</param>
 public sealed record RedemptionRecordDto(
     string CodeMasked,
     string? ProductName,
     string? TargetAppId,
     DateTime RedeemedAtUtc,
-    string Status);
+    string Status,
+    string? Payload = null);
 
 /// <summary>
 /// 我的应用 DTO——授权面「我的应用」API 的返回载体（UserCenter 退役后归本扩展属主）。

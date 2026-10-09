@@ -97,7 +97,11 @@ LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");
         var services = new ServiceCollection();
         services.AddLogging();
         new AuthSurfaceExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-        services.AddOptions<AuthSurfaceOptions>();
+        services.AddOptions<AuthSurfaceOptions>().Configure(o =>
+        {
+            // 测试宿主 dev 模式——FileSymmetricKeyProvider 未配置密钥路径时随机 32 字节兜底（生产 fail-fast 语义由生产路径测试锁定）
+            o.IsProduction = false;
+        });
 
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();

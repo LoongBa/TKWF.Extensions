@@ -241,4 +241,68 @@ public class RedemptionCommandServiceTests
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains(nameof(IRedemptionCommandService), ex.Message);
     }
+
+    // ── v0.2.0 核验场景（转告：兑换码附加信息字段——PayloadEncrypted AES-GCM 密文落库） ──
+
+    // 创建带 payload——库中仅存密文（非明文）+ 兑换取回明文一致（人工核验展示/自动核验匹配）
+
+    [Fact]
+    public async Task CreateWithPayload_StoresEncryptedOnly_RedeemReturnsPlaintext()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        var user = BindUser(sp, "u-1001");
+        var cmd = user.Use<IRedemptionCommandService>();
+
+        const string payload = """{"buyer":"张三","order":"SO-2026-001","items":[{"sku":"EDU-A1","qty":1}]}""";
+        var code = await cmd.CreateCodeAsync("精品课程 A", "edu-course", TimeSpan.FromDays(30), CancellationToken.None, payload);
+
+        // 库中 PayloadEncrypted 为密文——明文不落库（PII 安全红线）
+        var row = fsql.Select<RedemptionCodeEntity>().Where(e => e.CodeHash == RedemptionCodeGenerator.Hash(code)).ToOne();
+        Assert.NotNull(row.PayloadEncrypted);
+        Assert.DoesNotContain("张三", row.PayloadEncrypted);       // 非明文
+        Assert.DoesNotContain("SO-2026-001", row.PayloadEncrypted);
+        Assert.NotEqual(payload, row.PayloadEncrypted);
+
+        // 兑换取回明文——核验业务信息透传（人工/自动核验）
+        var dto = await cmd.RedeemAsync("u-1001", code, CancellationToken.None);
+        Assert.Equal(payload, dto.Payload);
+    }
+
+    // 无 payload——兼容 v0.1.0（库中 null + 返回 null）
+
+    [Fact]
+    public async Task CreateWithoutPayload_PayloadNull_RedeemReturnsNull()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        var user = BindUser(sp, "u-1001");
+        var cmd = user.Use<IRedemptionCommandService>();
+
+        var code = await cmd.CreateCodeAsync("精品课程 A", "edu-course", null, CancellationToken.None);   // 无 payload（v0.1.0 调用形态）
+
+        var row = fsql.Select<RedemptionCodeEntity>().Where(e => e.CodeHash == RedemptionCodeGenerator.Hash(code)).ToOne();
+        Assert.Null(row.PayloadEncrypted);
+
+        var dto = await cmd.RedeemAsync("u-1001", code, CancellationToken.None);
+        Assert.Null(dto.Payload);
+    }
+
+    // 白名单 payload（纯空白）——视为无附加信息（不加密空串）
+
+    [Fact]
+    public async Task CreateWithBlankPayload_TreatedAsNone()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        var user = BindUser(sp);
+        var cmd = user.Use<IRedemptionCommandService>();
+
+        var code = await cmd.CreateCodeAsync("精品课程 A", "edu-course", null, CancellationToken.None, "   ");
+
+        var row = fsql.Select<RedemptionCodeEntity>().Where(e => e.CodeHash == RedemptionCodeGenerator.Hash(code)).ToOne();
+        Assert.Null(row.PayloadEncrypted);
+    }
 }

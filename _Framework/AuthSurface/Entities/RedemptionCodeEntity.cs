@@ -60,4 +60,12 @@ public partial class RedemptionCodeEntity
 
     [FreeSql.DataAnnotations.Column(Position = 11)]
     public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// 附加信息密文（v0.2.0 核验场景——转告：兑换码增加附加信息字段，用于核验业务信息如购买人/权益明细）——
+    /// AES-GCM 单段规范格式（base64(nonce[12]‖cipher‖tag[16])，<see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> keyed 加解密；
+    /// 对齐 <c>SsoChannelRegistryEntity.AppSecretEncrypted</c> E4 先例）。<b>明文不落库</b>——含 PII 的核验信息加密存储。
+    /// </summary>
+    [FreeSql.DataAnnotations.Column(Position = 12, IsNullable = true, StringLength = 4000)]
+    public string? PayloadEncrypted { get; set; }
 }

@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.AuthSurface;
@@ -29,6 +32,15 @@ public class AuthSurfaceExtensionInitializer<TUserInfo> : ExtensionInitializer<T
 
         // v4.10.67：点检查限流原语内存默认（未启用 RateLimiting 扩展时频控不消失；R2 SqlCountRateLimitCheck 替换后自动切换）
         services.TryAddSingleton<IRateLimitCheck, MemoryRateLimitCheck>();
+
+        // E4 密钥管理抽象（v0.2.0 核验场景）：keyed ISymmetricKeyProvider（FileSymmetricKeyProvider——构造即加载密钥：
+        // 生产缺密钥 fail-fast / 开发随机兜底；AddKeyedSingleton 惰性构造，首次解析门面时触发）——
+        // RedemptionCommandService ctor 经 [FromKeyedServices] 注入（对齐 AuthCenter/Federation/MFA 先例）
+        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(AuthSurfaceKeyProviderKeys.AuthSurface, (sp, _) =>
+        {
+            var o = sp.GetRequiredService<IOptions<AuthSurfaceOptions>>().Value;
+            return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());
+        });
 
         // 门面（ADR90 正确路线——接口可构造守卫工厂 + 实现类 throw-factory；消费方 User.Use<接口>() 解析）
         services.AddConstructibleService<IRedemptionCommandService, RedemptionCommandService>();

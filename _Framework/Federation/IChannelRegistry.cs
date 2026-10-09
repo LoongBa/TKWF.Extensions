@@ -21,6 +21,15 @@ public interface IChannelRegistry : IDomainService
     /// <summary>按 ChannelId 精确定位通道配置；不存在返回 null（装配层转 CHANNEL_NOT_FOUND）。</summary>
     Task<ChannelConfig?> GetAsync(string channelId, CancellationToken ct = default);
 
+    /// <summary>
+    /// 统一解析入口（方案 §3.7 双键）——先 <see cref="ChannelConfig.Alias"/> 精确匹配 → 未中再
+    /// <see cref="ChannelConfig.ChannelId"/> 匹配 → 未中 null；key 空白 → null。
+    /// <para>用途：对外入口（路由段 /sso/oauth/{channelAlias}/callback 与 {channelId} 并存 / 客户端入参）
+    /// 解析一次后归一内部 ChannelId——<b>内部消费一律走 <see cref="GetAsync"/>（ChannelId），本方法不承载选区</b>。
+    /// alias 缺省 = ChannelId（存量零迁移：无 alias 通道经本方法仍可按 ChannelId 命中）。</para>
+    /// </summary>
+    Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default);
+
     /// <summary>枚举全部通道配置（构建通道集合 / 校验 / 管理面）。</summary>
     Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default);
 

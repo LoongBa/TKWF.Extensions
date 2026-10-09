@@ -36,6 +36,7 @@ public sealed class DingTalkChannelSource : IChannelSource
             {
                 ChannelId = c.ChannelId,
                 PlatformType = PlatformType,
+                Alias = c.Alias,   // 对外别名（可空——缺省 null = 用 ChannelId 对外，方案 §3.7 双键）
                 AppSecret = c.AppSecret,
                 Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
                 {

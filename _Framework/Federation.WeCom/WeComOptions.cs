@@ -21,6 +21,14 @@ public class WeComChannelConfig
     /// <summary>channel 实例 id（企业微信应用 id——<c>ISsoChannel.ChannelId</c> 选区依据）。</summary>
     public string ChannelId { get; set; } = "";
 
+    /// <summary>
+    /// 通道对外别名（方案 §3.7 双键——可空，缺省 null = 对外用 <see cref="ChannelId"/>，存量零迁移）。
+    /// <para>语义：alias = 对外名（URL 路径段 /sso/oauth/{alias}/callback / 展示 / 客户端入参），与内部
+    /// <see cref="ChannelId"/> 一一对应；可读直观 + 保护内部持久化键。解析统一经
+    /// <c>IChannelRegistry.GetByAliasOrIdAsync</c>（先 alias → 再 ChannelId）。</para>
+    /// </summary>
+    public string? Alias { get; set; }
+
     /// <summary>企业 CorpID（自建应用）/ SuiteID（三方应用——<c>appid</c> 参数与回调 receiveid 期望）。</summary>
     public string CorpId { get; set; } = "";
 

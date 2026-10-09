@@ -60,6 +60,24 @@ public sealed class DbChannelRegistry : DomainServiceBase, IChannelRegistry
     }
 
     /// <inheritdoc />
+    /// <remarks>先查 <see cref="SsoChannelRegistryEntity.ChannelAlias"/> == key（Alias 非空行——兼容 alias=ChannelId
+    /// 同名迁移）→ 未中回退 <see cref="SsoChannelRegistryEntity.ChannelId"/> == key（缺省 = ChannelId 零迁移）；
+    /// key 空白 → null。实体映射补 <see cref="ChannelConfig.Alias"/> = ChannelAlias。</remarks>
+    public async Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+
+        // 第一遍：alias 精确匹配（Alias 非空列才参与——空串/null 行不命中对外别名）
+        var byAlias = await DataService.EntityGetAsync(
+            m => m.ChannelAlias != null && m.ChannelAlias == key, ct);
+        if (byAlias != null) return Map(byAlias);
+
+        // 第二遍：未中 → ChannelId 匹配（无 alias 通道按内部键命中）
+        var byId = await DataService.EntityGetAsync(m => m.ChannelId == key, ct);
+        return byId is null ? null : Map(byId);
+    }
+
+    /// <inheritdoc />
     /// <remarks>枚举全部 DB 通道（构建通道集合 / 校验 / 管理面）。</remarks>
     public async Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default)
     {
@@ -85,6 +103,7 @@ public sealed class DbChannelRegistry : DomainServiceBase, IChannelRegistry
             ChannelId = entity.ChannelId,
             PlatformType = entity.PlatformType,
             AppId = entity.AppId,
+            Alias = entity.ChannelAlias,   // 对外别名（DB 行 ChannelAlias 列——缺省 null = 用 ChannelId 对外，P3-1）
             AppSecret = DecryptNullable(entity.AppSecretEncrypted, entity.ChannelId),
             Extra = DeserializeExtra(entity.ExtraJsonEncrypted, entity.ChannelId),
             IsDefault = entity.IsDefault,

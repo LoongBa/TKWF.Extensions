@@ -66,6 +66,15 @@ public class SsoChannelRegistryTests : TestHostBase
                 AppId = "wx-static-app",
                 AppSecret = "static-secret-shared", // 与 DB 注册同 id——DB 命中优先断言
                 IsEnabled = true,
+            },
+            new ChannelConfig
+            {
+                ChannelId = "static-alias-mp",
+                PlatformType = "wechat",
+                AppId = "wx-static-app",
+                AppSecret = "static-secret-alias",
+                Alias = "merchant-a",   // Phase 3（§3.7 双键）——静态 alias 对外名解析用例
+                IsEnabled = true,
             }));
 
         // 实体 DAC（真实 FreeSqlEntityDAC——全部实体含 SsoChannelRegistryEntity）
@@ -335,6 +344,131 @@ public class SsoChannelRegistryTests : TestHostBase
 
         Assert.NotNull(await user.Use<IChannelRegistry>().GetAsync("static-mp-1", CancellationToken.None));
         Assert.Null(await user.Use<IChannelRegistry>().GetAsync("no-such-channel", CancellationToken.None));
+    }
+
+    // ── 6. ChannelAlias 对外别名双键（Phase 3，方案 §3.7——GetByAliasOrIdAsync 统一解析入口） ──
+
+    /// <summary>静态 Channels 配 Alias → GetByAliasOrIdAsync(alias) 返回对应通道（对外别名精确匹配）。</summary>
+    [Fact]
+    public async Task Registry_GetByAliasOrId_Static_AliasMatches()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+
+        var cfg = await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("merchant-a", CancellationToken.None);
+        Assert.NotNull(cfg);
+        Assert.Equal("static-alias-mp", cfg!.ChannelId);       // alias → 对应内部 ChannelId
+        Assert.Equal("merchant-a", cfg.Alias);                 // 对外别名回读一致
+        Assert.Equal("static-secret-alias", cfg.AppSecret);
+    }
+
+    /// <summary>无 Alias 通道 → GetByAliasOrIdAsync(channelId) 命中——缺省 = ChannelId 对外（存量零迁移）。</summary>
+    [Fact]
+    public async Task Registry_GetByAliasOrId_FallsBackToChannelId()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+
+        // static-mp-1 无 Alias（缺省 = 用 ChannelId 对外）——按内部键解析命中
+        var cfg = await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("static-mp-1", CancellationToken.None);
+        Assert.NotNull(cfg);
+        Assert.Equal("static-mp-1", cfg!.ChannelId);
+        Assert.Null(cfg.Alias);   // 未配别名——回退 ChannelId 匹配
+        Assert.Equal("static-secret-1", cfg.AppSecret);
+
+        // 未知 key → null（CHANNEL_NOT_FOUND 语义）
+        Assert.Null(await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("no-such-alias", CancellationToken.None));
+    }
+
+    /// <summary>DB 注册 Alias → Composite 命中 DB alias 优先于静态同 ChannelId（DB 动态权威层对外名选区）。</summary>
+    [Fact]
+    public async Task Registry_GetByAliasOrId_Db_PrefersAlias()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+
+        // DB 注册通道：Alias = "static-mp-1"（与静态层 ChannelId 同名）——解析该 key 应命中 DB alias 行，而非静态回退
+        await user.Use<ISsoChannelRegistryService>().RegisterAsync(new ChannelConfig
+        {
+            ChannelId = "db-pri-mp",
+            PlatformType = "wechat",
+            AppId = "wx-db-app",
+            AppSecret = "db-secret-pri",
+            Alias = "static-mp-1",
+            IsEnabled = true,
+        }, CancellationToken.None);
+
+        var cfg = await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("static-mp-1", CancellationToken.None);
+        Assert.NotNull(cfg);
+        Assert.Equal("db-pri-mp", cfg!.ChannelId);       // DB alias 命中（非静态 ChannelId 回退）
+        Assert.Equal("db-secret-pri", cfg.AppSecret);    // DB 值优先（静态 static-secret-1 被覆盖）
+        Assert.Equal("static-mp-1", cfg.Alias);
+    }
+
+    /// <summary>同 Alias 二次注册（不同 ChannelId）→ DomainException CONFLICT（fail-closed，方案 P3-3）。</summary>
+    [Fact]
+    public async Task Register_DuplicateAlias_ThrowsConflict()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+
+        var svc = user.Use<ISsoChannelRegistryService>();
+        await svc.RegisterAsync(new ChannelConfig
+        {
+            ChannelId = "alias-owner-mp", PlatformType = "wechat", AppId = "wx-db", AppSecret = "s1",
+            Alias = "merchant-b", IsEnabled = true,
+        }, CancellationToken.None);
+
+        // 第二通道复用同 alias → Conflict
+        var ex = await Assert.ThrowsAsync<DomainException>(
+            () => svc.RegisterAsync(new ChannelConfig
+            {
+                ChannelId = "alias-intruder-mp", PlatformType = "wechat", AppId = "wx-db", AppSecret = "s2",
+                Alias = "merchant-b", IsEnabled = true,
+            }, CancellationToken.None));
+        Assert.Equal(DomainException.ErrorCodes.Conflict, ex.ErrorCode);
+
+        // 自身保留 alias 合法（Update 排除本行）——同 ChannelId 重写不冲突
+        var updated = await svc.UpdateAsync("alias-owner-mp", new ChannelConfig
+        {
+            ChannelId = "alias-owner-mp", PlatformType = "wechat", AppId = "wx-db", AppSecret = "s1-v2",
+            Alias = "merchant-b", IsEnabled = true,
+        }, CancellationToken.None);
+        Assert.True(updated);
+    }
+
+    /// <summary>Alias null 重写 → ChannelAlias 清空（清空语义）+ 再按旧 alias 解析 null（缺省回落 ChannelId）。</summary>
+    [Fact]
+    public async Task Update_ClearsAlias()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+
+        var svc = user.Use<ISsoChannelRegistryService>();
+        await svc.RegisterAsync(new ChannelConfig
+        {
+            ChannelId = "clear-alias-mp", PlatformType = "wechat", AppId = "wx-db", AppSecret = "s1",
+            Alias = "old-alias", IsEnabled = true,
+        }, CancellationToken.None);
+
+        // 确认 alias 已落库可解析
+        Assert.NotNull(await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("old-alias", CancellationToken.None));
+
+        // 重写：Alias = null → ChannelAlias 清空
+        var updated = await svc.UpdateAsync("clear-alias-mp", new ChannelConfig
+        {
+            ChannelId = "clear-alias-mp", PlatformType = "wechat", AppId = "wx-db", AppSecret = "s2",
+            Alias = null, IsEnabled = true,
+        }, CancellationToken.None);
+        Assert.True(updated);
+
+        // 旧 alias 解析 → null；按内部 ChannelId 仍命中（缺省 = ChannelId 对外）
+        Assert.Null(await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("old-alias", CancellationToken.None));
+        var cfg = await user.Use<IChannelRegistry>().GetByAliasOrIdAsync("clear-alias-mp", CancellationToken.None);
+        Assert.NotNull(cfg);
+        Assert.Equal("clear-alias-mp", cfg!.ChannelId);
+        Assert.Null(cfg.Alias);
+        Assert.Equal("s2", cfg.AppSecret);   // 清空同时全量重写生效
     }
 
     /// <summary>仅静态注册的专用宿主（复刻平台库测试宿主最小面——不注册 DbChannelRegistry 与注册表实体 DAC）。</summary>

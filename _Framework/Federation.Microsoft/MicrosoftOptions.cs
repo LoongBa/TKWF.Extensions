@@ -12,6 +12,14 @@ public sealed class MicrosoftChannelConfig
     /// <summary>channel 实例 id（pairwise 复合编码——channel_id 由 <c>BuildChannelId</c> 自动拼接 `microsoft_oidc:{client_id}`，Oracle P1-2）。</summary>
     public string ChannelId { get; set; } = "";
 
+    /// <summary>
+    /// 通道对外别名（方案 §3.7 双键——可空，缺省 null = 对外用 <see cref="ChannelId"/>，存量零迁移）。
+    /// <para>语义：alias = 对外名（URL 路径段 /sso/oauth/{alias}/callback / 展示 / 客户端入参），与内部
+    /// <see cref="ChannelId"/> 一一对应；可读直观 + 保护内部持久化键。解析统一经
+    /// <c>IChannelRegistry.GetByAliasOrIdAsync</c>（先 alias → 再 ChannelId）。</para>
+    /// </summary>
+    public string? Alias { get; set; }
+
     /// <summary>Microsoft Entra App client_id（pairwise sub 派生维度——不同 client_id 不同 sub）。</summary>
     public string ClientId { get; set; } = "";
 

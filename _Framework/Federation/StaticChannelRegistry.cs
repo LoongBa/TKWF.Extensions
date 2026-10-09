@@ -57,6 +57,41 @@ public sealed class StaticChannelRegistry : IChannelRegistry
     }
 
     /// <inheritdoc />
+    /// <remarks>先 Alias 精确匹配（<see cref="ChannelConfig.Alias"/> 非空才比，Ordinal）→ 未中回退 ChannelId
+    /// 匹配（alias 缺省 = ChannelId——存量零迁移）；key 空白 → null。</remarks>
+    public Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return Task.FromResult<ChannelConfig?>(null);
+
+        // 第一遍：alias 精确匹配（Alias 非空才参与比对——缺省 null = 用 ChannelId 对外）
+        foreach (var source in _sources)
+        {
+            foreach (var cfg in source.GetChannels())
+            {
+                if (!string.IsNullOrWhiteSpace(cfg.Alias)
+                    && string.Equals(cfg.Alias, key, StringComparison.Ordinal))
+                {
+                    return Task.FromResult<ChannelConfig?>(cfg);
+                }
+            }
+        }
+
+        // 第二遍：未中 → ChannelId 匹配（兼容无 alias 通道 / alias=ChannelId 同名）
+        foreach (var source in _sources)
+        {
+            foreach (var cfg in source.GetChannels())
+            {
+                if (string.Equals(cfg.ChannelId, key, StringComparison.Ordinal))
+                    return Task.FromResult<ChannelConfig?>(cfg);
+            }
+        }
+
+        LogNotFound(key);
+        return Task.FromResult<ChannelConfig?>(null);
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default)
     {
         var all = new List<ChannelConfig>();

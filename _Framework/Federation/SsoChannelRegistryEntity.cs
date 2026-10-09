@@ -16,6 +16,9 @@ namespace TKWF.Ext.Federation
     /// <para>加密语义（方案 M6/M12）：<see cref="AppSecretEncrypted"/> 与 <see cref="ExtraJsonEncrypted"/> 均
     /// AES-GCM 密文列（keyed <c>ISymmetricKeyProvider "Federation"</c>），服务层加解密（<c>SsoChannelRegistryService</c>）——
     /// 生产用 DB 层全程密文，明文不落库（静态 Options 明文仅限开发态，方案 M12）。</para>
+    /// <para>对外别名（Phase 3，方案 §3.7 双键）：<see cref="ChannelAlias"/> 列 = 通道实例对外名（可空，缺省
+    /// null = 对外用 <see cref="ChannelId"/>）；非唯一索引（兼容 alias=ChannelId 同名迁移），解析统一经
+    /// <c>IChannelRegistry.GetByAliasOrIdAsync</c>（先 alias → 再 ChannelId）。</para>
     /// <para>容量核验（Oracle M6）：<see cref="ExtraJsonEncrypted"/>(4000) 起步——RSA-2048 PEM 私钥约 1.7KB +
     /// OIDC DiscoveryUri+TokenIssuers 组合 1.5KB+ 加密 base64 膨胀 ~33%（P1 定案锁定，避免 P2 迁移）；
     /// <see cref="AppSecretEncrypted"/>(512) 承载对称密钥/AES-GCM 密文足量。</para>
@@ -39,35 +42,46 @@ namespace TKWF.Ext.Federation
         [MaxLength(32)]
         public string PlatformType { get; set; } = "";
 
-        /// <summary>OAuth 握手应用标识（AppId / ClientId 归一——OIDC 系 = client_id）；法人级标识进 ExtraJson（M7）。</summary>
+        /// <summary>
+        /// 通道对外别名（方案 §3.7 双键——可空，缺省 null = 对外用 <see cref="ChannelId"/>，存量零迁移）。
+        /// <para>语义：alias = 通道实例的<b>对外名</b>（URL 路径段 / 展示 / 客户端入参），与内部
+        /// <see cref="ChannelId"/> 一一对应；可读直观 + 保护内部持久化键。<b>非唯一索引</b>（P3-3 明确不加 UX——
+        /// 兼容 alias=ChannelId 同名迁移：存量行 channelId 即对外名，新 alias 可与之同名；解析优先级
+        /// alias 精确匹配 → ChannelId 匹配，冲突由注册门面校验 fail-closed）。</para>
+        /// </summary>
         [FreeSql.DataAnnotations.Column(Position = 4)]
+        [MaxLength(64)]
+        public string? ChannelAlias { get; set; }
+
+        /// <summary>OAuth 握手应用标识（AppId / ClientId 归一——OIDC 系 = client_id）；法人级标识进 ExtraJson（M7）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 5)]
         [MaxLength(128)]
         public string? AppId { get; set; }
 
         /// <summary>对称应用密钥（AES-GCM 密文——AppSecret 明文不落库；OIDC 系 = ClientSecret）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 5)]
+        [FreeSql.DataAnnotations.Column(Position = 6)]
         [MaxLength(512)]
         public string? AppSecretEncrypted { get; set; }
 
         /// <summary>扩展 JSON 密文（AES-GCM 整段加密——平台特定负载 ExtraJson，容量核验 4000 起步 / Oracle M6）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 6)]
+        [FreeSql.DataAnnotations.Column(Position = 7)]
         [MaxLength(4000)]
         public string? ExtraJsonEncrypted { get; set; }
 
         /// <summary>默认通道标记（无前缀 /sso/oauth/callback 降级选区；多公众号语义边界见方案 §3.2）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 7)]
+        [FreeSql.DataAnnotations.Column(Position = 8)]
         public bool IsDefault { get; set; }
 
         /// <summary>启停标记（默认 true；禁用 → CHANNEL_DISABLED）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 8)]
+        [FreeSql.DataAnnotations.Column(Position = 9)]
         public bool IsEnabled { get; set; } = true;
 
         /// <summary>创建时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 9)]
+        [FreeSql.DataAnnotations.Column(Position = 10)]
         public DateTime CreateTime { get; set; } = DateTime.UtcNow;
 
         /// <summary>更新时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 10)]
+        [FreeSql.DataAnnotations.Column(Position = 11)]
         public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
     }
 }

@@ -17,9 +17,12 @@ namespace TKWF.Ext.Federation;
 /// 通道注册表服务门面（多通道联邦 v0.3.0 Phase 2——DB 动态权威层写入契约，方案 docs/Federation/多通道联邦-开发方案.md §3.3）。
 /// <para>**管理端点不建**（无 [GenerateController]——管理门户不在本扩展模块范围，用户裁定）；服务层方法保留
 /// （供静态→DB seed 与消费方自建管理端点经 <c>User.Use&lt;ISsoChannelRegistryService&gt;()</c> 帧内消费）。</para>
-/// <para>写入语义：<see cref="RegisterAsync"/> 创建加密行（ChannelId 冲突抛 <see cref="DomainException"/> CONFLICT——
-/// fail-closed 显式语义，种子/覆盖请用 <see cref="UpdateAsync"/>）；<see cref="UpdateAsync"/> 按 channelId 全量重写
-/// （新 <see cref="ChannelConfig"/> 重加密落库）；<see cref="UnregisterAsync"/> 删行（不存在返回 false）。</para>
+    /// <para>写入语义：<see cref="RegisterAsync"/> 创建加密行（ChannelId 冲突抛 <see cref="DomainException"/> CONFLICT——
+    /// fail-closed 显式语义，种子/覆盖请用 <see cref="UpdateAsync"/>）；<see cref="UpdateAsync"/> 按 channelId 全量重写
+    /// （新 <see cref="ChannelConfig"/> 重加密落库）；<see cref="UnregisterAsync"/> 删行（不存在返回 false）。
+    /// <b>对外别名（Phase 3，方案 §3.7 双键）</b>：<see cref="ChannelConfig.Alias"/> 写入
+    /// <see cref="SsoChannelRegistryEntity.ChannelAlias"/> 列（可空——缺省 null = 对外用 ChannelId 零迁移）；
+    /// alias 非空时校验同 alias 冲突（fail-closed，含 Update 排除本行）。</para>
 /// <para>加密：AppSecret/ExtraJson AES-GCM 加密（keyed <see cref="ISymmetricKeyProvider"/>
 /// <see cref="SymmetricKeyProviderKeys.Federation"/>），密文落库明文不落库——对齐 <see cref="SsoClientService"/>
 /// 既有模式（读取侧 <see cref="DbChannelRegistry"/> 解密映射，本门面只写不读）。</para>
@@ -29,10 +32,12 @@ namespace TKWF.Ext.Federation;
 /// </summary>
 public interface ISsoChannelRegistryService : IDomainService
 {
-    /// <summary>注册通道——写入 AES-GCM 加密行；ChannelId 已存在抛 <see cref="DomainException"/>（CONFLICT，fail-closed）。</summary>
+    /// <summary>注册通道——写入 AES-GCM 加密行；ChannelId 已存在抛 <see cref="DomainException"/>（CONFLICT，fail-closed）；
+    /// <see cref="ChannelConfig.Alias"/> 非空时同 alias 二次注册亦抛 CONFLICT（方案 §3.7 双键冲突校验）。</summary>
     Task RegisterAsync(ChannelConfig config, CancellationToken ct = default);
 
-    /// <summary>按 channelId 全量重写通道配置（新 config 重加密落库）；通道不存在返回 false（CHANNEL_NOT_FOUND 语义）。</summary>
+    /// <summary>按 channelId 全量重写通道配置（新 config 重加密落库，<see cref="ChannelConfig.Alias"/> 重写含清空语义）；
+    /// 通道不存在返回 false（CHANNEL_NOT_FOUND 语义）。</summary>
     Task<bool> UpdateAsync(string channelId, ChannelConfig config, CancellationToken ct = default);
 
     /// <summary>注销通道（删行）；通道不存在返回 false（CHANNEL_NOT_FOUND 语义）。</summary>
@@ -70,7 +75,8 @@ internal sealed class SsoChannelRegistryService : DomainServiceBase, ISsoChannel
 
     /// <inheritdoc />
     /// <remarks>校验 ChannelId/PlatformType 非空 → 检查唯一 UX 冲突（存在 → DomainException CONFLICT）→
-    /// AppSecret/Extra 加密落库（CreateTime/UpdateTime = UtcNow）。</remarks>
+    /// Alias 非空时校验同 alias 冲突（fail-closed）→ AppSecret/Extra 加密落库（CreateTime/UpdateTime = UtcNow）。
+    /// <see cref="ChannelConfig.Alias"/> 一并写入 <see cref="SsoChannelRegistryEntity.ChannelAlias"/> 列（方案 §3.7 双键）。</remarks>
     public async Task RegisterAsync(ChannelConfig config, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(config);
@@ -87,11 +93,15 @@ internal sealed class SsoChannelRegistryService : DomainServiceBase, ISsoChannel
                 DomainException.ErrorCodes.Conflict);
         }
 
+        // 同 alias 二次注册冲突（alias 空白/null 跳过校验——缺省 null = 用 ChannelId 对外，不参与对外名冲突）
+        await EnsureAliasAvailableAsync(config.Alias, config.ChannelId, ct);
+
         var now = DateTime.UtcNow;
         await DataService.EntityCreateAsync(new SsoChannelRegistryEntity
         {
             ChannelId = config.ChannelId,
             PlatformType = config.PlatformType,
+            ChannelAlias = config.Alias,
             AppId = config.AppId,
             AppSecretEncrypted = EncryptSecret(config.AppSecret),
             ExtraJsonEncrypted = EncryptExtra(config.Extra),
@@ -103,8 +113,10 @@ internal sealed class SsoChannelRegistryService : DomainServiceBase, ISsoChannel
     }
 
     /// <inheritdoc />
-    /// <remarks>按 channelId 定位行（不存在 → false）→ 新 <see cref="ChannelConfig"/> 全量重写（AppSecret/Extra
-    /// 重加密 + IsDefault/IsEnabled 重写，UpdateTime=UtcNow）。</remarks>
+    /// <remarks>按 channelId 定位行（不存在 → false）→ Alias 冲突校验（同 alias 且非本行 → CONFLICT，fail-closed）→
+    /// 新 <see cref="ChannelConfig"/> 全量重写（AppSecret/Extra 重加密 + IsDefault/IsEnabled 重写 +
+    /// <see cref="SsoChannelRegistryEntity.ChannelAlias"/> = <see cref="ChannelConfig.Alias"/>（含清空语义——
+    /// Alias null → ChannelAlias null），UpdateTime=UtcNow）。</remarks>
     public async Task<bool> UpdateAsync(string channelId, ChannelConfig config, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(config);
@@ -113,7 +125,11 @@ internal sealed class SsoChannelRegistryService : DomainServiceBase, ISsoChannel
         var entity = await DataService.EntityGetAsync(m => m.ChannelId == channelId, ct);
         if (entity is null) return false;
 
+        // 同 alias 冲突校验（排除本行——允许保留/重写自身 alias）
+        await EnsureAliasAvailableAsync(config.Alias, channelId, ct);
+
         entity.PlatformType = config.PlatformType;
+        entity.ChannelAlias = config.Alias;   // 含清空语义（Alias null → ChannelAlias null）
         entity.AppId = config.AppId;
         entity.AppSecretEncrypted = EncryptSecret(config.AppSecret);
         entity.ExtraJsonEncrypted = EncryptExtra(config.Extra);
@@ -136,6 +152,22 @@ internal sealed class SsoChannelRegistryService : DomainServiceBase, ISsoChannel
 
         await DataService.EntityDeleteBatchAsync([entity.Id], ct);
         return true;
+    }
+
+    /// <summary>同 alias 冲突校验（方案 P3-3——同 alias 二次注册 fail-closed）：alias 空白/null 跳过校验（缺省
+    /// null = 用 ChannelId 对外，不参与对外名冲突）；否则查同 alias 且 ChannelId ≠ 本行 → DomainException CONFLICT。</summary>
+    private async Task EnsureAliasAvailableAsync(string? alias, string channelId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(alias)) return;
+
+        var conflict = await DataService.EntityGetAsync(
+            m => m.ChannelAlias == alias && m.ChannelId != channelId, ct);
+        if (conflict != null)
+        {
+            throw new DomainException(
+                $"通道别名已存在：Alias={alias}（已被 ChannelId={conflict.ChannelId} 占用——同 alias 二次注册 fail-closed，请换别名或先注销）",
+                DomainException.ErrorCodes.Conflict);
+        }
     }
 
     // ── 私有实现（对齐 SsoClientService 加密边界——服务层加解密，DataService 纯持久化） ──

@@ -37,6 +37,7 @@ public sealed class AlipayChannelSource : IChannelSource
             {
                 ChannelId = c.ChannelId,
                 PlatformType = PlatformType,
+                Alias = c.Alias,   // 对外别名（可空——缺省 null = 用 ChannelId 对外，方案 §3.7 双键）
                 AppId = c.AppId,
                 AppSecret = null, // 支付宝无对称密钥——RSA 私钥路径进 Extra（非对称/对称分离，方案 F5 零表结构变更）
                 Extra = new Dictionary<string, string?>(StringComparer.Ordinal)

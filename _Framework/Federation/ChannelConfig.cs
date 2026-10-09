@@ -22,6 +22,16 @@ public sealed class ChannelConfig
     /// <summary>通道实例键（<c>ISsoChannel.ChannelId</c> 选区依据——如公众号 id）。</summary>
     public string ChannelId { get; init; } = "";
 
+    /// <summary>
+    /// 通道对外别名（方案 §3.7 双键——可空，缺省 null = 对外用 <see cref="ChannelId"/>，存量零迁移）。
+    /// <para>语义：alias = 通道实例的<b>对外名</b>（URL 路径段 / 展示 / 客户端入参），与内部
+    /// <see cref="ChannelId"/> 一一对应（同实例双名）；可读直观（merchant-a / edu-course）+ 保护内部持久化键
+    /// （外部 URL 暴露 alias 不泄露 ChannelId）。解析入口统一经
+    /// <see cref="IChannelRegistry.GetByAliasOrIdAsync"/>（先 alias 精确匹配 → 再 ChannelId 匹配）；
+    /// <b>内部消费（通道 / accesscode / 映射）一律用 ChannelId</b>——alias 仅对外入口解析一次归一内部键。</para>
+    /// </summary>
+    public string? Alias { get; init; }
+
     /// <summary>平台族字符串（wechat / qq / dingtalk / wecom / oidc / google / microsoft / alipay...开放注册表）。</summary>
     public string PlatformType { get; init; } = "";
 

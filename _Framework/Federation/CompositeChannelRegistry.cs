@@ -59,6 +59,24 @@ public sealed class CompositeChannelRegistry : DomainServiceBase, IChannelRegist
     }
 
     /// <inheritdoc />
+    /// <remarks>统一解析入口（方案 §3.7）——DB 命中优先（Db 实现先 alias → ChannelId）→ 未中回退 Static
+    /// （同优先序）；DB 不可用（未注册/异常）→ 静默降级静态层（对齐 <see cref="GetAsync"/> 降级模式）。
+    /// <b>本方法仅对外入口解析用——内部消费一律 <see cref="GetAsync"/>（ChannelId）</b>。</remarks>
+    public async Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default)
+    {
+        try
+        {
+            var dbCfg = await Db.GetByAliasOrIdAsync(key, ct);
+            if (dbCfg != null) return dbCfg;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "DB 通道注册表不可用（GetByAliasOrIdAsync 降级静态层）：{Ex}", ex.Message);
+        }
+        return await Static.GetByAliasOrIdAsync(key, ct);
+    }
+
+    /// <inheritdoc />
     /// <remarks>DB 全部 + Static 全部合并（DB 命中优先——同 ChannelId 去重保留 DB 值；DB 不可用 → 仅静态）。</remarks>
     public async Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default)
     {

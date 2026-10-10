@@ -22,6 +22,8 @@
   <ItemGroup>
     <!-- M2：继承 M1 OIDC 基座（ISsoChannel 经基座传递引用——Oracle P2-2 不直接引 Federation） -->
     <ProjectReference Include="..\Federation.Oidc\TKWF.Federation.Oidc.csproj" />
+    <!-- 2026-10-09 三层边界（TrustCenter 剥离）：ISsoChannel 契约迁 TrustCenter.Abstractions——OidcChannelBase 消费 ISsoChannel/ChannelConfig，Microsoft 直引收口 L2 -->
+    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -38,15 +38,13 @@ public class SsoChannelRegistryTests : TestHostBase
         new FederationExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         // Options 值绑定（keyed FileSymmetricKeyProvider 依赖 SecretEncryptionKeyPath——测试宿主写密钥文件）
-        var opts = SsoTestHost.CreateOptions();
-        services.Configure<FederationOptions>(o =>
+        // ⚠️ TrustCenter 剥离：FederationOptions 迁 TrustCenter（TrustCenterOptions）——连接层通道注册表
+        // 密钥独立承载于 FederationChannelRegistryOptions（TKWF:Federation:ChannelRegistry 节）
+        var aesKeyPath = FederationTestHost.CreateAesKeyPath();
+        services.Configure<FederationChannelRegistryOptions>(o =>
         {
-            o.Issuer = opts.Issuer;
-            o.SigningKeyPath = opts.SigningKeyPath;
-            o.CurrentKid = opts.CurrentKid;
-            o.SigningKeys = opts.SigningKeys;
-            o.SecretEncryptionKeyPath = opts.SecretEncryptionKeyPath;
-            o.IsProduction = opts.IsProduction;
+            o.SecretEncryptionKeyPath = aesKeyPath;
+            o.IsProduction = true;
         });
 
         // 静态通道来源 stub（Composite 回退链断言——DB 无命中时回退静态）
@@ -77,8 +75,8 @@ public class SsoChannelRegistryTests : TestHostBase
                 IsEnabled = true,
             }));
 
-        // 实体 DAC（真实 FreeSqlEntityDAC——全部实体含 SsoChannelRegistryEntity）
-        SsoTestHost.RegisterEntityDacs(services);
+        // 实体 DAC（真实 FreeSqlEntityDAC——SsoChannelRegistryEntity 等连接层实体）
+        FederationTestHost.RegisterEntityDacs(services);
     }
 
     // ── 1. Register → GetAsync 回读（AppSecret/Extra 加密落库 + 回读解密）──

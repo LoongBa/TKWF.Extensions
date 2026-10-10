@@ -23,11 +23,18 @@
     <!-- 2026-10-05（SSO 立项，ADR-SSO Oracle P1-2/P1-3）：SSO 消费面契约包（接口 + DTO）——
          不引 Authentication 主包（ADR48 D7 L2 门控合规；组合矩阵第三形态零全量传递） -->
     <ProjectReference Include="..\AuthCenter.Abstractions\TKWF.Ext.AuthCenter.Abstractions.csproj" />
+    <!-- 2026-10-09（TrustCenter 剥离，T1/T2）：信任内核契约包（ISsoChannel/IToken2Service/IAccessCodeService）——
+         信任内核迁出后 Federation 经契约消费（编排面 SsoChannelFactory 需要 ISsoChannel 类型；L2 间接层合法） -->
+    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- Web 装配钩子（IWebExtension——FederationWebExtension T3 装配面）：
+         对齐 AuthCenter 先例（AuthCenter.csproj 同款双模式条目） -->
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
@@ -37,6 +44,10 @@
     <PackageReference Include="FreeSql" />
     <!-- token2 黑名单/缓存（对齐 Authentication Oracle C3 前置过滤） -->
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <!-- T3 装配面（FederationWebExtension）：IWebExtension/DomainWebOptions/MiddlewareAnchor 契约所在程序集
+         ——双模式条件化（Federation 为 Web 装配扩展，恒引用；对齐 AuthCenter 先例） -->
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
   </ItemGroup>
 
   <!-- ⚠️ JWKS/profile/端点装配依赖 ASP.NET Core 类型——FrameworkReference Microsoft.AspNetCore.App（net10 共享框架零 NuGet），

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
+using TKWF.Ext.TrustCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Federation.Oidc.Tests;

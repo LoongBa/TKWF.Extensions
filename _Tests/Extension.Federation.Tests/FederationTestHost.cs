@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
-using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -12,16 +10,16 @@ using TKWF.Ext.Testing.Shared;
 namespace TKWF.Ext.Federation.Tests;
 
 /// <summary>
-/// SSO 测试公共设施——SQLite 内存库（SsoClient + SsoAccessCode + 认证内核 AuthAccount/PlatformAccountMap）+ EC 测试密钥。
-/// <para>对齐 AuthenticationTestHost 模式：分层单测用 StubDomainUser 直构门面；生产路径集成测试用
-/// 真实 DI + Initializer ConfigureServices + BindScope + <c>User.Use&lt;接口&gt;()</c>。</para>
+/// Federation 连接层测试公共设施——SQLite 内存库（SsoChannelRegistryEntity + 认证内核 AuthAccount/PlatformAccountMap/UserProfile）+ 密钥。
+/// <para><b>TrustCenter 剥离（2026-10-09）</b>：原 SsoTestHost 迁 TrustCenter.Tests 改名 TrustCenterTestHost（信任内核 2 实体）；
+/// 本类为 Federation.Tests 自持连接层设施——SsoChannelRegistryEntity（多通道配置持久化）+ 认证内核实体
+/// （SsoProfileService 消费 ISsoAccountQueryService 需 AuthAccount + UserProfile）+ 密钥助手（RSA 认证内核 / AES 通道注册表）。</para>
 /// </summary>
-internal static class SsoTestHost
+internal static class FederationTestHost
 {
-    /// <summary>SSO 2 实体 + 认证内核 3 实体（SSO profile 消费 ISsoAccountQueryService 需 AuthAccount + UserProfile（V0.9.0 凭据/档案分离——档案从 1:1 表读））+ 通道注册表实体（多通道联邦 Phase 2 DB 动态权威层）。</summary>
+    /// <summary>连接层实体（SsoChannelRegistryEntity）+ 认证内核实体（SsoProfileService 跨扩展消费）。</summary>
     private static readonly Type[] EntityTypes =
     [
-        typeof(SsoClientEntity), typeof(SsoAccessCodeEntity),
         typeof(SsoChannelRegistryEntity),
         typeof(AuthAccountEntity), typeof(PlatformAccountMapEntity), typeof(UserProfileEntity)
     ];
@@ -55,47 +53,6 @@ internal static class SsoTestHost
         return fsql;
     }
 
-    private static string? _ecDir;
-    private static readonly object EcGate = new();
-
-    /// <summary>生成 EC P-256 测试密钥 PEM（PKCS#8——临时目录，缓存供多测试复用）。</summary>
-    public static (string PrivateKeyPath, string PublicKeyPath) CreateEcKeyFiles(string kid = "sso-test-key-1")
-    {
-        lock (EcGate)
-        {
-            _ecDir ??= Path.Combine(Path.GetTempPath(), "tkwf-sso-tests-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_ecDir);
-            var privatePath = Path.Combine(_ecDir, $"{kid}-private.pem");
-            var publicPath = Path.Combine(_ecDir, $"{kid}-public.pem");
-
-            if (File.Exists(privatePath)) return (privatePath, publicPath);
-
-            using var ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-            File.WriteAllText(privatePath, ec.ExportPkcs8PrivateKeyPem());
-            File.WriteAllText(publicPath, ec.ExportSubjectPublicKeyInfoPem());
-            return (privatePath, publicPath);
-        }
-    }
-
-    /// <summary>构造测试用 FederationOptions（生产模式 + EC 密钥 + AES-GCM 密钥文件【实际写入】）。</summary>
-    public static FederationOptions CreateOptions(string? kid = "sso-test-key-1")
-    {
-        var (privatePath, publicPath) = CreateEcKeyFiles(kid);
-        var aesKeyPath = Path.Combine(Path.GetTempPath(), "tkwf-sso-tests-aes-" + Guid.NewGuid().ToString("N") + ".key");
-        // 生产模式（IsProduction=true）要求密钥文件已预置——测试宿主实际写入 32 字节
-        if (!File.Exists(aesKeyPath))
-            File.WriteAllBytes(aesKeyPath, RandomNumberGenerator.GetBytes(32));
-        return new FederationOptions
-        {
-            Issuer = "https://sso.test.local",
-            SigningKeyPath = privatePath,
-            CurrentKid = kid,
-            SigningKeys = [new FederationSigningKeyConfig { Kid = kid, PrivateKeyPath = privatePath, PublicKeyPath = publicPath }],
-            SecretEncryptionKeyPath = aesKeyPath,
-            IsProduction = true,
-        };
-    }
-
     private static string? _rsaDir;
     private static readonly object RsaGate = new();
 
@@ -104,7 +61,7 @@ internal static class SsoTestHost
     {
         lock (RsaGate)
         {
-            _rsaDir ??= Path.Combine(Path.GetTempPath(), "tkwf-sso-tests-rsa-" + Guid.NewGuid().ToString("N"));
+            _rsaDir ??= Path.Combine(Path.GetTempPath(), "tkwf-federation-tests-rsa-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_rsaDir);
             var privatePath = Path.Combine(_rsaDir, "auth-private.pem");
             var publicPath = Path.Combine(_rsaDir, "auth-public.pem");
@@ -117,7 +74,7 @@ internal static class SsoTestHost
         }
     }
 
-    /// <summary>构造测试用 AuthCenterOptions（认证内核——SSO profile 消费 ISsoAccountQueryService 实现）。</summary>
+    /// <summary>构造测试用 AuthCenterOptions（认证内核——SsoProfileService 消费 ISsoAccountQueryService 实现）。</summary>
     public static AuthCenterOptions CreateAuthOptions()
     {
         var (privatePath, publicPath) = CreateRsaKeyFiles();
@@ -131,6 +88,23 @@ internal static class SsoTestHost
             IsProduction = false,
             RedirectUriWhitelist = ["https://app.example.com/callback"],
         };
+    }
+
+    private static string? _aesDir;
+    private static readonly object AesGate = new();
+
+    /// <summary>构造测试用 AES-GCM 密钥文件（通道注册表 FederationChannelRegistryOptions 用——临时目录，缓存复用）。</summary>
+    public static string CreateAesKeyPath()
+    {
+        lock (AesGate)
+        {
+            _aesDir ??= Path.Combine(Path.GetTempPath(), "tkwf-federation-tests-aes-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_aesDir);
+            var keyPath = Path.Combine(_aesDir, "channel-registry-aes.key");
+            if (!File.Exists(keyPath))
+                File.WriteAllBytes(keyPath, RandomNumberGenerator.GetBytes(32));
+            return keyPath;
+        }
     }
 
     /// <summary>

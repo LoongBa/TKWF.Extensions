@@ -23,6 +23,8 @@
     <!-- Oracle P1-1（平台网关设计铁律）：基座引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
          派生平台库引本基座经传递获得 ISsoChannel） -->
     <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+    <!-- 2026-10-09 三层边界（TrustCenter 剥离）：ISsoChannel 契约迁 TrustCenter.Abstractions——平台库直引收口 L2（实现 ISsoChannel 的契约来源） -->
+    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

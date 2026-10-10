@@ -23,6 +23,8 @@
     <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
          扩展不引库。QqOauthChannel 实现 ISsoChannel 在此库内） -->
     <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+    <!-- 2026-10-09 三层边界（TrustCenter 剥离）：ISsoChannel 契约迁 TrustCenter.Abstractions——平台库直引收口 L2（实现 ISsoChannel 的契约来源） -->
+    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,6 +13,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.Cryptography;
 using TKWF.Ext.Federation;
+using TKWF.Ext.TrustCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Federation.Alipay.Tests;

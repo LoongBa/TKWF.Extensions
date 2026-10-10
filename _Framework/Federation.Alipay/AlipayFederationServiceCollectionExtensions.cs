@@ -2,6 +2,7 @@ using System;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
+using TKWF.Ext.TrustCenter;
 using TKWF.Federation.Alipay;
 
 namespace Microsoft.Extensions.DependencyInjection;

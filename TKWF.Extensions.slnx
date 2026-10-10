@@ -216,6 +216,13 @@
   <Folder Name="/_Framework/Federation/">
     <Project Path="_Framework/Federation/TKWF.Ext.Federation.csproj" />
   </Folder>
+  <!-- TrustCenter 剥离（2026-10-09，T1/T2）：信任内核迁出为独立扩展——Abstractions 契约包 + 主包 + 测试项目 -->
+  <Folder Name="/_Framework/TrustCenter.Abstractions/">
+    <Project Path="_Framework/TrustCenter.Abstractions/TKWF.Ext.TrustCenter.Abstractions.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/TrustCenter/">
+    <Project Path="_Framework/TrustCenter/TKWF.Ext.TrustCenter.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Federation.WeChat/">
     <Project Path="_Framework/Federation.WeChat/TKWF.Federation.WeChat.csproj" />
   </Folder>
@@ -270,6 +277,9 @@
   </Folder>
   <Folder Name="/_Tests/Extension.Federation.Tests/">
     <Project Path="_Tests/Extension.Federation.Tests/TKWF.Ext.Federation.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.TrustCenter.Tests/">
+    <Project Path="_Tests/Extension.TrustCenter.Tests/TKWF.Ext.TrustCenter.Tests.csproj" />
   </Folder>
 </Solution>
 

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.TrustCenter</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>TrustCenter.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.TrustCenter.Abstractions</PackageId>
+    <Description>TKWF 信任中心契约抽象（TrustCenter——ISsoChannel / IToken2Service / IAccessCodeService + DTO）——依赖倒置（ADR48 D7 / TrustCenter 剥离）：信任内核主包实现契约，Federation 连接层与平台库经契约消费（零实体、零 SG1、不引主包）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 2026-10-09（TrustCenter 剥离，T2）：契约包只放接口 + 不可变 DTO（record）——
+         零实体、零 SG1 分析器（对齐 AuthCenter.Abstractions 形态）；但接口继承 IDomainService（User.Use 帧内解析准入）
+         需要 TKWF.Domain——非零框架引用（对齐 Permissions.Abstractions 先例，双模式条件化） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+  </ItemGroup>
+
+</Project>

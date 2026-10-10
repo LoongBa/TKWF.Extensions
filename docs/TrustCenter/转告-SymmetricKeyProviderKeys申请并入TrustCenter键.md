@@ -51,22 +51,27 @@ TrustCenter（信任中心，2026-10-09 自 Federation 剥离）需 keyed `ISymm
 
 ---
 
-## 附：TKWF.Ext.Federation 旧包 unlist 清单（移交用户）
+## 附：TKWF.Ext.Federation 旧包 unlist 清单（✅ 已执行 2026-10-10）
 
-> **背景**：TrustCenter 剥离（2026-10-09）后，`TKWF.Ext.Federation` 主包（联邦互联）已被 `TKWF.Ext.TrustCenter` 取代——Phase 0 用户裁定旧包版本线 unlist。
+> **背景**：TrustCenter 剥离（2026-10-09）后，`TKWF.Ext.Federation` 主包（联邦互联）已被 `TKWF.Ext.TrustCenter` 取代——Phase 0 用户裁定旧包版本线 unlist；**2026-10-10 用户裁定"全部 10 版本 unlist（含 0.5.0 连接层壳）——不留历史包袱，不必考虑兼容和迁移"**。
 
-**⚠️ 请用户核查 nuget.org 实际列出版本后 unlist**——以下为 git tag 已知对应版本线，**非 nuget 实际发布断言**：
+**✅ 已全部 unlist（2026-10-10，经 `dotnet nuget delete` = nuget.org unlist 语义）**：
 
-| git tag | 对应版本线 | 说明 |
-|---------|-----------|------|
-| Federation/v0.1.1 | 0.1.1（含 0.1.x-preview 线） | SSO 归层前旧线 |
-| Federation/v0.2.0 | 0.2.0 | 归层 + E4 密钥管理 |
-| Federation/v0.2.1 | 0.2.1（含 0.2.1-preview 线） | 0.2.x 补丁线 |
-| Federation/v0.3.0 | 0.3.0 | 多通道联邦（ChannelConfig） |
-| Federation/v0.4.0 | 0.4.0 | Phase 2/3 ChannelAlias 收尾 |
+| # | 版本 | 状态 |
+|---|------|------|
+| 1 | 0.2.1-preview.0.12 | ✅ unlist |
+| 2 | 0.2.1-preview.0.15 | ✅ unlist |
+| 3 | 0.2.1 | ✅ unlist |
+| 4 | 0.3.0 | ✅ unlist |
+| 5 | 0.3.1-preview.0.4 | ✅ unlist |
+| 6 | 0.3.1-preview.0.7 | ✅ unlist |
+| 7 | 0.4.0 | ✅ unlist |
+| 8 | 0.4.1-preview.0.1 | ✅ unlist |
+| 9 | 0.4.1-preview.0.7 | ✅ unlist |
+| 10 | 0.5.0（连接层壳） | ✅ unlist |
 
-- **仅 unlist `TKWF.Ext.Federation` 主包线**（含 0.1.1-preview / 0.2.1-preview 等全部已发布 preview + stable 版本）
-- **8 平台库 `TKWF.Federation.{平台}` 保留不 unlist**：`WeChat` / `QQ` / `DingTalk` / `WeCom` / `Oidc` / `Google` / `Microsoft` / `Alipay`（平台网关库为独立大使馆资产，TrustCenter 的 `ISsoChannel` 集合经平台库扩展方法装配——平台库持续演进，不受主包剥离影响）
-- 新线 `TKWF.Ext.TrustCenter` 独立 tag 独立发布（与 Federation 主包完全解耦）
+- **验证**：nuget.org 搜索 `TKWF.Ext.Federation` 已不可见（新安装不再选）；flatcontainer 版本仍可列举（unlist 不删包——既有依赖解析兼容，消费方零破坏）
+- **8 平台库 `TKWF.Federation.{平台}` 保留不 unlist**：`WeChat` / `QQ` / `DingTalk` / `WeCom` / `Oidc` / `Google` / `Microsoft` / `Alipay`（平台网关库独立大使馆资产，`ISsoChannel` 集合经平台库扩展方法装配，持续演进）——2026-10-10 已打 tag 发布新版（v0.2.2 ×7 + Alipay v0.1.1，引目标 TrustCenter.Abstractions 收口）
+- 新线 `TKWF.Ext.TrustCenter` V0.1.0 已发布（nuget.org 实证上架）——消费方改引新线
 
 <!-- EOF -->

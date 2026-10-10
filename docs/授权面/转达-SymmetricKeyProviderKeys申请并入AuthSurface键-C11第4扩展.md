@@ -3,7 +3,7 @@
 > **转达方**：TKWF 扩展模块组（AuthSurface 授权面）
 > **接收方**：主框架（TKW.Framework——Core/KeyManagement）
 > **日期**：2026-10-09
-> **状态**：📋 待框架组并入（CPM 升级后扩展侧切换主框架常量）
+> **状态**：✅ **已闭环（2026-10-10——v4.10.69 并入 + 扩展侧适配完成）**；框架组回复见主框架 `docs/03_扩展模块/转达/转告回复-SymmetricKeyProviderKeys已并入AuthSurface键-v4.10.69.md`
 
 ## 背景
 
@@ -24,6 +24,12 @@ AuthSurface（授权面）V0.2.0 **核验场景**（兑换码附加信息 `Redem
   public const string AuthSurface = "AuthSurface";
   ```
 - **CPM 升级后扩展侧切换**：删 `AuthSurfaceKeyProviderKeys` 自建常量 → `SymmetricKeyProviderKeys.AuthSurface`（单一事实源，防 typo 静默解析错 key）。
+
+## ✅ 适配闭环（2026-10-10）
+
+- 框架组已并入（v4.10.69，`SymmetricKeyProviderKeys.AuthSurface`，密钥值 `"AuthSurface"` 与扩展侧先行常量完全一致——零行为差异）
+- 扩展侧已完成：**CPM 13 包 lockstep 4.10.68 → 4.10.69**；**删 `AuthSurfaceKeyProviderKeys.cs`**；**2 处代码点切 `SymmetricKeyProviderKeys.AuthSurface`**（`AuthSurfaceExtensionInitializer` AddKeyedSingleton key 参数 + `RedemptionCommandService` `[FromKeyedServices]`）+ XML doc cref + README 同步
+- **零破坏性**：常量值不变，不触发密钥重建/数据迁移（v4.10.69 发布物已上架，消费方零中断）
 
 ## 一致性约束
 

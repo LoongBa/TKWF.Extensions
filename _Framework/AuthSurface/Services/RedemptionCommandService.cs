@@ -45,7 +45,7 @@ public interface IRedemptionCommandService : IDomainService
 /// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// <para>v4.10.67 适配：兑换尝试频控经 <see cref="IRateLimitCheck"/> 点检查原语（<c>TKW.Framework.Utility.RateLimitChecks</c>——
 /// R1 上移自 MFA MfaRateLimiter；R3 同步删 MfaRateLimiter——本扩展不复制旧形态）。</para>
-/// <para>v0.2.0 核验场景：keyed <see cref="ISymmetricKeyProvider"/>（键 <see cref="AuthSurfaceKeyProviderKeys.AuthSurface"/>）——
+/// <para>v0.2.0 核验场景：keyed <see cref="ISymmetricKeyProvider"/>（键 <see cref="SymmetricKeyProviderKeys.AuthSurface"/>）——
 /// 创建 <c>payload</c> 加密落 <c>PayloadEncrypted</c>（明文不落库）；兑换取回解密 <see cref="RedemptionRecordDto.Payload"/>。</para>
 /// </summary>
 [DiContractIgnore]
@@ -63,7 +63,7 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
         IDomainUser user,
         IOptions<AuthSurfaceOptions> options,
         IRateLimitCheck rateLimitCheck,
-        [FromKeyedServices(AuthSurfaceKeyProviderKeys.AuthSurface)] ISymmetricKeyProvider keys,
+        [FromKeyedServices(SymmetricKeyProviderKeys.AuthSurface)] ISymmetricKeyProvider keys,
         ILogger<RedemptionCommandService> logger) : base(user)
     {
         _options = options?.Value ?? new AuthSurfaceOptions();

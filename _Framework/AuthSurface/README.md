@@ -75,7 +75,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 - **✅ UserCenter 退役完结（2026-10-08）**：原 `IRedemptionHistorySource`/`IUserAppsSource` 契约随 UserCenter 完整删除——本扩展不再受"不实现他扩展契约"约束（契约已不存在）；消费方兑换/应用查询唯一通道 = 本扩展门面。
 - **行级 FK = `AuthAccount.UId`**（P4 白名单）——`RedemptionCode.RedeemedByUId`；`FederationAnchorOpenId` **不作引用键**（P2/P4——N2 anchor 冗余快查列）。
-- **兑换码安全**：明文不落库（SHA256 哈希唯一）——防库泄露即任意兑换；`CodeMasked` 脱敏透传（本扩展 DTO `RedemptionRecordDto.CodeMasked`，明文不落库）；**v0.2.0 核验信息亦明文不落库**（`PayloadEncrypted` AES-GCM 密文，`ISymmetricKeyProvider` keyed 加解密——密钥键常量 `AuthSurfaceKeyProviderKeys.AuthSurface`，对齐 AuthCenter/Federation/MFA E4 先例；⚠️ 主框架 `SymmetricKeyProviderKeys` 已转达申请并入，CPM 升级后切主框架常量）。
+- **兑换码安全**：明文不落库（SHA256 哈希唯一）——防库泄露即任意兑换；`CodeMasked` 脱敏透传（本扩展 DTO `RedemptionRecordDto.CodeMasked`，明文不落库）；**v0.2.0 核验信息亦明文不落库**（`PayloadEncrypted` AES-GCM 密文，`ISymmetricKeyProvider` keyed 加解密——密钥键 `SymmetricKeyProviderKeys.AuthSurface`（v4.10.69 已并入主框架，C11 第 4 扩展边界兑现；原扩展侧自建 `AuthSurfaceKeyProviderKeys` 已删除））。
 - **并发双兑**：CAS 原子兑换（ADR89 单语句 WHERE 谓词）——败者重查判定（已兑/过期）。
 - **视图前缀**：`TKWFV_` 暂用（前置裁定 P3 / ADR C.16——框架组前缀批次核查后视情况 rename，不影响实体/ViewSql 设计）。
 - **表名快照**：ViewSql 引用 `AuthGrant`/`TKWF_AuthAccount`（AuthCenter V0.9.0 身份域重构——ADR100 表名别名落地；`AuthAccount` 已改 `TKWF_AuthAccount` 凭据白名单列，档案列迁 `UserProfileEntity`）。

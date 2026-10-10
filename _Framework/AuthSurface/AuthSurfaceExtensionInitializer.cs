@@ -36,7 +36,7 @@ public class AuthSurfaceExtensionInitializer<TUserInfo> : ExtensionInitializer<T
         // E4 密钥管理抽象（v0.2.0 核验场景）：keyed ISymmetricKeyProvider（FileSymmetricKeyProvider——构造即加载密钥：
         // 生产缺密钥 fail-fast / 开发随机兜底；AddKeyedSingleton 惰性构造，首次解析门面时触发）——
         // RedemptionCommandService ctor 经 [FromKeyedServices] 注入（对齐 AuthCenter/Federation/MFA 先例）
-        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(AuthSurfaceKeyProviderKeys.AuthSurface, (sp, _) =>
+        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(SymmetricKeyProviderKeys.AuthSurface, (sp, _) =>
         {
             var o = sp.GetRequiredService<IOptions<AuthSurfaceOptions>>().Value;
             return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());

@@ -135,7 +135,7 @@ public class PasswordCapabilityTests
         // EnabledAuthTypes 不含 password → 门面返回 PASSWORD_PROVIDER_NOT_ENABLED（P1-1/P2-6 fail-closed）
         var stub = CreateStub(out _);
         var options = AuthenticationTestHost.CreateOptions();
-        options.EnabledAuthTypes = ["sms", "wechat"];   // 显式不含 password
+        options.EnabledAuthTypes = ["sms", "federated"];   // 显式不含 password（T5：federated 替代 wechat）
         var service = new PasswordLoginService(
             stub,
             [new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance)],

@@ -14,7 +14,8 @@ namespace TKWF.Ext.AuthCenter;
 /// <summary>
 /// 登录保护服务——AuthLoginAttempt 记录 + 限流窗口计数 + 最近尝试查询（方案 §5.6）。
 /// <para>只增语义：仅经 <see cref="AuthLoginAttemptEntityDataService.CreateAsync"/> 追加写，无 Update/Delete 路径（SecurityLog 先例）。</para>
-/// <para>限流判定按 authType 独立窗口：微信 OAuth（<see cref="AuthTypes.Wechat"/>）60s 滑窗 ≥
+/// <para>限流判定按 authType 独立窗口：联邦快捷（<see cref="AuthTypes.Federated"/>——T5 2026-10-09 替代原微信
+/// <c>AuthTypes.Wechat</c>）60s 滑窗 ≥
 /// <c>LoginProtectionOptions.OAuthPerMinutePerIp</c>；口令兑换（<see cref="AuthTypes.Redeem"/>）60min 滑窗 ≥
 /// <c>LoginProtectionOptions.RedeemPerHour</c>；短信（<see cref="AuthTypes.Sms"/>）返回 false——短信频控由
 /// <see cref="SmsVerificationService"/> 经 SmsRecordEntity 拥有（重发间隔 60s/小时 5 条/天 20 条/IP 20 条/校验 5 次每小时），
@@ -63,8 +64,8 @@ internal sealed class AuthLoginAttemptService : DomainServiceBase, IAuthLoginAtt
 
         return authType switch
         {
-            // 微信 OAuth：60s 滑窗计数（identity+authType）≥ OAuthPerMinutePerIp → 限流
-            AuthTypes.Wechat =>
+            // 联邦快捷（T5 2026-10-09 替代原 wechat）：60s 滑窗计数（identity+authType）≥ OAuthPerMinutePerIp → 限流
+            AuthTypes.Federated =>
                 await DataService.CountInWindowAsync(userIdentity, authType, now.AddSeconds(-60), ct)
                     >= protection.OAuthPerMinutePerIp,
 

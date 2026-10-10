@@ -37,7 +37,7 @@ internal static class AuthCenterEndpointHost
 
     // ─── Fake 门面（端点测试断言 Invoked/结果） ───
     public static FakeSmsLoginService SmsLogin { get; } = new();
-    public static FakeWechatLoginService WechatLogin { get; } = new();
+    public static FakeExternalIdpLoginService ExternalLogin { get; } = new();   // T5（2026-10-09）替代 FakeWechatLoginService
     public static FakeTokenService Token { get; } = new();
     public static FakeSmsVerificationService SmsVerification { get; } = new();
     public static FakeTicketService Ticket { get; } = new();
@@ -63,7 +63,7 @@ internal static class AuthCenterEndpointHost
         {
             svc.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new FakeTokenVerifier()));
             svc.Replace(ServiceDescriptor.Scoped<ISmsLoginService>(_ => SmsLogin));
-            svc.Replace(ServiceDescriptor.Scoped<IWechatLoginService>(_ => WechatLogin));
+            svc.Replace(ServiceDescriptor.Scoped<IExternalIdpLoginService>(_ => ExternalLogin));   // T5（2026-10-09）替代 IWechatLoginService
             svc.Replace(ServiceDescriptor.Scoped<ITokenService>(_ => Token));
             svc.Replace(ServiceDescriptor.Scoped<ISmsVerificationService>(_ => SmsVerification));
             svc.Replace(ServiceDescriptor.Scoped<IOAuthTicketService>(_ => Ticket));
@@ -160,14 +160,30 @@ internal static class AuthCenterEndpointHost
         }
     }
 
-    internal sealed class FakeWechatLoginService : IWechatLoginService
+    /// <summary>
+    /// 外部 IdP 登录门面 Fake（T5 2026-10-09——替代 FakeWechatLoginService）：Invoked/LastChannelType/LastParameters
+    /// 捕获 + 可配置 Result（成功 TokenResponse）/ Exception（守卫异常模拟——503 EXTERNAL_IDP_NOT_CONFIGURED 冒烟）。
+    /// </summary>
+    internal sealed class FakeExternalIdpLoginService : IExternalIdpLoginService
     {
         public bool Invoked { get; private set; }
+        public string? LastChannelType { get; private set; }
+        public IReadOnlyDictionary<string, string?>? LastParameters { get; private set; }
 
-        public Task<LoginResult> LoginAsync(string wechatCode, string wechatScope, CancellationToken ct = default)
+        public LoginResult Result { get; set; } =
+            new(true, "u_1", new TokenIssueResult("at-1", "rt-1", 7200), null);
+
+        /// <summary>模拟 fail-hard 守卫异常（领域架构守卫前缀——端点映射 503 EXTERNAL_IDP_NOT_CONFIGURED）。</summary>
+        public string? GuardExceptionMessage { get; set; }
+
+        public Task<LoginResult> LoginAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default)
         {
             Invoked = true;
-            return Task.FromResult(new LoginResult(true, "u_1", new TokenIssueResult("at-1", "rt-1", 7200), null));
+            LastChannelType = channelType;
+            LastParameters = parameters;
+            if (GuardExceptionMessage is not null)
+                throw new InvalidOperationException(GuardExceptionMessage);
+            return Task.FromResult(Result);
         }
     }
 

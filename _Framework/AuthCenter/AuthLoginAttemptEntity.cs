@@ -24,7 +24,7 @@ namespace TKWF.Ext.AuthCenter
         [MaxLength(100)]
         public string UserIdentity { get; set; } = "";
 
-        /// <summary>认证方式：sms/wechat/password/redeem。</summary>
+        /// <summary>认证方式：sms/federated/password/redeem（T5 2026-10-09——federated 替代 wechat）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 3)]
         [MaxLength(20)]
         public string AuthType { get; set; } = "";

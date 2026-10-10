@@ -15,14 +15,17 @@ public enum AuthLevel
     Federated = 2
 }
 
-/// <summary>认证方式常量——令牌 <c>authType</c> 声明与 Provider AuthType 取值（方案 §5.2/§5.5）。</summary>
+/// <summary>认证方式常量——令牌 <c>authType</c> 声明与 Provider AuthType 取值（方案 §5.2/§5.5）。
+/// <para>⚠️ T5（2026-10-09 三层边界）：<c>Wechat</c> 常量已删除——外部 IdP 认证（微信/QQ/支付宝等）
+/// 统一走 <see cref="Federated"/>（令牌 authType=<c>"federated"</c>，与 <see cref="AuthLevel.Federated"/> 语义一致）；
+/// 平台差异归 <c>channel_type</c> claim（<c>wechat_mp</c>/<c>qq_oauth</c> 等）。</para></summary>
 public static class AuthTypes
 {
     /// <summary>短信验证码（内置 Provider）。</summary>
     public const string Sms = "sms";
 
-    /// <summary>微信 OAuth（内置 Provider，双形态）。</summary>
-    public const string Wechat = "wechat";
+    /// <summary>联邦快捷认证（T5 起——外部 IdP 借道 Federation 桥接，替代原 Wechat="wechat" 常量；微信/QQ/支付宝/OIDC 等统一）。</summary>
+    public const string Federated = "federated";
 
     /// <summary>密码（V0.9.0 B.9 落地：PasswordAuthenticationProvider——扩展点实现启用）。</summary>
     public const string Password = "password";

@@ -30,7 +30,7 @@ namespace TKWF.Ext.AuthCenter
         [MaxLength(32)]
         public string UserId { get; set; } = "";
 
-        /// <summary>签发时认证方式：sms/wechat/password/redeem。</summary>
+        /// <summary>签发时认证方式：sms/federated/password/redeem（T5 2026-10-09——federated 替代 wechat）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 4)]
         [MaxLength(20)]
         public string AuthType { get; set; } = "";

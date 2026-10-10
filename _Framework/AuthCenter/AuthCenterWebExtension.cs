@@ -71,7 +71,9 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         app.UseMiddleware<JwtAuthenticationMiddleware<TUserInfo>>(RestoreUser);
     }
 
-    /// <summary>端点映射（AfterRouting 排空）——内建标准对内端点（V0.6.0 T4 + V0.8.0 认证 API 补全），路径/开关经 <see cref="AuthCenterEndpointOptions"/> 可配置。</summary>
+    /// <summary>端点映射（AfterRouting 排空）——内建标准对内端点（V0.6.0 T4 + V0.8.0 认证 API 补全 + T5 端点泛化），路径/开关经 <see cref="AuthCenterEndpointOptions"/> 可配置。
+    /// <para>T5（2026-10-09 三层边界）：<c>POST {prefix}/login/wechat</c> → <c>POST {prefix}/login/external/{{channelType}}</c>
+    /// （外部 IdP 桥接登录——channelType 为平台库通道类型如 <c>wechat_oauth</c>/<c>qq_oauth</c>，body = 参数字典）。</para></summary>
     public void ConfigureEndpoints(IEndpointRouteBuilder endpoints, DomainWebOptions options)
     {
         var endpointOptions = ResolveOptions(endpoints.ServiceProvider);
@@ -83,8 +85,8 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
             endpoints.MapPost($"{prefix}/sms/verify", HandleSmsVerify).AllowAnonymous();  // V0.8.0 验证码独立校验
         if (endpointOptions.SmsLoginEndpointEnabled)
             endpoints.MapPost($"{prefix}/login/sms", HandleSmsLogin).AllowAnonymous();
-        if (endpointOptions.WechatLoginEndpointEnabled)
-            endpoints.MapPost($"{prefix}/login/wechat", HandleWechatLogin).AllowAnonymous();
+        if (endpointOptions.ExternalLoginEndpointEnabled)
+            endpoints.MapPost($"{prefix}/login/external/{{channelType}}", HandleExternalLogin).AllowAnonymous();  // T5（2026-10-09）替代 login/wechat
         if (endpointOptions.PasswordLoginEndpointEnabled)
             endpoints.MapPost($"{prefix}/login/password", HandlePasswordLogin).AllowAnonymous();  // V0.9.0 B.9（P1-NEW-2 对称补全）
         if (endpointOptions.RefreshEndpointEnabled)
@@ -179,17 +181,30 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         }
     }
 
-    private static async Task<IResult> HandleWechatLogin(HttpContext ctx, [FromBody] WechatLoginRequest req, CancellationToken ct)
+    /// <summary>
+    /// 外部 IdP 登录端点（T5 2026-10-09——替代已删 login/wechat）：POST {prefix}/login/external/{channelType}。
+    /// body = 参数字典（含 code/channel_id 等平台协议字段——原样透传桥接）；游客帧 →
+    /// <c>guest.Use&lt;IExternalIdpLoginService&gt;()</c> 编排（桥接认证 fail-hard：Federation 未装配 → 守卫异常 → 503）。
+    /// </summary>
+    private static async Task<IResult> HandleExternalLogin(HttpContext ctx, string channelType, [FromBody] Dictionary<string, string?> parameters, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Code))
+        if (string.IsNullOrWhiteSpace(channelType))
+            return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "channelType 必填"));
+        if (parameters is null || !parameters.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code))
             return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "code 必填"));
 
         try
         {
-            var result = await GetGuest(ctx).Use<IWechatLoginService>().LoginAsync(req.Code, req.Scope, ct);
+            var result = await GetGuest(ctx).Use<IExternalIdpLoginService>().LoginAsync(channelType, parameters, ct);
             return result.Success
                 ? Results.Ok(ToTokenResponse(result.Token!))
                 : Results.BadRequest(new ErrorResponse(result.FailReason ?? "LOGIN_FAILED", null));
+        }
+        catch (InvalidOperationException ex) when (IsDomainGuardException(ex))
+        {
+            // fail-hard（P7）：Federation 未装配 → User.Use<IExternalIdpAuthenticator>() 抛守卫 → 503 显式告知
+            return Results.Json(new ErrorResponse("EXTERNAL_IDP_NOT_CONFIGURED", ex.Message),
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (AuthenticationException ex) when (IsRateLimitedCode(ex.Message))
         {
@@ -329,6 +344,12 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         || message.StartsWith("SMS_DAILY_LIMIT", StringComparison.Ordinal)
         || message.StartsWith("SMS_VERIFY_ATTEMPT_LIMIT", StringComparison.Ordinal);
 
+    /// <summary>领域架构守卫异常判定（T5 2026-10-09）——<c>User.Use&lt;T&gt;()</c> 帧外/未装配守卫工厂
+    /// （AddConstructibleService 实现类 throw-factory / 接口守卫工厂）抛 <c>InvalidOperationException</c> + "领域架构守卫" 前缀。
+    /// 外部 IdP 登录 fail-hard：Federation 未装配 → 守卫异常 → 503 EXTERNAL_IDP_NOT_CONFIGURED。</summary>
+    private static bool IsDomainGuardException(InvalidOperationException ex)
+        => ex.Message.Contains("领域架构守卫", StringComparison.Ordinal);
+
     private static TokenResponse ToTokenResponse(TokenIssueResult r)
         => new(r.AccessToken, r.RefreshToken, "Bearer", r.ExpiresIn);
 
@@ -366,12 +387,9 @@ public sealed record SendSmsCodeRequest(string Phone, string Scene);
 
 /// <summary>短信登录请求。</summary>
 public sealed record SmsLoginRequest(string Phone, string Code);
-    /// <summary>密码登录请求（V0.9.0 B.9 + ADR 决策 1——SecurePassword 协议：Identifier 为 UId 或 Phone 凭据标识；
-    /// ClientHash/Salt 为客户端算的 PBKDF2 产物，服务端零明文）。</summary>
-    public sealed record PasswordLoginRequest(string Identifier, string ClientHash, string Salt);
-
-/// <summary>微信登录请求（scope：snsapi_base 网页 / snsapi_login 扫码——透传）。</summary>
-public sealed record WechatLoginRequest(string Code, string? Scope);
+/// <summary>密码登录请求（V0.9.0 B.9 + ADR 决策 1——SecurePassword 协议：Identifier 为 UId 或 Phone 凭据标识；
+/// ClientHash/Salt 为客户端算的 PBKDF2 产物，服务端零明文）。</summary>
+public sealed record PasswordLoginRequest(string Identifier, string ClientHash, string Salt);
 
 /// <summary>刷新请求。</summary>
 public sealed record RefreshRequest(string RefreshToken);
@@ -384,7 +402,7 @@ public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, 
 /// <summary>令牌验签快照（/verify——已认证内省，非 RFC 7662 fanout；恒 200 于到达后，无效 Bearer → 401）。</summary>
 /// <param name="Valid">恒 true（到达即已验签）。</param>
 /// <param name="UserId">平台内部 id（JWT sub 同源）。</param>
-/// <param name="AuthType">认证方式（sms/wechat/...）。</param>
+/// <param name="AuthType">认证方式（sms/federated/password/redeem）。</param>
 /// <param name="AuthLevel">认证强度。</param>
 /// <param name="Exp">过期时间（unix 秒）。</param>
 /// <param name="Jti">令牌唯一 id。</param>

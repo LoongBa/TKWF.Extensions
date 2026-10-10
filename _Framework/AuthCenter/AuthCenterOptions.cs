@@ -94,10 +94,9 @@ public class AuthCenterOptions
     /// <summary>一次性票据有效期（分钟，默认 5）。</summary>
     public int TicketExpirationMinutes { get; set; } = 5;
 
-    /// <summary>启用认证方式（fail-closed——集合外 Provider 不接线；默认 ["sms","wechat","password"]——V0.9.0 P1-1 修正：
-    /// 历史仅 ["sms"] 但 EnabledAuthTypes 为 no-op（wechat 恒可用）；修复 fail-closed 过滤后默认须含既有可用 Provider，
-    /// 防显式配 ["sms"] 却用 wechat 的消费方被静默打断（消费方显式装配仍可裁剪）。</summary>
-    public string[] EnabledAuthTypes { get; set; } = ["sms", "wechat", "password"];
+    /// <summary>启用认证方式（fail-closed——集合外 Provider 不接线；默认 ["sms","password","federated"]——
+    /// T5 2026-10-09 三层边界：原 "wechat" 改 "federated"（微信双源 Provider 已删，外部 IdP 认证统一经桥接门面）。</summary>
+    public string[] EnabledAuthTypes { get; set; } = ["sms", "password", "federated"];
 
     /// <summary>票据换取 redirect_uri 白名单（app_id 校验 + 白名单——防跨应用抢先消费）。</summary>
     public string[] RedirectUriWhitelist { get; set; } = [];

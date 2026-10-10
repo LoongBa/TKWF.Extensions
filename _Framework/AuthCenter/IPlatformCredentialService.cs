@@ -24,10 +24,12 @@ public interface IPlatformCredentialService : IDomainService
     /// <summary>按平台 + 应用类型查询凭证（实体返回）。</summary>
     Task<PlatformCredentialEntity?> GetAsync(string platform, string appType, CancellationToken ct = default);
 
-    /// <summary>按平台 + 应用类型获取明文密钥（读路径解密——WeChatApiClient 等消费）。</summary>
+    /// <summary>按平台 + 应用类型获取明文密钥（读路径解密——平台网关库/Federation 桥接侧消费）。
+    /// <para>⚠️ T5（2026-10-09 三层边界）：AuthCenter 内 <c>WeChatApiClient</c> 已删——微信凭证消费归
+    /// Federation 平台库（凭证自持）；本门面保留为平台库共用底座（PlatformCredentialEntity 不删）。</para></summary>
     Task<PlatformCredentialSecret?> GetSecretAsync(string platform, string appType, CancellationToken ct = default);
 
-    /// <summary>按平台 + 应用 AppId 获取明文密钥（Oracle M3——微信授权 code 绑定发起 AppId，须按 AppId 精确定位凭证，防多应用误配）。</summary>
+    /// <summary>按平台 + 应用 AppId 获取明文密钥（读路径解密——平台库按 AppId 精确消费，防多应用误配）。</summary>
     /// <remarks>匿名面声明：微信 authorize URL 构建为无会话入口（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
     Task<PlatformCredentialSecret?> GetSecretByAppIdAsync(string platform, string appId, CancellationToken ct = default);

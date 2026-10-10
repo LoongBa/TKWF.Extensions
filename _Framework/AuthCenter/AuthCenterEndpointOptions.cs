@@ -16,7 +16,7 @@ namespace TKWF.Ext.AuthCenter;
 [Options("TKWF:AuthCenter:Web")]
 public class AuthCenterEndpointOptions
 {
-    /// <summary>对内端点路由前缀（默认 <c>/api/auth</c>——6 端点：sms/send-code · login/sms · login/wechat · refresh · logout · ticket/exchange 挂此前缀下）。</summary>
+    /// <summary>对内端点路由前缀（默认 <c>/api/auth</c>——7 端点：sms/send-code · login/sms · login/external/{channelType} · login/password · refresh · logout · ticket/exchange · sms/verify · verify · grants 挂此前缀下）。</summary>
     public string RoutePrefix { get; set; } = "/api/auth";
 
     /// <summary>短信验证码发送端点开关（POST {prefix}/sms/send-code）。</summary>
@@ -25,8 +25,9 @@ public class AuthCenterEndpointOptions
     /// <summary>短信登录端点开关（POST {prefix}/login/sms）。</summary>
     public bool SmsLoginEndpointEnabled { get; set; } = true;
 
-    /// <summary>微信登录端点开关（POST {prefix}/login/wechat）。</summary>
-    public bool WechatLoginEndpointEnabled { get; set; } = true;
+    /// <summary>外部 IdP 登录端点开关（POST {prefix}/login/external/{channelType}——T5 2026-10-09 替代微信登录端点；
+    /// body = 参数字典含 code/channel_id 等；Federation 未装配 → 503 EXTERNAL_IDP_NOT_CONFIGURED）。</summary>
+    public bool ExternalLoginEndpointEnabled { get; set; } = true;
 
     /// <summary>密码登录端点开关（POST {prefix}/login/password——V0.9.0 B.9，P1-NEW-2 对称补全）。</summary>
     public bool PasswordLoginEndpointEnabled { get; set; } = true;

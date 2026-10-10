@@ -1,6 +1,6 @@
 # TKWF.Ext.AuthCenter 认证中心扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.0（2026-10-07 身份域重构与密码能力——**ADR-AuthCenter-身份域数据模型与密码能力边界 落地**：A.1-A.8 凭据/档案表级分离（`AuthAccount` 瘦身凭据白名单 + `UserProfile` 1:1 档案，表名 `TKWF_AuthAccount`/`TKWF_UserProfile`）/ AuthLevel 泛化（1=手机号/2=联邦快捷，剔 3=教师核实）/ TeacherVerified 迁出（令牌不再携带 `teacher_verified` claim）/ 联邦 Id 归一化（微信 3 列删，openid 绑定迁 `PlatformAccountMap`）/ **密码能力（ADR-密码策略与口令协议 覆盖）**：SecurePassword（客户端算 clientHash+salt PBKDF2 600000，服务端零明文、AES-GCM 密文落库）+ 密码策略面 + 账号冻结 + `IRateLimitCheck` 频控（v4.10.67）+ 找回三通道（SMS/Email/扫码——自带投递，不实现 IAccountPasswordManager 第二实现）/ C.14 UserCenter 退役（**2026-10-08 落地：契约实现引用已移除**——档案读经 `IAuthAccountQueryService.GetProfileByUIdAsync`）/ EnabledAuthTypes fail-closed 生效；Oracle(oracle4) 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.8.0 认证 API 补全、V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）+ **Emailing.Abstractions（V0.9.0 可空依赖——Email 找回通道）** + **SecurityLog.Abstractions（V0.9.0 可空依赖——冻结/解冻 SecurityLog 直写）** | **表名前缀简称**: `AuthC`（扩展仓命名规则 §8.3 自声明——本表名前缀批次为先规范化者保留默认名；`AuthC` 预留备未来追尾场景）
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.0（2026-10-07 身份域重构与密码能力——**ADR-AuthCenter-身份域数据模型与密码能力边界 落地**：A.1-A.8 凭据/档案表级分离（`AuthAccount` 瘦身凭据白名单 + `UserProfile` 1:1 档案，表名 `TKWF_AuthAccount`/`TKWF_UserProfile`）/ AuthLevel 泛化（1=手机号/2=联邦快捷，剔 3=教师核实）/ TeacherVerified 迁出（令牌不再携带 `teacher_verified` claim）/ 联邦 Id 归一化（微信 3 列删，openid 绑定迁 `PlatformAccountMap`）/ **密码能力（ADR-密码策略与口令协议 覆盖）**：SecurePassword（客户端算 clientHash+salt PBKDF2 600000，服务端零明文、AES-GCM 密文落库）+ 密码策略面 + 账号冻结 + `IRateLimitCheck` 频控（v4.10.67）+ 找回三通道（SMS/Email/扫码——自带投递，不实现 IAccountPasswordManager 第二实现）/ C.14 UserCenter 退役（**2026-10-08 落地：契约实现引用已移除**——档案读经 `IAuthAccountQueryService.GetProfileByUIdAsync`）/ EnabledAuthTypes fail-closed 生效；Oracle(oracle4) 评审 PASS WITH CONDITIONS 修订闭环；前版 V0.8.0 认证 API 补全、V0.7.0 E4 密钥管理抽象、V0.6.0 归层迭代）** + 迭代注记（2026-10-09 三层边界桥接 T5——微信双源已删，`authType=wechat`→`federated` + `channel_type`；待发布，见 §四之三 破坏性变更）** | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + FreeSql + Microsoft.Extensions.Caching.Memory + FrameworkReference Microsoft.AspNetCore.App（路径 B 中间件 + 内建端点）+ **Emailing.Abstractions（V0.9.0 可空依赖——Email 找回通道）** + **SecurityLog.Abstractions（V0.9.0 可空依赖——冻结/解冻 SecurityLog 直写）** | **表名前缀简称**: `AuthC`（扩展仓命名规则 §8.3 自声明——本表名前缀批次为先规范化者保留默认名；`AuthC` 预留备未来追尾场景）
 
 **核心约束**: 手写 RS256 JWT（零第三方 JWT 库）/ 密钥持久化 PEM + kid 轮换 / 黑名单落库 + IMemoryCache 短 TTL / Refresh rotation + TokenVersion 闭环 / Provider 认证矩阵（fail-closed）/ 数据访问红线合规（全走 SG1 DataService）/ 身份适配层 AuthorityFilter 零改动
 
@@ -13,12 +13,12 @@
 | 能力 | 说明 |
 |------|------|
 | 令牌体系 | `TokenService`（手写 RSA RS256 + kid 轮换 + 持久化密钥 fail-fast + 黑名单落库 + Refresh rotation + TokenVersion 闭环） |
-| 认证矩阵 | `IAuthenticationProvider` Provider 框架（`EnabledAuthTypes` 配置化启用，fail-closed）+ **短信验证码**内置（`SmsVerificationService` + `ISmsSender` 抽象）+ **微信 OAuth 双形态**内置（网页授权 snsapi_base / 扫码 snsapi_login） |
+| 认证矩阵 | `IAuthenticationProvider` Provider 框架（`EnabledAuthTypes` 配置化启用，fail-closed）+ **短信验证码**内置（`SmsVerificationService` + `ISmsSender` 抽象）+ **密码**内置（`PasswordAuthenticationProvider`）+ **外部 IdP 桥接**（T5：`IExternalIdpLoginService` 借道 Federation 平台库通道——微信/QQ/支付宝等，协议单源归平台网关库） |
 | 登录保护 | `AuthLoginAttemptEntity` 限流/审计 + 策略配置（短信 60s/小时/天/IP + OAuth 10 次/分钟/IP + 口令兑换 5 次/小时） |
 | 票据换令牌 | `OAuthTicketEntity` TTL 5min 单次 + **PKCE** + app_id/redirect_uri 白名单 + state 防重放 |
 | 身份适配层 | `JwtDomainUserParser`（Parse 内部强制 Verify）/ `ITokenVerifier` / `IAuthorizationMapper<TUserInfo>` / `AuthenticationUserHelperBase<TUserInfo>` / `JwtAuthenticationMiddleware`（路径 B Bearer JWT 恢复）——**AuthorityFilter 零改动** |
 | 跨系统映射 | `PlatformAccountMapEntity`（平台内部 id ↔ 业务 app + 业务本地 id + UnionId——统一 DMP 双机制） |
-| 平台凭证 | `PlatformCredentialEntity`（AppSecret **AES-GCM 加密**在服务层 `PlatformCredentialService`——经 keyed `ISymmetricKeyProvider`；DataService 纯持久化）+ `WeChatApiClient`（access_token 缓存 + 并发锁） |
+| 平台凭证 | `PlatformCredentialEntity`（AppSecret **AES-GCM 加密**在服务层 `PlatformCredentialService`——经 keyed `ISymmetricKeyProvider`；DataService 纯持久化）——**T5：平台库共用底座保留（平台网关库消费），微信凭证存量 DBA 清理** |
 | 平台账号 | `AuthAccountEntity`（手机号主键 + 微信绑定 + 认证声明 teacher_verified/auth_level，**不含业务角色**） |
 | 账号查询契约（V0.2.0） | `IAuthAccountQueryService`——对外只读查询（ByUId/ByPhone/档案/微信绑定），委托 DataService（红线合规） |
 
@@ -28,12 +28,14 @@
 
 ```json
 { "iss": "<auth-instance-id>", "sub": "user:<平台内部id>", "userId": "u_xxxx",
-  "authType": "sms | wechat | password | redeem", "auth_level": 1,
+  "authType": "sms | federated | password | redeem", "auth_level": 1,
+  "channel_type": "wechat_oauth | qq_oauth | ...（外部 IdP 登录非空）",
   "exp": 1722243600, "iat": 1722240000,
   "jti": "unique-token-id", "kid": "rsa-key-2026-07" }
 ```
 
 - **不含业务角色**——令牌只回答「你是谁」；业务角色由各业务系统 `IAuthorizationMapper.MapRoles(sub, claims)` 本地映射。
+- **⚠️ T5（2026-10-09 三层边界）契约变更**：`authType` 值 `"wechat"` → **`"federated"`**（与 `AuthLevel.Federated=2` 语义一致——微信/QQ/支付宝/OIDC 等外部 IdP 统一）；新增 **`channel_type`** claim（外部 IdP 登录时非空，写平台库 channelType 如 `wechat_oauth`/`qq_oauth`；`TokenValidationResult.ChannelType` 回读，`TokenIssueRequest.ChannelType` 末位可选参数签发）。
 - **⚠️ V0.9.0 契约变更（ADR-AuthCenter-身份域数据模型与密码能力边界 A.4）**：`teacher_verified` claim 已移除——令牌不再携带业务声明（教师核实迁出至教育线业务扩展，自建声明/表）。存量 token 仍可解析（Claims 通配容错），新 token 不含该键；消费方从 `Claims["teacher_verified"]` 取值将得 null（V1.0.0 前建议过渡期发 `false` 占位，见开发方案 P2-8）。
 - **签名**：RS256（RSA PKCS#1 v1.5 SHA-256）；`kid` 标识密钥版本（JWK RFC 7517 语义），支持轮换。
 - **生命周期**：Access 2h / Long-lived 7d（壳端低敏）/ Refresh 30d rotation（SHA256 落库，新旧不可复用）/ 一次性票据 5min 单次。
@@ -63,12 +65,13 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
     // 自动注册（V4.10.53 领域自治根治，ADR90——正确路线三态；V4.10.55 ADR92/T3 闭环增强）：
     //   门面（AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory，消费方 User.Use<接口>() 解析）：
     //       ITokenService / IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService /
-    //       IPlatformCredentialService / IPlatformAccountMapService / IWeChatApiClient / ITokenVerifier /
+    //       IPlatformCredentialService / IPlatformAccountMapService / ITokenVerifier /
     //       IAuthAccountQueryService / IAuthAccountService
     //       + 应用授权双门面（V0.8.0）：IAuthGrantQueryService / IAuthGrantCommandService
-    //       + 登录编排门面（V0.5.0）：ISmsLoginService / IWechatLoginService——控制器经此编排，禁 [FromServices] 集合
-    //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 微信 + 密码）
-    //   + 8 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
+    //       + 登录编排门面（V0.5.0/V0.9.0/T5）：ISmsLoginService / IPasswordLoginService / IExternalIdpLoginService
+    //         ——控制器经此编排，禁 [FromServices] 集合（T5：IWechatLoginService 已删，外部 IdP 经 IExternalIdpLoginService 桥接）
+    //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 密码）
+    //   + 12 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
 }
 ```
 
@@ -80,9 +83,11 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 > **⚠️ V0.5.1（过渡形态，未发布）**：曾以 System 作用域（`BeginSystemScopeAsync` + `System.Use`）实现——语义错置（验签是 Guest 行为非 System 操作），经 Oracle 评审否决，V0.5.2 定稿游客帧。
 >
 > **⚠️ V0.5.0 消费约束（EduPlatform 3 端点修复，ADR92/T3 闭环）**：控制器**禁止**
-> `[FromServices] IEnumerable<IAuthenticationProvider>` 预绑定（帧外枚举抛守卫）——短信/微信登录改经登录编排门面：
-> `User.Use<ISmsLoginService>().LoginAsync(phone, code)` / `User.Use<IWechatLoginService>().LoginAsync(code, scope)`
+> `[FromServices] IEnumerable<IAuthenticationProvider>` 预绑定（帧外枚举抛守卫）——短信/外部 IdP 登录改经登录编排门面：
+> `User.Use<ISmsLoginService>().LoginAsync(phone, code)` / `User.Use<IExternalIdpLoginService>().LoginAsync(channelType, parameters)`
 > （门面 ctor 帧内枚举 Provider 集合，守卫工厂经 CurrentAopUser 供给）——见使用指南 §登录。
+>
+> **⚠️ T5（2026-10-09 三层边界破坏性变更）**：微信双源（`WeChatAuthenticationProvider`/`IWeChatApiClient`/`IWechatLoginService`/`AuthTypes.Wechat`）**已删除**——微信认证改经 `IExternalIdpLoginService` 桥接借道 Federation（`IExternalIdpAuthenticator` 契约，平台协议单源归平台网关库）；`authType` `"wechat"` → `"federated"`；端点 `/login/wechat` → `/login/external/{channelType}`；`EnabledAuthTypes` 默认 `["sms","password","federated"]`。
 
 ### 2. 登录衔接（路径 A——业务系统自己触发登录）
 
@@ -138,7 +143,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
       "SigningKeyPath": "/keys/rsa-private.pem",   // 必填（生产 fail-fast；开发自动生成临时密钥 + Warning）
       "CurrentKid": "rsa-key-1",
       "SigningKeys": [ { "Kid": "rsa-key-1", "PrivateKeyPath": "/keys/rsa-private.pem" } ],
-      "EnabledAuthTypes": ["sms", "wechat"],        // fail-closed：集合外 Provider 不接线
+      "EnabledAuthTypes": ["sms", "password", "federated"],  // fail-closed：集合外 Provider 不接线（T5：federated 替代 wechat）
       "RedirectUriWhitelist": ["https://app.example.com/callback"],
       "SecretEncryptionKeyPath": "/keys/credential-aes.key",  // 平台凭证 AES-GCM（前 32 字节；生产必填）
       "IsProduction": true,                          // fail-fast 门
@@ -154,17 +159,16 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 |----------|---------|------------|
 | **`ITokenService`** | 签发/验证/刷新/撤销（手写 RS256 + kid + 黑名单 + rotation） | `TokenService`（internal sealed，本扩展） |
 | **`ITokenVerifier`** | 令牌验证（本地公钥验签；VerifyMode.RemoteIntrospection 装配层替换）——**守卫工厂注册**（帧内供给）；**消费须在 AOP 帧内**（中间件经游客帧 `guest.Use` / UserHelper 经 `user.Use`，V0.5.2 终态） | `LocalJwtTokenVerifier`（本扩展） |
-| **`IAuthenticationProvider`** | 认证矩阵 Provider（EnabledAuthTypes fail-closed；V0.5.0 改 TryAddEnumerableConstructible 集合版守卫工厂——帧内经 CurrentAopUser 供给，禁帧外枚举） | `SmsAuthenticationProvider` + `WeChatAuthenticationProvider`（本扩展） |
-| **`ISmsLoginService`（V0.5.0）** | 短信登录编排门面（表现层零编排终态——验证码校验→查/建账号→ProviderAuthenticateResult；控制器 `User.Use<>()` 帧内编排，替代集合直注） | `SmsLoginService`（internal sealed，本扩展） |
-| **`IWechatLoginService`（V0.5.0）** | 微信登录编排门面（code→openid→查/建账号→ProviderAuthenticateResult；snsapi_base/snsapi_login scope 透传） | `WechatLoginService`（internal sealed，本扩展） |
+| **`IAuthenticationProvider`** | 认证矩阵 Provider（EnabledAuthTypes fail-closed；V0.5.0 改 TryAddEnumerableConstructible 集合版守卫工厂——帧内经 CurrentAopUser 供给，禁帧外枚举） | `SmsAuthenticationProvider` + `PasswordAuthenticationProvider`（本扩展） |
+| **`ISmsLoginService`（V0.5.0）** | 短信登录编排门面（表现层零编排终态——验证码校验→查/建账号→签发；控制器 `User.Use<>()` 帧内编排，替代集合直注） | `SmsLoginService`（internal sealed，本扩展） |
+| **`IExternalIdpLoginService`（T5 2026-10-09）** | 外部 IdP 登录编排门面（替代已删 IWechatLoginService——桥接认证 `IExternalIdpAuthenticator`（fail-hard）→ ISsoChannelMapService 映射 → 建号/复用 → 签 token1（authType=federated + channel_type）） | `ExternalIdpLoginService`（internal sealed，本扩展） |
 | **`ISmsVerificationService`** | 短信验证码发送/校验（频控 + 单次消费 + SHA256 落库） | `SmsVerificationService`（本扩展） |
 | **`ISmsSender`** | 短信发送渠道抽象（**消费方实现**——腾讯云等） | 无默认（TryAdd 语义） |
 | **`IAuthorizationMapper<TUserInfo>`** | 业务角色本地映射（sub+claims → 角色；**消费方实现**） | 无默认（TryAdd 语义） |
 | **`IOAuthTicketService`** | 一次性票据签发/消费（PKCE + 白名单 + 防重放） | `OAuthTicketService`（本扩展） |
 | **`IAuthLoginAttemptService`** | 登录尝试记录 + 限流窗口 | `AuthLoginAttemptService`（本扩展） |
 | **`IPlatformAccountMapService`** | 跨系统映射（Link upsert / 双向 / UnionId） | `PlatformAccountMapService`（本扩展） |
-| **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 加密在**服务层**——V0.7.0 自 DataService 边界上移，密钥经 keyed `ISymmetricKeyProvider`） | `PlatformCredentialService`（本扩展） |
-| **`IWeChatApiClient`** | 微信 API（access_token 缓存 + 并发锁 + 凭证解析） | `WeChatApiClient`（本扩展） |
+| **`IPlatformCredentialService`** | 平台凭证管理（AES-GCM 加密在**服务层**——V0.7.0 自 DataService 边界上移，密钥经 keyed `ISymmetricKeyProvider`；**T5：平台库共用底座保留，微信凭证存量 DBA 清理**） | `PlatformCredentialService`（本扩展） |
 | **11 实体 + DataService** | AuthAccount/AuthLoginAttempt/SmsRecord/AuthRefreshToken/AuthTokenBlacklist/OAuthTicket/PlatformAccountMap/PlatformCredential/**AuthGrant（V0.8.0 应用授权）**/**UserProfile + PasswordResetCode（V0.9.0 身份域重构）**/**PasswordHistory（ADR-密码策略 决策 5——历史防重用）**——共 12 实体 | SG1 + xCodeGen（.g.cs 入库） |
 | **`IAuthAccountQueryService`（V0.2.0）** | 对外只读查询契约（ByUId/ByPhone + **V0.9.0：GetProfileByUIdAsync（档案 1:1）+ IsWechatBoundAsync（PlatformAccountMap 通道行判定）；删 GetByWechat\***——联邦归一化）——返回完整 `AuthAccountEntity` | `AuthAccountQueryService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService` + `UserProfileEntityDataService`） |
 | **`IAuthAccountService`（V0.2.0）** | 对外写契约（Create/Update/IncrementTokenVersion/GetByUId + **V0.9.0：SetPasswordAsync/ChangePasswordAsync（SecurePassword 协议）+ FreezeAsync/UnfreezeAsync（账号冻结）**——DMP 渐进替换影子账号 upsert，ADR-Authentication-账号写契约） | `AuthAccountService`（internal sealed，本扩展，委托 `AuthAccountEntityDataService` + `PasswordHistoryEntityDataService`） |
@@ -178,6 +182,38 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 **`IAuthAccountQueryService`（查询契约）**——对外只读查询方法（`GetByUIdAsync`/`GetByPhoneAsync` + **V0.9.0** `GetProfileByUIdAsync`（档案 1:1 表）/`IsWechatBoundAsync`（PlatformAccountMap 通道行）），返回完整 `AuthAccountEntity`；实现 `AuthAccountQueryService`（internal sealed）委托 `AuthAccountEntityDataService` + `UserProfileEntityDataService`——**红线合规**（零 ORM 直注入）。**2026-10-08（UserCenter 退役）**：档案读统一经 `GetProfileByUIdAsync`（原 UserCenter `IUserProfileSource` 契约实现已删除，本扩展不再引用 `UserCenter.Abstractions`）。
 
 **`IAuthAccountService`（写契约）**——对外写契约（`CreateAsync`/`UpdateAsync`/`IncrementTokenVersionAsync`/`GetByUIdAsync` + **V0.9.0** `SetPasswordAsync`/`ChangePasswordAsync`——upsert 流单注入便利），实现 `AuthAccountService`（internal sealed）委托 `AuthAccountEntityDataService`；**DMP 渐进替换路径**（ADR-Authentication-账号写契约）：平台管理员影子 AuthAccount（`UId=PlatformAdmin.UId`，`IsEnabled=true`，Phone 可空）由消费端创建/更新/失效——扩展 `TokenService.RefreshTokenAsync` 强依赖 AuthAccount 记录。**`AdminDeleteAsync` 不暴露**（破坏性，管理 API 迭代）。
+
+## 四之三、破坏性变更与消费方适配（2026-10-09 T5 三层边界桥接——**待发布**）
+
+> **用户裁定（2026-10-10）**：迁移**不必考虑兼容性**——通知各方适配即可；`SymmetricKeyProviderKeys.TrustCenter` 等框架组适配后统一发布。
+
+### 删除清单（AuthCenter 微信双源已删除，根因修复——协议单源归平台网关库）
+
+| # | 删除项 | 替代 |
+|---|--------|------|
+| 1 | `WeChatAuthenticationProvider`（`IAuthenticationProvider` 实现） | `IExternalIdpLoginService`（桥接借道 Federation 平台库通道） |
+| 2 | `IWeChatApiClient`/`WeChatApiClient`（微信 API 出站客户端） | `TKWF.Federation.WeChat` 平台库 `WeChatApiClient`（协议单源） |
+| 3 | `IWechatLoginService`/`WechatLoginService`（微信登录编排门面） | `IExternalIdpLoginService`/`ExternalIdpLoginService`（外部 IdP 登录编排门面） |
+| 4 | `AuthTypes.Wechat` | **`AuthTypes.Federated`**（`AuthLevel.Federated=2` 语义一致——微信/QQ/支付宝/OIDC 统一） |
+| 5 | 端点 `POST {prefix}/login/wechat` | **`POST {prefix}/login/external/{channelType}`**（`channelType` 为平台库通道类型如 `wechat_oauth`/`qq_oauth`；body = 参数字典含 code/channel_id） |
+| 6 | token `authType` 值 `"wechat"` | **`"federated"`** + 新增 **`channel_type`** claim（外部 IdP 登录时非空） |
+| 7 | `EnabledAuthTypes` 默认值 `["sms","wechat","password"]` | **`["sms","password","federated"]`**（fail-closed：集合外 Provider 不接线） |
+
+### 新契约（消费面）
+
+| # | 契约 | 说明 |
+|---|------|------|
+| 1 | `IExternalIdpAuthenticator`（AuthCenter.Abstractions） | 外部 IdP 借道验证契约——**实现归 Federation**（`ExternalIdpAuthenticator`，委托平台库通道认证**非双实现**）；**fail-hard**：未装配 Federation → `User.Use<IExternalIdpAuthenticator>()` 抛守卫（不静默降级） |
+| 2 | `IExternalIdpLoginService`/`ExternalIdpLoginService`（本扩展） | 外部 IdP 登录编排门面（替代已删 IWechatLoginService）——桥接认证 → `ISsoChannelMapService` 映射（channelId 从 `parameters["channel_id"]`）→ 建号/复用 → 签 token1（`authType=federated` + `channel_type`；**fail-hard 不 catch 不降级**） |
+
+### 消费方适配清单
+
+- **引用**：外部 IdP 场景须装配 **Federation 连接层**（`TKWF.Ext.Federation` + 平台网关库如 `TKWF.Federation.WeChat`）+ 白名单声明 `FederationExtensionInitializer<>`；仅内部认证（短信/密码）场景零改动、无须引 Federation。
+- **登录改造**：控制器 `User.Use<IWechatLoginService>()` → `User.Use<IExternalIdpLoginService>().LoginAsync(channelType, parameters)`；禁用 `[FromServices] IEnumerable<IAuthenticationProvider>`（帧外抛守卫）。
+- **令牌解析**：`authType=="wechat"` 判断 → `"federated"`（并可用 `channel_type` 区分具体平台，`TokenValidationResult.ChannelType` 回读）。
+- **端点**：微信回调改打 `POST /api/auth/login/external/wechat_oauth`（`RoutePrefix` 默认 `/api/auth`；`channelType` 按平台库通道类型）。
+- **DMP 微信凭证存量**：生产 DBA 执行 `DELETE FROM TKWF_PlatformCredential WHERE Platform='wechat'`（AuthCenter 侧微信凭证已无消费者——凭证迁移至 `Federation.WeChat` `WeChatOptions` 自持，平台库共用底座保留）。
+- **既有测试宿主**：白名单声明补 `FederationExtensionInitializer<>`（桥接契约由 Federation 注册——端到端验证见 `ExternalIdpLoginServiceTests`）。
 
 ## 五、实体表结构（12 张——**全部 `TKWF_` 前缀**，ADR100 表前缀批次，迁移范围以源码 `[Table]` 为准）
 
@@ -279,6 +315,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
   - **⑤ Email 发起独立频控**：`pwd:reset-email:{uid}`（重发间隔 `ResetEmailResendIntervalSeconds` 默认 60s）+ `pwd:reset-email-hour:{uid}`/`pwd:reset-email-day:{uid}` 小时/日上限；SMS 保持 `pwd:reset:{identifier}` 统一频控。
   - **⑥ Email 投递 best-effort**：`SendAsync` 静默吞失败（Emailing 既有语义）——`EMAIL_RESET_CODE_SENT` 成功 ≠ 已送达；投递状态事后经 Emailing 扩展 `EmailRecord` 表查询（运维侧）。
   - 测试：**146 用例全绿**（+4：模板+TTL 配置化/Email 冻结互斥/完成冻结互斥/独立频控窗口）+ 全 slnx 40 项目零失败。
-- **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见使用指南 §六 DMP-Lite 迁移指引）。**⚠️ V0.9.0 破坏性迁移**：AuthAccount 表 RENAME + 删 6 列 + UserProfile 拆分 + `teacher_verified` claim 移除 + EnabledAuthTypes fail-closed——消费方按开发方案 §七 迁移指引适配。
+- **三层边界桥接（2026-10-09 T5，待发布）**：**① 删微信双源**（根因修复）——`WeChatAuthenticationProvider`/`IWeChatApiClient`/`WechatLoginService`/`AuthTypes.Wechat` 删除（协议单源归平台网关库 `TKWF.Federation.WeChat`）；**② 新契约**——AuthCenter.Abstractions 增 `IExternalIdpAuthenticator`（实现归 Federation `ExternalIdpAuthenticator`——**桥接认证 fail-hard，委托平台库通道非双实现**）+ 本扩展 `IExternalIdpLoginService`/`ExternalIdpLoginService`（映射→建号/复用→签 token1 全编排）；**③ 端点泛化**——`POST {prefix}/login/wechat` → `POST {prefix}/login/external/{channelType}`（channelType 为平台库通道类型如 wechat_oauth/qq_oauth，body = 参数字典含 code/channel_id）；**④ token 契约**——`authType` `"wechat"`→`"federated"` + 新增 `channel_type` claim（`TokenValidationResult.ChannelType` 回读，`TokenIssueRequest.ChannelType` 末位可选）；`EnabledAuthTypes` 默认 `["sms","wechat","password"]`→`["sms","password","federated"]`；**⑤ 微信凭证存量**（`TKWF_PlatformCredential WHERE Platform='wechat'`）生产 DBA 清理。适配清单见 §四之三；测试新增 `ExternalIdpLoginServiceTests` 8 + Federation `ExternalIdpAuthenticatorTests` 5、`FederationWebExtensionTests` 6 + 全量回归 0 失败（Phase 1-4 累计 1913 用例）。
+- **DMP-Lite 迁移**：本扩展完成后 DMP 改用本扩展（密钥交接不可行 → 存量 access 失效需公告重登；PlatformAdmin 本地映射；GlobalUserMap → PlatformAccountMap 外键拆除；TokenVersion 初始化对齐——见使用指南 §六 DMP-Lite 迁移指引）。**⚠️ V0.9.0 破坏性迁移**：AuthAccount 表 RENAME + 删 6 列 + UserProfile 拆分 + `teacher_verified` claim 移除 + EnabledAuthTypes fail-closed——消费方按开发方案 §七 迁移指引适配。**⚠️ 2026-10-09 T5 破坏性迁移**：微信登录消费方改 `IExternalIdpLoginService` + 端点 `/login/external/{channelType}` + `authType` 解析更新——见 §四之三 适配清单。
 
 <!-- EOF -->

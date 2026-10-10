@@ -93,6 +93,10 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
             ["kid"] = keys.CurrentKid
         };
 
+        // T5（2026-10-09 三层边界）：外部 IdP 登录 token 写 channel_type claim（非空时写——平台差异归渠道类型）
+        if (!string.IsNullOrEmpty(request.ChannelType))
+            payload["channel_type"] = request.ChannelType;
+
         var accessToken = SignToken(payload, keys);
 
         // Refresh rotation：SHA256 落库（不存明文）+ TokenVersion 闭环（账号当前版本）
@@ -172,6 +176,8 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
         var authType = root.TryGetProperty("authType", out var atEl) ? atEl.GetString() : AuthTypes.Sms;
         var authLevel = root.TryGetProperty("auth_level", out var alEl) && alEl.TryGetInt32(out var alVal) ? alVal : (int)AuthLevel.Phone;
+        // T5（2026-10-09 三层边界）：回读 channel_type claim（外部 IdP 登录 token 非空）
+        var channelType = root.TryGetProperty("channel_type", out var ctEl) ? ctEl.GetString() : null;
 
         var claims = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var prop in root.EnumerateObject())
@@ -188,7 +194,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
         return new TokenValidationResult(
             userId, authType, authLevel, jti,
-            DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime, claims);
+            DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime, claims, channelType);
     }
 
     public async Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default)

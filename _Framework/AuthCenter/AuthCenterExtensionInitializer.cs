@@ -16,12 +16,12 @@ namespace TKWF.Ext.AuthCenter;
 /// <summary>
 /// 认证中心扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线（方案 §5.11）：
 /// <list type="bullet">
-/// <item><see cref="ConfigureServices"/>——V4.10.53（领域自治根治，ADR90）三态注册：
-///     <b>13 门面</b>（接口 : IDomainService）→ <c>AddConstructibleService</c>（接口可构造守卫工厂 + 实现类
-///     throw-factory，消费方经 <c>User.Use&lt;接口&gt;()</c> 解析）；<b>多 Provider</b>（<see cref="IAuthenticationProvider"/>
-///     短信 + 微信 + 密码）→ <c>TryAddEnumerable</c>（多实现集合，AddConstructibleService 单实现不适用）。
-///     <b>零 DataService 手动注册</b>——ADR61/D17 铁律，9 实体 DataService 经 SG1 消费方聚合自动注册；
-///     Options（AuthCenterOptions）+ IMemoryCache（TokenService 黑名单前置过滤）兜底注册；</item>
+    /// <item><see cref="ConfigureServices"/>——V4 推荐（领域自治根治，ADR90）三态注册：
+    ///     <b>门面</b>（接口 : IDomainService）→ <c>AddConstructibleService</c>（接口可构造守卫工厂 + 实现类
+    ///     throw-factory，消费方经 <c>User.Use&lt;接口&gt;()</c> 解析）；<b>多 Provider</b>（<see cref="IAuthenticationProvider"/>
+    ///     短信 + 密码）→ <c>TryAddEnumerableConstructible</c>（多实现集合守卫工厂）。
+    ///     <b>零 DataService 手动注册</b>——ADR61/D17 铁律，12 实体 DataService 经 SG1 消费方聚合自动注册；
+    ///     Options（AuthCenterOptions）+ IMemoryCache（TokenService 黑名单前置过滤）兜底注册；</item>
 /// <item>ConfigureFilters——空（认证中心非过滤器扩展；AuthorityFilter 由主框架管线处理）；</item>
 /// <item><see cref="InitializeAsync"/>——签名密钥 fail-fast 预检（幂等；IServiceProvider 参数——ADR78 断代签名）。</item>
 /// </list>
@@ -44,13 +44,16 @@ namespace TKWF.Ext.AuthCenter;
     /// <list type="bullet">
     /// <item><b>门面（AddConstructibleService）</b>——14 个接口 : IDomainService（ITokenService /
     ///     IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService / IPlatformCredentialService /
-    ///     IPlatformAccountMapService / IWeChatApiClient / ITokenVerifier / IAuthAccountQueryService /
+    ///     IPlatformAccountMapService / ITokenVerifier / IAuthAccountQueryService /
     ///     IAuthAccountService / IAuthGrantQueryService / IAuthGrantCommandService（V0.8.0 应用授权双门面）/
-    ///     ISmsLoginService / IWechatLoginService）→ 接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；
+    ///     ISmsLoginService / IPasswordLoginService / IExternalIdpLoginService（T5 桥接消费门面））→ 接口可构造
+    ///     守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；
     ///     消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（AOP 路径先设 CurrentAopUser 再 GetRequiredService）。
     ///     旧形态 TryAddScoped 构造注入 <see cref="IDomainUser"/>（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）。</item>
-    /// <item><b>多 Provider（TryAddEnumerable）</b>——<see cref="IAuthenticationProvider"/> 短信 + 微信 + 密码：多实现集合
-    ///     （按实现类型去重），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase，内部 Use&lt;T&gt; 经基类 User。</item>
+    /// <item><b>多 Provider（TryAddEnumerableConstructible）</b>——<see cref="IAuthenticationProvider"/> 短信 + 密码：多实现集合
+    ///     （按实现类型去重，集合版守卫工厂 ADR92），AddConstructibleService 单实现不适用；实现继承 DomainServiceBase，内部 Use&lt;T&gt; 经基类 User。
+    ///     ⚠️ T5（2026-10-09 三层边界）：微信双源（WeChatAuthenticationProvider/IWeChatApiClient/IWechatLoginService）已删除——
+    ///     微信认证经 <see cref="IExternalIdpLoginService"/> 桥接借道 Federation（<see cref="IExternalIdpAuthenticator"/> 契约）。</item>
     /// </list>
     /// <para><see cref="ISmsSender"/> / <see cref="IAuthorizationMapper{TUserInfo}"/> 不注册默认实现——消费方实现
     /// （TryAdd 语义扩展默认优先，消费方覆盖——对齐 Emailing IEmailSender / Approval IApprovalAssigneeResolver 先例）。</para>
@@ -100,7 +103,6 @@ namespace TKWF.Ext.AuthCenter;
         services.AddConstructibleService<ISmsVerificationService, SmsVerificationService>();
         services.AddConstructibleService<IPlatformCredentialService, PlatformCredentialService>();
         services.AddConstructibleService<IPlatformAccountMapService, PlatformAccountMapService>();
-        services.AddConstructibleService<IWeChatApiClient, WeChatApiClient>();
         services.AddConstructibleService<ITokenVerifier, LocalJwtTokenVerifier>();
 
         // V0.2.0：账号查询契约（对外只读查询——装配实例 / 内部复用；委托 DataService 红线合规）
@@ -128,16 +130,18 @@ namespace TKWF.Ext.AuthCenter;
         // 集合元素以守卫工厂形态注册，帧内（登录门面 User.Use<ISmsLoginService>() 等调用链）经 CurrentAopUser
         // 供给 IDomainUser 构造；帧外枚举（如控制器 [FromServices] IEnumerable<IAuthenticationProvider>）抛守卫
         // （禁止形态——表现层必须经登录编排门面消费，见 tkwf-use-extension §4.6 集合行）
-        // V0.9.0（B.9）：追加 PasswordAuthenticationProvider——密码登录扩展点实现（EnabledAuthTypes fail-closed 过滤 P2-6）
+        // ⚠️ T5（2026-10-09 三层边界）：微信 Provider 已删——微信认证经 IExternalIdpLoginService 桥接借道 Federation
         services.TryAddEnumerableConstructible<IAuthenticationProvider, SmsAuthenticationProvider>();
-        services.TryAddEnumerableConstructible<IAuthenticationProvider, WeChatAuthenticationProvider>();
         services.TryAddEnumerableConstructible<IAuthenticationProvider, PasswordAuthenticationProvider>();
 
         // V4.10.55 (ADR92/T3 闭环)：登录编排门面——表现层零编排终态（EduPlatform 3 端点修复配套）。
-        // 控制器改 User.Use<ISmsLoginService>().LoginAsync(...) / User.Use<IWechatLoginService>().LoginAsync(...)，
+        // 控制器改 User.Use<ISmsLoginService>().LoginAsync(...) / User.Use<IExternalIdpLoginService>().LoginAsync(...)，
         // 门面内帧内枚举 IAuthenticationProvider 集合（ctor 注入 IEnumerable——守卫工厂经 CurrentAopUser 供给）。
         services.AddConstructibleService<ISmsLoginService, SmsLoginService>();
-        services.AddConstructibleService<IWechatLoginService, WechatLoginService>();
+
+        // T5（2026-10-09 三层边界）：外部 IdP 桥接消费门面——桥接认证（IExternalIdpAuthenticator 契约借道
+        // Federation，fail-hard：未装配 → User.Use 抛守卫）→ ISsoChannelMapService 映射 → 建号/复用 → 签 token1
+        services.AddConstructibleService<IExternalIdpLoginService, ExternalIdpLoginService>();
 
         // V0.9.0（B.9）：密码登录编排门面——镜像 SmsLoginService（Identifier+Password → Password Provider → 签发）
         services.AddConstructibleService<IPasswordLoginService, PasswordLoginService>();

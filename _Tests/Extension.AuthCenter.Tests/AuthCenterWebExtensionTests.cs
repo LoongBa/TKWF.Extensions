@@ -100,17 +100,79 @@ public sealed class AuthCenterWebExtensionTests
     }
 
     [Fact]
-    public async Task WechatLogin_Success_ReturnsTokenResponse()
+    public async Task ExternalLogin_Success_ReturnsTokenResponse()
     {
+        // T5（2026-10-09）：POST /login/external/{channelType}（替代 /login/wechat）——body = 参数字典
+        AuthCenterEndpointHost.ExternalLogin.GuardExceptionMessage = null;
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/wechat", new WechatLoginRequest("wx-code", "snsapi_base"));
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/wechat_oauth",
+            new Dictionary<string, string?> { ["code"] = "wx-code", ["channel_id"] = "fake-mp" });
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
         Assert.NotNull(body);
         Assert.Equal("at-1", body!.AccessToken);
-        Assert.True(AuthCenterEndpointHost.WechatLogin.Invoked);
+        Assert.True(AuthCenterEndpointHost.ExternalLogin.Invoked);
+        Assert.Equal("wechat_oauth", AuthCenterEndpointHost.ExternalLogin.LastChannelType);       // 路径参数透传
+        Assert.Equal("wx-code", AuthCenterEndpointHost.ExternalLogin.LastParameters!["code"]);   // body 参数透传
+    }
+
+    [Fact]
+    public async Task ExternalLogin_FederationNotAssembled_503()
+    {
+        // fail-hard（P7）：Federation 未装配 → 守卫异常（领域架构守卫）→ 503 EXTERNAL_IDP_NOT_CONFIGURED
+        AuthCenterEndpointHost.ExternalLogin.GuardExceptionMessage = "领域架构守卫：AddConstructibleService 实现类（ExternalIdpLoginService）帧外解析";
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/wechat_oauth",
+                new Dictionary<string, string?> { ["code"] = "wx-code", ["channel_id"] = "fake-mp" });
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+            Assert.Equal("EXTERNAL_IDP_NOT_CONFIGURED", body!.Code);
+        }
+        finally
+        {
+            AuthCenterEndpointHost.ExternalLogin.GuardExceptionMessage = null;   // 共享宿主还原
+        }
+    }
+
+    [Fact]
+    public async Task ExternalLogin_MissingCode_400()
+    {
+        AuthCenterEndpointHost.ExternalLogin.GuardExceptionMessage = null;
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/wechat_oauth",
+            new Dictionary<string, string?> { ["channel_id"] = "fake-mp" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.Equal("INVALID_ARGUMENT", body!.Code);
+    }
+
+    [Fact]
+    public async Task ExternalLogin_FailReason_MapsTo400()
+    {
+        // FailReason → 400 + code（HTTP 映射）；末尾还原默认 Result（共享 Fake——串行下防污染）
+        AuthCenterEndpointHost.ExternalLogin.GuardExceptionMessage = null;
+        AuthCenterEndpointHost.ExternalLogin.Result = new LoginResult(false, null, null, "EXTERNAL_AUTH_FAILED");
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/qq_oauth",
+                new Dictionary<string, string?> { ["code"] = "qq-code", ["channel_id"] = "qq-mp" });
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+            Assert.Equal("EXTERNAL_AUTH_FAILED", body!.Code);
+        }
+        finally
+        {
+            AuthCenterEndpointHost.ExternalLogin.Result = new LoginResult(true, "u_1", new TokenIssueResult("at-1", "rt-1", 7200), null);
+        }
     }
 
     [Fact]
@@ -262,6 +324,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             ["TKWF:AuthCenter:Web:RoutePrefix"] = "/custom",
             ["TKWF:AuthCenter:Web:SmsLoginEndpointEnabled"] = "false",
+            ["TKWF:AuthCenter:Web:ExternalLoginEndpointEnabled"] = "false",   // T5 新开关（替代 WechatLoginEndpointEnabled）
             ["TKWF:AuthCenter:Web:TokenVerifyEndpointEnabled"] = "false",   // V0.8.0 新开关
             ["TKWF:AuthCenter:Web:GrantsEndpointEnabled"] = "false",         // V0.8.0 新开关
             ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false"       // V0.8.0 新开关
@@ -271,6 +334,7 @@ public sealed class AuthCenterWebExtensionTests
 
         Assert.Equal("/custom", options.RoutePrefix);
         Assert.False(options.SmsLoginEndpointEnabled);      // 配置覆盖
+        Assert.False(options.ExternalLoginEndpointEnabled); // T5 配置覆盖
         Assert.False(options.TokenVerifyEndpointEnabled);   // V0.8.0 新开关配置覆盖
         Assert.False(options.GrantsEndpointEnabled);
         Assert.False(options.SmsVerifyEndpointEnabled);
@@ -286,6 +350,7 @@ public sealed class AuthCenterWebExtensionTests
         Assert.True(options.TokenVerifyEndpointEnabled);
         Assert.True(options.GrantsEndpointEnabled);
         Assert.True(options.SmsVerifyEndpointEnabled);
+        Assert.True(options.ExternalLoginEndpointEnabled);   // T5 外部 IdP 登录端点默认开放
     }
 
     [Fact]

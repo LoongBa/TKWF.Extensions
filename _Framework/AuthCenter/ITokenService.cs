@@ -12,11 +12,14 @@ namespace TKWF.Ext.AuthCenter;
 /// <param name="AuthType">认证方式（AuthTypes 常量）。</param>
 /// <param name="AuthLevel">认证强度（AuthLevel 枚举值）。</param>
 /// <param name="DeviceInfo">签发设备信息（可选，随 Refresh Token 落库）。</param>
+/// <param name="ChannelType">渠道类型（T5 三层边界 2026-10-09——外部 IdP 登录时填平台库 channelType 如
+/// <c>wechat_oauth</c>/<c>qq_oauth</c>，JWT 写 <c>channel_type</c> claim；非空时写，null 不写。末位可选参数默认 null——零破坏既有调用）。</param>
 public sealed record TokenIssueRequest(
     string UserId,
     string AuthType,
     int AuthLevel,
-    string? DeviceInfo = null);
+    string? DeviceInfo = null,
+    string? ChannelType = null);
 
 /// <summary>签发结果（方案 §5.4）。</summary>
 /// <param name="AccessToken">JWT access token（RS256）。</param>
@@ -34,13 +37,15 @@ public sealed record TokenRefreshResult(string AccessToken, string RefreshToken,
 /// <param name="Jti">令牌唯一 id（撤销/黑名单关联键）。</param>
 /// <param name="ExpiresAtUtc">过期时间（UTC）。</param>
 /// <param name="Claims">令牌载荷完整声明（iss/sub/iat/kid 等，供 IAuthorizationMapper 消费）。</param>
+/// <param name="ChannelType">渠道类型（T5 2026-10-09——JWT <c>channel_type</c> claim 回读；外部 IdP 登录 token 非空，其余 null）。</param>
 public sealed record TokenValidationResult(
     string UserId,
     string AuthType,
     int AuthLevel,
     string Jti,
     DateTime ExpiresAtUtc,
-    IReadOnlyDictionary<string, string> Claims);
+    IReadOnlyDictionary<string, string> Claims,
+    string? ChannelType = null);
 
 /// <summary>
 /// 令牌服务契约——签发/验证/刷新/撤销（业界成熟重写：持久化密钥 + 黑名单落库 + Refresh rotation + TokenVersion 闭环）。

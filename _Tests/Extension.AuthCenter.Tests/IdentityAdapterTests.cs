@@ -33,7 +33,7 @@ public class IdentityAdapterTests
     public void UserHelperBase_CreateUserInfoFromToken_FillsRoles()
     {
         var token = new TokenValidationResult(
-            "u-200", AuthTypes.Wechat, (int)AuthLevel.Federated,
+            "u-200", AuthTypes.Federated, (int)AuthLevel.Federated,   // T5（2026-10-09）：federated 替代 wechat
             "jti-1", DateTime.UtcNow.AddHours(2),
             new Dictionary<string, string> { ["iss"] = "auth-test" });
         var helper = new TestAuthUserHelper();

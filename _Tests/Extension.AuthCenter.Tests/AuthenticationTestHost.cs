@@ -132,7 +132,7 @@ internal static class AuthenticationTestHost
     /// 构建生产路径等价测试桩——真实 FreeSqlEntityDAC（全部 9 实体）+ 可选附加服务注册。
     /// 门面直构传本桩（经基类 User 取上下文）；桩内 Use&lt;T&gt;() 走生产 NoAop 路径等价（具体类 ActivatorUtilities 直建，
     /// 接口 GetRequiredService——分层单测需在 <paramref name="register"/> 中注册接口实例，如 ITokenService 供
-    /// OAuthTicketService/WeChatApiClient 懒加载）。
+    /// OAuthTicketService 懒加载）。
     /// <paramref name="user"/> 可选（默认匿名 StubDomainUser）——BindTicketAsync 已认证帧测试传
     /// <see cref="AuthenticatedStubUser"/>（经基类 User 供给 UserId）。
     /// </summary>

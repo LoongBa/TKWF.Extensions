@@ -35,9 +35,10 @@ public class AnonymousSurfaceTests
         // IPlatformCredentialService：微信 authorize URL 凭证读取（管理写方法例外——见负向）
         Assert.True(HasAnonymousFlag(typeof(IPlatformCredentialService).GetMethod(nameof(IPlatformCredentialService.GetSecretByAppIdAsync))!));
 
-        // V4.10.55（ADR92/T3 闭环）：登录编排门面——短信/微信登录匿名入口（表现层零编排，门面内帧内枚举 Provider）
+        // V4.10.55（ADR92/T3 闭环）：登录编排门面——短信/外部 IdP 登录匿名入口（表现层零编排，门面内帧内枚举）
+        // T5（2026-10-09）：IWechatLoginService → IExternalIdpLoginService（微信双源已删，外部 IdP 桥接门面）
         Assert.True(HasAnonymousFlag(typeof(ISmsLoginService).GetMethod(nameof(ISmsLoginService.LoginAsync))!));
-        Assert.True(HasAnonymousFlag(typeof(IWechatLoginService).GetMethod(nameof(IWechatLoginService.LoginAsync))!));
+        Assert.True(HasAnonymousFlag(typeof(IExternalIdpLoginService).GetMethod(nameof(IExternalIdpLoginService.LoginAsync))!));
     }
 
     /// <summary>负向边界：非匿名面方法零声明——服务端通道/凭据校验/管理写面。</summary>

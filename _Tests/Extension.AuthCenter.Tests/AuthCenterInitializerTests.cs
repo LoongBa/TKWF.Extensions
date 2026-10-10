@@ -12,17 +12,19 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// AuthCenterExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册形态（V4.10.53 领域自治根治三态）。
 /// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态：</para>
 /// <list type="bullet">
-/// <item>10 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
+/// <item>12 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
 /// <item><see cref="IAuthenticationProvider"/> 双实现 → V4.10.55（ADR92）<c>TryAddEnumerableConstructible</c>
 ///     （集合版守卫工厂——工厂委托形态 + 帧内 CurrentAopUser 供给；帧外枚举抛守卫）。</item>
-/// <item><see cref="ISmsLoginService"/>/<see cref="IWechatLoginService"/> 登录编排门面（V4.10.55 ADR92/T3 闭环）→
-///     <c>AddConstructibleService</c>——表现层经 <c>User.Use&lt;门面&gt;()</c> 帧内编排 Provider 集合。</item>
+/// <item><see cref="ISmsLoginService"/>/<see cref="IExternalIdpLoginService"/> 登录编排门面（V4.10.55 ADR92/T3 闭环）→
+///     <c>AddConstructibleService</c>——表现层经 <c>User.Use&lt;门面&gt;()</c> 帧内编排。
+///     ⚠️ T5（2026-10-09 三层边界）：微信门面（IWechatLoginService）/微信客户端（IWeChatApiClient）已删——
+///     外部 IdP 登录统一经 <see cref="IExternalIdpLoginService"/> 桥接。</item>
 /// </list>
 /// </summary>
 public class AuthCenterInitializerTests
 {
-    /// <summary>12 个 AddConstructibleService 门面（接口 → 实现）+ 2 登录编排门面（V4.10.55 ADR92/T3 闭环）。</summary>
+    /// <summary>12 个 AddConstructibleService 门面（接口 → 实现）+ 3 登录编排门面（V4.10.55 ADR92/T3 闭环）。</summary>
     private static readonly (System.Type Interface, System.Type Impl)[] Facades =
     [
         (typeof(ITokenService), typeof(TokenService)),
@@ -31,12 +33,11 @@ public class AuthCenterInitializerTests
         (typeof(ISmsVerificationService), typeof(SmsVerificationService)),
         (typeof(IPlatformCredentialService), typeof(PlatformCredentialService)),
         (typeof(IPlatformAccountMapService), typeof(PlatformAccountMapService)),
-        (typeof(IWeChatApiClient), typeof(WeChatApiClient)),
         (typeof(ITokenVerifier), typeof(LocalJwtTokenVerifier)),
         (typeof(IAuthAccountQueryService), typeof(AuthAccountQueryService)),
         (typeof(IAuthAccountService), typeof(AuthAccountService)),
         (typeof(ISmsLoginService), typeof(SmsLoginService)),
-        (typeof(IWechatLoginService), typeof(WechatLoginService))
+        (typeof(IExternalIdpLoginService), typeof(ExternalIdpLoginService))
     ];
 
     [Fact]
@@ -103,7 +104,8 @@ public class AuthCenterInitializerTests
         Assert.Contains("ITokenService", ex.Message);
     }
 
-    /// <summary>多 Provider——V4.10.55（ADR92）改 TryAddEnumerableConstructible（集合版守卫工厂）：双实现以工厂委托形态注册（ImplementationType=null + ImplementationFactory 非空）。</summary>
+    /// <summary>多 Provider——V4.10.55（ADR92）改 TryAddEnumerableConstructible（集合版守卫工厂）：实现以工厂委托形态注册（ImplementationType=null + ImplementationFactory 非空）。
+    /// ⚠️ T5（2026-10-09）：微信 Provider 已删——短信 + 密码双实现（WeChatAuthenticationProvider 移除）。</summary>
     [Fact]
     public void ConfigureServices_Registers_TwoProviders_Enumerable()
     {
@@ -111,7 +113,7 @@ public class AuthCenterInitializerTests
         new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         var descriptors = services.Where(d => d.ServiceType == typeof(IAuthenticationProvider)).ToList();
-        Assert.Equal(3, descriptors.Count);   // V0.9.0（B.9）：+PasswordAuthenticationProvider（短信 + 微信 + 密码）
+        Assert.Equal(2, descriptors.Count);   // 短信 + 密码（V0.9.0 B.9；微信已删 T5）
         // TryAddEnumerableConstructible：工厂委托形态（ImplementationType=null + ImplementationFactory 非空）——
         // 帧内（User.Use 链）经 CurrentAopUser 供给构造；实现类 SmsAuthenticationProvider 另有 throw-factory 描述符
         Assert.DoesNotContain(descriptors, d => d.ImplementationType != null);
@@ -126,7 +128,7 @@ public class AuthCenterInitializerTests
         var services = new ServiceCollection();
         new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
-        foreach (var implType in new[] { typeof(SmsAuthenticationProvider), typeof(WeChatAuthenticationProvider) })
+        foreach (var implType in new[] { typeof(SmsAuthenticationProvider), typeof(PasswordAuthenticationProvider) })
         {
             var descriptor = services.FirstOrDefault(d => d.ServiceType == implType);
             Assert.NotNull(descriptor);
@@ -139,7 +141,7 @@ public class AuthCenterInitializerTests
         }
 
         // 登录编排门面（V4.10.55 ADR92/T3 闭环）：AddConstructibleService 守卫工厂注册
-        foreach (var facade in new[] { typeof(ISmsLoginService), typeof(IWechatLoginService) })
+        foreach (var facade in new[] { typeof(ISmsLoginService), typeof(IExternalIdpLoginService) })
         {
             Assert.Contains(services, d => d.ServiceType == facade);
         }

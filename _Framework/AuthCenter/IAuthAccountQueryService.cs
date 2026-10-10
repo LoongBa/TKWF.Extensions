@@ -8,6 +8,17 @@ using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuthCenter;
 
+/// <summary>AuthCenter 侧渠道类型常量（T5 2026-10-09——原 <c>WeChatAuthenticationProvider.ChannelWechatMp/Web</c> 内联：
+/// 微信双源 Provider 已删，常量迁本类保 <see cref="IAuthAccountQueryService.IsWechatBoundAsync"/> 语义）。</summary>
+internal static class AuthCenterChannelIds
+{
+    /// <summary>公众号网页授权 channelId（snsapi_base）。</summary>
+    public const string WechatMp = "wechat_mp";
+
+    /// <summary>开放平台扫码 channelId（snsapi_login）。</summary>
+    public const string WechatWeb = "wechat_web";
+}
+
 /// <summary>账号查询服务——对外只读查询契约（装配实例 / 内部复用）。</summary>
 public interface IAuthAccountQueryService : IDomainService
 {
@@ -57,13 +68,14 @@ internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQ
 
     /// <inheritdoc cref="IAuthAccountQueryService.IsWechatBoundAsync"/>
     /// <remarks>V0.9.0 A.8：联邦 Id 归一化——微信绑定判定 = PlatformAccountMap 存在
-    /// <c>wechat_mp</c>/<c>wechat_web</c> channel 行（替代原 AuthAccount 三列 OR 推导）。</remarks>
+    /// <c>wechat_mp</c>/<c>wechat_web</c> channel 行（替代原 AuthAccount 三列 OR 推导）。
+    /// T5（2026-10-09）：常量内联 <see cref="AuthCenterChannelIds"/>（微信双源 Provider 已删）。</remarks>
     public async Task<bool> IsWechatBoundAsync(string uid, CancellationToken ct = default)
     {
         var channels = await ChannelMapDataService.GetChannelsByPlatformIdAsync(uid, ct);
         return channels.Any(c =>
-            c.ChannelId == WeChatAuthenticationProvider.ChannelWechatMp
-            || c.ChannelId == WeChatAuthenticationProvider.ChannelWechatWeb);
+            c.ChannelId == AuthCenterChannelIds.WechatMp
+            || c.ChannelId == AuthCenterChannelIds.WechatWeb);
     }
 
     /// <inheritdoc cref="ISsoAccountQueryService.GetByUIdAsync"/>

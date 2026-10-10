@@ -8,18 +8,17 @@ namespace TKWF.Ext.AuthCenter;
 /// <summary>认证上下文——Provider 输入（方案 §5.5：认证矩阵多方式）。</summary>
 /// <param name="Phone">手机号（sms）。</param>
 /// <param name="Code">短信验证码（sms）。</param>
-/// <param name="WechatCode">微信授权 code（wechat）。</param>
-/// <param name="WechatScope">微信授权 scope：snsapi_base（网页）/snsapi_login（扫码）。</param>
 /// <param name="Password">密码（password Provider——V0.9.0 SecurePassword：客户端算 clientHash+salt，服务端零明文）。</param>
 /// <param name="DeviceInfo">设备信息（可选，透传签发）。</param>
 /// <param name="Identifier">凭据标识（password Provider——UId 或 Phone，V0.9.0 B.9 新增；仅密码链路使用）。</param>
 /// <param name="ClientHash">客户端算的密码散列（hex(PBKDF2(password, salt, iterations, 32bytes))——SecurePassword 协议，V0.9.0 ADR 决策 1）。</param>
 /// <param name="Salt">客户端算的盐（hex(salt 32bytes)——SecurePassword 协议；与 <see cref="ClientHash"/> 配套）。</param>
+/// <remarks>⚠️ T5（2026-10-09 三层边界）：<c>WechatCode</c>/<c>WechatScope</c> 已删除——微信双源 Provider 移除，
+/// 微信认证经 <see cref="IExternalIdpLoginService"/> 桥接借道 Federation（外部 IdP 通道参数走
+/// <see cref="IExternalIdpAuthenticator.AuthenticateAsync"/> 参数字典，不经 Provider 上下文）。</remarks>
 public sealed record ProviderAuthenticateContext(
     string? Phone = null,
     string? Code = null,
-    string? WechatCode = null,
-    string? WechatScope = null,
     string? Password = null,
     string? DeviceInfo = null,
     string? Identifier = null,
@@ -40,7 +39,9 @@ public sealed record ProviderAuthenticateResult(
 /// <summary>
 /// 认证 Provider 契约——认证矩阵多方式（配置化启用，fail-closed）。
 /// <para>方案 §5.5——<c>AuthCenterOptions.EnabledAuthTypes</c> 启用集合之外 Provider 不接线；</para>
-/// <para>内置：<c>SmsAuthenticationProvider</c>（短信验证码）+ <c>WeChatAuthenticationProvider</c>（微信双形态）；密码/抖音为扩展点。</para>
+/// <para>内置：<c>SmsAuthenticationProvider</c>（短信验证码）+ <c>PasswordAuthenticationProvider</c>（密码）；抖音为扩展点。
+/// ⚠️ T5（2026-10-09 三层边界）：微信 Provider 已删除——微信认证经 <see cref="IExternalIdpLoginService"/>
+/// 桥接借道 Federation（<see cref="IExternalIdpAuthenticator"/> 契约，fail-hard）。</para>
 /// </summary>
 public interface IAuthenticationProvider : IDomainService
 {
@@ -48,7 +49,7 @@ public interface IAuthenticationProvider : IDomainService
     string AuthType { get; }
 
     /// <summary>执行认证——成功返回平台内部 id；失败返回 FailReason。</summary>
-    /// <remarks>匿名面声明：短信/微信登录与 OAuth 回调为无会话入口（EduPlatform 转达 E1）。</remarks>
+    /// <remarks>匿名面声明：短信/密码登录与 OAuth 回调为无会话入口（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
     Task<ProviderAuthenticateResult> AuthenticateAsync(ProviderAuthenticateContext context, CancellationToken ct = default);
 }

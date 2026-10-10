@@ -236,7 +236,7 @@ Task<T?> RedeemAsync<T>(string code, string? claimant, CancellationToken ct);   
 | 3 | **nuget 已发布包**（`TKWF.Ext.Federation 0.2.1-preview` 等） | 保留不 unlist（已发布即历史）；新版本线 `TKWF.Ext.TrustCenter` 独立发布 | 📋 待确认 |
 | 4 | **AuthCenter.Abstractions SSO 契约归属**（`ISsoAccountQueryService`/`ISsoChannelMapService`） | **保留在 AuthCenter.Abstractions**（用户映射契约属认证内核）；TrustCenter.Abstractions 只承载信任契约（ISsoChannel/IToken2Service/IAccessCodeService）——Federation 双 Abstractions 依赖为合法 L2 | 📋 定案 |
 | 5 | **DMP-Lite 现装配** | DMP-Lite 当前装配 AuthCenter（`WechatLoginEndpointEnabled:false`，未用微信 Provider）——**零微信引用已核实**；Federation 重命名后 DMP 引用/using/IVT 清单更新 | 📋 待迁移 |
-| 6 | **PlatformCredentialEntity 微信凭证存量** | AuthCenter `PlatformCredentialEntity` 表微信凭证（Platform=wechat）在删 `IWeChatApiClient` 后**无消费者**——凭证迁移至 Federation.WeChat `WeChatOptions`（凭证自持 P2-4）；存量表数据留待 DBA 清理或保留（非破坏） | 📋 待确认 |
+| 6 | **PlatformCredentialEntity 微信凭证存量** | AuthCenter `PlatformCredentialEntity` 表微信凭证（Platform=wechat）在删 `IWeChatApiClient` 后**无消费者**——凭证迁移至 Federation.WeChat `WeChatOptions`（凭证自持 P2-4）；**✅ 定案（T5 实施 2026-10-09）：生产 DBA 执行 SQL 清理**（`DELETE FROM TKWF_PlatformCredential WHERE Platform='wechat'`——脚本落 AuthCenter 使用指南 §6-b；表/门面保留为平台库共用底座） | ✅ 已实施 |
 | 7 | **7 平台库测试宿主白名单** | 当前模拟"已启用 Federation"——重命名后改"已启用 TrustCenter"（信任契约）+ "已启用 Federation"（新连接层）双白名单 | 📋 待迁移 |
 | 8 | **Federation.Tests 拆分** | 现有 34 用例拆为 TrustCenter.Tests（信任内核）+ Federation.Tests（连接层） | 📋 待迁移 |
 | 9 | **SsoChannelRegistry 多通道设施归属** | `SsoChannelRegistryEntity` + `IChannelRegistry`/`CompositeChannelRegistry`/`StaticChannelRegistry`/`DbChannelRegistry`/`SsoChannelRegistryService` **全归 Federation**（连接层选区设施） | ✅ 定案（评审条件 5） |

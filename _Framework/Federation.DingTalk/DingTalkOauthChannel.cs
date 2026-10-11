@@ -90,4 +90,28 @@ public sealed class DingTalkOauthChannel : DomainServiceBase, ISsoChannel
             return new SsoChannelAuthResult(false, null, ex.Message, 0);
         }
     }
+
+    /// <inheritdoc />
+    public Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default)
+    {
+        // 模板实例（channel=null）/禁用——不可构造（DIM null 语义 → 端点 AUTHORIZE_NOT_SUPPORTED）
+        if (_channel is null || !_channel.IsEnabled)
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // 凭证（AppKey——钉钉凭证解析键，Extra 承载；缺 → 不可构造）
+        if (!_channel.Extra.TryGetValue("AppKey", out var appKey) || string.IsNullOrEmpty(appKey))
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // 钉钉新 OAuth2（login.dingtalk.com/oauth2/auth——scope 默认 openid（或 "openid corpid" 经 Parameters["scope"]）；
+        // prompt=consent 必填；iframe 内嵌须与 redirect_uri 同源归装配层）
+        string scope = context.Scope ?? "openid";
+        string url = "https://login.dingtalk.com/oauth2/auth"
+            + $"?client_id={Uri.EscapeDataString(appKey)}"
+            + $"&redirect_uri={Uri.EscapeDataString(context.RedirectUri)}"
+            + "&response_type=code"
+            + $"&scope={Uri.EscapeDataString(scope)}"
+            + "&prompt=consent"
+            + $"&state={Uri.EscapeDataString(context.State ?? string.Empty)}";
+        return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));
+    }
 }

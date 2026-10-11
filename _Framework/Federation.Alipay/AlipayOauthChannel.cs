@@ -96,4 +96,18 @@ public sealed class AlipayOauthChannel : DomainServiceBase, ISsoChannel
             return new SsoChannelAuthResult(false, null, ex.Message, 0);
         }
     }
+
+    /// <inheritdoc />
+    public Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default)
+    {
+        // 模板实例（channel=null）/禁用——不可构造（DIM null 语义 → 端点 AUTHORIZE_NOT_SUPPORTED）
+        if (_channel is null || !_channel.IsEnabled)
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // 支付宝授权 URL（复用 AlipayApiClient.BuildAuthorizeUrl——openauth publicAppAuthorize；scope auth_base/auth_user；
+        // state 可空省略；⚠️ state base64 ≤100 字符硬约束 N4 §3.2——Platform HMAC 票据紧凑格式满足）
+        string scope = context.Scope ?? "auth_base";
+        string url = AlipayApiClient.BuildAuthorizeUrl(_channel.AppId!, context.RedirectUri, scope, context.State);
+        return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));
+    }
 }

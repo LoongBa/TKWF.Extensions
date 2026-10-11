@@ -13,6 +13,7 @@ using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Web.Extensions;
 using TKW.Framework.Domain.Web.Hosting;
+using TKW.Framework.Enumerations;
 using TKWF.Ext.Testing.Shared;
 using TKWF.Ext.TrustCenter;
 
@@ -23,11 +24,14 @@ namespace TKWF.Ext.Federation.Tests;
 /// （"DomainHost 不能重复初始化"），全测试项目**仅可建 1 个 Web 宿主**——FederationWebExtension
 /// 端点冒烟（FederationWebExtensionTests）专用。
 /// <para>含：<see cref="FederationWebExtension{TUserInfo}"/>（端点映射）+ Fake 门面（端点行为断言——
-/// 普通 Scoped 经 RegisterServices 替换守卫工厂——ISsoLogin/ISsoChannelFactory 由 Federation 初始器
-/// AddConstructibleService 注册后替换；IToken2Service 契约在 TrustCenter.Abstractions（经 Federation 传递），
-/// 测试项目不引 TrustCenter 主包 → AddScoped 直接注册 Fake）+ FakeSsoChannel（AuthenticateAsync 断言
+/// 普通 Scoped 经 RegisterServices 替换守卫工厂——ISsoLogin/ISsoChannelFactory/ISsoSubAppBridge 由 Federation
+/// 初始器 AddConstructibleService 注册后替换；IToken2Service 契约在 TrustCenter.Abstractions（经 Federation
+/// 传递），测试项目不引 TrustCenter 主包 → AddScoped 直接注册 Fake）+ FakeSsoChannel（AuthenticateAsync 断言
 /// SsoChannelAuthContext 参数透传）。宿主参数对齐 AuthCenterEndpointHost 先例：Development
 /// （ValidateScopes=true 回归哨兵）+ TKWDomain:Name + UseNoEntityDAC + ExcludedPathPrefixes /sso。</para>
+/// <para><b>trust/issue 已认证帧（2026-10-11）</b>：BeforeRouting 哨兵中间件读 <c>X-Test-Auth-User</c> header
+/// → <c>guest.LoginAsUserAsync</c>（模拟 AuthCenterWebExtension 中间件写入已认证 DomainUser——真实生产经
+/// Bearer 验签 + RestoreUser；测试经 header 标记）。</para>
 /// </summary>
 internal static class FederationEndpointHost
 {
@@ -39,6 +43,7 @@ internal static class FederationEndpointHost
     public static FakeSsoChannelFactory Factory { get; } = new();
     public static FakeSsoChannel Channel { get; } = new("wechat-mp");
     public static FakeToken2Service Token2 { get; } = new();
+    public static FakeSsoSubAppBridge Bridge { get; } = new();
 
     /// <summary>共享宿主状态复位（跨用例防污染——负向/正向断言前置调用，对齐 AuthCenter V0.8.0 复位范式）。</summary>
     public static void Reset()
@@ -50,6 +55,7 @@ internal static class FederationEndpointHost
         Factory.Channel = Channel;
         Login.Factory = Factory;    // Fake 登录编排复用宿主工厂（共享实例——默认通道/选区走同一通道源）
         Token2.Reset();
+        Bridge.Reset();
     }
 
     private static TestServer CreateServer()
@@ -71,6 +77,9 @@ internal static class FederationEndpointHost
         {
             svc.Replace(ServiceDescriptor.Scoped<ISsoLogin>(_ => Login));
             svc.Replace(ServiceDescriptor.Scoped<ISsoChannelFactory>(_ => Factory));
+            // ISsoSubAppBridge：子应用消费方委托门面（2026-10-11）——Federation 初始器 AddConstructibleService
+            // 注册后替换为普通 Scoped Fake（端点行为断言——Start/CompleteOAuth/TrustIssue/Claim 请求透传）
+            svc.Replace(ServiceDescriptor.Scoped<ISsoSubAppBridge>(_ => Bridge));
             // IToken2Service：契约在 TrustCenter.Abstractions（经 Federation 传递），测试项目未引 TrustCenter
             // 主包 → 无既有注册，AddScoped 直接注册 Fake（GetGuest.Use<T>() → GetRequiredService 解析）
             svc.AddScoped<IToken2Service>(_ => Token2);
@@ -80,7 +89,20 @@ internal static class FederationEndpointHost
         {
             e.Add<FederationWebExtension<TestUserInfo>>();
         })
-        .BeforeRouting((_, _) => { })              // 返回 BeforeRoutingBuilder——UseAspNetCoreRouting 为其成员
+        .BeforeRouting((app, _) =>
+        {
+            // 测试哨兵中间件：trust/issue 已认证帧注入（模拟 AuthCenterWebExtension 中间件写入
+            // Items["DomainUser"] 已认证用户——真实生产经 Bearer 验签 + RestoreUser；测试经 header 标记）。
+            app.Use(async (ctx, next) =>
+            {
+                if (ctx.Request.Headers.TryGetValue("X-Test-Auth-User", out var uid)
+                    && ctx.Items["DomainUser"] is DomainUser<TestUserInfo> guest)
+                {
+                    await guest.LoginAsUserAsync(new TestUserInfo(uid.ToString(), "授权用户"), EnumLoginFrom.PcWeb);
+                }
+                await next(ctx);
+            });
+        })
         .UseAspNetCoreRouting()
         .AfterRouting((_, _) => { })
         .Build();
@@ -187,5 +209,67 @@ internal static class FederationEndpointHost
 
         public Task<Token2ValidationResult> ValidateToken2Async(string token, CancellationToken ct = default)
             => throw new NotSupportedException();
+    }
+
+    /// <summary>Fake 子应用消费方桥接门面（2026-10-11）——端点行为断言：请求透传（CallbackBaseUrl 服务端填充/
+    /// 回调参数/channelId/platformUid/claim 请求）+ 可配置结果（Start/Callback/TrustIssue/Claim，Reset 重置默认成功）。</summary>
+    internal sealed class FakeSsoSubAppBridge : ISsoSubAppBridge
+    {
+        public AuthorizeStartResult StartResult { get; set; } =
+            new(true, "https://open.weixin.qq.com/connect/oauth2/authorize?appid=wx_test&scope=snsapi_base#wechat_redirect", "state-ticket", null);
+        public OAuthCallbackResult CallbackResult { get; set; } =
+            new(true, "https://sub.example.com/cb?code=ac-1&state=sub-st", "sub-st", null);
+        public TrustIssueResult TrustIssueResult { get; set; } =
+            new(true, "https://sub.example.com/cb?code=ac-2", "ac-2", null);
+        public IdentityClaimResult ClaimResult { get; set; } =
+            new(true, "federated", "wx-1", "ext-100", null, null);
+
+        public AuthorizeStartRequest? LastStartRequest { get; private set; }
+        public string? LastCallbackChannelId { get; private set; }
+        public IReadOnlyDictionary<string, string?>? LastCallbackParams { get; private set; }
+        public TrustIssueRequest? LastTrustIssueRequest { get; private set; }
+        public string? LastPlatformUid { get; private set; }
+        public IdentityClaimRequest? LastClaimRequest { get; private set; }
+
+        public void Reset()
+        {
+            LastStartRequest = null;
+            LastCallbackChannelId = null;
+            LastCallbackParams = null;
+            LastTrustIssueRequest = null;
+            LastPlatformUid = null;
+            LastClaimRequest = null;
+            // 默认成功结果（各用例前置覆盖 FailReason 负向场景）
+            StartResult = new(true, "https://open.weixin.qq.com/connect/oauth2/authorize?appid=wx_test&scope=snsapi_base#wechat_redirect", "state-ticket", null);
+            CallbackResult = new(true, "https://sub.example.com/cb?code=ac-1&state=sub-st", "sub-st", null);
+            TrustIssueResult = new(true, "https://sub.example.com/cb?code=ac-2", "ac-2", null);
+            ClaimResult = new(true, "federated", "wx-1", "ext-100", null, null);
+        }
+
+        public Task<AuthorizeStartResult> StartAsync(AuthorizeStartRequest request, CancellationToken ct = default)
+        {
+            LastStartRequest = request;
+            return Task.FromResult(StartResult);
+        }
+
+        public Task<OAuthCallbackResult> CompleteOAuthAsync(string channelId, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default)
+        {
+            LastCallbackChannelId = channelId;
+            LastCallbackParams = parameters;
+            return Task.FromResult(CallbackResult);
+        }
+
+        public Task<TrustIssueResult> IssueForPlatformUserAsync(TrustIssueRequest request, string platformUid, CancellationToken ct = default)
+        {
+            LastTrustIssueRequest = request;
+            LastPlatformUid = platformUid;
+            return Task.FromResult(TrustIssueResult);
+        }
+
+        public Task<IdentityClaimResult> ClaimAsync(IdentityClaimRequest request, CancellationToken ct = default)
+        {
+            LastClaimRequest = request;
+            return Task.FromResult(ClaimResult);
+        }
     }
 }

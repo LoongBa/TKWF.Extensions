@@ -92,5 +92,9 @@ namespace TKWF.Ext.Federation;
 
         // profile API 门面（server-to-server——scope 强制 + 审计，经 AuthCenter.Abstractions 契约消费认证内核）
         services.AddConstructibleService<ISsoProfileService, SsoProfileService>();
+
+        // 子应用消费方桥接门面（2026-10-11——仅共享 Federation 模式编排：authorize/start · oauth/callback ·
+        // trust/issue · identity/claim 四端点编排——state 票据 AES-GCM Federation 密钥 + L2 契约消费 TrustCenter 校验面）
+        services.AddConstructibleService<ISsoSubAppBridge, SsoSubAppBridge>();
     }
 }

@@ -114,6 +114,40 @@ public sealed class WeComOauthChannel : DomainServiceBase, ISsoChannel
         }
     }
 
+    /// <inheritdoc />
+    public Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default)
+    {
+        // 模板实例（channel=null）/禁用——不可构造（DIM null 语义 → 端点 AUTHORIZE_NOT_SUPPORTED）
+        if (_channel is null || !_channel.IsEnabled)
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // 凭证（CorpId 法人级标识 Extra；缺 → 不可构造——对齐 AuthenticateAsync WECOM_CONFIG_MISSING 语义）
+        var corpId = GetExtra(_channel, "CorpId");
+        if (string.IsNullOrEmpty(corpId))
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // 双授权流（P1-3 构造归装配层——现收敛于通道）：Parameters["flow"] == "scan" → 扫码（login.work.weixin.qq.com，
+        // login_type 自建/三方）；缺省 webview（open.weixin.qq.com #wechat_redirect）
+        try
+        {
+            var agentId = GetExtra(_channel, "AgentId") ?? string.Empty;
+            string scope = context.Scope ?? GetExtra(_channel, "DefaultScope") ?? "snsapi_base";
+            string state = context.State ?? string.Empty;
+            string flow = context.Parameters.TryGetValue("flow", out var f) && !string.IsNullOrEmpty(f) ? f : "webview";
+
+            string url = flow == "scan"
+                ? WeComAuthorizeUrlBuilder.BuildScanUrl(corpId, agentId, context.RedirectUri, state,
+                    loginType: string.Equals(GetExtra(_channel, "IsThirdParty"), "true", StringComparison.OrdinalIgnoreCase) ? "ServiceApp" : "CorpApp")
+                : WeComAuthorizeUrlBuilder.BuildWebviewUrl(corpId, context.RedirectUri, scope, state, agentId);
+            return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));
+        }
+        catch (ArgumentException)
+        {
+            // 扫码流 AgentId 缺失等构造参数非法——DIM null 语义（端点 AUTHORIZE_NOT_SUPPORTED）
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+        }
+    }
+
     private static string? GetExtra(ChannelConfig cfg, string key)
         => cfg.Extra.TryGetValue(key, out var v) ? v : null;
 

@@ -27,4 +27,16 @@ public class FederationEndpointOptions
 
     /// <summary>平台事件推送接收端点开关（POST {prefix}/event/{channelId}——匿名，事件验签由平台库通道内部完成）。</summary>
     public bool EventEndpointEnabled { get; set; } = true;
+
+    /// <summary>子应用发起端点开关（POST {prefix}/authorize/start——匿名 + 建议消费方装配 RateLimitingWebExtension IP 限流，Oracle 条件 5）。</summary>
+    public bool AuthorizeEndpointEnabled { get; set; } = true;
+
+    /// <summary>OAuth 回调落地端点开关（GET {prefix}/oauth/{channelId}/callback——匿名，平台 IdP 302 回调落点；须 GET——IdP 重定向语义，Oracle 条件 1）。</summary>
+    public bool OauthCallbackEndpointEnabled { get; set; } = true;
+
+    /// <summary>Platform 登录态签发端点开关（POST {prefix}/trust/issue——已认证 Bearer token1；direct 模式；须 AuthCenterWebExtension 同装配）。</summary>
+    public bool TrustIssueEndpointEnabled { get; set; } = true;
+
+    /// <summary>子应用兑现端点开关（POST {prefix}/identity/claim——匿名 + 子应用 credential 鉴权；统一 401 防枚举，Oracle 条件 4）。</summary>
+    public bool IdentityClaimEndpointEnabled { get; set; } = true;
 }

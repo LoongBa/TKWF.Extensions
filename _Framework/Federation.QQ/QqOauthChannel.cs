@@ -82,4 +82,24 @@ public sealed class QqOauthChannel : DomainServiceBase, ISsoChannel
             return new SsoChannelAuthResult(false, null, ex.Message, 0);
         }
     }
+
+    /// <inheritdoc />
+    public Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default)
+    {
+        // 模板实例（channel=null）/禁用——不可构造（DIM null 语义 → 端点 AUTHORIZE_NOT_SUPPORTED）
+        if (_channel is null || !_channel.IsEnabled)
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // QQ 网页授权（state 必填——Platform 签名票据；scope 默认 get_user_info；display 可经 Parameters 扩展）
+        string scope = context.Scope ?? "get_user_info";
+        string display = context.Parameters.TryGetValue("display", out var d) && !string.IsNullOrEmpty(d)
+            ? $"&display={Uri.EscapeDataString(d)}" : string.Empty;
+        string url = "https://graph.qq.com/oauth2.0/authorize"
+            + $"?client_id={Uri.EscapeDataString(_channel.AppId!)}"
+            + $"&redirect_uri={Uri.EscapeDataString(context.RedirectUri)}"
+            + $"&state={Uri.EscapeDataString(context.State ?? string.Empty)}"
+            + $"&scope={Uri.EscapeDataString(scope)}"
+            + display;
+        return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));
+    }
 }

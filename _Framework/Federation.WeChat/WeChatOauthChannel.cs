@@ -72,4 +72,23 @@ public sealed class WeChatOauthChannel : DomainServiceBase, ISsoChannel
             return new SsoChannelAuthResult(false, null, ex.Message, 0);
         }
     }
+
+    /// <inheritdoc />
+    public Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default)
+    {
+        // 模板实例（channel=null）/禁用——不可构造（DIM null 语义 → 端点 AUTHORIZE_NOT_SUPPORTED）
+        if (_channel is null || !_channel.IsEnabled)
+            return Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+        // 公众号网页授权（snsapi_base 静默 / snsapi_userinfo）——state 由 Platform 签名票据传入（回调验签解 app_id/redirect）
+        string scope = context.Scope ?? "snsapi_base";
+        string url = "https://open.weixin.qq.com/connect/oauth2/authorize"
+            + $"?appid={Uri.EscapeDataString(_channel.AppId!)}"
+            + $"&redirect_uri={Uri.EscapeDataString(context.RedirectUri)}"
+            + "&response_type=code"
+            + $"&scope={Uri.EscapeDataString(scope)}"
+            + $"&state={Uri.EscapeDataString(context.State ?? string.Empty)}"
+            + "#wechat_redirect";
+        return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));
+    }
 }

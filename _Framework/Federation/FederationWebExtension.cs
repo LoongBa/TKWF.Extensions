@@ -30,18 +30,27 @@ namespace TKWF.Ext.Federation;
 /// <para>配置分层（AGENTS §8）：领域决策在 <see cref="FederationChannelRegistryOptions"/>（TKWF:Federation:ChannelRegistry——
 /// 通道启用/加密密钥路径）/ TrustCenter（TKWF:TrustCenter——令牌签发/密钥路径）不动；暴露面（RoutePrefix +
 /// 端点开关）在 <see cref="FederationEndpointOptions"/>（TKWF:Federation:Web——不镜像领域配置）。</para>
-/// <para><b>端点（3+1 形态）</b>：<c>POST {prefix}/login</c>（无 channelId → <see cref="ISsoLogin.LoginDefaultAsync"/>
-/// 降级默认通道）/ <c>POST {prefix}/login/{channelId}</c>（精确选区 → <see cref="ISsoLogin.LoginAsync"/>）——
+/// <para><b>端点（7+1 形态，子应用消费方接入 2026-10-11）</b>：
+/// <c>POST {prefix}/login</c>（无 channelId → <see cref="ISsoLogin.LoginDefaultAsync"/> 降级默认通道）/
+/// <c>POST {prefix}/login/{channelId}</c>（精确选区 → <see cref="ISsoLogin.LoginAsync"/>）——
 /// body/route 传参数（code 等）→ <c>SsoChannelAuthContext</c> → <see cref="SsoChannelAuthResult"/> JSON；
 /// <c>GET {prefix}/jwks</c>——JWKS 公钥分发（信任内核职责，经 <see cref="IToken2Service.GetJwksJson"/>）；
 /// <c>POST {prefix}/event/{channelId}</c>——平台事件推送接收（端点只中转：原始 body 包参数字典
 /// <c>{"__raw": ..., "channel_id": ...}</c> → <see cref="ISsoChannelFactory.CreateAsync"/> 构造 →
-/// <c>channel.AuthenticateAsync</c>——事件验签由平台库通道实现内部完成，一票否决）。</para>
+/// <c>channel.AuthenticateAsync</c>——事件验签由平台库通道实现内部完成，一票否决）；
+/// <b>子应用消费方委托（<see cref="ISsoSubAppBridge"/> 编排）</b>：<c>POST {prefix}/authorize/start</c>（匿名——
+/// 发起外部认证，redirect 白名单 + state 票据 + 通道授权 URL 构造）、<c>GET {prefix}/oauth/{channelId}/callback</c>
+/// （匿名——平台 IdP 302 回调落点，验 state → 认证 → 签 accesscode → 302 跳回子应用；<b>须 GET</b>——IdP 重定向语义）、
+/// <c>POST {prefix}/trust/issue</c>（<b>已认证</b> Bearer token1——direct 模式 Platform 登录态签发；须 AuthCenterWebExtension
+/// 同装配）、<c>POST {prefix}/identity/claim</c>（匿名 + 子应用 credential——兑现 accesscode 原子取回，统一 401 防枚举）。</para>
 /// <para>⚠️ 装配约束：须与 <c>UseWebSession</c> 同装配（ContextExtraction 阶段 2 写游客 DomainUser——
 /// 匿名端点 handler 经游客帧 <c>guest.Use&lt;门面&gt;()</c> 调用守卫工厂门面；未装配 → 抛守卫 = 正确 fail
-/// 非静默降级）。</para>
-/// <para>不提供 authorize 端点：<see cref="ISsoChannel"/> 契约无 <c>BuildAuthorizeUrl</c>——不臆造契约，
-/// 授权链接构造归平台库/消费方（N3 P1-3 state 归装配层——如需 OAuth 跳转端点由平台库侧另行装配）。</para>
+/// 非静默降级）。<c>trust/issue</c> 端点另须 <c>AuthCenterWebExtension</c> 同装配（已认证帧写入
+/// <c>Items["DomainUser"]</c>——Platform 档位④自然满足）。</para>
+/// <para><b>authorize 端点说明（ADR-Federation-子应用委托授权URL构造契约化，2026-10-11 反转）</b>：既有
+/// "契约无 BuildAuthorizeUrl——不臆造契约，授权链接构造归平台库/消费方"（N3 P1-3）决策被有意推翻——
+/// 多子应用统一协议的 authorize/start 端点须通道实现构造授权 URL（<see cref="ISsoChannel.BuildAuthorizeUrlAsync"/>
+/// DIM 默认 null，非破坏）；state 归本层（签名票据，AES-GCM Federation 密钥——Oracle 条件 3）。</para>
 /// </summary>
 /// <typeparam name="TUserInfo">消费方用户类型。</typeparam>
 public sealed class FederationWebExtension<TUserInfo> : IWebExtension
@@ -66,7 +75,8 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     /// <summary>中间件挂载——纯端点装配，无中间件。</summary>
     public void ConfigureMiddleware(IApplicationBuilder app, DomainWebOptions options) { }
 
-    /// <summary>端点映射（AfterRouting 排空）——对外连接层 <c>/sso/*</c> 端点（登录编排 / JWKS / 事件接收），路径/开关经 <see cref="FederationEndpointOptions"/> 可配置。</summary>
+    /// <summary>端点映射（AfterRouting 排空）——对外连接层 <c>/sso/*</c> 端点（登录编排 / JWKS / 事件接收 /
+    /// 子应用消费方委托四端点），路径/开关经 <see cref="FederationEndpointOptions"/> 可配置。</summary>
     public void ConfigureEndpoints(IEndpointRouteBuilder endpoints, DomainWebOptions options)
     {
         var endpointOptions = ResolveOptions(endpoints.ServiceProvider);
@@ -81,6 +91,14 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             endpoints.MapGet($"{prefix}/jwks", HandleJwks).AllowAnonymous();
         if (endpointOptions.EventEndpointEnabled)
             endpoints.MapPost($"{prefix}/event/{{channelId}}", HandleEvent).AllowAnonymous();
+        if (endpointOptions.AuthorizeEndpointEnabled)
+            endpoints.MapPost($"{prefix}/authorize/start", HandleAuthorizeStart).AllowAnonymous();
+        if (endpointOptions.OauthCallbackEndpointEnabled)
+            endpoints.MapGet($"{prefix}/oauth/{{channelId}}/callback", HandleOAuthCallback).AllowAnonymous();
+        if (endpointOptions.TrustIssueEndpointEnabled)
+            endpoints.MapPost($"{prefix}/trust/issue", HandleTrustIssue);   // 已认证端点（不经 AllowAnonymous）
+        if (endpointOptions.IdentityClaimEndpointEnabled)
+            endpoints.MapPost($"{prefix}/identity/claim", HandleIdentityClaim).AllowAnonymous();
     }
 
     // ─────────────────────────── 端点处理器（匿名游客帧） ───────────────────────────
@@ -158,6 +176,70 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         }
     }
 
+    // ─────────────────────────── 子应用消费方委托端点（ISsoSubAppBridge 编排，2026-10-11） ───────────────────────────
+
+    /// <summary>发起外部认证（POST {prefix}/authorize/start，匿名）——<see cref="ISsoSubAppBridge.StartAsync"/>：
+    /// redirect 白名单 + state 票据 + 通道授权 URL 构造。CallbackBaseUrl 由本 handler 用 Request.Scheme/Host
+    /// <b>服务端可信填充</b>（OAuth redirect_uri 落点，防子应用伪造回调域）。建议消费方对前缀配 RateLimitingWebExtension
+    /// IP 限流（Oracle 条件 5——匿名端点防滥用）。</summary>
+    private static async Task<IResult> HandleAuthorizeStart(HttpContext ctx, [FromBody] AuthorizeStartRequest req, CancellationToken ct)
+    {
+        // 服务端可信回调基址（请求体值被覆盖——防子应用把 IdP 回调导向任意域）
+        var request = req with { CallbackBaseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}" };
+        var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().StartAsync(request, ct);
+        if (!result.Success)
+            return MapFailReason(result.FailReason);
+        return Results.Ok(new { authorize_url = result.AuthorizeUrl, state = result.State });
+    }
+
+    /// <summary>OAuth 回调落地（GET {prefix}/oauth/{channelId}/callback，匿名——<b>GET</b>：IdP 302 重定向语义，
+    /// Oracle 条件 1）——query 原样包参数字典 → <see cref="ISsoSubAppBridge.CompleteOAuthAsync"/>（验 state 票据 →
+    /// ISsoLogin 纯通道认证 → 签 accesscode expectedClaimant=app_id）→ 302 跳回子应用（code + sub_state）。</summary>
+    private static async Task<IResult> HandleOAuthCallback(HttpContext ctx, string channelId, CancellationToken ct)
+    {
+        var parameters = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var (key, value) in ctx.Request.Query)
+            parameters[key] = value.ToString();
+
+        var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().CompleteOAuthAsync(channelId, parameters, ct);
+        if (!result.Success)
+            return MapFailReason(result.FailReason);
+        return Results.Redirect(result.RedirectUrl!);
+    }
+
+    /// <summary>Platform 登录态签发（POST {prefix}/trust/issue，<b>已认证</b> Bearer token1——direct 模式）——
+    /// 已认证帧（AuthCenterWebExtension 中间件写入 <c>Items["DomainUser"]</c>）→
+    /// <see cref="ISsoSubAppBridge.IssueForPlatformUserAsync"/>（验白名单 → 签 accesscode payload=Platform uid）→
+    /// 302 跳回子应用（code）。未认证 → 401 UNAUTHENTICATED（不经 AllowAnonymous——与 AuthCenter 中间件短路判定配合）。</summary>
+    private static async Task<IResult> HandleTrustIssue(HttpContext ctx, [FromBody] TrustIssueRequest req, CancellationToken ct)
+    {
+        if (ctx.Items["DomainUser"] is not DomainUser<TUserInfo> user || !user.IsAuthenticated)
+            return Results.Json(new ErrorResponse("UNAUTHENTICATED", null),
+                statusCode: StatusCodes.Status401Unauthorized);
+
+        var result = await user.Use<ISsoSubAppBridge>().IssueForPlatformUserAsync(req, user.UserInfo.UserIdString, ct);
+        if (!result.Success)
+            return MapFailReason(result.FailReason);
+        return Results.Redirect(result.RedirectUrl!);
+    }
+
+    /// <summary>子应用兑现（POST {prefix}/identity/claim，匿名 + 子应用 credential）——
+    /// <see cref="ISsoSubAppBridge.ClaimAsync"/>（credential 鉴权统一 AUTHENTICATION_FAILED 防枚举 →
+    /// RedeemAsync 原子取回 payload）→ 200 身份载荷 JSON。</summary>
+    private static async Task<IResult> HandleIdentityClaim(HttpContext ctx, [FromBody] IdentityClaimRequest req, CancellationToken ct)
+    {
+        var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().ClaimAsync(req, ct);
+        if (!result.Success)
+            return MapFailReason(result.FailReason);
+        return Results.Ok(new
+        {
+            mode = result.Mode,
+            channel_id = result.ChannelId,
+            external_user_id = result.ExternalUserId,
+            platform_uid = result.PlatformUid,
+        });
+    }
+
     // ─────────────────────────── 辅助 ───────────────────────────
 
     /// <summary>游客帧（V0.5.2 模式延伸）——匿名端点经 guest.Use&lt;门面&gt;() 调用守卫工厂门面。
@@ -170,11 +252,17 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         return guest;
     }
 
-    /// <summary>FailReason → HTTP 状态码映射（对齐 SsoLogin 错误码映射表：CHANNEL_NOT_FOUND→404 /
-    /// CHANNEL_REGISTRY_UNAVAILABLE→503 / 其他业务码→400）。</summary>
+    /// <summary>FailReason → HTTP 状态码映射（对齐子应用消费方错误码映射表——Oracle 条件 4 防枚举：claim 统一 401、
+    /// 认证类 401 / 限流 429 / CHANNEL_NOT_FOUND→404 / CHANNEL_REGISTRY_UNAVAILABLE→503 / 其他业务码→400）。</summary>
     private static IResult MapFailReason(string? failReason)
         => failReason switch
         {
+            "AUTHENTICATION_FAILED" => Results.Json(new ErrorResponse("AUTHENTICATION_FAILED", null),
+                statusCode: StatusCodes.Status401Unauthorized),
+            "UNAUTHENTICATED" => Results.Json(new ErrorResponse("UNAUTHENTICATED", null),
+                statusCode: StatusCodes.Status401Unauthorized),
+            "RATE_LIMITED" => Results.Json(new ErrorResponse("RATE_LIMITED", null),
+                statusCode: StatusCodes.Status429TooManyRequests),
             "CHANNEL_NOT_FOUND" => Results.Json(new ErrorResponse("CHANNEL_NOT_FOUND", null),
                 statusCode: StatusCodes.Status404NotFound),
             "CHANNEL_REGISTRY_UNAVAILABLE" => Results.Json(new ErrorResponse("CHANNEL_REGISTRY_UNAVAILABLE", null),

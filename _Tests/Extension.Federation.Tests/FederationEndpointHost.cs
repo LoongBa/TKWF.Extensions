@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -44,6 +45,7 @@ internal static class FederationEndpointHost
     public static FakeSsoChannel Channel { get; } = new("wechat-mp");
     public static FakeToken2Service Token2 { get; } = new();
     public static FakeSsoSubAppBridge Bridge { get; } = new();
+    public static FakeChannelRegistry Registry { get; } = new();
 
     /// <summary>共享宿主状态复位（跨用例防污染——负向/正向断言前置调用，对齐 AuthCenter V0.8.0 复位范式）。</summary>
     public static void Reset()
@@ -56,6 +58,7 @@ internal static class FederationEndpointHost
         Login.Factory = Factory;    // Fake 登录编排复用宿主工厂（共享实例——默认通道/选区走同一通道源）
         Token2.Reset();
         Bridge.Reset();
+        Registry.Reset();
     }
 
     private static TestServer CreateServer()
@@ -71,12 +74,15 @@ internal static class FederationEndpointHost
         var app = builder.ConfigWebAppDomain<TestUserInfo, ConsumerHostInitializer, DomainWebOptions>(configure: cfg =>
         {
             cfg.UseNoEntityDAC();                               // 冒烟无数据存取（门面 Fake）
-            cfg.HttpAuth.ExcludedPathPrefixes.Add("/sso");      // 匿名端点免认证双保险
+            cfg.HttpAuth.ExcludedPathPrefixes.Add("/feberation"); // 匿名端点免认证双保险（路由命名空间 2026-10-11）
         })
         .RegisterServices((svc, _) =>
         {
             svc.Replace(ServiceDescriptor.Scoped<ISsoLogin>(_ => Login));
             svc.Replace(ServiceDescriptor.Scoped<ISsoChannelFactory>(_ => Factory));
+            // IChannelRegistry：handler ResolveChannelAsync（平台段校验 + B 守卫）依赖——Federation 初始器
+            // AddConstructibleService 注册真实 Composite 后替换为普通 Scoped Fake（单通道 wechat-mp / 可配多通道）
+            svc.Replace(ServiceDescriptor.Scoped<IChannelRegistry>(_ => Registry));
             // ISsoSubAppBridge：子应用消费方委托门面（2026-10-11）——Federation 初始器 AddConstructibleService
             // 注册后替换为普通 Scoped Fake（端点行为断言——Start/CompleteOAuth/TrustIssue/Claim 请求透传）
             svc.Replace(ServiceDescriptor.Scoped<ISsoSubAppBridge>(_ => Bridge));
@@ -147,19 +153,22 @@ internal static class FederationEndpointHost
         }
     }
 
-    /// <summary>Fake 通道工厂——按 ChannelId 精确匹配返回 <see cref="Channel"/>（未知 id → null → CHANNEL_NOT_FOUND 404）。</summary>
+    /// <summary>Fake 通道工厂——按 ChannelId 精确匹配返回 <see cref="Channel"/>（未知 id → null → CHANNEL_NOT_FOUND 404）；
+    /// 记录 LastChannelType（event 通道类型推导断言）。</summary>
     internal sealed class FakeSsoChannelFactory : ISsoChannelFactory
     {
         public FakeSsoChannel? Channel { get; set; }
         public bool CreateInvoked { get; private set; }
         public string? LastChannelId { get; private set; }
+        public string? LastChannelType { get; private set; }
 
-        public void Reset() { CreateInvoked = false; LastChannelId = null; }
+        public void Reset() { CreateInvoked = false; LastChannelId = null; LastChannelType = null; }
 
         public Task<ISsoChannel?> CreateAsync(string channelId, string? channelType = null, CancellationToken ct = default)
         {
             CreateInvoked = true;
             LastChannelId = channelId;
+            LastChannelType = channelType;
             return Task.FromResult(Channel is not null && string.Equals(Channel.ChannelId, channelId, StringComparison.Ordinal)
                 ? (ISsoChannel?)Channel
                 : null);
@@ -167,6 +176,35 @@ internal static class FederationEndpointHost
 
         public Task<ISsoChannel?> CreateDefaultAsync(CancellationToken ct = default)
             => Task.FromResult(Channel is null ? null : (ISsoChannel)Channel);
+    }
+
+    /// <summary>Fake 通道注册表——handler ResolveChannelAsync（平台段校验 + B 守卫）数据源：
+    /// 默认单通道（wechat-mp / PlatformType=wechat / IsEnabled）——可配置多通道（B 守卫用例）。
+    /// <see cref="GetAllAsync"/> 返回 IsEnabled 通道；<see cref="GetByAliasOrIdAsync"/> 按 ChannelId/Alias 双键；
+    /// <see cref="GetDefaultAsync"/> 返回 IsDefault → 首个 IsEnabled。</summary>
+    internal sealed class FakeChannelRegistry : IChannelRegistry
+    {
+        public List<ChannelConfig> Channels { get; set; } = new()
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = true },
+        };
+
+        public void Reset() => Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = true },
+        };
+
+        public Task<ChannelConfig?> GetAsync(string channelId, CancellationToken ct = default)
+            => Task.FromResult(Channels.FirstOrDefault(c => c.ChannelId == channelId));
+
+        public Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default)
+            => Task.FromResult(Channels.FirstOrDefault(c => c.ChannelId == key || c.Alias == key));
+
+        public Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ChannelConfig>>(Channels);
+
+        public Task<ChannelConfig?> GetDefaultAsync(CancellationToken ct = default)
+            => Task.FromResult(Channels.FirstOrDefault(c => c.IsDefault) ?? Channels.FirstOrDefault(c => c.IsEnabled));
     }
 
     /// <summary>Fake 通道——AuthenticateAsync 记录上下文 + 返回可配置 Result（默认成功 ext-100/AuthLevel 2）。</summary>

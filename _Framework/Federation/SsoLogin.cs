@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,7 @@ public sealed class SsoLogin : DomainServiceBase, ISsoLogin
 {
     private readonly ILogger<SsoLogin> _logger;
     private ISsoChannelFactory? _factory;
+    private IChannelRegistry? _registry;
 
     /// <summary>构造（IDomainUser 经守卫工厂帧内供给；非域基础设施可构造注入）。</summary>
     public SsoLogin(IDomainUser user, IServiceProvider serviceProvider, ILogger<SsoLogin> logger)
@@ -60,6 +62,15 @@ public sealed class SsoLogin : DomainServiceBase, ISsoLogin
     {
         try
         {
+            // B 守卫（Oracle 评审条件 1——对外路由命名空间方案）：多通道（活跃数 >1）+ 未指定 channelId →
+            // CHANNEL_REQUIRED 硬失败（防 GetDefaultAsync IsDefault→首项 非确定性静默选区）；
+            // 单通道（活跃数 ==1）→ 降级无歧义（守卫在消费者层，工厂 CreateDefaultAsync null 语义已占用）。
+            if ((await Registry.GetAllAsync(ct)).Count(c => c.IsEnabled) > 1)
+            {
+                _logger.LogWarning("默认登录选区守卫：多通道部署须显式 channelId（CHANNEL_REQUIRED）");
+                return new SsoChannelAuthResult(false, null, "CHANNEL_REQUIRED", 0);
+            }
+
             var channel = await Factory.CreateDefaultAsync(ct);
             if (channel is null)
             {
@@ -76,4 +87,5 @@ public sealed class SsoLogin : DomainServiceBase, ISsoLogin
     }
 
     private ISsoChannelFactory Factory => _factory ??= User.Use<ISsoChannelFactory>();
+    private IChannelRegistry Registry => _registry ??= User.Use<IChannelRegistry>();
 }

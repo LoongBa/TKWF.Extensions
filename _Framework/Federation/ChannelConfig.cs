@@ -44,7 +44,7 @@ public sealed class ChannelConfig
     /// <summary>平台特定负载扩展字典（AES-GCM 密文解密后明文——DB 层；静态层直接投影）。</summary>
     public IReadOnlyDictionary<string, string?> Extra { get; init; } = new Dictionary<string, string?>(StringComparer.Ordinal);
 
-    /// <summary>默认通道标记（无前缀 /sso/oauth/callback 降级选区）。</summary>
+    /// <summary>默认通道标记（单通道降级（活跃数==1；多通道 B 守卫 CHANNEL_REQUIRED）选区）。</summary>
     public bool IsDefault { get; init; }
 
     /// <summary>启停标记（false → CHANNEL_DISABLED）。</summary>

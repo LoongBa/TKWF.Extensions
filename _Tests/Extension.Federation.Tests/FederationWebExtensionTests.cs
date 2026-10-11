@@ -24,19 +24,21 @@ namespace TKWF.Ext.Federation.Tests;
 /// </summary>
 public sealed class FederationWebExtensionTests
 {
-    private const string DefaultPrefix = "/sso";
+    private const string DefaultPrefix = "/feberation";
+    private const string DefaultPlatformId = "wechat";
 
     // ═══════════════════ 端点冒烟（共享宿主） ═══════════════════
 
-    /// <summary>(a)+(d)：POST /sso/login（无 channelId → 默认通道）——body 参数透传 SsoChannelAuthContext
-    /// → Fake 通道 AuthenticateAsync 被调 → 200 SsoChannelAuthResult。</summary>
+    /// <summary>(a)+(d)：POST /feberation/{platformId}/login（无 channelId → 单通道降级）——body 参数透传
+    /// SsoChannelAuthContext → Fake 通道 AuthenticateAsync 被调 → 200 SsoChannelAuthResult；
+    /// handler ResolveChannelAsync 单通道活跃数==1 → 解析唯一通道 → LoginAsync(cfg.ChannelId)。</summary>
     [Fact]
     public async Task SsoLogin_DefaultChannel_ParamsPassed_ReturnsResult()
     {
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login",
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login",
             new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "auth-code-1", ["state"] = "st-1" }));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -45,27 +47,28 @@ public sealed class FederationWebExtensionTests
         Assert.True(body!.Success);
         Assert.Equal("ext-100", body.ExternalUserId);
         Assert.Equal(2, body.AuthLevel);
-        Assert.True(FederationEndpointHost.Login.DefaultInvoked);          // 无 channelId → LoginDefaultAsync
-        Assert.True(FederationEndpointHost.Channel.Authenticated);          // 通道 AuthenticateAsync 被调
+        Assert.True(FederationEndpointHost.Login.Invoked);                       // 单通道降级 → LoginAsync(cfg.ChannelId)
+        Assert.Equal("wechat-mp", FederationEndpointHost.Login.LastChannelId);  // 解析出的唯一活跃通道
+        Assert.True(FederationEndpointHost.Channel.Authenticated);               // 通道 AuthenticateAsync 被调
         Assert.Equal("auth-code-1", FederationEndpointHost.Channel.LastContext!.Parameters["code"]); // 参数透传
         Assert.Equal("st-1", FederationEndpointHost.Channel.LastContext.Parameters["state"]);
     }
 
-    /// <summary>(d)：POST /sso/login/{channelId}——route 精确选区 → LoginAsync(channelId) → 上下文透传 → 200。</summary>
+    /// <summary>(d)：POST /feberation/{platformId}/login/{channelId}——route 精确选区 → LoginAsync(channelId) → 上下文透传 → 200。</summary>
     [Fact]
     public async Task SsoLogin_RouteChannel_ParamsPassed_ReturnsResult()
     {
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/wechat-mp",
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login/wechat-mp",
             new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "auth-code-2" }));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<SsoChannelAuthResult>();
         Assert.NotNull(body);
         Assert.True(body!.Success);
-        Assert.True(FederationEndpointHost.Login.Invoked);                   // 有 channelId → LoginAsync（非 Default）
+        Assert.True(FederationEndpointHost.Login.Invoked);                   // 有 channelId → LoginAsync
         Assert.Equal("wechat-mp", FederationEndpointHost.Login.LastChannelId);
         Assert.Equal("wechat-mp", FederationEndpointHost.Factory.LastChannelId);
         Assert.Equal("auth-code-2", FederationEndpointHost.Channel.LastContext!.Parameters["code"]);
@@ -78,7 +81,7 @@ public sealed class FederationWebExtensionTests
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/unknown-channel",
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login/unknown-channel",
             new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
@@ -88,7 +91,70 @@ public sealed class FederationWebExtensionTests
         Assert.False(FederationEndpointHost.Channel.Authenticated);          // 选区失败不触达通道
     }
 
-    /// <summary>(c)：GET /sso/jwks——信任内核 JWKS 公钥分发（匿名公开）→ 200 + JSON 含 kid。</summary>
+    /// <summary>B 守卫（Oracle 评审条件 1）：多通道（活跃数 >1）+ 省略 channelId → 400 CHANNEL_REQUIRED
+    /// （防 GetDefaultAsync IsDefault→首项 非确定性静默选区）。</summary>
+    [Fact]
+    public async Task SsoLogin_MultiChannel_NoChannelId_400_ChannelRequired()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = true },
+            new() { ChannelId = "wechat-mp-2", PlatformType = "wechat", IsEnabled = true },
+        };
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login",
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_REQUIRED", body!.Code);
+        Assert.False(FederationEndpointHost.Login.Invoked);                   // 守卫拦截不触达门面
+    }
+
+    /// <summary>平台段 Ordinal 校验（Oracle 评审条件 2）：channelId 存在但 PlatformType != 路由 platformId → 404
+    /// CHANNEL_NOT_FOUND（统一防枚举——不泄露"通道存在但平台写错" vs "通道不存在"）。</summary>
+    [Fact]
+    public async Task SsoLogin_PlatformMismatch_404_ChannelNotFound()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/dingtalk/login/wechat-mp",
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
+        Assert.False(FederationEndpointHost.Login.Invoked);                   // 平台错配不触达门面
+    }
+
+    /// <summary>通道存在但 IsEnabled=false（显式 channelId）→ 403 CHANNEL_DISABLED（MapFailReason 显式映射——
+    /// Oracle 复查 Issue 1：原缺 case 落入默认 400，与文档约定 403 不符）。</summary>
+    [Fact]
+    public async Task SsoLogin_DisabledChannel_403_ChannelDisabled()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = false },   // 禁用通道
+        };
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login/wechat-mp",
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_DISABLED", body!.Code);
+        Assert.False(FederationEndpointHost.Login.Invoked);                   // 禁用通道不触达门面
+    }
+
+    /// <summary>(c)：GET /feberation/jwks——信任内核 JWKS 公钥分发（匿名公开，跨平台根级）→ 200 + JSON 含 kid。</summary>
     [Fact]
     public async Task Jwks_Get_ReturnsPublicKeys()
     {
@@ -105,9 +171,59 @@ public sealed class FederationWebExtensionTests
         Assert.True(FederationEndpointHost.Token2.JwksInvoked);
     }
 
+    // ═══════════════════ 平台事件推送（缺陷修复 2026-10-11） ═══════════════════
+
+    /// <summary>event 端点（POST /feberation/{platformId}/event/{channelId}）——channelType 按平台段推导
+    /// <c>{PlatformType}_event</c> 精确匹配 *_event 模板（缺陷修复：原 null 分支 IsOAuthChannel 白名单仅
+    /// *_oauth/*_oidc，event 通道不可达）——Fake 工厂收到 channelType="wechat_event"。</summary>
+    [Fact]
+    public async Task Event_ChannelTypeDerivedFromPlatformId()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("wechat-mp", FederationEndpointHost.Factory.LastChannelId);
+        Assert.Equal("wechat_event", FederationEndpointHost.Factory.LastChannelType);   // 平台段推导修复断言
+        Assert.True(FederationEndpointHost.Channel.Authenticated);
+        Assert.Equal("""{"EventType":"subscribe"}""", FederationEndpointHost.Channel.LastContext!.Parameters["__raw"]);
+    }
+
+    /// <summary>event 端点平台段错配 → 404（统一防枚举，对齐平台校验语义）。</summary>
+    [Fact]
+    public async Task Event_PlatformMismatch_404()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/dingtalk/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        Assert.False(FederationEndpointHost.Factory.CreateInvoked);
+    }
+
+    /// <summary>event 端点无通道段（单通道降级）——唯一活跃通道解析 → 平台段推导 + 构造。</summary>
+    [Fact]
+    public async Task Event_NoChannelId_SingleChannel_DerivesAndConstructs()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("wechat-mp", FederationEndpointHost.Factory.LastChannelId);
+        Assert.Equal("wechat_event", FederationEndpointHost.Factory.LastChannelType);
+    }
+
     // ═══════════════════ 子应用消费方委托端点冒烟（ISsoSubAppBridge——2026-10-11） ═══════════════════
 
-    /// <summary>(1)：POST /sso/authorize/start——匿名发起外部认证成功 → 200 {authorize_url, state}；
+    /// <summary>(1)：POST /feberation/authorize/start——匿名发起外部认证成功 → 200 {authorize_url, state}；
     /// 断言 Fake 收到请求含 <c>CallbackBaseUrl</c> 服务端可信填充（<c>http://localhost</c>——请求体伪造值被覆盖，防子应用伪造回调域）。</summary>
     [Fact]
     public async Task AuthorizeStart_Success_200_AndServerFillsCallbackBaseUrl()
@@ -154,8 +270,8 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("ORIGIN_NOT_ALLOWED", body!.Code);
     }
 
-    /// <summary>(3)：GET /sso/oauth/{channelId}/callback——OAuth IdP 302 重定向落点（<b>GET</b> 方法）成功 → 302
-    /// Location 含 code + state（跳回子应用）；query 参数透传 Fake。</summary>
+    /// <summary>(3)：GET /feberation/{platformId}/oauth/{channelId}/callback——OAuth IdP 302 重定向落点（<b>GET</b> 方法）
+    /// 成功 → 302 Location 含 code + state（跳回子应用）；query 参数透传 Fake。</summary>
     [Fact]
     public async Task OAuthCallback_Get_302_LocationContainsCodeAndState()
     {
@@ -165,7 +281,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync(
-            $"{DefaultPrefix}/oauth/wechat-mp/callback?code=wechat-code-1&state=ticket-1");
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/wechat-mp/callback?code=wechat-code-1&state=ticket-1");
 
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         var location = resp.Headers.Location?.ToString();
@@ -181,7 +297,47 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("ticket-1", FederationEndpointHost.Bridge.LastCallbackParams["state"]);
     }
 
-    /// <summary>(4a)：POST /sso/trust/issue——已认证帧（测试哨兵中间件 X-Test-Auth-User 写入 Items["DomainUser"]）
+    /// <summary>(3b)：GET /feberation/{platformId}/oauth/callback（无通道段，单通道降级）——唯一活跃通道解析 →
+    /// CompleteOAuthAsync(cfg.ChannelId)——无前缀降级形态（文档漂移补实）。</summary>
+    [Fact]
+    public async Task OAuthCallback_NoChannelId_SingleChannel_ResolvesDefault()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Bridge.CallbackResult =
+            new(true, "https://app.example.com/cb?code=ac-1&state=sub-state-1", "sub-state-1", null);
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/callback?code=wechat-code-1&state=ticket-1");
+
+        Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
+        Assert.Equal("wechat-mp", FederationEndpointHost.Bridge.LastCallbackChannelId);   // 单通道降级解析
+        Assert.Equal("wechat-code-1", FederationEndpointHost.Bridge.LastCallbackParams!["code"]);
+    }
+
+    /// <summary>(3c)：OAuth 回调多通道 + 无通道段 → 400 CHANNEL_REQUIRED（B 守卫）。</summary>
+    [Fact]
+    public async Task OAuthCallback_MultiChannel_NoChannelId_400_ChannelRequired()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = true },
+            new() { ChannelId = "wechat-mp-2", PlatformType = "wechat", IsEnabled = true },
+        };
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/callback?code=wechat-code-1&state=ticket-1");
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_REQUIRED", body!.Code);
+        Assert.Null(FederationEndpointHost.Bridge.LastCallbackChannelId);      // 守卫拦截不触达门面
+    }
+
+    /// <summary>(4a)：POST /feberation/trust/issue——已认证帧（测试哨兵中间件 X-Test-Auth-User 写入 Items["DomainUser"]）
     /// → 302 跳回子应用；已认证用户 UserIdString 作为 platformUid 传给门面。</summary>
     [Fact]
     public async Task TrustIssue_AuthenticatedFrame_302()
@@ -205,7 +361,7 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("app-1", FederationEndpointHost.Bridge.LastTrustIssueRequest!.AppId);
     }
 
-    /// <summary>(4b)：POST /sso/trust/issue——未认证（无已认证帧）→ 401 UNAUTHENTICATED（不触达门面）。</summary>
+    /// <summary>(4b)：POST /feberation/trust/issue——未认证（无已认证帧）→ 401 UNAUTHENTICATED（不触达门面）。</summary>
     [Fact]
     public async Task TrustIssue_Unauthenticated_401()
     {
@@ -222,7 +378,7 @@ public sealed class FederationWebExtensionTests
         Assert.Null(FederationEndpointHost.Bridge.LastTrustIssueRequest);   // 未触达门面
     }
 
-    /// <summary>(5a)：POST /sso/identity/claim——子应用兑现成功 → 200 {mode, channel_id, external_user_id}。</summary>
+    /// <summary>(5a)：POST /feberation/identity/claim——子应用兑现成功 → 200 {mode, channel_id, external_user_id}。</summary>
     [Fact]
     public async Task IdentityClaim_Success_200_ReturnsIdentityPayload()
     {

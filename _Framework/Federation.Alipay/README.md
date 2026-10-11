@@ -23,7 +23,7 @@
 - **Authentication + Federation = 认证中心实例**（内部认证 + 多应用联邦 SSO）
 - **Federation + `TKWF.Federation.Alipay` = 纯外部联邦登录（BYO IdP）**：本库引 Federation 扩展实现 `ISsoChannel`，经 Federation 窄适配编排身份获取方向，消费方零内部 Provider 全量
 
-**不包含**：`/sso/*` 端点映射（OAuth 代理入口 / 支付宝回调——归 Federation 扩展/消费方**装配层**，本库不引 AspNetCore）；**H5 端内 JSAPI**（`ap.getAuthCode` 纯前端 SDK 取 code——装配层/前端）；refresh_token 长续期（归 L7 非认证面 YAGNI，认证面一次性消费）。
+**不包含**：`/{prefix}/*` 端点映射（OAuth 代理入口 / 支付宝回调——归 Federation 扩展/消费方**装配层**，本库不引 AspNetCore）；**H5 端内 JSAPI**（`ap.getAuthCode` 纯前端 SDK 取 code——装配层/前端）；refresh_token 长续期（归 L7 非认证面 YAGNI，认证面一次性消费）。
 
 ---
 
@@ -72,7 +72,7 @@ services.AddAlipayFederationChannels();   // 内部 TryAddEnumerableConstructibl
 - **凭证承载形态**（Oracle P2-4）：支付宝无对称 AppSecret——**RSA 私钥/公钥 PEM 文件路径**配置（**私钥文件 chmod 600 不进代码库**；生产 fail-fast 缺钥拒——F7）。支持 KMS/装配注入路径（N4 §六风险）。
 - **open_id 配置启用**（N4 §二）：接入前置须在支付宝控制台启用 openid 配置（灰度阶段）——本库统一读 `open_id` 字段（USER_ID→OPENID_AND_USERID→OPEN_ID 过渡兼容）。
 
-### 4. 编排（Federation 白名单 + `/sso/login` 路由——已实现通道 + 装配层编排）
+### 4. 编排（Federation 白名单 + `/{prefix}/{platformId}/login` 路由——已实现通道 + 装配层编排）
 
 ```csharp
 using TKWF.Ext.Federation;
@@ -81,7 +81,7 @@ using TKWF.Ext.Federation;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-Federation 扩展按 channel 类型路由：`alipay_oauth` → 装配层构造支付宝 authorize URL（`AlipayApiClient.BuildAuthorizeUrl` 或装配层直拼 `openauth.alipay.com/oauth2/publicAppAuthorize.htm`——**authorize 构造归装配层**：state 生成 + 会话绑定 + 回调校验全部归装配层，通道不感知 state——Oracle P1-1）→ 回调 `/sso/oauth/{channelId}/callback?auth_code=&state=`（v0.3.0 多通道带 channelId 段精确选区；无前缀降级默认通道）→ 装配层把 auth_code 映射为 context "code" 键 + redirect_uri 注入 → `AlipayOauthChannel.AuthenticateAsync`。
+Federation 扩展按 channel 类型路由：`alipay_oauth` → 装配层构造支付宝 authorize URL（`AlipayApiClient.BuildAuthorizeUrl` 或装配层直拼 `openauth.alipay.com/oauth2/publicAppAuthorize.htm`——**authorize 构造归装配层**：state 生成 + 会话绑定 + 回调校验全部归装配层，通道不感知 state——Oracle P1-1）→ 回调 `/{prefix}/{platformId}/oauth/{channelId}/callback?auth_code=&state=`（v0.3.0 多通道带 channelId 段精确选区；无前缀降级默认通道）→ 装配层把 auth_code 映射为 context "code" 键 + redirect_uri 注入 → `AlipayOauthChannel.AuthenticateAsync`。
 
 **redirect_uri 校验（N4 P1-2 防开放重定向）**：支付宝 code→token 换取**不经** redirect_uri（顶层参数无此字段——与 QQ 不同）；redirect_uri 须与支付宝控制台回调配置一致（防开放重定向）——装配层/消费方在授权步骤保证，通道仅校验 context 注入的 redirect_uri 存在。
 
@@ -103,7 +103,7 @@ Federation 扩展按 channel 类型路由：`alipay_oauth` → 装配层构造�
 
 | 通道 | 场景 | 流程 |
 |------|------|------|
-| `alipay_oauth`（出站-only） | 支付宝授权身份获取（跳转/扫码/H5 三形态统一收敛） | `/sso/login` 按 channel 路由 → 装配层构造 authorize URL（**state 必填**，CSRF 防护，归装配层）→ 回调 auth_code（+state）→ `AlipayOauthChannel.AuthenticateAsync`：缺 code 拒 / 缺 redirect_uri 拒 → `AlipayApiClient.GetAccessTokenAsync`（RSA2 签名 → 验签 → user_id）→ `(channel_id, user_id) → uid` → Federation 签 token2 |
+| `alipay_oauth`（出站-only） | 支付宝授权身份获取（跳转/扫码/H5 三形态统一收敛） | `/{prefix}/{platformId}/login` 按 channel 路由 → 装配层构造 authorize URL（**state 必填**，CSRF 防护，归装配层）→ 回调 auth_code（+state）→ `AlipayOauthChannel.AuthenticateAsync`：缺 code 拒 / 缺 redirect_uri 拒 → `AlipayApiClient.GetAccessTokenAsync`（RSA2 签名 → 验签 → user_id）→ `(channel_id, user_id) → uid` → Federation 签 token2 |
 
 - **三种授权形态边界（Oracle P1-1 定案）**：跳转（装配层拼 `publicAppAuthorize.htm` 302）/ 扫码（二维码 = 授权页二维码；扫码页专用 `alipay.user.info.auth` 生成 `qr_code_url` 归装配层签名调用编排）/ H5 JSAPI（`ap.getAuthCode` 纯前端 SDK）——在 `AuthenticateAsync` 端点处**全部收敛到 code→user_id 同一处理路径**（channel 无分支）。
 - **unionid = 应用分组（N4 §二）**：支付宝 unionid 为应用分组维度（须绑定分组）——跨应用对齐可选增强；user_id/open_id 为应用维度唯一（external_uid 稳定映射键）。双锚点写入（user_id 写 PlatformAccountMap + unionid 经 `ISsoAccountLinkService.SetFederationAnchorAsync` 写联盟锚点）归装配层/编排层（对齐 N2 §3.1 选项 B）。

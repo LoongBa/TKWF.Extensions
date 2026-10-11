@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -48,6 +49,18 @@ internal sealed class ExternalIdpAuthenticator : DomainServiceBase, IExternalIdp
     {
         try
         {
+            // B 守卫（Oracle 评审条件 1——对外路由命名空间方案）：多通道（活跃数 >1）+ 缺省 channel_id →
+            // CHANNEL_REQUIRED 硬失败（防 GetDefaultAsync IsDefault→首项 非确定性静默选区）；
+            // 单通道（活跃数 ==1）→ 降级无歧义。守卫在消费者层（CreateDefaultAsync null 语义已占用）。
+            if (!parameters.TryGetValue(ChannelIdKey, out var channelId) || string.IsNullOrWhiteSpace(channelId))
+            {
+                if ((await Registry.GetAllAsync(ct)).Count(c => c.IsEnabled) > 1)
+                {
+                    _logger.LogWarning("外部 IdP 借道认证守卫：多通道部署须显式 channel_id（CHANNEL_REQUIRED）");
+                    return new ExternalIdpAuthResult(false, null, "CHANNEL_REQUIRED", 0);
+                }
+            }
+
             var channel = await ResolveChannelAsync(channelType, parameters, ct);
             if (channel is null)
             {
@@ -69,11 +82,14 @@ internal sealed class ExternalIdpAuthenticator : DomainServiceBase, IExternalIdp
 
     private async Task<ISsoChannel?> ResolveChannelAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct)
     {
-        // 显式 channel_id 优先（精确选区）→ 缺省降级默认通道（对齐 SsoLogin.LoginDefaultAsync 语义）
+        // 显式 channel_id 优先（精确选区）→ 缺省降级默认通道（对齐 SsoLogin.LoginDefaultAsync 语义；B 守卫已在 AuthenticateAsync 前置）
         if (parameters.TryGetValue(ChannelIdKey, out var channelId) && !string.IsNullOrWhiteSpace(channelId))
             return await Factory.CreateAsync(channelId, channelType, ct);
         return await Factory.CreateDefaultAsync(ct);
     }
 
     private ISsoChannelFactory Factory => _factory ??= User.Use<ISsoChannelFactory>();
+    private IChannelRegistry Registry => _registry ??= User.Use<IChannelRegistry>();
+
+    private IChannelRegistry? _registry;
 }

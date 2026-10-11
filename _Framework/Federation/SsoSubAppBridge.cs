@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -21,10 +22,12 @@ namespace TKWF.Ext.Federation;
 /// <para>对齐 <see cref="SsoLogin"/> 门面范式：继承 <see cref="DomainServiceBase"/>（经基类 <c>User</c> 取上下文）、
 /// 内部经 <c>User.Use&lt;契约&gt;()</c> 懒加载（DI004 零豁免）、<c>AddConstructibleService</c> 注册（守卫工厂）。
 /// 异常收敛：非取消异常 catch → FailReason（机器可读），成功返回 Success——端点 handler 按 FailReason 映射 HTTP。</para>
-/// <para><b>state 票据</b>：AES-GCM 单段密文（keyed <c>ISymmetricKeyProvider</c> <c>SymmetricKeyProviderKeys.Federation</c>，
+/// <para><b>state 票据</b>：HMAC-SHA256 签名（keyed <c>ISymmetricKeyProvider</c> <c>SymmetricKeyProviderKeys.Federation</c>，
 /// Oracle 条件 3 域内自洽——Federation 自有密钥，不跨域复用 TrustCenter 密钥）承载
-/// <c>app_id|redirect|sub_state</c>，Base64Url 编码（URL-safe）；回调验签解密解 app_id/redirect，
-/// 防开放重定向 + 防 state 伪造（机密性 + 完整性，优于 HMAC）。</para>
+/// <c>app_id|redirect|sub_state</c>，格式 <c>base64url(payload) + "." + base64url(签名前 8 字节)</c>（URL-safe）；
+/// 回调验签解 app_id/redirect，防开放重定向 + 防 state 伪造。⚠️ 选型：payload 非机密（仅需完整性防篡改）——
+/// HMAC 优于 AES-GCM（更短，兼容支付宝 state ≤100 字符硬约束 N4 §3.2）；签名截断 8 字节（64-bit，state 短 TTL
+/// 一次性防篡改够用），详见 <see cref="SignState"/>。</para>
 /// </summary>
 [DiContractIgnore]
 public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
@@ -54,6 +57,9 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
     private ISsoChannelFactory Channels => _channels ??= User.Use<ISsoChannelFactory>();
     private ISsoLogin Login => _login ??= User.Use<ISsoLogin>();
     private IAccessCodeService Codes => _codes ??= User.Use<IAccessCodeService>();
+    private IChannelRegistry Registry => _registry ??= User.Use<IChannelRegistry>();
+
+    private IChannelRegistry? _registry;
 
     /// <inheritdoc />
     public async Task<AuthorizeStartResult> StartAsync(AuthorizeStartRequest request, CancellationToken ct = default)
@@ -72,7 +78,11 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
             if (!await IsRedirectAllowedAsync(request.AppId, request.Redirect, ct))
                 return new AuthorizeStartResult(false, null, null, "ORIGIN_NOT_ALLOWED");
 
-            // ③ 通道选区（null ChannelId → 默认通道降级）
+            // ③ 通道选区（null ChannelId → 默认通道降级；B 守卫——多通道活跃数 >1 → CHANNEL_REQUIRED，
+            //    防 GetDefaultAsync IsDefault→首项 非确定性静默选区，Oracle 评审条件 1；单通道降级无歧义）
+            if (request.ChannelId is null && (await Registry.GetAllAsync(ct)).Count(c => c.IsEnabled) > 1)
+                return new AuthorizeStartResult(false, null, null, "CHANNEL_REQUIRED");
+
             ISsoChannel? channel = request.ChannelId is null
                 ? await Channels.CreateDefaultAsync(ct)
                 : await Channels.CreateAsync(request.ChannelId, null, ct);

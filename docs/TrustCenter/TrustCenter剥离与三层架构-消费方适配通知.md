@@ -24,14 +24,14 @@
 │   ├─ accesscode（数据投递 + ExpectedClaimant）  │
 │   └─ ISsoChannel/IToken2Service/IAccessCodeService（Abstractions）│
 └──────────────┬──────────────────────────────────┘
-Federation —— 对外连接层壳（/sso/* 端点 + 编排 + 桥接）
+Federation —— 对外连接层壳（/feberation/* 端点 + 编排 + 桥接）
 ```
 
 | 对象 | 变更前 | 变更后 |
 |------|--------|--------|
 | 信任内核（token2/应用注册/accesscode） | `TKWF.Ext.Federation` 主包 | **`TKWF.Ext.TrustCenter`**（新扩展，命名空间 `TKWF.Ext.TrustCenter`） |
 | 信任契约（ISsoChannel/IToken2Service/IAccessCodeService） | Federation 主包 | **`TKWF.Ext.TrustCenter.Abstractions`**（新契约包） |
-| Federation | 信任内核 + 连接混合 | **连接层壳**（/sso/* 端点 + SsoLogin 编排 + ExternalIdpAuthenticator 桥接 + 多通道设施保留） |
+| Federation | 信任内核 + 连接混合 | **连接层壳**（/feberation/* 端点 + SsoLogin 编排 + ExternalIdpAuthenticator 桥接 + 多通道设施保留） |
 | 平台库 | 引 Federation 主包（实现 ISsoChannel） | 引 `TrustCenter.Abstractions`（新增）+ Federation 主包（保留——ChannelConfig/IChannelSource 仍在连接层） |
 | AuthCenter 微信 Provider | `WeChatAuthenticationProvider`（内建双源） | **删除**——经 `IExternalIdpLoginService` 借道 Federation 平台库 |
 | 微信协议实现 | AuthCenter 内 `WeChatApiClient` + 平台库双份 | **单源**——仅平台库（`TKWF.Federation.WeChat`） |
@@ -46,7 +46,7 @@ Federation —— 对外连接层壳（/sso/* 端点 + 编排 + 桥接）
 <!-- csproj：Federation 主包引用保留（连接层），新增 TrustCenter 主包 + 契约包 -->
 <ProjectReference Include="..\..\_Framework\TrustCenter\TKWF.Ext.TrustCenter.csproj" />
 <ProjectReference Include="..\..\_Framework\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
-<ProjectReference Include="..\..\_Framework\Federation\TKWF.Ext.Federation.csproj" />   <!-- 连接层壳（如需 /sso 编排） -->
+<ProjectReference Include="..\..\_Framework\Federation\TKWF.Ext.Federation.csproj" />   <!-- 连接层壳（如需 /feberation 编排） -->
 ```
 
 ```csharp
@@ -63,7 +63,7 @@ using TKWF.Ext.TrustCenter;   // ✅ 变更后
 ```csharp
 // 信任内核（token2/accesscode/应用注册）
 [TKWFEnabledExtension(typeof(TrustCenterExtensionInitializer<>))]
-// 连接层（/sso 编排 + 桥接——可选，需外连才装）
+// 连接层（/feberation 编排 + 桥接——可选，需外连才装）
 [TKWFEnabledExtension(typeof(FederationExtensionInitializer<>))]
 // 认证中心（身份认证——组合式）
 [TKWFEnabledExtension(typeof(AuthCenterExtensionInitializer<>))]
@@ -76,7 +76,7 @@ using TKWF.Ext.TrustCenter;   // ✅ 变更后
 | 信任内核（token2/accesscode/密钥） | `TKWF:Federation` | **`TKWF:TrustCenter`**（Issuer/SigningKeyPath/CurrentKid/SigningKeys/Token2ExpirationSeconds/AccessCodeExpirationSeconds/**AccessCodeRetentionDays**/SecretEncryptionKeyPath/IsProduction） |
 | Federation 连接层通道注册表密钥 | （无独立节——曾归 FederationOptions） | **`TKWF:Federation:ChannelRegistry`**（SecretEncryptionKeyPath/IsProduction） |
 | Federation 静态通道 | `TKWF:Federation:Channels` | 不变（`FederationStaticChannelOptions`） |
-| Federation Web 端点 | （无——/sso 归装配层） | **`TKWF:Federation:Web`**（RoutePrefix 默认 `/sso` + LoginEndpointEnabled/JwksEndpointEnabled/EventEndpointEnabled） |
+| Federation Web 端点 | （无——/feberation 归装配层） | **`TKWF:Federation:Web`**（RoutePrefix 默认 `/feberation` + LoginEndpointEnabled/JwksEndpointEnabled/EventEndpointEnabled） |
 | AuthCenter 认证方式 | `EnabledAuthTypes: ["sms","wechat","password"]` | **`["sms","password","federated"]`**（`wechat` 值已删——外部 IdP 登录 authType 用 `federated`） |
 
 ### 4. 认证端点（AuthCenter——破坏性）
@@ -116,7 +116,7 @@ services.AddWeChatFederationChannels();  // 不变——平台库注册方法，
 DELETE FROM TKWF_PlatformCredential WHERE Platform = 'wechat';
 ```
 
-### 9. FederationWebExtension（新增装配面——原 /sso 归装配层）
+### 9. FederationWebExtension（新增装配面——原 /feberation 归装配层）
 
 消费方如需对外连接端点，装配：
 
@@ -126,7 +126,7 @@ DELETE FROM TKWF_PlatformCredential WHERE Platform = 'wechat';
 .UseWebExtensions(e => e.Add<FederationWebExtension<MyUserInfo>>())
 ```
 
-端点：`POST /sso/login` / `POST /sso/login/{channelId}` / `GET /sso/jwks` / `POST /sso/event/{channelId}`（路由前缀 `TKWF:Federation:Web:RoutePrefix` 可配，默认 `/sso`）。
+端点：`POST /feberation/{platformId}/login` / `POST /feberation/{platformId}/login/{channelId}` / `GET /feberation/jwks` / `POST /feberation/{platformId}/event/{channelId}`（路由前缀 `TKWF:Federation:Web:RoutePrefix` 可配，默认 `/feberation`）。
 
 ---
 
@@ -149,8 +149,8 @@ DELETE FROM TKWF_PlatformCredential WHERE Platform = 'wechat';
 ## 四、新能力（供业务层选用）
 
 - **AccessCode 安全数据投递**（TrustCenter 内置，`IAccessCodeService`）：`IssueAsync(payloadJson, ttl, expectedClaimant)` / `PeekAsync<T>` / `RedeemAsync<T>`——Payload AES-GCM 密文落库（明文上限 ~4068 字节）、ExpectedClaimant 原子核销（无 TOCTOU）、过期清理（`AccessCodeRetentionDays` 默认 7 天）——见 `docs/TrustCenter/信任中心-使用指南.md`
-- **FederationWebExtension**：连接层内建 /sso/* 端点（登录/JWKS/事件接收）
-- **JWKS 公共密钥分发**：`GET /sso/jwks`（Federation 装配时）
+- **FederationWebExtension**：连接层内建 /feberation/* 端点（登录/JWKS/事件接收）
+- **JWKS 公共密钥分发**：`GET /feberation/jwks`（Federation 装配时）
 
 ---
 

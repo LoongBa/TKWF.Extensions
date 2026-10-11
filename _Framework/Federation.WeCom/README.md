@@ -20,7 +20,7 @@
 
 **组合矩阵**（消费方按需装配）：只引 `TKWF.Ext.Authentication` = 内部认证（单应用登录）；**Authentication + Federation = 认证中心实例**；**Federation + `TKWF.Federation.WeCom` = 纯外部联邦登录（BYO IdP）**——本库引 Federation 扩展实现 `ISsoChannel`，经 Federation 窄适配编排身份获取方向。
 
-**不包含**：`@wecom/jssdk` **内嵌扫码组件前端**（`ww.createWWLoginPanel`——归装配层/前端，库提供扫码 authorize URL）；**通讯录管理 API**（成员增删改/部门树 `user/get` 等组织管理能力——非认证面归 L7 YAGNI）；**企业微信-微信 unionid 打通**（双通道+主体一致性非默认——锚点 TKWF 侧自建映射 N2）；`snsapi_privateinfo` **敏感信息持久化**（user_ticket 即用即弃不落库——隐私最小化）；`/sso/*` 端点映射（归 Federation 扩展/消费方装配层）。
+**不包含**：`@wecom/jssdk` **内嵌扫码组件前端**（`ww.createWWLoginPanel`——归装配层/前端，库提供扫码 authorize URL）；**通讯录管理 API**（成员增删改/部门树 `user/get` 等组织管理能力——非认证面归 L7 YAGNI）；**企业微信-微信 unionid 打通**（双通道+主体一致性非默认——锚点 TKWF 侧自建映射 N2）；`snsapi_privateinfo` **敏感信息持久化**（user_ticket 即用即弃不落库——隐私最小化）；`/{prefix}/*` 端点映射（归 Federation 扩展/消费方装配层）。
 
 ## 二、安装与接线
 

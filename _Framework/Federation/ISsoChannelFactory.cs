@@ -25,6 +25,7 @@ public interface ISsoChannelFactory : IDomainService
     /// <returns>构造的通道实例；channelId 不存在 / 平台库未注册对应类型 → null（装配层转映射错误）。</returns>
     Task<ISsoChannel?> CreateAsync(string channelId, string? channelType = null, CancellationToken ct = default);
 
-    /// <summary>构造默认通道实例（无前缀 /sso/oauth/callback 降级——registry.GetDefaultAsync + OAuth 类型推导）。</summary>
+    /// <summary>构造默认通道实例（单通道降级——registry 活跃通道数 ==1 时唯一通道；多通道须显式 channelId，
+    /// B 守卫 CHANNEL_REQUIRED 由消费者层承担——Oracle 评审条件 1）。</summary>
     Task<ISsoChannel?> CreateDefaultAsync(CancellationToken ct = default);
 }

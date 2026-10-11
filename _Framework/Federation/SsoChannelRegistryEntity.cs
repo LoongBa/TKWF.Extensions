@@ -68,7 +68,7 @@ namespace TKWF.Ext.Federation
         [MaxLength(4000)]
         public string? ExtraJsonEncrypted { get; set; }
 
-        /// <summary>默认通道标记（无前缀 /sso/oauth/callback 降级选区；多公众号语义边界见方案 §3.2）。</summary>
+        /// <summary>默认通道标记（单通道降级（活跃数==1；多通道 B 守卫 CHANNEL_REQUIRED）选区；多公众号语义边界见方案 §3.2）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 8)]
         public bool IsDefault { get; set; }
 

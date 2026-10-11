@@ -23,7 +23,7 @@
 - **Authentication + Federation = 认证中心实例**（内部认证 + 多应用联邦 SSO）
 - **Federation + `TKWF.Federation.QQ` = 纯外部联邦登录（BYO IdP——V5 国外客户主力形态）**：本库引 Federation 扩展实现 `ISsoChannel`，经 Federation 窄适配编排身份获取方向，消费方零内部 Provider 全量
 
-**不包含**：`/sso/*` 端点映射（OAuth 代理入口 / QQ 回调——归 Federation 扩展/消费方**装配层**，本库不引 AspNetCore）；**QQ 扫码**（官方仅跳转授权，无扫码；APP 内嵌 H5 不支持）；refresh_token 续票（QQ refresh_token 一次有效续票 3 个月——归 L7 非认证面 YAGNI，认证面一次性消费）。
+**不包含**：`/{prefix}/*` 端点映射（OAuth 代理入口 / QQ 回调——归 Federation 扩展/消费方**装配层**，本库不引 AspNetCore）；**QQ 扫码**（官方仅跳转授权，无扫码；APP 内嵌 H5 不支持）；refresh_token 续票（QQ refresh_token 一次有效续票 3 个月——归 L7 非认证面 YAGNI，认证面一次性消费）。
 
 ---
 
@@ -70,7 +70,7 @@ services.AddQqFederationChannels();   // 内部 TryAddEnumerableConstructible<IS
 - **`[Options("TKWF:Federation:QQ")]`**：SG1 在消费方生成 GeneratedOptionsBindings，宿主启动期自动绑定；亦可在消费方 ConfigureExtensions 编程覆盖（`AddQqFederationChannels(x => x.Channels = ...)`）。
 - **凭证承载形态**（Oracle 评审点 4 P2）：开发——明文配置；生产——**AES-GCM 密文**或装配注入（K8s secret mount）；**AppSecret 永不明文进配置库**。channel 凭证归本库自持（P1-1：QQ 仅 AppId+AppKey 两凭证，AppKey=ClientSecret 同物，命名对齐 WeChat 先例 AppId+AppSecret）。
 
-### 4. 编排（Federation 白名单 + `/sso/login` 路由——已实现通道 + 装配层编排）
+### 4. 编排（Federation 白名单 + `/{prefix}/{platformId}/login` 路由——已实现通道 + 装配层编排）
 
 ```csharp
 using TKWF.Ext.Federation;
@@ -99,7 +99,7 @@ Federation 扩展按 channel 类型路由：`qq_oauth` → 302 QQ authorize（gr
 
 | 通道 | 场景 | 流程 |
 |------|------|------|
-| `qq_oauth`（出站-only） | 网页跳转授权身份获取 | `/sso/login` 按 channel 路由 → 302 QQ `authorize?client_id&redirect_uri&state&scope&display`（**state 必填**，CSRF 防护，归装配层）→ 回调 code（+state，**恒传 redirect_uri 进 context 供换取一致性比对**）→ `QqOauthChannel.AuthenticateAsync`：code 缺拒 / redirect_uri 缺拒 → `QqApiClient.GetAccessTokenAsync`（client_secret + fmt=json + redirect_uri 出站比对）→ `GetMeAsync` → openid（+unionid 若 EnableUnionId）→ `(channel_id, openid) → uid` → Federation 签 token2 |
+| `qq_oauth`（出站-only） | 网页跳转授权身份获取 | `/{prefix}/{platformId}/login` 按 channel 路由 → 302 QQ `authorize?client_id&redirect_uri&state&scope&display`（**state 必填**，CSRF 防护，归装配层）→ 回调 code（+state，**恒传 redirect_uri 进 context 供换取一致性比对**）→ `QqOauthChannel.AuthenticateAsync`：code 缺拒 / redirect_uri 缺拒 → `QqApiClient.GetAccessTokenAsync`（client_secret + fmt=json + redirect_uri 出站比对）→ `GetMeAsync` → openid（+unionid 若 EnableUnionId）→ `(channel_id, openid) → uid` → Federation 签 token2 |
 
 - **unionid 联盟锚点配合**（P1-2）：`EnableUnionId=true` 时 `GetMeAsync` 额外请求 `unionid=1` 并返回（未申请权限时 QQ 返 100048 companyid not set → 抛错）。**external_uid 始终 = openid**（应用维度稳定映射键）；unionid 仅为联盟锚点写入辅助（写 `FederationAnchorOpenId` 归装配层，对齐 N2 §3.1 选项 B——锚点列存平台无关自生成值）。
 - **匿名关联**：QQ 无手机号无邮箱（官方明示），联邦只能匿名关联（openid/unionid）——账号绑定靠 N2 锚点策略（映射表），不依赖手机号。

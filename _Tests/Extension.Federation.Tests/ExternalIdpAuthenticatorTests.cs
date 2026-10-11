@@ -31,28 +31,37 @@ public class ExternalIdpAuthenticatorTests : TestHostBase
         new FederationExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         // 静态通道来源（registry 选区数据源——Composite 无 Db 注册回退静态）：
-        // fake-default（IsDefault 默认通道——缺省 channel_id 降级）/ fake-mp（显式选区）
+        // fake-default（IsDefault 默认通道——单通道场景缺省 channel_id 降级）；
+        // 多通道/显式选区场景经用例 configure 追加第二个 source（fake-mp）——B 守卫（Oracle 评审条件 1）。
         services.AddSingleton<IChannelSource>(new StubStaticSource(
             new ChannelConfig
             {
                 ChannelId = "fake-default", PlatformType = "wechat", AppId = "wx-fake", AppSecret = "s1",
                 IsEnabled = true, IsDefault = true,
-            },
+            }));
+    }
+
+    /// <summary>追加第二个通道 source（fake-mp）——多通道场景（显式选区 / B 守卫）用例专用。</summary>
+    private static Action<IServiceCollection> AddFakeMpSource() => services =>
+        services.AddSingleton<IChannelSource>(new StubStaticSource(
             new ChannelConfig
             {
                 ChannelId = "fake-mp", PlatformType = "wechat", AppId = "wx-fake", AppSecret = "s2",
                 IsEnabled = true,
             }));
-    }
 
-    /// <summary>显式 channel_id 选区 → 工厂构造 Fake 通道（ChannelId 传入）→ 委托认证成功 + AuthLevel 透传。</summary>
+    /// <summary>显式 channel_id 选区 → 工厂构造 Fake 通道（ChannelId 传入）→ 委托认证成功 + AuthLevel 透传。
+    /// 宿主多通道（fake-default + fake-mp）——显式选区不受 B 守卫影响。</summary>
     [Fact]
     public async Task Authenticate_WithChannelId_DelegatesToRegisteredChannel_Success()
     {
         ResetFakeState();
         using var _ = this;
         var (_, user) = BindTestScope(services =>
-            services.TryAddEnumerableConstructible<ISsoChannel, FakeSsoChannel>());
+        {
+            AddFakeMpSource()(services);
+            services.TryAddEnumerableConstructible<ISsoChannel, FakeSsoChannel>();
+        });
 
         var bridge = user.Use<IExternalIdpAuthenticator>();
         var result = await bridge.AuthenticateAsync(
@@ -68,9 +77,10 @@ public class ExternalIdpAuthenticatorTests : TestHostBase
         Assert.Equal(1, FakeSsoChannel.AuthenticateCalls);
     }
 
-    /// <summary>缺省 channel_id → 默认通道降级（CreateDefaultAsync——对齐 SsoLogin.LoginDefaultAsync 语义）。</summary>
+    /// <summary>缺省 channel_id → 单通道（活跃数 ==1）→ 默认通道降级（CreateDefaultAsync——对齐 SsoLogin.LoginDefaultAsync
+    /// 语义；B 守卫单通道无歧义放行，Oracle 评审条件 1）。</summary>
     [Fact]
-    public async Task Authenticate_NoChannelId_FallsBackToDefaultChannel_Success()
+    public async Task Authenticate_NoChannelId_SingleChannel_FallsBackToDefaultChannel_Success()
     {
         ResetFakeState();
         using var _ = this;
@@ -87,6 +97,32 @@ public class ExternalIdpAuthenticatorTests : TestHostBase
         Assert.Equal("openid-fake", result.ExternalUserId);
         Assert.Equal("fake-default", FakeSsoChannel.LastConstructedChannelId);  // 默认通道选区命中
         Assert.Equal(2, result.AuthLevel);
+    }
+
+    /// <summary>缺省 channel_id + 多通道（活跃数 >1）→ CHANNEL_REQUIRED 硬失败（B 守卫——防 IsDefault→首项
+    /// 非确定性静默选区，Oracle 评审条件 1；须显式 channel_id）。</summary>
+    [Fact]
+    public async Task Authenticate_NoChannelId_MultiChannel_ReturnsChannelRequired()
+    {
+        ResetFakeState();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            AddFakeMpSource()(services);
+            services.TryAddEnumerableConstructible<ISsoChannel, FakeSsoChannel>();
+        });
+
+        var bridge = user.Use<IExternalIdpAuthenticator>();
+        var result = await bridge.AuthenticateAsync(
+            "wechat_oauth",
+            new Dictionary<string, string?> { ["code"] = "wx-code-2b" },
+            CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Null(result.ExternalUserId);
+        Assert.Equal("CHANNEL_REQUIRED", result.FailReason);
+        Assert.Equal(0, result.AuthLevel);
+        Assert.Equal(0, FakeSsoChannel.AuthenticateCalls);      // 守卫拦截未委托
     }
 
     /// <summary>Fake 通道未注册进 ISsoChannel 集合（registry 有配置但集合空）→ CHANNEL_NOT_FOUND（机器码）。</summary>
@@ -131,14 +167,18 @@ public class ExternalIdpAuthenticatorTests : TestHostBase
         Assert.Equal(0, FakeSsoChannel.AuthenticateCalls);      // 未委托（选区失败）
     }
 
-    /// <summary>parameters 字典原样透传进 SsoChannelAuthContext（桥接不裁剪/不重写——协议字段归平台库通道解析）。</summary>
+    /// <summary>parameters 字典原样透传进 SsoChannelAuthContext（桥接不裁剪/不重写——协议字段归平台库通道解析）。
+    /// 显式 channel_id（fake-mp——追加 source 多通道宿主）。</summary>
     [Fact]
     public async Task Authenticate_PassesParametersThroughToChannelContext()
     {
         ResetFakeState();
         using var _ = this;
         var (_, user) = BindTestScope(services =>
-            services.TryAddEnumerableConstructible<ISsoChannel, FakeSsoChannel>());
+        {
+            AddFakeMpSource()(services);
+            services.TryAddEnumerableConstructible<ISsoChannel, FakeSsoChannel>();
+        });
 
         var bridge = user.Use<IExternalIdpAuthenticator>();
         var parameters = new Dictionary<string, string?>

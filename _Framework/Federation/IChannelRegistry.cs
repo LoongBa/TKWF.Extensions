@@ -24,15 +24,17 @@ public interface IChannelRegistry : IDomainService
     /// <summary>
     /// 统一解析入口（方案 §3.7 双键）——先 <see cref="ChannelConfig.Alias"/> 精确匹配 → 未中再
     /// <see cref="ChannelConfig.ChannelId"/> 匹配 → 未中 null；key 空白 → null。
-    /// <para>用途：对外入口（路由段 /sso/oauth/{channelAlias}/callback 与 {channelId} 并存 / 客户端入参）
-    /// 解析一次后归一内部 ChannelId——<b>内部消费一律走 <see cref="GetAsync"/>（ChannelId），本方法不承载选区</b>。
-    /// alias 缺省 = ChannelId（存量零迁移：无 alias 通道经本方法仍可按 ChannelId 命中）。</para>
+    /// <para>用途：对外入口（路由段 /{prefix}/{platformId}/oauth/{channelId|alias}/callback 与 {channelId} 并存 /
+    /// 客户端入参）解析一次后归一内部 ChannelId——<b>内部消费一律走 <see cref="GetAsync"/>（ChannelId），本方法不承载选区</b>。
+    /// alias 缺省 = ChannelId（存量零迁移：无 alias 通道经本方法仍可按 ChannelId 命中）。
+    /// alias 全局解析（跨平台），平台段为额外校验层（Oracle 评审条件 5c——alias 命中平台错配 → CHANNEL_NOT_FOUND）。</para>
     /// </summary>
     Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default);
 
-    /// <summary>枚举全部通道配置（构建通道集合 / 校验 / 管理面）。</summary>
+    /// <summary>枚举全部通道配置（构建通道集合 / 校验 / 管理面 / B 守卫活跃通道数判定——Oracle 评审条件 1）。</summary>
     Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default);
 
-    /// <summary>默认通道（无前缀 /sso/oauth/callback 降级选区——单实例向后兼容；多公众号语义边界见方案 §3.2）。</summary>
+    /// <summary>默认通道（单通道降级选区——活跃数 ==1 唯一通道；多通道由消费者层 B 守卫 CHANNEL_REQUIRED，
+    /// IsDefault 标记仅单通道场景生效；对外路由命名空间 2026-10-11）。</summary>
     Task<ChannelConfig?> GetDefaultAsync(CancellationToken ct = default);
 }

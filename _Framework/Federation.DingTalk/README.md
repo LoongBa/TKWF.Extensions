@@ -23,7 +23,7 @@
 - **Authentication + Federation = 认证中心实例**（内部认证 + 多应用联邦 SSO）
 - **Federation + `TKWF.Federation.DingTalk` = 纯外部联邦登录（BYO IdP）**：本库引 Federation 扩展实现 `ISsoChannel`，经 Federation 窄适配编排身份获取方向，消费方零内部 Provider 全量
 
-**不包含**：旧 `qrconnect`/`snsapi_login` 协议（法律旧码——文档迁历史，本库**不含**，仅注记）；**Stream Mode**（官方建议新应用替代 Webhook 的事件接收方式——长连接消费端 + 独立 SDK 语义，与"纯库不引 AspNetCore"约束冲突，归装配层另立项；Webhook 验签 crypto 基元 `DingTalkEventCrypto` 与 Stream 解密共用，Stream 落地时复用）；`exclusiveLogin`（专属组织二维码——扫码登录增强形态归装配层调用，库提供 authorize URL 构造能力）；`/sso/*` 端点映射（归 Federation 扩展/消费方装配层）；其他平台网关（微信/QQ/Google——`TKWF.Federation.{平台}` 模式复制）。
+**不包含**：旧 `qrconnect`/`snsapi_login` 协议（法律旧码——文档迁历史，本库**不含**，仅注记）；**Stream Mode**（官方建议新应用替代 Webhook 的事件接收方式——长连接消费端 + 独立 SDK 语义，与"纯库不引 AspNetCore"约束冲突，归装配层另立项；Webhook 验签 crypto 基元 `DingTalkEventCrypto` 与 Stream 解密共用，Stream 落地时复用）；`exclusiveLogin`（专属组织二维码——扫码登录增强形态归装配层调用，库提供 authorize URL 构造能力）；`/{prefix}/*` 端点映射（归 Federation 扩展/消费方装配层）；其他平台网关（微信/QQ/Google——`TKWF.Federation.{平台}` 模式复制）。
 
 ## 二、安装与接线
 

@@ -1,10 +1,10 @@
 # TKWF.Ext.Federation 联邦互联技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0（2026-10-09 三层架构重构——TrustCenter 剥离后**连接层壳**重定位；**待发布**） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + `TKWF.Ext.TrustCenter.Abstractions` 信任契约包 + `TKWF.Ext.AuthCenter.Abstractions` 契约包（SsoProfileService 桥接消费）+ FreeSql + Microsoft.AspNetCore.App（`/sso/*` 端点装配）+ Microsoft.Extensions.Caching.Memory
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.0（2026-10-09 三层架构重构——TrustCenter 剥离后**连接层壳**重定位；**待发布**） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain + `TKWF.Ext.TrustCenter.Abstractions` 信任契约包 + `TKWF.Ext.AuthCenter.Abstractions` 契约包（SsoProfileService 桥接消费）+ FreeSql + Microsoft.AspNetCore.App（`/feberation/*` 端点装配，V0.7.0 路由命名空间）+ Microsoft.Extensions.Caching.Memory
 
 **中文名**: **联邦互联**（2026-10-05 用户裁定——"联邦认证"偏窄，落脚点"互联"宽于认证：Federation 层职责含应用注册/信任建立/身份映射/多 IdP 连接；与"认证中心"对仗：内部中心 + 外部互联）
 
-⚠️ **重构说明**：信任内核（token2/accesscode/应用注册/`ISsoChannel` 契约定义）已迁 **`TKWF.Ext.TrustCenter`**——本包定位为**对外连接层壳**（通道选区/连接编排/`/sso/*` 端点/外部 IdP 桥接）+ 多通道配置持久化。消费方引用/using 适配见 §八 破坏性变更段。
+⚠️ **重构说明**：信任内核（token2/accesscode/应用注册/`ISsoChannel` 契约定义）已迁 **`TKWF.Ext.TrustCenter`**——本包定位为**对外连接层壳**（通道选区/连接编排/`/feberation/*` 端点/外部 IdP 桥接）+ 多通道配置持久化。消费方引用/using 适配见 §八 破坏性变更段。
 
 **核心约束**: 手写 ES256 JWT（零第三方 JWT 库）/ **独立密钥域**（ECDSA P-256 PEM + kid 轮换 + JWKS，与 Authentication RS256 完全独立）/ 授权码 accesscode（120s 单次原子 CAS + SHA256 存储 + PKCE 可选）/ 应用注册（origin 白名单防开放重定向 + scope + client credential AES-GCM + per-channel HMAC）/ 数据访问红线合规（全走 SG1 DataService）/ 经 AuthCenter.Abstractions 契约消费认证内核（组合式，L2 门控）/ **外部 IdP 桥接委托非双实现**（ExternalIdpAuthenticator 借道平台库通道——根因修复）
 
@@ -12,7 +12,7 @@
 
 ## 一、定位（2026-10-09 三层架构重定位）
 
-认证体系**三层架构**（`TrustCenter剥离与三层架构-开发方案.md`）中的**对外连接层**——认证中心实例的对外**统一出口**：内网（AuthCenter 身份 + TrustCenter 信任）零外部协议依赖，Federation 承载所有对外连接（平台 IdP 接入、`/sso/*` 端点、外部身份桥接）。
+认证体系**三层架构**（`TrustCenter剥离与三层架构-开发方案.md`）中的**对外连接层**——认证中心实例的对外**统一出口**：内网（AuthCenter 身份 + TrustCenter 信任）零外部协议依赖，Federation 承载所有对外连接（平台 IdP 接入、`/feberation/*` 端点、外部身份桥接）。
 
 ```
 ┌──────────── 内网（零外部协议依赖） ───────────────────────┐
@@ -21,7 +21,7 @@
                │ 经 Abstractions 契约（不引主包）
 ┌──────────────▼────────────────────────────────────────────┐
 │  Federation（对外连接层壳）                                │
-│   ├─ 装配面：Initializer + WebExtension（/sso/* 端点）      │
+│   ├─ 装配面：Initializer+WebExtension（/feberation/* 端点）│
 │   ├─ 多通道配置持久化（SsoChannelRegistryEntity）          │
 │   ├─ 通道选区设施（IChannelRegistry 系列）                  │
 │   ├─ 连接执行：平台库集合（实现 ISsoChannel）               │
@@ -37,7 +37,7 @@
 | 编排门面 | `ISsoLogin`（登录编排——认证→查号→建号→发码→换 token2）+ `ISsoChannelFactory`（按 channelId 构造通道实例）——经用户 `User.Use<>()` 帧内解析 |
 | 多通道设施 | `IChannelRegistry`（按 ChannelId 精确选区——Composite：**DB 命中优先 → 静态回退**）+ `ChannelConfig`（公共列 + Extra 扩展字典）+ ChannelAlias 双键（对外别名）+ 静态/DB 双层来源 |
 | DB 动态权威 | `SsoChannelRegistryEntity`（`TKWF_SsoChannelRegistry`——AppSecret/ExtraJson AES-GCM 密文列）+ `ISsoChannelRegistryService` 写入门面（Register/Update/Unregister——管理端点不建，服务层方法保留） |
-| `/sso/*` 端点 | `FederationWebExtension<TUserInfo>`（T3 装配面，IWebExtension）——`POST {prefix}/login`/`{prefix}/login/{channelId}`（登录编排）/ `GET {prefix}/jwks`（JWKS 公钥分发——信任内核职责经 `IToken2Service.GetJwksJson`）/ `POST {prefix}/event/{channelId}`（平台事件推送接收）——匿名游客帧 + 配置分层 `TKWF:Federation:Web` |
+| `/feberation/*` 端点 | `FederationWebExtension<TUserInfo>`（T3 装配面，IWebExtension）——**平台集成面**：`POST {prefix}/{platformId}/login`/`{prefix}/{platformId}/login/{channelId}`（登录编排——platformId=平台族 `ChannelConfig.PlatformType` 开放注册表，Ordinal 校验；多活跃通道省略通道段 → 400 `CHANNEL_REQUIRED`，单活跃通道降级）/ `POST {prefix}/{platformId}/event[/{channelId}]`（平台事件推送接收——channelType 按平台段权威推导 `{PlatformType}_event`）/ `GET {prefix}/{platformId}/oauth[/{channelId}]/callback`（IdP 回调，子应用委托——无通道段形态单活跃通道降级/多活跃通道 400 `CHANNEL_REQUIRED`）；**信任/委托面**（根级不挂平台段）：`GET {prefix}/jwks`（JWKS 公钥分发——信任内核职责经 `IToken2Service.GetJwksJson`）/ `POST {prefix}/authorize/start`·`POST {prefix}/trust/issue`·`POST {prefix}/identity/claim`（子应用委托 4 端点中根级 3 个——callback 已列上方，协议见 `子应用消费方接入-开发方案.md`）——匿名游客帧 + 配置分层 `TKWF:Federation:Web`（`RoutePrefix` 默认 `/feberation`） |
 | 外部 IdP 桥接 | `ExternalIdpAuthenticator : IExternalIdpAuthenticator`（契约在 AuthCenter.Abstractions）——**委托平台库通道认证（协议单源，非双实现）**；AuthCenter 内网经 `IExternalIdpLoginService` 借道本桥接完成外部认证（根因修复：删除 AuthCenter 内微信 Provider 双源，P2 唯一事实源） |
 | profile API | `ISsoProfileService`——server-to-server（scope 强制 + ILogger 审计 + 永不返回 openid/channel_id/phone） |
 | 依赖方向 | 平台库 → `TrustCenter.Abstractions` + `Federation`（装配）；Federation → `TrustCenter.Abstractions`（编排调签发）+ `AuthCenter.Abstractions`（桥接 + profile 消费）——单向无环 |
@@ -92,7 +92,7 @@ builder.Services.AddWeChatFederationChannels();
 //    通道配置经 TKWF:Federation:WeChat 配置节绑定（SG1 [Options] 自动），或编程覆盖：
 builder.Services.Configure<WeChatOptions>(o => { /* 按 AppId 选区 Channels */ });
 
-// ③ 装配 FederationWebExtension（/sso/* 端点——T3 装配面，锚点 AfterRouting）
+// ③ 装配 FederationWebExtension（/feberation/* 端点——T3 装配面，锚点 AfterRouting）
 builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(...)
     .UseWebSession()
     .UseWebExtensions(e => e.Add<FederationWebExtension<MyUserInfo>>(x =>
@@ -123,11 +123,15 @@ var result = await user.Use<ISsoLogin>().LoginAsync(channelId, context, ct);
         "SecretEncryptionKeyPath": "C:\\keys\\sso-channel-registry-aes.key",  // SsoChannelRegistryEntity AppSecret/ExtraJson AES-GCM（前 32 字节，生产必填）
         "IsProduction": true
       },
-      "Web": {                             // 对外端点表现层（FederationWebExtension，配置分层 AGENTS §8）
-        "RoutePrefix": "/sso",             // 3+1 端点挂此前缀
-        "LoginEndpointEnabled": true,      // POST /sso/login[ /{channelId}]
-        "JwksEndpointEnabled": true,       // GET /sso/jwks
-        "EventEndpointEnabled": true       // POST /sso/event/{channelId}
+      "Web": {                             // 对外端点表现层（FederationWebExtension，配置分层 AGENTS §8——平台集成面含 {platformId} 平台段，信任/委托面根级）
+        "RoutePrefix": "/feberation",        // 端点挂此前缀（V0.7.0 默认 /feberation，可配）
+        "LoginEndpointEnabled": true,      // POST {prefix}/{platformId}/login[ /{channelId}]
+        "JwksEndpointEnabled": true,       // GET {prefix}/jwks（根级）
+        "EventEndpointEnabled": true,      // POST {prefix}/{platformId}/event[/{channelId}]
+        "AuthorizeEndpointEnabled": true,  // POST {prefix}/authorize/start（子应用委托，根级）
+        "OauthCallbackEndpointEnabled": true, // GET {prefix}/{platformId}/oauth[/{channelId}]/callback
+        "TrustIssueEndpointEnabled": true,   // POST {prefix}/trust/issue（子应用委托，根级）
+        "IdentityClaimEndpointEnabled": true // POST {prefix}/identity/claim（子应用委托，根级）
       }
       // 平台库各自配置节：TKWF:Federation:WeChat / :QQ / ...（Channels 列表）
     }
@@ -187,7 +191,7 @@ accesscode 服务（`IAccessCodeService`/`AccessCodeIssueRequest`）随信任内
 - **密钥安全**：信任内核（token2 EC 私钥 PEM / AccessCode AES-GCM）密钥归 **TrustCenter**（`TrustCenterOptions`）管理——生产缺密钥 fail-fast；连接层通道注册表（`SsoChannelRegistryEntity` AppSecret/ExtraJson）归 **Federation** keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Federation`——主框架常量已存在直接复用）。kid 轮换支持紧急换钥。
 - **防开放重定向**：`target_app_id → 注册精确 origin（scheme+host）` 白名单（TrustCenter `SsoClientService.IsOriginAllowedAsync`，Ordinal 精确匹配）；不接受自由 `redirect_uri` 参数。
 - **外部 IdP 桥接 fail-hard（P7）**：`IExternalIdpAuthenticator`（契约在 AuthCenter.Abstractions）实现注册于 Federation——未装配 Federation 时 AuthCenter `User.Use<IExternalIdpAuthenticator>()` 抛守卫（不静默降级）；桥接**委托平台库通道认证（协议单源非双实现）**。
-- **`/sso/*` 端点匿名** + 游客帧（`guest.Use<门面>()`，须 UseWebSession 同装配）；事件端点只中转——事件验签由平台库通道内部完成（WeChatEventCrypto 一票否决）。
+- **`/feberation/*` 端点匿名** + 游客帧（`guest.Use<门面>()`，须 UseWebSession 同装配）；事件端点只中转——事件验签由平台库通道内部完成（WeChatEventCrypto 一票否决）。
 - **profile 审计**：ILogger 结构化日志（app_id/uid/scopes/ip/ts）——SsoProfileAuditEntity 归后续迭代（复用 SecurityLog 或自建表另议）。
 
 ## 六、架构决策记录
@@ -200,6 +204,7 @@ accesscode 服务（`IAccessCodeService`/`AccessCodeIssueRequest`）随信任内
 
 | 版本 | 内容 |
 |------|------|
+| V0.7.0（2026-10-11） | **对外路由命名空间迭代（`/sso` → `/feberation` + 平台段，方案 `docs/Federation/对外路由命名空间-开发方案.md`）**：根前缀默认 `/feberation`（`FederationEndpointOptions.RoutePrefix` 可配保留）；平台集成面二级平台段 `{platformId}`（= `ChannelConfig.PlatformType` 开放注册表 `wechat/qq/dingtalk/wecom/alipay/oidc/google/microsoft`，Ordinal 校验防跨平台错配 → 统一 404 `CHANNEL_NOT_FOUND`）+ 三级端点组（login/oauth/event）+ 四级通道实例；信任/委托面根级不挂平台段（`jwks`/`authorize/start`/`trust/issue`/`identity/claim` 仅换前缀）；**B 守卫**（多活跃通道省略通道段 → 400 `CHANNEL_REQUIRED`，单活跃通道降级）；**event 缺陷修复**（channelType 按平台段权威推导 `{PlatformType}_event`——原 null 分支白名单排除 `*_event` 致通道不可达）；alias 全局解析 + 平台段额外校验层；`TKWF:Federation:Web` 端点开关全集收录（含子应用委托 4 开关 `Authorize/OauthCallback/TrustIssue/IdentityClaimEndpointEnabled`，承接 `子应用消费方接入-开发方案.md`——README 首次收录） |
 | V0.5.0（2026-10-09，**待发布**） | **三层架构重构（TrustCenter 剥离，连接层壳重定位，Phase 1-4）**：信任内核（token2/accesscode/应用注册/`ISsoChannel` 契约定义）迁出至 `TKWF.Ext.TrustCenter`（MinVerTagPrefix `TrustCenter/v`）；平台库引目标改 `TrustCenter.Abstractions`（包名保留 `TKWF.Federation.{平台}`）；**新建 `FederationWebExtension<TUserInfo>`**（T3 装配面——`POST /sso/login[ /{channelId}]`/`GET /sso/jwks`/`POST /sso/event/{channelId}` + `FederationEndpointOptions` `TKWF:Federation:Web` 配置分层）；编排面（`ISsoLogin`/`ISsoChannelFactory`）+ 多通道设施（`IChannelRegistry` 系列/`SsoChannelRegistryEntity`/`SsoChannelRegistryService`）**保留归本包**；**新建 `ExternalIdpAuthenticator : IExternalIdpAuthenticator`**（AuthCenter.Abstractions 契约——委托平台库通道认证非双实现，根因修复）；`FederationChannelRegistryOptions` `TKWF:Federation:ChannelRegistry` 独立承载通道注册表密钥；配置节拆分（签发配置迁 `TKWF:TrustCenter`）；破坏性变更段 §八；测试重划（Federation.Tests 连接层 + TrustCenter.Tests 信任内核）+ 全量回归 0 失败（Phase 1-4 累计 1913 用例） |
 | V0.4.0（2026-10-08/10） | **多通道联邦 Phase 2/3（DB 动态权威 + ChannelAlias 双键）**：`SsoChannelRegistryEntity`（`TKWF_SsoChannelRegistry`——AppSecret/ExtraJson AES-GCM 密文列）+ `DbChannelRegistry` + `CompositeChannelRegistry`（DB 命中优先 → 静态回退）+ `ISsoChannelRegistryService` 写入门面（Register/Update/Unregister）；`ChannelConfig.Alias` 双键 + `IChannelRegistry.GetByAliasOrIdAsync`（alias 精确匹配 → ChannelId）+ `SsoChannelRegistryEntity.ChannelAlias` 列；（阶段说明详见使用指南 §3.5b/§3.5c；tag Federation/v0.4.0 2026-10-10） |
 | V0.3.0（2026-10-07/08） | **多通道联邦 Phase 1**（方案 `docs/Federation/多通道联邦-开发方案.md` Oracle PASS）：`IChannelRegistry`/`StaticChannelRegistry`/`CompositeChannelRegistry` + `IChannelSource`（平台库投影）+ `ISsoChannelFactory`（按 channelId 构造）+ `ISsoLogin`（编排门面 + 默认降级）——替代 6 平台库 14 处 `Channels.FirstOrDefault()`；凭证模型公共列（AppId/AppSecret/IsDefault/IsEnabled）+ Extra 扩展字典；41 项目 1888 用例全绿（tag Federation/v0.3.0 2026-10-08） |

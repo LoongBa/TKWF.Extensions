@@ -88,7 +88,7 @@ public sealed class GoogleOidcChannel : OidcChannelBase
 }
 ```
 
-### 4. 编排（Federation 白名单 + `/sso/login`——装配层）
+### 4. 编排（Federation 白名单 + `/{prefix}/{platformId}/login`——装配层）
 
 ```csharp
 using TKWF.Ext.Federation;

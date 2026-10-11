@@ -23,7 +23,7 @@
 - **Authentication + Federation = 认证中心实例**（内部认证 + 多应用联邦 SSO）
 - **Federation + `TKWF.Federation.WeChat` = 纯外部联邦登录（BYO IdP——V5 国外客户主力形态）**：本库引 Federation 扩展实现 `ISsoChannel`，经 Federation 窄适配编排身份获取方向，消费方零内部 Provider 全量
 
-**不包含**：`/sso/*` 端点映射（OAuth 代理入口 / 微信回调 / 事件推送接收——归 Federation 扩展/消费方**装配层**，本库不引 AspNetCore，只提供验签/出站逻辑类）；其他平台网关（QQ/Google/支付宝——`TKWF.Federation.{平台}` 模式复制）；`TKWF.Utility.OAuthClient` 引擎（BCL 协议，归主框架 Utility，转达框架组）。
+**不包含**：`/{prefix}/*` 端点映射（OAuth 代理入口 / 微信回调 / 事件推送接收——归 Federation 扩展/消费方**装配层**，本库不引 AspNetCore，只提供验签/出站逻辑类）；其他平台网关（QQ/Google/支付宝——`TKWF.Federation.{平台}` 模式复制）；`TKWF.Utility.OAuthClient` 引擎（BCL 协议，归主框架 Utility，转达框架组）。
 
 ## 二、安装与接线
 
@@ -71,7 +71,7 @@ services.AddWeChatFederationChannels();   // 内部 TryAddEnumerableConstructibl
 - **`[Options("TKWF:Federation:WeChat")]`**：SG1 在消费方生成 GeneratedOptionsBindings，宿主启动期自动绑定（对齐 AuthCenterOptions/FederationOptions 先例）；亦可在消费方 ConfigureExtensions 编程覆盖。
 - **凭证承载形态**（Oracle 评审点 4 P2）：开发——明文 `appsettings.json` 配置；生产——**AES-GCM 密文**或装配注入（K8s secret mount）；**AppSecret 永不明文进配置库**。channel 凭证归本库自持，与 Federation `SsoSecretKeyStore`/Authentication `PlatformCredentialService` 均独立。
 
-### 4. 编排（Federation 白名单 + `/sso/login` 路由——已实现通道 + 装配层编排）
+### 4. 编排（Federation 白名单 + `/{prefix}/{platformId}/login` 路由——已实现通道 + 装配层编排）
 
 ```csharp
 using TKWF.Ext.Federation;
@@ -97,7 +97,7 @@ Federation 扩展按 channel 类型路由：`wechat_oauth` → 302 微信 author
 
 | 通道 | 场景 | 流程 |
 |------|------|------|
-| `wechat_oauth`（形态 A/认证服务号） | 网页静默 OAuth 身份获取 | `/sso/login` 按 channel 路由 → 302 微信 `authorize?appid&redirect_uri&scope=snsapi_base&state`（state 绑定会话防 CSRF，回调域名 = SSO 域名）→ 回调 code → `WeChatApiClient.GetOpenIdAsync(appId, code)` → `(channel_id, openid) → uid` → Federation 签 token2 |
+| `wechat_oauth`（形态 A/认证服务号） | 网页静默 OAuth 身份获取 | `/{prefix}/{platformId}/login` 按 channel 路由 → 302 微信 `authorize?appid&redirect_uri&scope=snsapi_base&state`（state 绑定会话防 CSRF，回调域名 = SSO 域名）→ 回调 code → `WeChatApiClient.GetOpenIdAsync(appId, code)` → `(channel_id, openid) → uid` → Federation 签 token2 |
 | `wechat_event`（形态 B/未认证号） | 公众号事件推送入站 | 微信推送事件 → 接收端点（**验 `msg_signature` + AES 解密**；`FromUserName` = openid）→ 进程内调 Federation `ISsoAccessCodeService.IssueAsync`（帧内 AOP，零 HMAC 自签——Oracle 评审点 4 P1-2）→ 得 accesscode → 被动回复图文链接 |
 
 - **联盟锚点配合**（T5）：`snsapi_base` 联盟服务号场景 → `FederationAnchorOpenId`（经 Abstractions `ISsoAccountLinkService.SetFederationAnchorAsync`）；商户 openid2 → `ISsoChannelMapService.LinkAsync` → `PlatformAccountMap`；反查直认经既有契约。

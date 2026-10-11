@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -19,10 +20,10 @@ using TKWF.Ext.TrustCenter;
 namespace TKWF.Ext.Federation;
 
 /// <summary>
-/// 联邦互联 Web 装配扩展（三层架构重构 T3 装配面——Federation 对外连接层 <c>/sso/*</c> 端点；v4.10.45
+/// 联邦互联 Web 装配扩展（三层架构重构 T3 装配面——Federation 对外连接层 <c>/{prefix}/*</c> 端点；v4.10.45
 /// Web 装配钩子 ADR87/D22/G18）——自描述 Web 装配需求，消费方 <c>UseWebExtensions</c> 一次声明。
 /// <para>锚点：默认 <see cref="MiddlewareAnchor.AfterRouting"/>（纯端点装配，无中间件——<see cref="ConfigureMiddleware"/>
-/// 空实现）。端点均为匿名（<c>AllowAnonymous</c>）——/sso/* 是对外连接面（平台回调/公共 JWKS），
+/// 空实现）。端点均为匿名（<c>AllowAnonymous</c>）——对外连接面（平台回调/公共 JWKS），
 /// 不经 HttpAuthentication 认证（HttpAuth ExcludedPathPrefixes 归消费方装配配置）。</para>
 /// <para>领域自治（G18 §3）：<see cref="ISsoLogin"/>/<see cref="ISsoChannelFactory"/> 等领域门面留 Domain 钩子
 /// <see cref="FederationExtensionInitializer{TUserInfo}"/> 注册（AddConstructibleService 守卫工厂）——本 Web
@@ -30,16 +31,15 @@ namespace TKWF.Ext.Federation;
 /// <para>配置分层（AGENTS §8）：领域决策在 <see cref="FederationChannelRegistryOptions"/>（TKWF:Federation:ChannelRegistry——
 /// 通道启用/加密密钥路径）/ TrustCenter（TKWF:TrustCenter——令牌签发/密钥路径）不动；暴露面（RoutePrefix +
 /// 端点开关）在 <see cref="FederationEndpointOptions"/>（TKWF:Federation:Web——不镜像领域配置）。</para>
-/// <para><b>端点（7+1 形态，子应用消费方接入 2026-10-11）</b>：
-/// <c>POST {prefix}/login</c>（无 channelId → <see cref="ISsoLogin.LoginDefaultAsync"/> 降级默认通道）/
-/// <c>POST {prefix}/login/{channelId}</c>（精确选区 → <see cref="ISsoLogin.LoginAsync"/>）——
+/// <para><b>端点（平台集成面 6 + 信任/委托面 4，对外路由命名空间 2026-10-11——/sso → /feberation + 平台段）</b>：
+/// <c>POST {prefix}/{platformId}/login[/{channelId}]</c>（平台段 Ordinal 校验 + B 守卫；无 channelId 单通道降级 → 精确选区）——
 /// body/route 传参数（code 等）→ <c>SsoChannelAuthContext</c> → <see cref="SsoChannelAuthResult"/> JSON；
-/// <c>GET {prefix}/jwks</c>——JWKS 公钥分发（信任内核职责，经 <see cref="IToken2Service.GetJwksJson"/>）；
-/// <c>POST {prefix}/event/{channelId}</c>——平台事件推送接收（端点只中转：原始 body 包参数字典
-/// <c>{"__raw": ..., "channel_id": ...}</c> → <see cref="ISsoChannelFactory.CreateAsync"/> 构造 →
-/// <c>channel.AuthenticateAsync</c>——事件验签由平台库通道实现内部完成，一票否决）；
+/// <c>GET {prefix}/jwks</c>——JWKS 公钥分发（信任内核职责，经 <see cref="IToken2Service.GetJwksJson"/>；跨平台根级）；
+/// <c>POST {prefix}/{platformId}/event[/{channelId}]</c>——平台事件推送接收（端点只中转：原始 body 包参数字典
+/// <c>{"__raw": ..., "channel_id": ...}</c> → <see cref="ISsoChannelFactory.CreateAsync"/> 构造（channelType 按平台段推导
+/// <c>{PlatformType}_event</c>——缺陷修复）→ <c>channel.AuthenticateAsync</c>——事件验签由平台库通道实现内部完成，一票否决）；
 /// <b>子应用消费方委托（<see cref="ISsoSubAppBridge"/> 编排）</b>：<c>POST {prefix}/authorize/start</c>（匿名——
-/// 发起外部认证，redirect 白名单 + state 票据 + 通道授权 URL 构造）、<c>GET {prefix}/oauth/{channelId}/callback</c>
+/// 发起外部认证，redirect 白名单 + state 票据 + 通道授权 URL 构造）、<c>GET {prefix}/{platformId}/oauth[/{channelId}]/callback</c>
 /// （匿名——平台 IdP 302 回调落点，验 state → 认证 → 签 accesscode → 302 跳回子应用；<b>须 GET</b>——IdP 重定向语义）、
 /// <c>POST {prefix}/trust/issue</c>（<b>已认证</b> Bearer token1——direct 模式 Platform 登录态签发；须 AuthCenterWebExtension
 /// 同装配）、<c>POST {prefix}/identity/claim</c>（匿名 + 子应用 credential——兑现 accesscode 原子取回，统一 401 防枚举）。</para>
@@ -75,26 +75,36 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     /// <summary>中间件挂载——纯端点装配，无中间件。</summary>
     public void ConfigureMiddleware(IApplicationBuilder app, DomainWebOptions options) { }
 
-    /// <summary>端点映射（AfterRouting 排空）——对外连接层 <c>/sso/*</c> 端点（登录编排 / JWKS / 事件接收 /
-    /// 子应用消费方委托四端点），路径/开关经 <see cref="FederationEndpointOptions"/> 可配置。</summary>
+    /// <summary>端点映射（AfterRouting 排空）——对外连接层 <c>/{prefix}/*</c> 端点（平台集成面 6 端点 + 信任/委托面 4 端点，
+    /// 对外路由命名空间 2026-10-11——/sso → /feberation 语义化 + 二级平台段），路径/开关经
+    /// <see cref="FederationEndpointOptions"/> 可配置。</summary>
     public void ConfigureEndpoints(IEndpointRouteBuilder endpoints, DomainWebOptions options)
     {
         var endpointOptions = ResolveOptions(endpoints.ServiceProvider);
         var prefix = endpointOptions.RoutePrefix.TrimEnd('/');
 
+        // ── 平台集成面（二级 = 平台族 PlatformType，三级 = 端点组，四级 = 通道实例；平台段 Ordinal 校验防跨平台错配） ──
         if (endpointOptions.LoginEndpointEnabled)
         {
-            endpoints.MapPost($"{prefix}/login", HandleSsoLogin).AllowAnonymous();
-            endpoints.MapPost($"{prefix}/login/{{channelId}}", HandleSsoLogin).AllowAnonymous();
+            endpoints.MapPost($"{prefix}/{{platformId}}/login", HandleSsoLogin).AllowAnonymous();
+            endpoints.MapPost($"{prefix}/{{platformId}}/login/{{channelId}}", HandleSsoLogin).AllowAnonymous();
         }
+        if (endpointOptions.EventEndpointEnabled)
+        {
+            endpoints.MapPost($"{prefix}/{{platformId}}/event", HandleEvent).AllowAnonymous();
+            endpoints.MapPost($"{prefix}/{{platformId}}/event/{{channelId}}", HandleEvent).AllowAnonymous();
+        }
+        if (endpointOptions.OauthCallbackEndpointEnabled)
+        {
+            endpoints.MapGet($"{prefix}/{{platformId}}/oauth/callback", HandleOAuthCallback).AllowAnonymous();
+            endpoints.MapGet($"{prefix}/{{platformId}}/oauth/{{channelId}}/callback", HandleOAuthCallback).AllowAnonymous();
+        }
+
+        // ── 信任/委托面（跨平台，根级——不挂平台段） ──
         if (endpointOptions.JwksEndpointEnabled)
             endpoints.MapGet($"{prefix}/jwks", HandleJwks).AllowAnonymous();
-        if (endpointOptions.EventEndpointEnabled)
-            endpoints.MapPost($"{prefix}/event/{{channelId}}", HandleEvent).AllowAnonymous();
         if (endpointOptions.AuthorizeEndpointEnabled)
             endpoints.MapPost($"{prefix}/authorize/start", HandleAuthorizeStart).AllowAnonymous();
-        if (endpointOptions.OauthCallbackEndpointEnabled)
-            endpoints.MapGet($"{prefix}/oauth/{{channelId}}/callback", HandleOAuthCallback).AllowAnonymous();
         if (endpointOptions.TrustIssueEndpointEnabled)
             endpoints.MapPost($"{prefix}/trust/issue", HandleTrustIssue);   // 已认证端点（不经 AllowAnonymous）
         if (endpointOptions.IdentityClaimEndpointEnabled)
@@ -103,18 +113,23 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
     // ─────────────────────────── 端点处理器（匿名游客帧） ───────────────────────────
 
-    /// <summary>登录编排（POST {prefix}/login[ /{channelId}]）——body/route 传 channelId + 参数（code 等）→
-    /// <see cref="ISsoLogin"/> 门面 → <see cref="SsoChannelAuthResult"/> JSON；FailReason 映射
-    /// （CHANNEL_NOT_FOUND→404 / CHANNEL_REGISTRY_UNAVAILABLE→503 / 其他业务码→400）；异常包裹（非取消）→ 503。</summary>
-    private static async Task<IResult> HandleSsoLogin(HttpContext ctx, string? channelId, [FromBody] SsoLoginWebRequest req, CancellationToken ct)
+    /// <summary>登录编排（POST {prefix}/{platformId}/login[ /{channelId}]）——body/route 传 channelId + 参数（code 等）→
+    /// <see cref="ISsoLogin"/> 门面 → <see cref="SsoChannelAuthResult"/> JSON；平台段 Ordinal 校验（防跨平台错配）+ B 守卫
+    /// （多通道 + 省略 channelId → CHANNEL_REQUIRED，Oracle 评审条件 1）；FailReason 映射
+    /// （CHANNEL_NOT_FOUND→404 / CHANNEL_REQUIRED→400 / CHANNEL_REGISTRY_UNAVAILABLE→503 / 其他业务码→400）；异常包裹（非取消）→ 503。</summary>
+    private static async Task<IResult> HandleSsoLogin(HttpContext ctx, string platformId, string? channelId, [FromBody] SsoLoginWebRequest req, CancellationToken ct)
     {
+        var registry = GetGuest(ctx).Use<IChannelRegistry>();
+        var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
+        if (cfg is null)
+            return MapFailReason(failReason);
+
         var context = new SsoChannelAuthContext(req.Parameters ?? new Dictionary<string, string?>());
         SsoChannelAuthResult result;
         try
         {
-            result = string.IsNullOrWhiteSpace(channelId)
-                ? await GetGuest(ctx).Use<ISsoLogin>().LoginDefaultAsync(context, ct)
-                : await GetGuest(ctx).Use<ISsoLogin>().LoginAsync(channelId, context, ct);
+            // 已解析出具体通道实例（cfg.ChannelId）——精确选区（多通道守卫在 ResolveChannelAsync，单通道默认降级归一内部键）
+            result = await GetGuest(ctx).Use<ISsoLogin>().LoginAsync(cfg.ChannelId, context, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -133,11 +148,19 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     private static IResult HandleJwks(HttpContext ctx)
         => Results.Text(GetGuest(ctx).Use<IToken2Service>().GetJwksJson(), contentType: "application/json");
 
-    /// <summary>平台事件推送接收（POST {prefix}/event/{channelId}）——端点只中转：原始 body 包参数字典
+    /// <summary>平台事件推送接收（POST {prefix}/{platformId}/event[/{channelId}]）——端点只中转：原始 body 包参数字典
     /// （<c>{"__raw": rawBody, "channel_id": channelId}</c>）→ 构造通道 → AuthenticateAsync；事件验签由
-    /// 平台库通道实现内部完成（WeChatEventCrypto 一票否决），端点不解析事件语义。</summary>
-    private static async Task<IResult> HandleEvent(HttpContext ctx, string channelId, CancellationToken ct)
+    /// 平台库通道实现内部完成（WeChatEventCrypto 一票否决），端点不解析事件语义。
+    /// <para><b>缺陷修复（2026-10-11 对外路由命名空间）</b>：channelType 按平台段推导 <c>{cfg.PlatformType}_event</c>
+    /// 精确匹配 <c>*_event</c> 通道模板——原 <c>CreateAsync(channelId, null)</c> 走 null 分支（IsOAuthChannel
+    /// 白名单仅 <c>*_oauth/*_oidc</c>）致 event 通道不可达（双注册错选 OAuth 通道 / 单注册 404）。</para></summary>
+    private static async Task<IResult> HandleEvent(HttpContext ctx, string platformId, string? channelId, CancellationToken ct)
     {
+        var registry = GetGuest(ctx).Use<IChannelRegistry>();
+        var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
+        if (cfg is null)
+            return MapFailReason(failReason);
+
         string rawBody;
         using (var reader = new StreamReader(ctx.Request.Body))
             rawBody = await reader.ReadToEndAsync(ct);
@@ -145,13 +168,14 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         var parameters = new Dictionary<string, string?>
         {
             ["__raw"] = rawBody,
-            ["channel_id"] = channelId,
+            ["channel_id"] = cfg.ChannelId,
         };
 
         ISsoChannel? channel;
         try
         {
-            channel = await GetGuest(ctx).Use<ISsoChannelFactory>().CreateAsync(channelId, null, ct);
+            // 按平台段推导 channelType（权威 = cfg.PlatformType，非路由段）——精确匹配 *_event 模板（缺陷修复）
+            channel = await GetGuest(ctx).Use<ISsoChannelFactory>().CreateAsync(cfg.ChannelId, $"{cfg.PlatformType}_event", ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -192,16 +216,22 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         return Results.Ok(new { authorize_url = result.AuthorizeUrl, state = result.State });
     }
 
-    /// <summary>OAuth 回调落地（GET {prefix}/oauth/{channelId}/callback，匿名——<b>GET</b>：IdP 302 重定向语义，
+    /// <summary>OAuth 回调落地（GET {prefix}/{platformId}/oauth[/{channelId}]/callback，匿名——<b>GET</b>：IdP 302 重定向语义，
     /// Oracle 条件 1）——query 原样包参数字典 → <see cref="ISsoSubAppBridge.CompleteOAuthAsync"/>（验 state 票据 →
-    /// ISsoLogin 纯通道认证 → 签 accesscode expectedClaimant=app_id）→ 302 跳回子应用（code + sub_state）。</summary>
-    private static async Task<IResult> HandleOAuthCallback(HttpContext ctx, string channelId, CancellationToken ct)
+    /// ISsoLogin 纯通道认证 → 签 accesscode expectedClaimant=app_id）→ 302 跳回子应用（code + sub_state）。
+    /// 无通道段形态（{prefix}/{platformId}/oauth/callback）→ 单通道降级 / 多通道 CHANNEL_REQUIRED（B 守卫，Oracle 评审条件 1）。</summary>
+    private static async Task<IResult> HandleOAuthCallback(HttpContext ctx, string platformId, string? channelId, CancellationToken ct)
     {
+        var registry = GetGuest(ctx).Use<IChannelRegistry>();
+        var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
+        if (cfg is null)
+            return MapFailReason(failReason);
+
         var parameters = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var (key, value) in ctx.Request.Query)
             parameters[key] = value.ToString();
 
-        var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().CompleteOAuthAsync(channelId, parameters, ct);
+        var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().CompleteOAuthAsync(cfg.ChannelId, parameters, ct);
         if (!result.Success)
             return MapFailReason(result.FailReason);
         return Results.Redirect(result.RedirectUrl!);
@@ -253,7 +283,8 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     }
 
     /// <summary>FailReason → HTTP 状态码映射（对齐子应用消费方错误码映射表——Oracle 条件 4 防枚举：claim 统一 401、
-    /// 认证类 401 / 限流 429 / CHANNEL_NOT_FOUND→404 / CHANNEL_REGISTRY_UNAVAILABLE→503 / 其他业务码→400）。</summary>
+    /// 认证类 401 / 限流 429 / CHANNEL_REQUIRED→400（B 守卫多通道省略通道段，Oracle 评审条件 1）/
+    /// CHANNEL_DISABLED→403 / CHANNEL_NOT_FOUND→404 / CHANNEL_REGISTRY_UNAVAILABLE→503 / 其他业务码→400）。</summary>
     private static IResult MapFailReason(string? failReason)
         => failReason switch
         {
@@ -263,12 +294,52 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
                 statusCode: StatusCodes.Status401Unauthorized),
             "RATE_LIMITED" => Results.Json(new ErrorResponse("RATE_LIMITED", null),
                 statusCode: StatusCodes.Status429TooManyRequests),
+            "CHANNEL_REQUIRED" => Results.Json(new ErrorResponse("CHANNEL_REQUIRED", null),
+                statusCode: StatusCodes.Status400BadRequest),
+            "CHANNEL_DISABLED" => Results.Json(new ErrorResponse("CHANNEL_DISABLED", null),
+                statusCode: StatusCodes.Status403Forbidden),
             "CHANNEL_NOT_FOUND" => Results.Json(new ErrorResponse("CHANNEL_NOT_FOUND", null),
                 statusCode: StatusCodes.Status404NotFound),
             "CHANNEL_REGISTRY_UNAVAILABLE" => Results.Json(new ErrorResponse("CHANNEL_REGISTRY_UNAVAILABLE", null),
                 statusCode: StatusCodes.Status503ServiceUnavailable),
             _ => Results.BadRequest(new ErrorResponse(failReason ?? "LOGIN_FAILED", null)),
         };
+
+    /// <summary>通道实例解析 + 平台段校验 + B 守卫（平台集成面端点统一入口，2026-10-11 对外路由命名空间）——
+    /// 解析通道配置（channelId 空白 → 活跃通道枚举降级：0 → CHANNEL_NOT_FOUND、>1 → CHANNEL_REQUIRED、==1 → 唯一通道），
+    /// 平台段 Ordinal 校验（<c>cfg.PlatformType == platformId</c>——不匹配统一 CHANNEL_NOT_FOUND 404 防跨平台错配/探测；
+    /// Oracle 评审条件 2）。返回 (cfg, failReason)——failReason 非 null 时 cfg 为 null。</summary>
+    private static async Task<(ChannelConfig? Cfg, string? FailReason)> ResolveChannelAsync(
+        IChannelRegistry registry, string platformId, string? channelId, CancellationToken ct)
+    {
+        ChannelConfig? cfg;
+        if (string.IsNullOrWhiteSpace(channelId))
+        {
+            // B 守卫（Oracle 评审条件 1）：多通道（活跃数 >1）+ 省略 channelId → CHANNEL_REQUIRED 硬失败；
+            // 单通道（活跃数 ==1）→ 唯一活跃通道降级（无歧义）；0 → CHANNEL_NOT_FOUND。
+            var active = (await registry.GetAllAsync(ct)).Where(c => c.IsEnabled).ToList();
+            if (active.Count > 1)
+                return (null, "CHANNEL_REQUIRED");
+            cfg = active.FirstOrDefault();
+            if (cfg is null)
+                return (null, "CHANNEL_NOT_FOUND");
+        }
+        else
+        {
+            // 双键解析（alias → ChannelId）——对齐 GetByAliasOrIdAsync 语义（alias 全局解析，平台段为额外校验层，Oracle 评审条件 5c）
+            cfg = await registry.GetByAliasOrIdAsync(channelId, ct);
+            if (cfg is null)
+                return (null, "CHANNEL_NOT_FOUND");
+            if (!cfg.IsEnabled)
+                return (null, "CHANNEL_DISABLED");
+        }
+
+        // 平台段 Ordinal 校验（统一 404 防枚举——不泄露"通道存在但平台写错" vs "通道不存在"，Oracle 评审条件 2）
+        if (!string.Equals(cfg.PlatformType, platformId, StringComparison.Ordinal))
+            return (null, "CHANNEL_NOT_FOUND");
+
+        return (cfg, null);
+    }
 
     /// <summary>端点 Options 解析（HealthCheck/AuthCenter 先例——IOptions → IConfiguration 直读 → 默认值 三段兜底）。</summary>
     private static FederationEndpointOptions ResolveOptions(IServiceProvider services)

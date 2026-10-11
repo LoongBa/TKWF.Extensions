@@ -97,6 +97,11 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
         if (!string.IsNullOrEmpty(request.ChannelType))
             payload["channel_type"] = request.ChannelType;
 
+        // Iter-6（2026-10-11 v4.10.71 OAuth 资源服务器中间件配套，A1）：aud claim（AuthCenterOptions.Audience 非空时写——
+        // 框架中间件强校验 aud（缺失 missing_aud 拒），补后独立服务可统一经框架中间件验 AuthCenter token；空 = 向后兼容不写）
+        if (!string.IsNullOrEmpty(_options.Value.Audience))
+            payload["aud"] = _options.Value.Audience;
+
         var accessToken = SignToken(payload, keys);
 
         // Refresh rotation：SHA256 落库（不存明文）+ TokenVersion 闭环（账号当前版本）

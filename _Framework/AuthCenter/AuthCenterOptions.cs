@@ -70,6 +70,16 @@ public class AuthCenterOptions
     /// <summary>令牌签发者（iss——auth-instance-id，多实例隔离校验）。</summary>
     public string Issuer { get; set; } = "";
 
+    /// <summary>
+    /// 令牌受众（aud——Iter-6 v4.10.71 OAuth 资源服务器中间件配套，2026-10-11）。
+    /// <para>非空时签发写 <c>aud</c> claim（值 = 资源服务器 client_id/实例资源标识）——框架中间件强校验 aud
+    /// （缺失即 <c>missing_aud</c> 拒，A1），补后独立服务可统一经框架中间件验 AuthCenter token；
+    /// 空（默认）= 不写 aud（向后兼容既有 token 契约，自验路径宽松不强制 aud）。</para>
+    /// <para>⚠️ 生产建议：框架中间件场景（<c>OAuthResourceServerWebExtension</c>）必须配置本字段 +
+    /// 中间件 <c>Audiences</c> 含同值；自验场景（AuthCenterWebExtension）不强制。</para>
+    /// </summary>
+    public string? Audience { get; set; }
+
     /// <summary>RSA 私钥 PEM 路径（当前签发密钥；fail-fast 门）。</summary>
     public string? SigningKeyPath { get; set; }
 

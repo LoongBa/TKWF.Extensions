@@ -299,6 +299,23 @@ _Tests/Extension.{扩展名}.Tests/
 
 - **dll 被占用（`CS2012`/`file in use by another process`）时，用 `dotnet build-server shutdown` 优雅关闭 MSBuild/VBCSCompiler 编译服务器**，而非强杀进程——编译服务器是常驻进程（MSBuild node + Roslyn compiler server），强杀会留下孤儿进程/状态损坏；shutdown 后重试构建即可。若 shutdown 后仍占用，再检查是否残留 dotnet 测试宿主进程。
 
+### 测试纪律（受影响面定向测试——2026-10-11 用户裁定）
+
+**三级分层**：**L0 编译门**（slnx 构建 0 错误——每次变更必做）→ **L1 受影响面定向测试**（按变更类型矩阵，每次变更收尾必做）→ **L2 全量回归**（42 项目 ~1948 用例分批——**发布/tag 前 + 契约包变更 + 主框架 lockstep + 不定期**，非每次）。
+
+**变更类型 → 必测受影响面**（判定依据 = 依赖拓扑反向图）：
+
+| 变更类型 | 必测受影响面 |
+|---------|------------|
+| 契约包变更（`*.Abstractions`） | 契约实现方 + 编排消费方 + 契约实现库（平台库）——建议 L2 |
+| 主框架 CPM/DLL 升级 | 编译门先筛 + 框架转达清单重点面 + **L2** |
+| 单扩展内部（无契约/框架） | 该扩展测试 + 直接消费方 |
+| 扩展门面/端点/Web 装配钩子 | 该扩展测试 |
+| 平台库（`Federation.{平台}`） | 该库 + Federation 主包 |
+| 文档/配置 | 编译门即可（Options 默认值影响行为 → 该扩展测试） |
+
+> **判定方法**：csproj ProjectReference 反向图（改了 X → 测 X + 所有引 X 的项目）+ grep `using TKWF.Ext.{Xxx}.Abstractions`（契约消费方）+ 框架组转达清单（如 Iter-6 A1-A5 明确 AuthCenter/Federation）。详细矩阵 + 工具化见 `docs/测试纪律-受影响面定向测试.md`。
+
 ---
 
 ## 变更记录

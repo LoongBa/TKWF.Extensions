@@ -77,6 +77,38 @@ public class TokenServiceTests
         Assert.Equal(0, row.TokenVersion);
     }
 
+    // ── Iter-6（2026-10-11 v4.10.71 OAuth 资源服务器中间件配套，A1）：aud claim ──────────────────────────
+
+    [Fact]
+    public async Task IssueToken_AudienceConfigured_WritesAudClaim()
+    {
+        var options = AuthenticationTestHost.CreateOptions();
+        options.Audience = "dmp-api";                                       // 框架中间件场景须配置（A1）
+        var (service, stub) = CreateService(options);
+        var account = CreateAccount();
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
+
+        var parts = result.AccessToken.Split('.');
+        Assert.Equal(3, parts.Length);
+        var payload = JsonDocument.Parse(Decode(parts[1])).RootElement;
+        Assert.Equal("dmp-api", payload.GetProperty("aud").GetString());    // aud = 资源服务器标识
+    }
+
+    [Fact]
+    public async Task IssueToken_AudienceNotConfigured_NoAudClaim()
+    {
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());   // 默认 Audience=null（向后兼容）
+        var account = CreateAccount();
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
+
+        var payload = JsonDocument.Parse(Decode(result.AccessToken.Split('.')[1])).RootElement;
+        Assert.False(payload.TryGetProperty("aud", out _));                 // 空配置不写 aud（既有契约零破坏）
+    }
+
     [Fact]
     public async Task IssueToken_RefreshToken_RawNotStoredInDb()
     {

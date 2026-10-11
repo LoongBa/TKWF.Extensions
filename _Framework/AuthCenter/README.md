@@ -30,9 +30,12 @@
 { "iss": "<auth-instance-id>", "sub": "user:<平台内部id>", "userId": "u_xxxx",
   "authType": "sms | federated | password | redeem", "auth_level": 1,
   "channel_type": "wechat_oauth | qq_oauth | ...（外部 IdP 登录非空）",
+  "aud": "<资源服务器 client_id/实例资源标识——AuthCenterOptions.Audience 非空时写>",
   "exp": 1722243600, "iat": 1722240000,
   "jti": "unique-token-id", "kid": "rsa-key-2026-07" }
 ```
+
+- **⚠️ Iter-6（2026-10-11 v4.10.71）契约增补**：`aud` claim（`AuthCenterOptions.Audience` 非空时写）——框架 OAuth 资源服务器中间件强校验 aud（缺失 `missing_aud` 拒，A1），补后独立服务可统一经框架中间件验 AuthCenter token；空配置不写（向后兼容既有契约）。
 
 - **不含业务角色**——令牌只回答「你是谁」；业务角色由各业务系统 `IAuthorizationMapper.MapRoles(sub, claims)` 本地映射。
 - **⚠️ T5（2026-10-09 三层边界）契约变更**：`authType` 值 `"wechat"` → **`"federated"`**（与 `AuthLevel.Federated=2` 语义一致——微信/QQ/支付宝/OIDC 等外部 IdP 统一）；新增 **`channel_type`** claim（外部 IdP 登录时非空，写平台库 channelType 如 `wechat_oauth`/`qq_oauth`；`TokenValidationResult.ChannelType` 回读，`TokenIssueRequest.ChannelType` 末位可选参数签发）。
@@ -145,6 +148,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
       "SigningKeys": [ { "Kid": "rsa-key-1", "PrivateKeyPath": "/keys/rsa-private.pem" } ],
       "EnabledAuthTypes": ["sms", "password", "federated"],  // fail-closed：集合外 Provider 不接线（T5：federated 替代 wechat）
       "RedirectUriWhitelist": ["https://app.example.com/callback"],
+      "Audience": "dmp-api",                           // Iter-6（v4.10.71）：aud claim（框架中间件场景必填——非空写 aud，空不写）
       "SecretEncryptionKeyPath": "/keys/credential-aes.key",  // 平台凭证 AES-GCM（前 32 字节；生产必填）
       "IsProduction": true,                          // fail-fast 门
       "LoginProtection": { "SmsResendIntervalSeconds": 60, "OAuthPerMinutePerIp": 10 }

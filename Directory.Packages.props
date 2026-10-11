@@ -65,36 +65,38 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         全量 lockstep v4.10.68（2026-10-07——RateLimiting v0.3.0 / AuthSurface v0.1.0 /
-         AuthCenter V0.9.x 消费 v4.10.67 `IRateLimitCheck`（TKW.Framework.Utility.RateLimitChecks）,
-         CI（UseLocalFw=false）nuget 模式 restore 4.10.65 编译失败（AuthSurface CS0234/CS0246）——
-         锁定 nuget.org 最新 4.10.68 解除；含 v4.10.66 表名前缀批次（TKWF_/TKWFV_/TKWFIX_ ADR100）、
-         v4.10.67 RateLimitCheck 点检查原语、v4.10.68 修补。本地开发 DLL 模式消费部署根 build\refs
-         （UseLocalFw=true 零 restore，部署根已至 4.10.69-preview 覆盖）。
+         全量 lockstep v4.10.72（2026-10-11——v4.10.71 OAuth 资源服务器中间件（Iter-6 MS2
+         框架侧）+ v4.10.72 微服务前瞻收尾：① `RabbitMqDistributedEventBus.QueueBindAsync`
+         参数顺序 bug 修复（RabbitMQ.Client 7.x 签名为 (queue,exchange,routingKey)——此前误写
+         (exchange,queue,routingKey) 致消费者永不绑定队列，v4.9.64/ADR22 引入以来既有缺陷，
+         1b Outbox→RabbitMQ→Inbox 三件套真实传输测试首次暴露；扩展侧 FeatureManagement 用
+         `IDistributedEventBus` 接口 + 进程内 `LocalDistributedEventBus` 降级，零直连不受影响）
+         ② `PgContainerGuard → DockerDaemonGuard` 泛化（测试基建，扩展侧零引用零适配）
+         ③ RabbitMqContainerFixture/RabbitMqRequired 容器辅助新增（A 级测试未来可复用）。
+         本地开发 DLL 模式消费部署根 build\refs（UseLocalFw=true 零 restore，部署根已至 4.10.72）。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.71" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.71" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.71" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.71" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.71" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.71" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.71" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.71" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.71" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.72" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.72" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.72" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.72" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.72" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.72" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.72" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.72" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.72" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.71" />
-    <!-- ✅ 4.10.68 全量 lockstep（2026-10-07——修复 RateLimiting v0.3.0/AuthSurface v0.1.0/AuthCenter V0.9.x
-         消费 v4.10.67 IRateLimitCheck 后 CI nuget 模式 restore 4.10.65 编译失败的回归；
-         含 4.10.66 表名前缀批次 + 4.10.67 RateLimitCheck + 4.10.68 修补；版本锁 nuget.org 最新） -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.71" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.71" />
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.72" />
+    <!-- ✅ 4.10.72 全量 lockstep（2026-10-11——v4.10.71 OAuth 资源服务器中间件 + v4.10.72 微服务
+         前瞻收尾（QueueBindAsync 消费端修复 + DockerDaemonGuard 泛化）；版本锁 nuget.org 最新） -->
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.72" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.72" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.71" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.72" />
   </ItemGroup>
 </Project>
 

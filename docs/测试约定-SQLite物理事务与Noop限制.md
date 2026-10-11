@@ -90,6 +90,8 @@ FreeSql 官方事务文档**明示**：
 - **流程**：按 AGENTS §3——编写开发方案（`docs/` 公开）→ Oracle 评审 → 实施（Testcontainers 引入 + 3 扩展各 ≥1 例）→ 全量回归。
 - **前置**：CI workflow 确认 Docker service 可用；本地无 Docker 条件跳过策略先行验证。
 
+> ✅ **框架基座就绪（v4.10.72 通知登记）**：框架 `TKWF.Domain.Testing.xUnit` 包已完成 **`PgContainerGuard` → `DockerDaemonGuard` 泛化**（namespace `TKW.Framework.Domain.Testing.xUnit.Container`，daemon 探测事实源通用化）+ `PgContainerTestFixture`/`[PgContainerRequired]`（PG 容器生命周期 + 发现期 Skip）。**扩展侧零 PgContainerGuard 引用（本仓库未落地 A 级容器测试）——无改名适配**；未来实施 §四 时直接引用新基座（使用 `DockerDaemonGuard.IsDockerDaemonAvailable` + `using ...xUnit.Container`，或经 `[PgContainerRequired]`/`PgContainerTestFixture` 隐式使用零改动）。RabbitMQ 容器同基座（`[RabbitMqRequired]`/`RabbitMqContainerFixture`，`Testcontainers.RabbitMq 4.15.0`）——Emailing/事件链路可靠投递验证可复用。
+
 ---
 
 ## 五、变更记录

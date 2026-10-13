@@ -149,11 +149,17 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         => Results.Text(GetGuest(ctx).Use<IToken2Service>().GetJwksJson(), contentType: "application/json");
 
     /// <summary>平台事件推送接收（POST {prefix}/{platformId}/event[/{channelId}]）——端点只中转：原始 body 包参数字典
-    /// （<c>{"__raw": rawBody, "channel_id": channelId}</c>）→ 构造通道 → AuthenticateAsync；事件验签由
-    /// 平台库通道实现内部完成（WeChatEventCrypto 一票否决），端点不解析事件语义。
+    /// （<c>{"__raw": rawBody, "channel_id": channelId}</c>）+ <b>透传 query 参数</b>（msg_signature/signature/
+    /// timestamp/nonce/echostr——微信验签参数在 URL query，现有缺陷修复）→ 构造通道 → AuthenticateAsync 验签
+    /// （平台库通道内部完成，一票否决）→ <b>事件编排</b>（uid 只读查询 + 平台化回复 + handler first-non-null-wins）
+    /// → <b>微信 XML 被动回复</b>（text/xml——微信要求 XML 回复，JSON 致"服务暂不可用"）。
     /// <para><b>缺陷修复（2026-10-11 对外路由命名空间）</b>：channelType 按平台段推导 <c>{cfg.PlatformType}_event</c>
     /// 精确匹配 <c>*_event</c> 通道模板——原 <c>CreateAsync(channelId, null)</c> 走 null 分支（IsOAuthChannel
-    /// 白名单仅 <c>*_oauth/*_oidc</c>）致 event 通道不可达（双注册错选 OAuth 通道 / 单注册 404）。</para></summary>
+    /// 白名单仅 <c>*_oauth/*_oidc</c>）致 event 通道不可达（双注册错选 OAuth 通道 / 单注册 404）。</para>
+    /// <para><b>URL 验证握手（echostr——微信回调 URL 验证契约）</b>：query 含 echostr 且验签通过 → 原样回显
+    /// （text/plain；安全模式加密 echostr 解密归后续迭代——微信后台 URL 验证配置时使用）。</para>
+    /// <para><b>微信 5 秒超时约束（外部身份联邦 E3）</b>：handler 委托为空 → 200 空回复（text/xml）兜底——
+    /// 异步客服消息机制归 Phase 2/消费方（本端点不实现客服 API）。</para></summary>
     private static async Task<IResult> HandleEvent(HttpContext ctx, string platformId, string? channelId, CancellationToken ct)
     {
         var registry = GetGuest(ctx).Use<IChannelRegistry>();
@@ -165,11 +171,14 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         using (var reader = new StreamReader(ctx.Request.Body))
             rawBody = await reader.ReadToEndAsync(ct);
 
-        var parameters = new Dictionary<string, string?>
+        // 参数字典：原始 body __raw + channel_id + query 透传（微信验签参数在 URL query——现有缺陷修复）
+        var parameters = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["__raw"] = rawBody,
             ["channel_id"] = cfg.ChannelId,
         };
+        foreach (var (key, value) in ctx.Request.Query)
+            parameters[key] = value.ToString();
 
         ISsoChannel? channel;
         try
@@ -188,10 +197,26 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
         try
         {
+            // 验签（信任根一票否决——平台库通道内部完成）；失败 → FailReason 映射 4xx
             var result = await channel.AuthenticateAsync(new SsoChannelAuthContext(parameters), ct);
-            return result.Success
-                ? Results.Ok(result)
-                : Results.BadRequest(new ErrorResponse(result.FailReason ?? "AUTHENTICATION_FAILED", null));
+            if (!result.Success)
+                return Results.BadRequest(new ErrorResponse(result.FailReason ?? "AUTHENTICATION_FAILED", null));
+
+            // 已验签外部身份（供编排 uid 只读查询——评审 F7：GetByChannelAsync 只读不建号）
+            parameters["external_user_id"] = result.ExternalUserId ?? "";
+
+            // URL 验证握手（echostr——微信回调 URL 验证契约）：query 含 echostr 且验签通过 → 原样回显
+            if (parameters.TryGetValue("echostr", out var echo) && !string.IsNullOrEmpty(echo))
+                return Results.Text(echo, contentType: "text/plain");
+
+            // 事件编排（uid 只读查询 + 平台化回复 + handler first-non-null-wins）→ 微信 XML 被动回复（text/xml）
+            var reply = await GetGuest(ctx).Use<IEventOrchestrator>()
+                .OrchestrateAsync(cfg.ChannelId, $"{cfg.PlatformType}_event", new SsoChannelEventContext(parameters), ct);
+
+            // 平台化回复（微信 XML text/xml）/ 空回复 200 兜底（微信 5 秒超时——异步客服消息归 Phase 2/消费方）
+            return reply is null
+                ? Results.Text("", contentType: "text/xml")
+                : Results.Text(reply.Content, reply.ContentType);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

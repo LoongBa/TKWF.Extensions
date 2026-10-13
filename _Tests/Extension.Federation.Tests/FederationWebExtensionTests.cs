@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using TKWF.Ext.AuthCenter;
 using TKWF.Ext.Federation;
 using TKWF.Ext.TrustCenter;
 using Xunit;
@@ -219,6 +220,102 @@ public sealed class FederationWebExtensionTests
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("wechat-mp", FederationEndpointHost.Factory.LastChannelId);
         Assert.Equal("wechat_event", FederationEndpointHost.Factory.LastChannelType);
+    }
+
+    // ═══════════════════ 事件链（外部身份联邦 E3——query 透传 + XML 回复 + handler + uid 只读） ═══════════════════
+
+    /// <summary>event 端点 query 透传（现有缺陷修复——微信验签参数在 URL query）+ 微信 XML 回复：
+    /// POST event 端点带 query（msg_signature/timestamp/nonce）→ 验签成功 → 编排 → Fake 通道平台化回复 →
+    /// 200 + ContentType text/xml；query 参数在 Fake 事件上下文 Parameters。</summary>
+    [Fact]
+    public async Task Event_QueryParamsPassed_XmlReply()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Channel.EventReply =
+            new EventReplyResult("<xml><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[ok]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);   // 微信要求 XML 回复
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("<MsgType><![CDATA[text]]></MsgType>", body);
+
+        // query 透传（微信验签参数在 URL query——现有缺陷修复断言）
+        Assert.NotNull(FederationEndpointHost.Channel.LastEventContext);
+        Assert.Equal("sig-1", FederationEndpointHost.Channel.LastEventContext!.Parameters["msg_signature"]);
+        Assert.Equal("123", FederationEndpointHost.Channel.LastEventContext.Parameters["timestamp"]);
+        Assert.Equal("nc-1", FederationEndpointHost.Channel.LastEventContext.Parameters["nonce"]);
+        Assert.Equal("""{"EventType":"subscribe"}""", FederationEndpointHost.Channel.LastEventContext.Parameters["__raw"]);
+        Assert.Equal("wechat-mp", FederationEndpointHost.Channel.LastEventContext.Parameters["channel_id"]);
+    }
+
+    /// <summary>URL 验证握手（echostr——微信回调 URL 验证契约）：query 含 echostr 且验签通过 → 原样回显（text/plain）。</summary>
+    [Fact]
+    public async Task Event_Echostr_UrlVerification_ReturnsEcho()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1&echostr=echo-abc",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Equal("echo-abc", body);                                          // 验签通过 → 原样回显
+        Assert.True(FederationEndpointHost.Channel.Authenticated);               // 验签（AuthenticateAsync）已执行
+    }
+
+    /// <summary>handler first-non-null-wins（评审 F8）：Fake 通道平台回复 null → 编排委托 IEventReplyHandler 集合
+    /// 按 ChannelType 匹配 → 首个非 null 生效（handler-1）→ 200 回复；handler-2 不触达（短路）。</summary>
+    [Fact]
+    public async Task Event_HandlerFirstNonNullWins()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("<xml><Content><![CDATA[from-handler-1]]></Content></xml>", "text/xml");
+        FederationEndpointHost.EventHandler2.Result = new EventReplyResult("<xml><Content><![CDATA[from-handler-2]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("from-handler-1", body);                                 // 首个非 null 生效
+        Assert.DoesNotContain("from-handler-2", body);
+        Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);           // handler-1 被调
+        Assert.Equal(0, FederationEndpointHost.EventHandler2.Invoked);           // first-non-null-wins 短路
+    }
+
+    /// <summary>uid 只读查询（评审 F7）：编排经 ISsoChannelMapService.GetByChannelAsync 查 uid（不建号——
+    /// LinkAsync 不被调）→ 富化 Parameters["uid"] 供 handler 签票据。</summary>
+    [Fact]
+    public async Task Event_UidReadOnlyLookup_EnrichedIntoHandlerContext()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.ChannelMap.Map = new SsoChannelMapDto("u-100", "wechat-mp", "ext-100");
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("<xml><Content><![CDATA[login-link]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        // uid 只读查询（GetByChannelAsync 被调、LinkAsync 不被调）
+        Assert.Equal(1, FederationEndpointHost.ChannelMap.GetByChannelInvoked);
+        Assert.Equal("wechat-mp", FederationEndpointHost.ChannelMap.LastChannelId);
+        Assert.Equal("ext-100", FederationEndpointHost.ChannelMap.LastExternalUserId);  // 验签富化的 external_user_id
+        Assert.Equal(0, FederationEndpointHost.ChannelMap.LinkInvoked);                 // 只读不建号
+
+        // uid 富化进 handler 上下文（供 handler 签 ISealedTicketService<FederatedIdentity> 票据）
+        Assert.NotNull(FederationEndpointHost.EventHandler1.LastContext);
+        Assert.Equal("u-100", FederationEndpointHost.EventHandler1.LastContext!.Parameters["uid"]);
     }
 
     // ═══════════════════ 子应用消费方委托端点冒烟（ISsoSubAppBridge——2026-10-11） ═══════════════════

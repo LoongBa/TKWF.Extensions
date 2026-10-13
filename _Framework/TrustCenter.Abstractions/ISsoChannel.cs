@@ -30,6 +30,20 @@ public sealed record SsoChannelAuthorizeContext(string RedirectUri, string? Stat
 public sealed record SsoChannelAuthorizeResult(string Url, string? State, string? PkceVerifier, string? PkceChallenge);
 
 /// <summary>
+/// 事件推送上下文（外部身份联邦 E3——平台事件入站；键值模型对齐 <see cref="SsoChannelAuthContext"/>）。
+/// <para>参数约定：<c>__raw</c> = 原始 body；query 参数（msg_signature/signature/timestamp/nonce/echostr——
+/// 微信验签参数在 URL query，装配层透传）；<c>channel_id</c>；平台库通道验签解密后富化
+/// <c>external_user_id</c>（openid）/ <c>msg_type</c> / <c>event</c>；编排层 uid 只读查询后富化 <c>uid</c>
+/// （评审 F7——<c>GetByChannelAsync</c> 只读不建号，不调 LinkAsync）。</summary>
+public sealed record SsoChannelEventContext(IReadOnlyDictionary<string, string?> Parameters);
+
+/// <summary>
+/// 事件平台化回复（外部身份联邦 E3 评审 F5）——<c>Content</c> = 响应体（微信 XML 被动回复 text/xml）；
+/// 空 <c>Content</c> + "text/xml" = 200 空回复（微信 5 秒超时约束兜底——异步客服消息机制归 Phase 2/消费方）。
+/// </summary>
+public sealed record EventReplyResult(string Content, string ContentType);
+
+/// <summary>
 /// SSO channel 契约（IdP 适配器接口——供平台适配扩展 <c>TKWF.Federation.{平台}</c> 实现）。
 /// <para>设计文档 §4.1 channel 抽象：channel_type 决定"身份获取流程"（OAuth 代理 / Issue 票据 / 未来其他）；
 /// 与既有 <c>IAuthenticationProvider</c> 的边界（Oracle P2-3）：Provider = 认证中心内部认证方式
@@ -58,4 +72,15 @@ public interface ISsoChannel : IDomainService
     /// <para>凭证自持（Oracle P2-4）：通道 ctor <c>ChannelConfig</c> 已含 AppId/AppSecret/Extra——构造 URL 不额外索取凭证。</para>
     /// </summary>
     Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default) => Task.FromResult<SsoChannelAuthorizeResult?>(null);
+
+    /// <summary>
+    /// 处理平台事件推送并返回平台化回复（外部身份联邦 E3——ADR-Federation-外部身份联邦与密封票据适配 E3）。
+    /// <para><b>DIM 默认 null = 非事件通道零强制</b>（对齐 <see cref="BuildAuthorizeUrlAsync"/> DIM 模式——既有/未来平台库零改动）；
+    /// 事件通道（如 <c>wechat_event</c>）实现：验签（信任根一票否决）+ AES 解密 → 提取 openid/MsgType/Event
+    /// 富化 <see cref="SsoChannelEventContext.Parameters"/> → 微信 XML 被动回复（text/xml）/ 空 Content 200 兜底
+    /// （微信 5 秒超时约束——异步客服消息归 Phase 2/消费方）。</para>
+    /// <para>返回 null = 无平台回复（编排层委托 <c>IEventReplyHandler</c> first-non-null-wins——Federation 主包契约）。</para>
+    /// </summary>
+    Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        => Task.FromResult<EventReplyResult?>(null);
 }

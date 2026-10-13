@@ -13,6 +13,7 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Domain.Ticket;
 
 namespace TKWF.Ext.TrustCenter;
 
@@ -37,9 +38,14 @@ namespace TKWF.Ext.TrustCenter;
 /// <para><b>TrustCenter 剥离（2026-10-09）</b>：自 Federation 迁入——<c>SsoAccessCodeService</c> → <see cref="AccessCodeService"/>
 /// （去 Sso 前缀，方案 §5.8）；契约 <c>ISsoAccessCodeService</c> → <see cref="IAccessCodeService"/>；
 /// 实体 <c>SsoAccessCodeEntity</c> → <see cref="AccessCodeEntity"/>（表 TKWF_AccessCode）；命名空间 TKWF.Ext.TrustCenter。</para>
+/// <para><b>E2 附加契约（2026-10-14，外部身份联邦与会话绑定守卫-开发方案 §五 E2 + ADR E2）</b>：
+/// 同一实现类附加实现 <see cref="ISealedTicketService{T}"/> 的 <see cref="FederatedIdentity"/> 特化
+/// （<b>DB 后端适配器</b>——既有 TKWF_AccessCode 表 + SHA256 + AES-GCM + ExpectedClaimant 原子 CAS），消费方经
+/// <c>User.Use&lt;ISealedTicketService&lt;FederatedIdentity&gt;&gt;()</c> 帧内解析到 DB 后端；
+/// <see cref="IAccessCodeService"/> 契约与既有 6 方法<b>零改动</b>（API 兼容，初始器双接口注册同一实现）。</para>
 /// </summary>
 [DiContractIgnore]
-internal sealed class AccessCodeService : DomainServiceBase, IAccessCodeService
+internal sealed class AccessCodeService : DomainServiceBase, IAccessCodeService, ISealedTicketService<FederatedIdentity>
 {
     /// <summary>附带信息明文容量上限（字节）——列表 <c>PayloadEncrypted</c> MaxLength(4096) 为 AES-GCM 密文
     /// base64：明文 = 4096 - 12(nonce) - 16(tag) = 4068（方案 §5.5 P7 fail-hard）。</summary>
@@ -284,6 +290,58 @@ internal sealed class AccessCodeService : DomainServiceBase, IAccessCodeService
         _logger.LogInformation("accesscode 清理——删除 {Deleted} 行过期记录（cutoff={Cutoff:O}）", deleted, cutoff);
         return deleted;
     }
+
+    // ── ISealedTicketService<FederatedIdentity> 适配（E2——外部身份联邦与会话绑定守卫-开发方案 §五 E2 + ADR-Federation E2）──
+    // 同一实现类两接口的附加契约（初始器 AddConstructibleService 双接口注册）：FederatedIdentity → JSON →
+    // 既有 IssueAsync(payloadJson, ttl, claimant)（内部 SHA256 + AES-GCM 落 TKWF_AccessCode.PayloadEncrypted）；
+    // RedeemAsync → 解密 → Deserialize<FederatedIdentity>。PKCE 无对应——null/丢弃（Phase 2 经 Extensions）。
+
+    /// <summary>
+    /// E2：<see cref="ISealedTicketService{T}"/> 签发适配——FederatedIdentity → JSON → 既有
+    /// <see cref="IssueAsync(string?, TimeSpan, string?, CancellationToken)"/>（SHA256 + AES-GCM 落库 + 原子 CAS）。
+    /// <para>映射（评审 M5）：payload 序列化为 JSON；<see cref="SealedTicketOptions.ExpectedClaimant"/> → expectedClaimant；
+    /// PKCE 无对应（FederatedIdentity 无 verifier）——null/丢弃（Phase 2 经 Extensions）。</para>
+    /// </summary>
+    async Task<SealedTicketResult> ISealedTicketService<FederatedIdentity>.IssueAsync(
+        FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+
+        var json = JsonSerializer.Serialize(payload);
+        var result = await IssueAsync(json, ttl, options?.ExpectedClaimant, ct);
+        return new SealedTicketResult(result.Code, result.ExpiresIn);
+    }
+
+    /// <summary>
+    /// E2：<see cref="ISealedTicketService{T}"/> 兑换适配——委托既有 <see cref="RedeemAsync{T}(string, string?, CancellationToken)"/>
+    /// （原子 CAS + ExpectedClaimant 无 TOCTOU）→ 解密 payload → <see cref="FederatedIdentity"/>。
+    /// <para>claimant 传 null（可转让语义——票据身份由 UId 一致性校验保证，见框架 D5）。</para>
+    /// <para><b>契约语义对齐（"失败/过期/已用返回 null"）</b>：底层 DB 后端以 <see cref="AuthenticationException"/>
+    /// （原因码 ACCESS_CODE_NOT_FOUND/TICKET_EXPIRED/TICKET_CONSUMED/CLAIMANT_MISMATCH）抛错，
+    /// 适配层映射为 null（自密封票据契约视角"未成功即 null"，不向票据消费方泄露失败原因码；
+    /// <see cref="IAccessCodeService"/> 既有异常码路径保留不变）。载荷解密失败
+    /// （<see cref="CryptographicException"/>/<see cref="FormatException"/>）<b>不捕获</b>——
+    /// fail-closed 拒信任（README §五），与契约"非 null 即已信任"语义一致。</para>
+    /// </summary>
+    async Task<FederatedIdentity?> ISealedTicketService<FederatedIdentity>.RedeemAsync(
+        string ticket, CancellationToken ct = default)
+    {
+        try
+        {
+            return await RedeemAsync<FederatedIdentity>(ticket, claimant: null, ct);
+        }
+        catch (AuthenticationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// E2：<see cref="ISealedTicketService{T}"/> 清理适配——委托既有 <see cref="CleanupExpiredAsync(int?, CancellationToken)"/>
+    /// （默认保留天数 7，含 Payload 密文清理）。
+    /// </summary>
+    async Task<int> ISealedTicketService<FederatedIdentity>.CleanupExpiredAsync(CancellationToken ct = default)
+        => await CleanupExpiredAsync(retentionDays: null, ct);
 
     // ── 私有实现（对齐 TokenService 静态辅助模式） ──
 

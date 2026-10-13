@@ -142,6 +142,57 @@ internal static class WeChatEventCrypto
     }
 
     /// <summary>
+    /// 从解密 XML 提取 ToUserName（公众号 id——被动回复 <c>FromUserName</c> 用）；非法 XML / 缺节点抛
+    /// <see cref="InvalidOperationException"/>（对齐 <see cref="ExtractFromUserName"/> 形态）。
+    /// </summary>
+    public static string ExtractToUserName(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
+            throw new InvalidOperationException("微信消息 XML 为空");
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(xml);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            throw new InvalidOperationException("微信消息 XML 非法", ex);
+        }
+
+        var value = doc.Root?.Element("ToUserName")?.Value;
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("微信消息 XML 缺 ToUserName");
+        return value.Trim();
+    }
+
+    /// <summary>
+    /// 从解密 XML 提取 <c>MsgType</c>/<c>Event</c>（外部身份联邦 E3 评审 F4——事件类型语义进
+    /// <c>Parameters["msg_type"]</c>/<c>["event"]</c>）。缺节点返回 null（不抛——普通消息（text/image）无
+    /// <c>Event</c> 节点；<c>MsgType</c> 恒存在）；非法 XML 抛 <see cref="InvalidOperationException"/>。
+    /// </summary>
+    public static (string? MsgType, string? Event) ExtractMsgTypeAndEvent(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
+            throw new InvalidOperationException("微信消息 XML 为空");
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(xml);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            throw new InvalidOperationException("微信消息 XML 非法", ex);
+        }
+
+        var msgType = doc.Root?.Element("MsgType")?.Value;
+        var eventValue = doc.Root?.Element("Event")?.Value;
+        return (string.IsNullOrWhiteSpace(msgType) ? null : msgType.Trim(),
+                string.IsNullOrWhiteSpace(eventValue) ? null : eventValue.Trim());
+    }
+
+    /// <summary>
     /// 测试辅助：AES-256-CBC 加密（构造合法 msg_encrypt 正向样本）——与 <see cref="DecryptMsg"/> 严格对称。
     /// <para>明文布局同官方加密侧：<c>[16B 随机][4B 网络序消息长度][XML][receiveid]</c> + PKCS7。</para>
     /// </summary>

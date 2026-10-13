@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Authentication;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Domain.Ticket;
 
 namespace TKWF.Ext.TrustCenter.Tests;
 
@@ -232,5 +235,114 @@ public class AccessCodeServiceTests
         // retention=0 → 跳过清理（返回 0，不删除）
         Assert.Equal(0, await service.CleanupExpiredAsync(retentionDays: null, default));
         Assert.NotNull(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued.Code), default));
+    }
+
+    // ── E2：ISealedTicketService<FederatedIdentity> DB 后端适配（外部身份联邦与会话绑定守卫-开发方案 §五 E2 + ADR-Federation E2） ──
+
+    /// <summary>E2 测试用联邦身份（全字段——含 Extensions 字典；FederatedIdentity = 框架 Core record）。</summary>
+    private static FederatedIdentity FedIdentity()
+        => new(
+            UId: "u-fed-100",
+            ChannelId: "ch-wechat",
+            ExternalUserId: "openid-fed-100",
+            ChannelType: "wechat_oauth",
+            AuthLevel: 2,
+            Extensions: new Dictionary<string, string?>
+            {
+                ["role"] = "admin",
+                ["nickname"] = "alice",
+            });
+
+    /// <summary>密封票据往返——FederatedIdentity → JSON → AES-GCM 落库 → Redeem 解密反序列化，全字段一致。
+    /// Extensions 字典逐项断言（record 等值比较对字典按引用比较，不做整对象 Equal）。</summary>
+    [Fact]
+    public async Task SealedTicket_IssueRedeem_RoundTrip_ReturnsFullFederatedIdentity()
+    {
+        var (service, _, _) = CreateService();
+        ISealedTicketService<FederatedIdentity> sealedService = service;
+        var identity = FedIdentity();
+
+        var issued = await sealedService.IssueAsync(identity, TimeSpan.FromSeconds(120));
+        Assert.False(string.IsNullOrWhiteSpace(issued.Ticket));
+        Assert.Equal(120, issued.ExpiresIn);
+
+        var redeemed = await sealedService.RedeemAsync(issued.Ticket);
+        Assert.NotNull(redeemed);
+        Assert.Equal(identity.UId, redeemed!.UId);
+        Assert.Equal(identity.ChannelId, redeemed.ChannelId);
+        Assert.Equal(identity.ExternalUserId, redeemed.ExternalUserId);
+        Assert.Equal(identity.ChannelType, redeemed.ChannelType);
+        Assert.Equal(identity.AuthLevel, redeemed.AuthLevel);
+        Assert.NotNull(redeemed.Extensions);
+        Assert.Equal(identity.Extensions!.Count, redeemed.Extensions.Count);
+        Assert.Equal("admin", redeemed.Extensions["role"]);
+        Assert.Equal("alice", redeemed.Extensions["nickname"]);
+    }
+
+    /// <summary>防重放——同票二次兑换 null（密封契约"失败/已用返回 null"：底层 DB CAS TICKET_CONSUMED → 适配层映射 null）。</summary>
+    [Fact]
+    public async Task SealedTicket_SecondRedeem_ReturnsNull_ReplayProtected()
+    {
+        var (service, _, _) = CreateService();
+        ISealedTicketService<FederatedIdentity> sealedService = service;
+
+        var issued = await sealedService.IssueAsync(FedIdentity(), TimeSpan.FromSeconds(120));
+
+        var first = await sealedService.RedeemAsync(issued.Ticket);
+        Assert.NotNull(first);
+
+        var second = await sealedService.RedeemAsync(issued.Ticket);
+        Assert.Null(second);
+    }
+
+    /// <summary>ttl 过期——过期票据兑换 null（对齐 CleanupExpired 测试既有确定性老化模式：短 TTL 落库后直接老化 ExpiresAt）。</summary>
+    [Fact]
+    public async Task SealedTicket_Expired_ReturnsNull()
+    {
+        var (service, ds, _) = CreateService();
+        ISealedTicketService<FederatedIdentity> sealedService = service;
+
+        // 短 TTL（1s——底层钳制 Math.Max(TotalSeconds, 1)）
+        var issued = await sealedService.IssueAsync(FedIdentity(), TimeSpan.FromSeconds(1));
+        // 确定性老化：直接落库把 ExpiresAt 改为过去（避免真实睡眠——对齐 CleanupExpired_RemovesStaleRows 模式）
+        await ds.EntityUpdateWhereAsync(
+            m => m.CodeHash == Token2Service.Sha256Hex(issued.Ticket),
+            m => new { ExpiresAt = DateTime.UtcNow.AddMinutes(-1) },
+            default);
+
+        Assert.Null(await sealedService.RedeemAsync(issued.Ticket));
+    }
+
+    /// <summary>ExpectedClaimant 未用（options null）——票据可转让：未指定核销人，任意核销人可兑换。</summary>
+    [Fact]
+    public async Task SealedTicket_OptionsNull_Transferable()
+    {
+        var (service, _, _) = CreateService();
+        ISealedTicketService<FederatedIdentity> sealedService = service;
+
+        var issued = await sealedService.IssueAsync(FedIdentity(), TimeSpan.FromSeconds(120), options: null);
+        Assert.False(string.IsNullOrWhiteSpace(issued.Ticket));
+
+        var redeemed = await sealedService.RedeemAsync(issued.Ticket);
+        Assert.NotNull(redeemed);
+        Assert.Equal("u-fed-100", redeemed!.UId);
+    }
+
+    /// <summary>清理适配——ISealedTicketService.CleanupExpiredAsync() 委托既有默认保留天数（retentionDays: null）。</summary>
+    [Fact]
+    public async Task SealedTicket_CleanupExpired_UsesDefaultRetention()
+    {
+        var (service, ds, _) = CreateService();
+        ISealedTicketService<FederatedIdentity> sealedService = service;
+
+        var issued = await sealedService.IssueAsync(FedIdentity(), TimeSpan.FromSeconds(120));
+        // 老化（30 天前——默认 RetentionDays=7 删除范围）
+        await ds.EntityUpdateWhereAsync(
+            m => m.CodeHash == Token2Service.Sha256Hex(issued.Ticket),
+            m => new { ExpiresAt = DateTime.UtcNow.AddDays(-30) },
+            default);
+
+        Assert.Equal(1, await sealedService.CleanupExpiredAsync());
+        Assert.Null(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued.Ticket), default));
     }
 }

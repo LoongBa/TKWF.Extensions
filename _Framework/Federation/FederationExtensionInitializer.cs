@@ -96,5 +96,10 @@ namespace TKWF.Ext.Federation;
         // 子应用消费方桥接门面（2026-10-11——仅共享 Federation 模式编排：authorize/start · oauth/callback ·
         // trust/issue · identity/claim 四端点编排——state 票据 AES-GCM Federation 密钥 + L2 契约消费 TrustCenter 校验面）
         services.AddConstructibleService<ISsoSubAppBridge, SsoSubAppBridge>();
+
+        // 事件编排门面（外部身份联邦 E3——平台化回复 + uid 只读查询 + handler first-non-null-wins）：
+        // IEventReplyHandler 集合由消费方注册（TryAddEnumerableConstructible——事件回复是业务决策，
+        // Federation 只提供契约 + 编排；平台库不注册 handler 防过度设计——空集合自然跳过）
+        services.AddConstructibleService<IEventOrchestrator, EventOrchestrator>();
     }
 }

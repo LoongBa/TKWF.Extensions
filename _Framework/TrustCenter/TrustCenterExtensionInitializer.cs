@@ -7,6 +7,7 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Domain.Ticket;
 using TKW.Framework.Utility.Caching;
 
 namespace TKWF.Ext.TrustCenter;
@@ -68,12 +69,16 @@ namespace TKWF.Ext.TrustCenter;
         services.AddConstructibleService<IToken2Service, Token2Service>();
         services.AddConstructibleService<IAccessCodeService, AccessCodeService>();
         services.AddConstructibleService<ISsoClientService, SsoClientService>();
+        // E2（外部身份联邦与会话绑定守卫）：同一实现类注册 ISealedTicketService<FederatedIdentity> 附加契约
+        // （DB 后端适配器——消费方 User.Use<ISealedTicketService<FederatedIdentity>>() 帧内解析到本实现；
+        //  框架 D3 内存版 InMemorySealedTicketService 由消费方按需另注册，二选一不冲突）
+        services.AddConstructibleService<ISealedTicketService<FederatedIdentity>, AccessCodeService>();
     }
 
     /// <summary>
     /// 幂等初始化——签名密钥 fail-fast 预检（生产缺 Issuer/EC 密钥 → InvalidOperationException 拒绝启动；
     /// 开发自动生成临时密钥 + Warning）。
-    /// <para>经 <see cref="BeginSystemScopeAsync"/> 进入系统作用域 + <c>scope.System.Use&lt;IToken2Service&gt;()</c>
+    /// <para>经 <c>BeginSystemScopeAsync()</c> 进入系统作用域 + <c>scope.System.Use&lt;IToken2Service&gt;()</c>
     /// 解析（对齐 AuthCenter V0.3.1 A' 裁定——门面解析需域作用域；IToken2Service : IDomainService 准入）。</para>
     /// <para><b>V0.1.1 修复（Development 模式启动崩溃，同 AuthCenter V0.5.4 defect 复制链）</b>：
     /// <c>BeginSystemScopeAsync(externalSp)</c> 传参按 M1 契约原样绑定不建子 scope——<c>InitializeAsync</c> 的

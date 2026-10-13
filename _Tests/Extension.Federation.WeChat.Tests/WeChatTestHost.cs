@@ -62,6 +62,10 @@ internal static class WeChatTestHost
     public static SsoChannelAuthContext CreateContext(params (string Key, string? Value)[] parameters)
         => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
 
+    /// <summary>构造 SsoChannelEventContext（事件链 E3——HandleEventAsync 用例；Dictionary 实例原地富化跨调用方可见）。</summary>
+    public static SsoChannelEventContext CreateEventContext(params (string Key, string? Value)[] parameters)
+        => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
+
     /// <summary>Stub HttpMessageHandler 实现（路由微信 API 路径）。</summary>
     private sealed class StubWeChatHandler : HttpMessageHandler
     {

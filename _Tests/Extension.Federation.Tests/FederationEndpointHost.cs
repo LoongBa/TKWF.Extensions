@@ -15,6 +15,7 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Web.Extensions;
 using TKW.Framework.Domain.Web.Hosting;
 using TKW.Framework.Enumerations;
+using TKWF.Ext.AuthCenter;
 using TKWF.Ext.Testing.Shared;
 using TKWF.Ext.TrustCenter;
 
@@ -46,6 +47,10 @@ internal static class FederationEndpointHost
     public static FakeToken2Service Token2 { get; } = new();
     public static FakeSsoSubAppBridge Bridge { get; } = new();
     public static FakeChannelRegistry Registry { get; } = new();
+    public static FakeSsoChannelMapService ChannelMap { get; } = new();
+    public static FakeEventReplyHandler EventHandler1 { get; } = new("handler-1");
+    public static FakeEventReplyHandler EventHandler2 { get; } = new("handler-2");
+    public static FakeEventOrchestrator Orchestrator { get; } = new();
 
     /// <summary>共享宿主状态复位（跨用例防污染——负向/正向断言前置调用，对齐 AuthCenter V0.8.0 复位范式）。</summary>
     public static void Reset()
@@ -59,6 +64,10 @@ internal static class FederationEndpointHost
         Token2.Reset();
         Bridge.Reset();
         Registry.Reset();
+        ChannelMap.Reset();
+        EventHandler1.Reset();
+        EventHandler2.Reset();
+        Orchestrator.Reset();
     }
 
     private static TestServer CreateServer()
@@ -89,6 +98,17 @@ internal static class FederationEndpointHost
             // IToken2Service：契约在 TrustCenter.Abstractions（经 Federation 传递），测试项目未引 TrustCenter
             // 主包 → 无既有注册，AddScoped 直接注册 Fake（GetGuest.Use<T>() → GetRequiredService 解析）
             svc.AddScoped<IToken2Service>(_ => Token2);
+            // ISsoChannelMapService：契约在 AuthCenter.Abstractions（uid 只读查询——事件编排 F7 消费），
+            // 测试项目未引 AuthCenter 主包 → AddScoped 直接注册 Fake（GetByChannelAsync 断言 / LinkAsync 不调）
+            svc.AddScoped<ISsoChannelMapService>(_ => ChannelMap);
+            // IEventReplyHandler 集合（事件编排 first-non-null-wins F8——真实 EventOrchestrator ctor 注入；
+            // 测试注册 2 个 Fake handler 供 first-non-null-wins / uid 富化断言）
+            svc.AddScoped<IEventReplyHandler>(_ => EventHandler1);
+            svc.AddScoped<IEventReplyHandler>(_ => EventHandler2);
+            // IEventOrchestrator：事件编排门面（E3——Federation 初始器 AddConstructibleService 注册真实守卫工厂；
+            // 测试宿主 Replace 为普通 Scoped Fake 编排（复刻真实行为：通道 HandleEventAsync + uid 只读富化 +
+            // handler first-non-null-wins——无守卫依赖，规避守卫工厂与 TestMetaContext 空上下文的发现不确定性）
+            svc.Replace(ServiceDescriptor.Scoped<IEventOrchestrator>(_ => Orchestrator));
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -207,7 +227,8 @@ internal static class FederationEndpointHost
             => Task.FromResult(Channels.FirstOrDefault(c => c.IsDefault) ?? Channels.FirstOrDefault(c => c.IsEnabled));
     }
 
-    /// <summary>Fake 通道——AuthenticateAsync 记录上下文 + 返回可配置 Result（默认成功 ext-100/AuthLevel 2）。</summary>
+    /// <summary>Fake 通道——AuthenticateAsync 记录上下文 + 返回可配置 Result（默认成功 ext-100/AuthLevel 2）；
+    /// HandleEventAsync 记录事件上下文 + 返回可配置 EventReply（默认 null——编排转 handler 委托，first-non-null-wins）。</summary>
     internal sealed class FakeSsoChannel : ISsoChannel
     {
         public FakeSsoChannel(string channelId) => ChannelId = channelId;
@@ -215,16 +236,24 @@ internal static class FederationEndpointHost
         public string ChannelType => "fake_oauth";
         public string ChannelId { get; }
         public SsoChannelAuthResult Result { get; set; } = new(true, "ext-100", null, 2);
+        public EventReplyResult? EventReply { get; set; }
         public SsoChannelAuthContext? LastContext { get; private set; }
+        public SsoChannelEventContext? LastEventContext { get; private set; }
         public bool Authenticated { get; private set; }
 
-        public void Reset() { LastContext = null; Authenticated = false; }
+        public void Reset() { LastContext = null; LastEventContext = null; Authenticated = false; EventReply = null; }
 
         public Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
         {
             Authenticated = true;
             LastContext = context;
             return Task.FromResult(Result);
+        }
+
+        public Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        {
+            LastEventContext = context;
+            return Task.FromResult(EventReply);
         }
     }
 
@@ -308,6 +337,99 @@ internal static class FederationEndpointHost
         {
             LastClaimRequest = request;
             return Task.FromResult(ClaimResult);
+        }
+    }
+
+    /// <summary>Fake SSO 渠道身份映射（AuthCenter.Abstractions 契约——事件编排 uid 只读查询 F7）：
+    /// GetByChannelAsync 记录调用 + 返回可配置 Map；LinkAsync 计数（uid 只读断言——LinkAsync 不被调）。</summary>
+    internal sealed class FakeSsoChannelMapService : ISsoChannelMapService
+    {
+        public SsoChannelMapDto? Map { get; set; }
+        public int GetByChannelInvoked { get; private set; }
+        public int LinkInvoked { get; private set; }
+        public string? LastChannelId { get; private set; }
+        public string? LastExternalUserId { get; private set; }
+
+        public void Reset() { Map = null; GetByChannelInvoked = 0; LinkInvoked = 0; LastChannelId = null; LastExternalUserId = null; }
+
+        public Task<SsoChannelMapDto?> GetByChannelAsync(string channelId, string externalUserId, CancellationToken ct = default)
+        {
+            GetByChannelInvoked++;
+            LastChannelId = channelId;
+            LastExternalUserId = externalUserId;
+            return Task.FromResult(Map);
+        }
+
+        public Task<SsoChannelMapDto> LinkAsync(string uid, string channelId, string externalUserId, CancellationToken ct = default)
+        {
+            LinkInvoked++;
+            return Task.FromResult(Map ?? new SsoChannelMapDto(uid, channelId, externalUserId));
+        }
+    }
+
+    /// <summary>Fake 事件回复处理器（IEventReplyHandler——事件编排 first-non-null-wins F8）：
+    /// 记录 Invoked/LastContext + 返回可配置 Result（null = 不处理）。</summary>
+    internal sealed class FakeEventReplyHandler : IEventReplyHandler
+    {
+        public FakeEventReplyHandler(string name) => Name = name;
+
+        private string Name { get; }
+        public string ChannelType { get; set; } = "wechat_event";
+        public EventReplyResult? Result { get; set; }
+        public int Invoked { get; private set; }
+        public SsoChannelEventContext? LastContext { get; private set; }
+
+        public void Reset() { Result = null; Invoked = 0; LastContext = null; }
+
+        public Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        {
+            Invoked++;
+            LastContext = context;
+            return Task.FromResult(Result);
+        }
+    }
+
+    /// <summary>Fake 事件编排门面（IEventOrchestrator——复刻真实 EventOrchestrator 行为，无守卫依赖）：
+    /// 调通道 HandleEventAsync（平台化回复，默认 null）→ uid 只读查询富化（GetByChannelAsync 断言/LinkAsync 不调）→
+    /// handler first-non-null-wins（按 ChannelType 匹配）。</summary>
+    internal sealed class FakeEventOrchestrator : IEventOrchestrator
+    {
+        public int Invoked { get; private set; }
+        public SsoChannelEventContext? LastContext { get; private set; }
+
+        public void Reset() { Invoked = 0; LastContext = null; }
+
+        public Task<EventReplyResult?> OrchestrateAsync(string channelId, string channelType, SsoChannelEventContext context, CancellationToken ct = default)
+        {
+            Invoked++;
+            LastContext = context;
+
+            // ① 通道平台化回复（FakeSsoChannel.HandleEventAsync——记录 LastEventContext + 返回可配置 EventReply）
+            var platformReply = Channel.HandleEventAsync(context, ct).GetAwaiter().GetResult();
+            if (platformReply is not null)
+                return Task.FromResult(platformReply);
+
+            // ② uid 只读查询富化（评审 F7——GetByChannelAsync 只读不建号，LinkAsync 不被调）
+            if (context.Parameters is Dictionary<string, string?> dict
+                && context.Parameters.TryGetValue("external_user_id", out var externalUserId)
+                && !string.IsNullOrEmpty(externalUserId))
+            {
+                var map = ChannelMap.GetByChannelAsync(channelId, externalUserId, ct).GetAwaiter().GetResult();
+                if (map is not null)
+                    dict["uid"] = map.UId;
+            }
+
+            // ③ handler first-non-null-wins（按 ChannelType 匹配）
+            foreach (var handler in new[] { EventHandler1, EventHandler2 })
+            {
+                if (!string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
+                    continue;
+                var reply = handler.HandleAsync(context, ct).GetAwaiter().GetResult();
+                if (reply is not null)
+                    return Task.FromResult(reply);
+            }
+
+            return Task.FromResult<EventReplyResult?>(null);
         }
     }
 }

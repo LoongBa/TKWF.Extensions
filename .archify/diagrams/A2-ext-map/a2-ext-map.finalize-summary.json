@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\candidate.json",
+    "sha256": "7ebcd41e2d5ea63392a7268a8bee6342521e0b673e8b417e40f455f3661aea54",
+    "bytes": 8854
+  },
+  "artifact": {
+    "path": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
+    "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
+    "bytes": 769228
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.finalize.json",
+    "summaryReceipt": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.finalize-summary.json",
+    "browserCheckReceipt": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-13T14:07:00.854Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 1931,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "resolvedCrossovers": 2,
+      "routesOverSuggestedBends": 1,
+      "routesOverSuggestedStretch": 1
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [
+        {
+          "left": {
+            "id": "g-auth-fw",
+            "from": "g-auth",
+            "to": "fw",
+            "label": "User.Use/白名单",
+            "collectionIndex": 0,
+            "artifactIndex": 1
+          },
+          "right": {
+            "id": "g-data-fw",
+            "from": "g-data",
+            "to": "fw",
+            "label": "User.Use/白名单",
+            "collectionIndex": 4,
+            "artifactIndex": 5
+          },
+          "point": [
+            296,
+            484
+          ],
+          "sharedNode": "fw"
+        },
+        {
+          "left": {
+            "id": "g-msg-fw",
+            "from": "g-msg",
+            "to": "fw",
+            "label": "User.Use/白名单",
+            "collectionIndex": 3,
+            "artifactIndex": 4
+          },
+          "right": {
+            "id": "g-plat-fw",
+            "from": "g-plat",
+            "to": "fw",
+            "label": "User.Use/白名单",
+            "collectionIndex": 6,
+            "artifactIndex": 7
+          },
+          "point": [
+            1384,
+            484
+          ],
+          "sharedNode": "fw"
+        }
+      ],
+      "detours": [
+        {
+          "relationship": {
+            "id": "g-msg-fw",
+            "from": "g-msg",
+            "to": "fw",
+            "label": "User.Use/白名单",
+            "collectionIndex": 3,
+            "artifactIndex": 4
+          },
+          "bends": 4,
+          "stretch": 1.567
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "g-auth → fw and g-data → fw cross next to fw: move node g-auth or g-data so the two reach fw from different sides (for example one level with it, one directly above or below it).",
+      "g-msg → fw and g-plat → fw cross next to fw: move node g-msg or g-plat so the two reach fw from different sides (for example one level with it, one directly above or below it).",
+      "g-msg → fw needs 4 bends: move node g-msg or fw so they share a row or column with matching centers, or sit diagonally with a clear corner."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

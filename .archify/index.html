@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TKWF.Extensions 架构图总览</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2129;
+    --panel-hover: #212b36;
+    --border: #2d3844;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #4a9eff;
+    --ok: #3fb950;
+    --pending: #d29922;
+    --tag: #30363d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    line-height: 1.6;
+    padding: 40px 24px 80px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header { margin-bottom: 32px; }
+  header h1 { font-size: 26px; font-weight: 600; }
+  header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .group { margin-bottom: 36px; }
+  .group h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    text-decoration: none;
+    color: var(--text);
+    transition: background .15s, border-color .15s, transform .1s;
+  }
+  a.card:hover { background: var(--panel-hover); border-color: var(--accent); transform: translateX(3px); }
+  a.card.disabled { opacity: .55; pointer-events: none; }
+  .id {
+    flex: 0 0 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--tag);
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--accent);
+  }
+  .info { flex: 1; min-width: 0; }
+  .info .t { font-weight: 600; font-size: 15px; }
+  .info .d { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .meta { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .badge {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .badge.ok { background: rgba(63,185,80,.15); color: var(--ok); }
+  .badge.pending { background: rgba(210,153,34,.15); color: var(--pending); }
+  .type { font-size: 11px; color: var(--muted); font-family: Consolas, monospace; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+  footer code { background: var(--tag); padding: 1px 6px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TKWF.Extensions 架构图总览</h1>
+    <p>扩展仓（TKWF.Ext.*）架构图。全部由 archify 生成（自包含 HTML，含仓库证据引用）。点击卡片打开对应图表。</p>
+  </header>
+
+  <div class="group">
+    <h2>门面层 — 全景认知</h2>
+    <a class="card" href="diagrams/A2-ext-map/a2-ext-map.html">
+      <div class="id">A2</div>
+      <div class="info">
+        <div class="t">扩展仓全景图</div>
+        <div class="d">_TKWF.Extensions 仓 30+ 扩展按领域聚类、落地状态、对主框架契约的依赖</div>
+      </div>
+      <div class="meta"><span class="badge ok">已完成</span><span class="type">architecture</span></div>
+    </a>
+  </div>
+
+  <footer>
+    生成工具：archify v3.0.1（<code>node archify.mjs finalize &lt;type&gt; &lt;candidate.json&gt; &lt;out.html&gt; --repo-root F:\LoongBa_Git\_TKWF.Extensions --quality showcase</code>）。
+    各图 candidate.json 与 receipt 位于同级目录；证据引用基于扩展仓 commit b7b607e0。
+  </footer>
+</div>
+</body>
+</html>

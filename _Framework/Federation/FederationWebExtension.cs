@@ -24,7 +24,10 @@ namespace TKWF.Ext.Federation;
 /// Web 装配钩子 ADR87/D22/G18）——自描述 Web 装配需求，消费方 <c>UseWebExtensions</c> 一次声明。
 /// <para>锚点：默认 <see cref="MiddlewareAnchor.AfterRouting"/>（纯端点装配，无中间件——<see cref="ConfigureMiddleware"/>
 /// 空实现）。端点均为匿名（<c>AllowAnonymous</c>）——对外连接面（平台回调/公共 JWKS），
-/// 不经 HttpAuthentication 认证（HttpAuth ExcludedPathPrefixes 归消费方装配配置）。</para>
+/// 不经 HttpAuthentication 认证（<b>v4.10.76 起框架自动排除</b>：<see cref="HttpAuthenticationMiddleware{TUserInfo}"/>
+/// 锚点后移 AfterRouting 读端点 <c>IAllowAnonymous</c> 元数据——本扩展所有端点
+/// <c>AllowAnonymous</c>（除 trust/issue）自动免 HttpAuth 认证，<b>消费方零配置</b>，不再需要
+/// <c>HttpAuth.ExcludedPathPrefixes.Add(...)</c>；详见 <c>docs/HttpAuth匿名端点排除机制-开发方案.md</c>）。</para>
 /// <para>领域自治（G18 §3）：<see cref="ISsoLogin"/>/<see cref="ISsoChannelFactory"/> 等领域门面留 Domain 钩子
 /// <see cref="FederationExtensionInitializer{TUserInfo}"/> 注册（AddConstructibleService 守卫工厂）——本 Web
 /// 钩子仅宿主注册（端点映射 + 端点 Options），handler 经游客帧 <c>guest.Use&lt;门面&gt;()</c> 帧内解析。</para>

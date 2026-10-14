@@ -19,6 +19,10 @@ namespace TKWF.Ext.Federation;
 /// first-non-null-wins（消费方业务回复）→ 返回首个非 null <see cref="EventReplyResult"/>。
 /// 编排内经 <see cref="ISsoChannelMapService.GetByChannelAsync"/> 查 uid（<b>只读不建号</b>——评审 F7，
 /// 不调 LinkAsync）→ 富化 <c>Parameters["uid"]</c> 供 handler 签票据。</para>
+/// <para><b>handler 迭代边界（Oracle P2-3 记录）</b>：handler 委托仅对<b>未实现
+/// <c>HandleEventAsync</c>（恒返回 null）的通道</b>兜底——已平台化自处理回复的通道（如
+/// <c>WeChatEventChannel</c> 恒返回非 null，空回复兜底）对 handler 迭代<b>不可达</b>；
+/// 两处迭代（通道自处理 + 编排器 handler）设计可接受，职责各归其位。</para>
 /// <para>注册：<c>AddConstructibleService&lt;IEventOrchestrator, EventOrchestrator&gt;()</c>——门面标准形态；
 /// 装配层（FederationWebExtension.HandleEvent）经 <c>guest.Use&lt;IEventOrchestrator&gt;()</c> 帧内解析。
 /// <see cref="IEventReplyHandler"/> 集合 ctor 注入（ADR92 集合版守卫工厂帧内供给——消费方注册，空集合自然跳过）。</para>

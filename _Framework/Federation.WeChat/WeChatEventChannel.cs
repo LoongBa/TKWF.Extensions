@@ -105,7 +105,11 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
     public async Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
     {
         // 与 AuthenticateAsync 同款守卫（模板实例/禁用/配置缺失/参数缺失/验签失败/解密失败 → null——
-        // 错误语义由装配层 AuthenticateAsync 先行映射（WebExtension 验签成功后才会调本方法）；null 仅表示无平台回复）
+        // 错误语义由装配层 AuthenticateAsync 先行映射（WebExtension 验签成功后才会调本方法）；null 仅表示无平台回复）。
+        // ⚠️ 重复验签+解密链（Oracle P2-2 记录——性能非安全，保留设计）：WebExtension 端点已先验签成功，
+        // 本方法仍自验——因本方法是通道契约方法，可被直连调用（不经装配层），验签信任根须自持（纵深防御）；
+        // 不可用"external_user_id 已存在即跳过验签"优化（存在直调伪造 openid 绕过信任根的漏洞）。
+        // Phase 2 契约微调选项（记录，不阻断）：AuthenticateAsync 返回解密 XML 供 HandleEventAsync 复用，需契约微调。
         if (_channel is null)
             return null;
         if (!_channel.IsEnabled)

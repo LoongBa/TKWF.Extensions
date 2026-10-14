@@ -33,20 +33,27 @@ public class SsoClientServiceTests
         var client = await service.RegisterAsync(["https://app.example.com"], ["profile:basic"], default);
 
         Assert.StartsWith("app-", client.AppId);
-        Assert.Contains("https://app.example.com", client.OriginWhitelist);
-        Assert.True(client.IsEnabled);
+        Assert.Contains("https://app.example.com", client.Info.OriginWhitelist);
+        Assert.True(client.Info.IsEnabled);
+
+        // ★2026-10-14 注册契约缺口修复：注册响应一次性携带明文 client_secret（RFC 7591）——
+        // 非空 + 可经 ValidateClientCredentialAsync 通过（动态注册子应用兑现身份的关键）
+        Assert.False(string.IsNullOrWhiteSpace(client.ClientSecret));
+        Assert.True(await service.ValidateClientCredentialAsync(client.AppId, client.ClientSecret, default));
 
         // 落库密文（AES-GCM）——明文绝不落库
         var row = await ds.EntityGetAsync(m => m.AppId == client.AppId, default);
         Assert.NotNull(row);
         Assert.False(string.IsNullOrEmpty(row!.ClientSecretEncrypted));
         Assert.False(string.IsNullOrEmpty(row.HmacSecretEncrypted));
+        // 明文 != 密文（加密语义验证）
+        Assert.NotEqual(client.ClientSecret, row.ClientSecretEncrypted);
     }
 
     [Fact]
     public async Task ValidateClientCredential_RoundTrip()
     {
-        // 经 RegisterAsync 拿不到明文 secret（SsoClientInfo 无 secret 字段）——直接种实体 + 解密校验链路
+        // 直接种实体 + 解密校验链路（注册响应 secret 外，校验链路本体正负断言）
         var (service, ds, keys) = CreateService();
         var appId = "app-roundtrip";
         var clientSecret = "secret-abc";

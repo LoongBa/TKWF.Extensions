@@ -14,7 +14,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 应用注册 | `SsoClientEntity`（app_id + origin 白名单 + scope + client credential + per-channel HMAC 密钥，AES-GCM 加密落库） |
+| 应用注册 | `SsoClientEntity`（app_id + origin 白名单 + scope + client credential + per-channel HMAC 密钥，AES-GCM 加密落库）；`RegisterAsync` 返回 `SsoClientRegistrationResult`（**一次性明文 client_secret**——OAuth 动态注册 RFC 7591，注册响应即取，服务端不提供恢复接口） |
 | token2 签发/验证 | `Token2Service`——手写 **ES256**（BCL ECDsa，P-256 曲线强制）+ kid 轮换 + 独立密钥域（生产 PEM fail-fast / 开发临时密钥 `DevKeyCache<Token2Service.EcKeySet>`——框架 Utility.Caching）+ JWKS 分发 |
 | accesscode（联邦流） | `AccessCodeEntity`——CSPRNG 32B base64url / 120s TTL / **单次原子 CAS**（ADR89 条件 UPDATE）/ 只存 SHA256(code) / **PKCE 可选**（defense in depth） |
 | accesscode（安全数据投递） | **Payload + ExpectedClaimant**（方案 §5.5）——附带信息 AES-GCM 密文落库（明文不落库，容量上限 ~4068 字节）+ 可核销人进原子 CAS 条件（无 TOCTOU）+ `IssueAsync(payload,ttl,claimant)`/`PeekAsync`/`RedeemAsync` |
@@ -168,6 +168,7 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 | 版本 | 内容 |
 |------|------|
+| V0.2.1（2026-10-14） | **SsoClient 注册契约缺口修复（方案①——框架组转达，OAuth 动态注册 RFC 7591 §4.3）**：`RegisterAsync` 返回类型 `SsoClientInfo` → `SsoClientRegistrationResult`（`AppId` + **一次性明文 `ClientSecret`** + `Info` 脱敏快照）——动态注册子应用注册时即拿 secret，兑现身份链路（identity/claim）打通；**安全**：明文仅注册响应返回一次、服务端只存 AES-GCM 密文、**不提供恢复接口**（防 appId 枚举）；契约包 `ISsoClientQueryService`/`SsoClientInfo` 零变更（L2 面零破坏）；测试补注册响应 secret 断言（非空 + 可过校验 + 明文≠密文）+ README/使用指南同步 |
 | V0.1.0（2026-10-09，**待发布**） | **TrustCenter 信任内核（自 Federation 剥离，Phase 1-4）**：项目/命名空间/MinVerTagPrefix（`TrustCenter/v`）确立；`SsoClientEntity`（应用注册——origin 白名单 + scope + AES-GCM credential + per-channel HMAC）/ `Token2Service`（手写 ES256 独立密钥域 + kid 轮换 + JWKS + `DevKeyCache<EcKeySet>`）/ `AccessCodeEntity` + `AccessCodeService`（联邦授权码 Issue/Consume + **安全数据投递增强** Payload + ExpectedClaimant + Issue/Peek/Redeem + CleanupExpiredAsync）/ `TrustCenterExtensionInitializer`（AddConstructibleService 三门面 + keyed `ISymmetricKeyProvider` + DevKeyCache + 生产 fail-fast 预检）；`TrustCenter.Abstractions` 契约包（`ISsoChannel`/`IToken2Service`/`IAccessCodeService` + 不可变 DTO，零实体零 SG1）；编排面（SsoLogin/ISsoChannelFactory）与多通道设施归 Federation；25 测试用例 + 全量回归 0 失败（Phase 1-4 累计 1913 用例）。**✅ v4.10.70 适配（2026-10-10）**：CPM 4.10.69→4.10.70 lockstep + 删 `TrustCenterKeyProviderKeys` 过渡类 + 3 处代码点/5 处注释切 `SymmetricKeyProviderKeys.TrustCenter`（C11 第 5 扩展边界兑现，零行为差异）——统一发布待用户同意 |
 
 <!-- EOF -->

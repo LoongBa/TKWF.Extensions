@@ -60,8 +60,11 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
     /// 注册应用——生成 <c>app-{Guid}</c> AppId + client secret（CSPRNG 32B Base64Url）+ HMAC secret
     /// （CSPRNG 32B Base64Url）→ 均 AES-GCM 加密落库（ClientSecretEncrypted/HmacSecretEncrypted）；
     /// origin/scopes JSON 序列化（JsonSerializer）；scopes 为空默认 <c>["profile:basic"]</c>。
+    /// <para><b>2026-10-14 SsoClient 注册契约缺口修复</b>：返回 <see cref="SsoClientRegistrationResult"/>
+    /// （含一次性明文 ClientSecret——OAuth 动态注册惯例 RFC 7591 §4.3，调用方注册时安全保存；
+    /// 服务端只存密文，查询面 <see cref="SsoClientInfo"/> 保持脱敏，不提供恢复接口）。</para>
     /// </summary>
-    public async Task<SsoClientInfo> RegisterAsync(IReadOnlyList<string> originWhitelist, IReadOnlyList<string> scopes, CancellationToken ct = default)
+    public async Task<SsoClientRegistrationResult> RegisterAsync(IReadOnlyList<string> originWhitelist, IReadOnlyList<string> scopes, CancellationToken ct = default)
     {
         var origins = originWhitelist?.ToList() ?? [];
         var scopeList = scopes is { Count: > 0 } ? scopes.ToList() : ["profile:basic"];
@@ -84,7 +87,8 @@ internal sealed class SsoClientService : DomainServiceBase, ISsoClientService
         };
         await DataService.EntityCreateAsync(entity, ct);
 
-        return new SsoClientInfo(appId, origins, scopeList, entity.IsEnabled);
+        // 注册响应一次性携带明文 client_secret（RFC 7591——调用方安全保存；Info 快照脱敏）
+        return new SsoClientRegistrationResult(appId, clientSecret, new SsoClientInfo(appId, origins, scopeList, entity.IsEnabled));
     }
 
     /// <summary>

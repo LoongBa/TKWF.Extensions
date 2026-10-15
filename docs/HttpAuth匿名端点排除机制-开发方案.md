@@ -188,3 +188,91 @@ AfterRouting 桶设标记 → UseEndpoints 内端点执行 → `AuthorityFilterA
 | 日期 | 版本 | 内容 |
 |------|------|------|
 | 2026-10-14 | v0.1 | 方案定稿：背景/根因/选型（Oracle APPROVE 方案 C）/详细设计（锚点后移 + 判定升级 + 兜底保留）/适配清单/风险/验收 |
+
+---
+
+## 八、路径 A：SG1b 生成端点匿名缺口修复（v4.10.76 方案 C 的覆盖缺口）
+
+### 8.1 缺口发现（Oracle 评审确认）
+
+方案 C 后复查发现**覆盖缺口**：SG1b/ApiService 生成器对 `[ApiExpose(AllowAnonymous=true)]` 的处理是**跳过 `.RequireAuthorization()`**（不附加任何授权元数据），而非**附加 `.AllowAnonymous()`**：
+
+```csharp
+// ApiServiceGenerator.Resolvers.cs L2754-2758（v4.10.76 前）
+if (!method.AllowAnonymous)
+    sb.Append(".RequireAuthorization()");   // true 时什么都不加 → 无 IAllowAnonymous 元数据
+```
+
+后果：`[ApiExpose(AllowAnonymous=true)]` 生成的匿名端点（Identity `POST /auth/register`、`POST /auth/login`）——端点无 `IAllowAnonymous` 也无 `RequireAuthorization` → HttpAuth 方案 C 判定 ① 不命中 → ② 命中（有端点）→ ③ 若前缀不在排除列表 → **④ 401 拦截声明匿名的 SG1b 端点**（重蹈"双源分离"覆辙）。
+
+### 8.2 根因
+
+`ApiExpose(AllowAnonymous=true)` 的**原设计意图**（`ApiExposeAttribute.cs` L74-78 文档）："跳过 `.RequireAuthorization()`——仅影响 HTTP 中间件层认证要求，不影响 AOP 层 AuthorityFilter（如需完全匿名另标 `[AllowAnonymousFlag]`）"。其面向的是 **ASP.NET `AuthorizationMiddleware`**（RequireAuthorization 是它的元数据）——而 TKWF `HttpAuthenticationMiddleware` 是自定义中间件（v4.10.76 前走前缀排除、不读端点元数据）。
+
+**方案 C 把 HttpAuth 升级为"读端点 `IAllowAnonymous` 元数据"后，生成器实现与新机制不同步**——"跳过授权"（面向 ASP.NET 中间件）≠ "声明匿名"（面向元数据判定）。这是框架预留方法的**实现缺口**，非设计错误。
+
+### 8.3 修复设计（路径 A——Oracle APPROVE）
+
+生成器改为：`AllowAnonymous=true` → **附加 `.AllowAnonymous()`**（真正声明 `IAllowAnonymous` 元数据，供 HttpAuth ① 与 ASP.NET Authorization 统一识别）；缺省 → `.RequireAuthorization()`（fail-closed 保持）。
+
+```csharp
+// ApiServiceGenerator.Resolvers.cs L2754-2758 + L3014-3017（v4.10.76 路径 A）
+if (method.AllowAnonymous)
+    sb.Append(".AllowAnonymous()");      // IAllowAnonymous 元数据——HttpAuth ① 放行
+else
+    sb.Append(".RequireAuthorization()"); // fail-closed——默认所有 REST 端点需要认证
+```
+
+**文档同步**：`ApiExposeAttribute.cs` L76 语义更新为"附加 `.AllowAnonymous()`（IAllowAnonymous 元数据）"，保留"不影响 AOP 层、完全匿名需另标 `[AllowAnonymousFlag]`"说明。
+
+### 8.4 Oracle 评审结论（路径选型）
+
+| 路径 | 描述 | 结论 |
+|------|------|------|
+| **A. 生成器附加 `.AllowAnonymous()`** | `AllowAnonymous=true` → `.AllowAnonymous()`；缺省 → `.RequireAuthorization()` | ✅ **推荐**——最小化、本地化（生成器 2 处 + 文档 1 处）、对齐 ASP.NET 标准语义、不改安全模型 |
+| **B. HttpAuth fail-open**（默认放行、有授权才拦） | HttpAuth 判定翻转 | ❌ **否决**——4 个手写认证端点（Federation `trust/issue`、AuthCenter `logout`/`verify`/`grants`）无 `RequireAuthorization()` 靠 fail-closed 保护，翻转后**静默变匿名**（安全模型倒退，违反「缺省=守卫硬失败」） |
+| **C. 路径 A + ExcludedPathPrefixes 兜底** | 等价路径 A（兜底已存在 HttpAuth ③） | 无增量价值 |
+| **D. 双标注 / HttpAuth 精确变体** | D1 生成器加 `.AllowAnonymous()`+`[AllowAnonymousFlag]`（生成器无法向用户源码注入 AOP 标注）；D2 同路径 B fail-open | 否决/等价 |
+
+**Oracle 关键实证**：路径 B 会让 4 个手写认证端点（`HandleTrustIssue` L115、AuthCenter `logout`/`verify`/`grants` L95/97/99）**无任何授权元数据 → 变匿名**——安全回归不可接受。
+
+### 8.5 验证（已实施 + 生成器测试）
+
+| 验证 | 结果 |
+|------|------|
+| 生成器编译（ApiService.SG + CodeGeneration.Abstractions） | ✅ 0 错误 |
+| `AllowAnonymousTrue_GeneratesAllowAnonymous_Metadata`（生成 `.AllowAnonymous()`） | ✅ 通过 |
+| `Default_NoAllowAnonymous_GeneratesRequireAuthorization_FailClosed`（缺省 fail-closed 保持） | ✅ 通过 |
+| 影响面 | 仅 Identity 2 端点实际使用 `[ApiExpose(AllowAnonymous=true)]`（框架自身 0 处）；SG1b 端点在 obj/GeneratedFiles 每次构建重生成——**无需改入库 .g.cs** |
+
+---
+
+## 九、实施状态与待决策（框架组评审）
+
+> **⚠️ 边界声明（2026-10-15）**：本方案的**方案 C（HttpAuth 中间件锚点迁移）与路径 A（SG1 生成器修改）均为主框架 `_TKWF` 代码**——按 AGENTS 边界应由框架组实施。扩展组在转达处理中**已直接实施并部分提交**（越界修正，向用户/框架组致歉），现完整落档供评审决策。
+
+### 9.1 已实施内容
+
+| 部分 | 内容 | 状态 |
+|------|------|------|
+| **方案 C** | `HttpAuthenticationMiddleware` 锚点后移 AfterRouting + `RequiresAuthentication` 读端点 `IAllowAnonymous`（判定 ①②③④）+ `WebAppBuilder` 挂载点迁移 | ✅ 已实施 + **已提交主框架 `761e74ca` 并 push** |
+| **方案 C 测试** | `Domain.Web.Tests` +4 契约测试（`HttpAuthenticationAnonymousEndpointTests`——匿名放行/非匿名 401/未路由 404/前缀兜底）24/24 | ✅ 已实施 + 已提交 `761e74ca` |
+| **方案 C skill** | `tkwf-extension` #15 + `tkwf-use-extension` §4.2 同步 | ✅ 已提交 `761e74ca` |
+| **路径 A** | SG1 生成器 2 处改 `.AllowAnonymous()` + `ApiExposeAttribute.cs` 文档 | ✅ 已实施 + **未提交（工作区）** |
+| **路径 A 测试** | `Domain.ApiService.SG.Tests` +2（AllowAnonymous 生成 / fail-closed 保持） | ✅ 已实施 + **未提交（工作区）** |
+| **扩展侧适配** | Federation/AuthCenter/HealthCheck/Identity/SignalR/Notifications 测试（方案 C 收益面） | ✅ 全绿（66/155/17/73/13/78）——扩展侧 `9f673c3` 已提交 |
+| **转达** | `转达-v4.10.76-HttpAuth匿名端点自动排除-请所有Web扩展自查.md` | ✅ 已提交 `8b9b70fd`（含路径 A 待定说明） |
+
+### 9.2 待框架组决策
+
+1. **方案 C 是否收入框架组**：`761e74ca` 已 push 主框架 master——是否接受（含 `HttpAuthenticationMiddleware` 锚点后移拓扑变更 + 判定升级 + 测试 + skill）？
+2. **路径 A 是否收入框架组**：SG1 生成器修改（工作区 3 文件）——是否接受（含 `TKWF.CodeGeneration` 分析器新版发布 + 扩展 CPM bump）？
+3. **文档归属**：开发方案（本文件）已落公开扩展仓库；若框架组收入，是否需补充框架侧设计文档/ADR（中间件拓扑变更 = 关键设计取舍）？
+4. **发布路径**：方案 C 随主框架 v4.10.76（本地已同步部署根）；路径 A 需 `TKWF.CodeGeneration` 新版 + 扩展 CPM lockstep + 全量回归。
+
+### 9.3 若不收入框架组的替代
+
+- 方案 C/路径 A 改动回退至 `761e74ca` 前状态（主框架）——消费方继续手动 `ExcludedPathPrefixes.Add(...)`（旧机制）
+- 或由框架组按自身节奏另行设计实施（本方案文档作为参考）
+
+<!-- EOF -->

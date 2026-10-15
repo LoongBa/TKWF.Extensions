@@ -42,6 +42,8 @@
 | profile API | `ISsoProfileService`——server-to-server（scope 强制 + ILogger 审计 + 永不返回 openid/channel_id/phone） |
 | 依赖方向 | 平台库 → `TrustCenter.Abstractions` + `Federation`（装配）；Federation → `TrustCenter.Abstractions`（编排调签发）+ `AuthCenter.Abstractions`（桥接 + profile 消费）——单向无环 |
 
+> **端点数对齐（实际 13 注册，2026-10-15 核查）**：`FederationWebExtension.ConfigureEndpoints` 实际注册 **13 条**端点（`AllowAnonymous` 12 + 已认证 1）——平台集成面 6（login/event/oauth 各 1 + `channelId` 变体 3）+ 信任/委托面 4（jwks/authorize/start/trust/issue/identity/claim）+ **GET/POST event 双形态 2**（`GET {prefix}/{platformId}/event[/{channelId}]`）+ **test/accesscode 1**（`GET {prefix}/test/accesscode/{code}`）——较文档 10（6+4）多 3。`trust/issue` 无 `AllowAnonymous`（已认证——未认证 401，端点粒度精确判定）。
+
 **组合矩阵**（消费方按需装配，4 档装配梯度——见使用指南 §一 组合矩阵）：
 - 只引 `TKWF.Ext.AuthCenter` = AuthCenter 内部认证（单应用登录）
 - **AuthCenter + TrustCenter = 信任中枢实例**（内部认证 + 跨应用 token2/accesscode，内网两层，无外连端点）

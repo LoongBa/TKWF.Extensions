@@ -197,6 +197,7 @@ V0.5.0 起三接口为 AddConstructibleService 注册。消费方自定义实现
 - **开箱密码重置适配器 `IdentityPasswordManager`**（`IAccountPasswordManager`，组装方案 + 可配置迭代——`IOptions<DomainOptions>.Auth.Pbkdf2Iterations` 与框架单一来源）——消费方启用 Identity + Account 零手写获得密码重置落地
 - **Permissions 角色实时查库 `IdentityRoleProvider<TUserInfo>`**（`IRoleProvider`，经 VEntity JOIN 链路 + Scoped 缓存消除 PermissionChecker 2N 放大；`AddScoped` 覆盖默认，双白名单时生效）——角色变更即时生效，无需重新登录
 - **注册/登录 API `IdentityAuthService`**（普通 `[GenerateController]` + `DomainServiceBase`；`POST /auth/register` + `POST /auth/login`，匿名守卫双控）——明文注册/登录开箱即用（框架 AuthController 仅 SecurePassword）
+  > **v4.10.76 补注（HttpAuth 匿名端点排除，ADR108）**：`[ApiExpose(AllowAnonymous=true)]`（HTTP 层）经 SG1b 生成器转为 `.AllowAnonymous()` 端点元数据（路径 A）——`/auth/register` + `/auth/login` 在 HttpAuth 层**自动放行，消费方零配置**；`[AllowAnonymousFlag]`（AOP 层）双控不变（漏声明匿名端点会被 401）。
 - **登录衔接基类 `IdentityUserHelperBase<TUserInfo>`**（预实现 `OnLoginByPasswordAsync` 调 `IUserManager`，消费方仅实现 `CreateUserInfoFromEntity` 工厂——样板 171→8 行）
 - **框架侧配套**：`DomainUserHelperBase.OnNewGuestSessionCreatedAsync` abstract→virtual + 默认 guest（主框架独立提交）
 - 拆包 `TKWF.Ext.Account.Abstractions`（`IAccountPasswordManager` 契约，ADR48 D7）；`UserEntity` 加 NormalizedUserName 唯一索引（重名竞态 DB 兜底）

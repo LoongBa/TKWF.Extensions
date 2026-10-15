@@ -22,7 +22,17 @@ namespace TKWF.Ext.Permissions;
 //
 // 【V0.3.0 (权限管理 Service)】手写骨架（DMP-Lite 模式，`.cs` 入库；`.g.cs` 不入库、构建时自动生成）。
 // 消费方通过 DI 注入 PermissionGrantEntityDataService 即可操作权限授予数据。
-[GenerateController(FromDataService = true)]
+//
+// 【越权授权面修复（2026-10-15，变更记录条目⑥(a)，随下次 tag 发布）】
+// - [GenerateController(FromDataService = true, ExcludeMethods = *)]——排除标准写 CRUD
+//   （CreateAsync/UpdateAsync/DeleteAsync）防任何已认证用户经 REST 直接增改删权限授予记录
+//   （可自授 Admin.All 等越权授权面）；对齐 AuditLogging 管理 API 排除范式（V0.4.0）。
+// - 写入口收敛到业务方法：SetGrantAsync（upsert——替代 CreateAsync/UpdateAsync）/
+//   RevokeGrantAsync（撤销——替代 DeleteAsync），均 [GenerateControllerMethod] 暴露。
+// - 只读查询保留（GetByIdAsync/SelectAsync/SelectPageAsync/CountAsync）——只读无越权授权能力；
+//   业务读另有 GetByPermissionNameAsync/GetByProviderAsync/GetGrantAsync 覆盖主要查询模式。
+[GenerateController(FromDataService = true,
+    ExcludeMethods = new[] { "CreateAsync", "UpdateAsync", "DeleteAsync" })]
 public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityDAC<PermissionGrantEntity> dac)
         : DomainDataServiceBase<PermissionGrantEntity, PermissionGrantEntityDto>(user, dac, hasSoftDelete: false)
 {

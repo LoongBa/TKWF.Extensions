@@ -83,6 +83,8 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 1. **自动**：`RateLimitingWebExtension` 注册的全局分区器按 `Request.Path` 精确命中 `EndpointPolicies` 自动换用端点策略（key 带 `ep:{path}:` 前缀独立配额）；未命中回退 `Global`。v0.1.0 **不支持通配符前缀**（v0.2.0 评估）。
 2. **标注式**：端点定义时 `.MapTkfwRateLimiter("/api/auth/login")`（等价 `RequireRateLimiting`）——显式挂命名策略；命中时中间件只执行端点策略不执行全局策略。
 
+> ⚠️ **`.MapTkfwRateLimiter` 不声明认证元数据**：该扩展方法只挂**限流元数据**（`RequireRateLimiting` 别名），**不声明任何认证元数据**——消费方链式调用（如 `.MapTkfwRateLimiter(...)`）后**仍需自行 `.AllowAnonymous()` / 认证处理**（防"挂了限流就免认证"误读）；v4.10.76 起 HttpAuth 仅按端点 `IAllowAnonymous` 判定，漏声明匿名端点会被 401。
+
 ## 五、分区器（Oracle C1）
 
 - **IP**：`HttpContext.Connection.RemoteIpAddress` → `ip:{ip}`；TestServer/无 IP 上下文 fallback `ip:unknown`

@@ -247,7 +247,7 @@ else
 
 ---
 
-## 九、实施状态与待决策（框架组评审）
+## 九、实施状态与框架组决策（✅ 已收入，ADR108 生效）
 
 > **⚠️ 边界声明（2026-10-15）**：本方案的**方案 C（HttpAuth 中间件锚点迁移）与路径 A（SG1 生成器修改）均为主框架 `_TKWF` 代码**——按 AGENTS 边界应由框架组实施。扩展组在转达处理中**已直接实施并部分提交**（越界修正，向用户/框架组致歉），现完整落档供评审决策。
 
@@ -258,21 +258,22 @@ else
 | **方案 C** | `HttpAuthenticationMiddleware` 锚点后移 AfterRouting + `RequiresAuthentication` 读端点 `IAllowAnonymous`（判定 ①②③④）+ `WebAppBuilder` 挂载点迁移 | ✅ 已实施 + **已提交主框架 `761e74ca` 并 push** |
 | **方案 C 测试** | `Domain.Web.Tests` +4 契约测试（`HttpAuthenticationAnonymousEndpointTests`——匿名放行/非匿名 401/未路由 404/前缀兜底）24/24 | ✅ 已实施 + 已提交 `761e74ca` |
 | **方案 C skill** | `tkwf-extension` #15 + `tkwf-use-extension` §4.2 同步 | ✅ 已提交 `761e74ca` |
-| **路径 A** | SG1 生成器 2 处改 `.AllowAnonymous()` + `ApiExposeAttribute.cs` 文档 | ✅ 已实施 + **未提交（工作区）** |
-| **路径 A 测试** | `Domain.ApiService.SG.Tests` +2（AllowAnonymous 生成 / fail-closed 保持） | ✅ 已实施 + **未提交（工作区）** |
+| **路径 A** | SG1 生成器 2 处改 `.AllowAnonymous()` + `ApiExposeAttribute.cs` 文档 | ✅ 已实施 + **框架组已收入（`e603783d`，含接口级 fallback 增强）** |
+| **路径 A 测试** | `Domain.ApiService.SG.Tests` +2（AllowAnonymous 生成 / fail-closed 保持） | ✅ 已实施 + **框架组已收入（120/120 含投影交叉验证）** |
 | **扩展侧适配** | Federation/AuthCenter/HealthCheck/Identity/SignalR/Notifications 测试（方案 C 收益面） | ✅ 全绿（66/155/17/73/13/78）——扩展侧 `9f673c3` 已提交 |
 | **转达** | `转达-v4.10.76-HttpAuth匿名端点自动排除-请所有Web扩展自查.md` | ✅ 已提交 `8b9b70fd`（含路径 A 待定说明） |
 
-### 9.2 待框架组决策
+### 9.2 框架组决策结果（2026-10-15：✅ 已收入，ADR108 生效）
 
-1. **方案 C 是否收入框架组**：`761e74ca` 已 push 主框架 master——是否接受（含 `HttpAuthenticationMiddleware` 锚点后移拓扑变更 + 判定升级 + 测试 + skill）？
-2. **路径 A 是否收入框架组**：SG1 生成器修改（工作区 3 文件）——是否接受（含 `TKWF.CodeGeneration` 分析器新版发布 + 扩展 CPM bump）？
-3. **文档归属**：开发方案（本文件）已落公开扩展仓库；若框架组收入，是否需补充框架侧设计文档/ADR（中间件拓扑变更 = 关键设计取舍）？
-4. **发布路径**：方案 C 随主框架 v4.10.76（本地已同步部署根）；路径 A 需 `TKWF.CodeGeneration` 新版 + 扩展 CPM lockstep + 全量回归。
+1. **方案 C 已收入框架组**：`761e74ca` → 主框架 v4.10.76（`HttpAuthenticationMiddleware` 锚点后移 AfterRouting + 判定读 `IAllowAnonymous` 元数据 + `WebAppBuilder` 挂载迁移 + 测试 24/24 + skill 同步）。
+2. **路径 A 已收入框架组并增强**：SG1 生成器 `.AllowAnonymous()`（`e603783d`）+ **接口级 fallback 收口**——`ExposeAttributeInfo.AllowAnonymous` 改 `bool?` 三态（方法级显式 > 接口级标注 > 双缺省 fail-closed），接口级 `[ApiExpose(AllowAnonymous=true)]` = 该接口所有方法默认匿名（此前静默 no-op 落 fail-closed 401 侧）；生成器测试 120/120 + 投影交叉验证（`V4_10_76_Projection_InterfaceLevelAllowAnonymous_GeneratesAllowAnonymous`）。
+3. **文档归属**：框架侧已补 ADR108（中间件拓扑变更关键设计取舍）+ CHANGELOG + 转达/备忘（主框架 `8b1b0883`/`2ca6b7ea`/`69c982cb`/`5ce05574`）。
+4. **发布路径**：tag v4.10.76 重指 `e603783d`（初版 `8dc7d689` 因事务测试并行 flaky 失败二次，用户同意重指，先例 v4.10.72）——CI run `38712013536` 全链成功（build ✅ / consumer-verify ✅ / publish ✅）；nuget.org 实证 `TKWF.CodeGeneration` 最新 **4.10.76**；**扩展侧 CPM lockstep 4.10.76**（12 包）+ 各 Web 扩展匿名端点自查零适配（本方案配套提交 `b01c26c` 后）。
 
-### 9.3 若不收入框架组的替代
+### 9.3 扩展侧自查结论（v4.10.76 适配零代码改动）
 
-- 方案 C/路径 A 改动回退至 `761e74ca` 前状态（主框架）——消费方继续手动 `ExcludedPathPrefixes.Add(...)`（旧机制）
-- 或由框架组按自身节奏另行设计实施（本方案文档作为参考）
+- **匿名端点声明全部正确无遗漏**（漏声明会被 401）：AuthCenter 7 匿名（sms/send-code、sms/verify、login/sms、login/external、login/password、refresh）+ 3 已认证（logout/verify/grants）/ Federation 9 匿名 + 1 已认证（trust/issue）/ HealthCheck `/health` 开关式默认匿名 / Notifications.SignalR 默认 RequireAuthorization 可配匿名 / Identity SG1b `[ApiExpose(AllowAnonymous=true)]` register|login（路径 A 生成 `.AllowAnonymous()`）。
+- **测试断言 401 核查**：扩展测试全部 401 断言均为合法认证拒绝（AuthCenter Verify/Grants/InvalidBearer、Federation TrustIssue、RateLimiting 限流码）——**无"未路由路径 401"断言需改 404**。
+- **消费方影响**：旧版手动 `HttpAuth.ExcludedPathPrefixes.Add("/feberation")` 冗余（保留无害）；`IAllowAnonymous` 为编译期唯一权威事实源，领域层/表现层均无覆盖机会（框架组全链路核查确认）。
 
 <!-- EOF -->

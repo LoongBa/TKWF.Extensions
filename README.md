@@ -269,6 +269,7 @@ Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 - **后续版本发布**：各扩展打 `{扩展名}/v{x.y.z}` tag（patch bump 指向目标 commit）→ push tag 即触发 CI 全量重建 + 发布（--skip-duplicate 幂等）。
 - ✅ **`TKWF.Ext.Federation` 主包已废弃并全量 unlist（2026-10-10）**——10 版本（0.2.1-preview.0.12 ~ 0.5.0，含连接层壳版）已 unlist（nuget.org 搜索不可见、flatcontainer 保留兼容既有引用）；消费方改引 `TKWF.Ext.TrustCenter` 新线 + 8 平台库 `TKWF.Federation.{平台}`（保留不 unlist，2026-10-10 已发 v0.2.2 ×7 + Alipay v0.1.1）。
 - ✅ **`TKWF.Ext.TrustCenter` V0.1.0 已发布**（2026-10-10：框架组 v4.10.70 并入 `SymmetricKeyProviderKeys.TrustCenter`（C11 第 5 扩展边界）→ CPM 4.10.70 lockstep + 删过渡类 + 切主框架常量 → 全量 1913 用例 0 失败；TrustCenter/Abstractions/Federation v0.5.0/AuthCenter v0.9.2 四 tag + 8 平台库 tag 已发布 + CI 全绿 + nuget.org 实证上架）。
+- ✅ **v4.10.76 HttpAuth 匿名端点排除机制收入（2026-10-15，ADR108）**——主框架 v4.10.76（`HttpAuthenticationMiddleware` 锚点后移 AfterRouting 读端点 `IAllowAnonymous` 元数据——**扩展声明 `AllowAnonymous` 即自动放行，消费方零配置**；SG1b 生成器 `AllowAnonymous=true → .AllowAnonymous()` + 接口级 fallback）+ **扩展侧 CPM lockstep 4.10.76**（12 包）+ 各 Web 扩展匿名端点自查零适配；消费方旧版手动 `HttpAuth.ExcludedPathPrefixes.Add("/feberation")` 冗余（保留无害）；详见 `docs/HttpAuth匿名端点排除机制-开发方案.md`。
 
 > 设计思路与 ABP 兼容策略（最优设计为默认、兼容 ABP 为特殊需求、碰巧兼容只记录）+ 各扩展设计分类见 [`docs/扩展模块设计思路与ABP兼容策略.md`](./docs/扩展模块设计思路与ABP兼容策略.md)；状态跟踪见主框架私有 [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](https://github.com/LoongBa/TKW.Framework/blob/master/docs/03_扩展模块/总览和跟踪.md)。
 

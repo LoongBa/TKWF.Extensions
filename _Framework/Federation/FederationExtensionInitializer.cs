@@ -101,5 +101,14 @@ namespace TKWF.Ext.Federation;
         // IEventReplyHandler 集合由消费方注册（TryAddEnumerableConstructible——事件回复是业务决策，
         // Federation 只提供契约 + 编排；平台库不注册 handler 防过度设计——空集合自然跳过）
         services.AddConstructibleService<IEventOrchestrator, EventOrchestrator>();
+
+        // 内置测试 handler（开发期对接测试——方案 docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md）：
+        // 注册对齐 ADR92 集合版守卫工厂（帧内供给 IDomainUser）。开关 TestEventReplyHandlerEnabled（默认 false
+        // ——P1-1 fail-safe）由 handler 内经 IOptions<FederationEventReplyOptions> 惰性判断——false 时
+        // BuildReplyAsync 返回 null（不回复不拦截业务 handler），true + BaseUrl 配置时产出图文链接。
+        // 开发期测试：开此开关 + 配 TestAccessCodeEndpointBaseUrl + 测试端点开（Web 节 TestAccessCodeEndpointEnabled）；
+        // 接入业务 handler 后保持关闭（测试设施整体不启用——使用指南"测试设施生命周期"小节）。
+        services.AddOptions<FederationEventReplyOptions>();
+        services.TryAddEnumerableConstructible<IEventReplyHandler, TestEventReplyHandler>();
     }
 }

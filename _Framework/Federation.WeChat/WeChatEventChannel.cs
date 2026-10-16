@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -38,16 +39,25 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
 {
     private readonly ChannelConfig? _channel;
     private readonly IReadOnlyList<IEventReplyHandler> _handlers;
+    private readonly ILogger<WeChatEventChannel> _logger;
 
     /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
     /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
     /// <paramref name="handlers"/> = IEventReplyHandler 集合（消费方注册，ADR92 集合版守卫工厂帧内供给——
     /// 平台库不注册 handler，防过度设计）；凭证（Token/EncodingAESKey——事件验签信任根）在
-    /// <c>AuthenticateAsync</c>/<c>HandleEventAsync</c> 从 cfg.Extra 使用。</summary>
-    public WeChatEventChannel(IDomainUser user, IEnumerable<IEventReplyHandler> handlers, ChannelConfig? channel = null) : base(user)
+    /// <c>AuthenticateAsync</c>/<c>HandleEventAsync</c> 从 cfg.Extra 使用。
+    /// <paramref name="logger"/> = 结构化日志（工厂 ActivatorUtilities 从 DI 自动解析，无需调用点改动）。</summary>
+    public WeChatEventChannel(
+        IDomainUser user,
+        IEnumerable<IEventReplyHandler> handlers,
+        ChannelConfig? channel = null,
+        ILogger<WeChatEventChannel>? logger = null)
+        : base(user)
     {
         _channel = channel;
         _handlers = handlers?.ToList() ?? throw new ArgumentNullException(nameof(handlers));
+        // 模板实例（集合类型索引源——ctor channel=null）可能直构不经 DI——logger 缺失时 NullLogger 容错（不抛）
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatEventChannel>.Instance;
     }
 
     /// <inheritdoc />
@@ -62,42 +72,179 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
         if (_channel is null)
             return Task.FromResult(new SsoChannelAuthResult(false, null, "CHANNEL_NOT_FOUND", 0));   // 模板实例不可直接认证
         if (!_channel.IsEnabled)
+        {
+            _logger.LogWarning("微信事件验签拒绝：通道已禁用 ChannelId={ChannelId}", _channel.ChannelId);
             return Task.FromResult(new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0));
+        }
 
         // 平台特定负载（Extra——Token/EncodingAESKey 事件验签信任根）
         _channel.Extra.TryGetValue("Token", out var token);
         _channel.Extra.TryGetValue("EncodingAESKey", out var encodingAesKey);
         if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(encodingAesKey))
+        {
+            _logger.LogWarning("微信事件验签拒绝：凭证缺失（Token/EncodingAESKey）ChannelId={ChannelId}", _channel.ChannelId);
             return Task.FromResult(new SsoChannelAuthResult(false, null, "WECHAT_EVENT_CONFIG_MISSING", 0));
+        }
 
         if (context.Parameters == null)
+        {
+            _logger.LogWarning("微信事件验签拒绝：参数包缺失 ChannelId={ChannelId}", _channel.ChannelId);
             return Task.FromResult(new SsoChannelAuthResult(false, null, "WECHAT_EVENT_PARAMS_MISSING", 0));
+        }
 
         // 微信官方 URL 参数名 = msg_signature；装配层亦可能透传 "signature"（兼容两种命名）
-        if (!context.Parameters.TryGetValue("msg_signature", out var signature))
+        // 预声明 + 独立 TryGetValue（out var 置于复合 || 条件中编译器不保证已赋值——CS0165 保守判定）
+        string? signature = null;
+        string? timestamp = null;
+        string? nonce = null;
+        string? msgEncrypt = null;
+        if (!context.Parameters.TryGetValue("msg_signature", out signature))
             context.Parameters.TryGetValue("signature", out signature);
-        if (!context.Parameters.TryGetValue("timestamp", out var timestamp)
-            || !context.Parameters.TryGetValue("nonce", out var nonce)
-            || !context.Parameters.TryGetValue("msg_encrypt", out var msgEncrypt)
-            || string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
+        context.Parameters.TryGetValue("timestamp", out timestamp);
+        context.Parameters.TryGetValue("nonce", out nonce);
+        context.Parameters.TryGetValue("msg_encrypt", out msgEncrypt);
+
+        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
             || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(msgEncrypt))
-            return Task.FromResult(new SsoChannelAuthResult(false, null, "WECHAT_EVENT_PARAMS_MISSING", 0));
+        {
+            // ⚠️ 安全模式 POST 消息推送：msg_encrypt 不在 query——在 body XML 的 <Encrypt> 字段（装配层
+            // 已把 rawBody 存入 __raw）。从 __raw 提取 Encrypt 密文补充 msg_encrypt，验签/解密链继续。
+            string? encryptFromBody = null;
+            if (context.Parameters.TryGetValue("__raw", out var rawBody) && !string.IsNullOrEmpty(rawBody))
+            {
+                try
+                {
+                    encryptFromBody = WeChatEventCrypto.ExtractEncrypt(rawBody);
+                }
+                catch (Exception) when (ct.IsCancellationRequested is false)
+                {
+                    // __raw 非 XML——URL 验证/直调场景，保持原参数缺失语义
+                }
+            }
+            if (!string.IsNullOrEmpty(encryptFromBody))
+            {
+                msgEncrypt = encryptFromBody;
+                // 原地富化——下游 HandleEventAsync/编排共用（装配层构造 Dictionary 实例经 record 传入）
+                if (context.Parameters is Dictionary<string, string?> dict)
+                    dict["msg_encrypt"] = encryptFromBody;
+            }
+
+            if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
+                || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(msgEncrypt))
+            {
+                _logger.LogWarning("微信事件验签拒绝：签名参数缺失 ChannelId={ChannelId}", _channel.ChannelId);
+                return Task.FromResult(new SsoChannelAuthResult(false, null, "WECHAT_EVENT_PARAMS_MISSING", 0));
+            }
+        }
 
         // 信任根一票否决：验签失败 → 拒绝（绝不解密伪造密文）
         if (!WeChatEventCrypto.VerifySignature(token!, timestamp!, nonce!, msgEncrypt!, signature!))
+        {
+            _logger.LogWarning("微信事件验签失败：msg_signature 校验不通过（信任根一票否决）ChannelId={ChannelId}", _channel.ChannelId);
             return Task.FromResult(new SsoChannelAuthResult(false, null, "WECHAT_SIGNATURE_INVALID", 0));
+        }
 
         try
         {
             // 安全模式 AES 解密 → FromUserName(openid)
             var xml = WeChatEventCrypto.DecryptMsg(encodingAesKey!, msgEncrypt!);
             var openId = WeChatEventCrypto.ExtractFromUserName(xml);
+            _logger.LogInformation("微信事件验签通过：ChannelId={ChannelId} OpenId={OpenId}", _channel.ChannelId, openId);
             return Task.FromResult(new SsoChannelAuthResult(true, openId, null, 2));  // AuthLevel=2
         }
         catch (Exception) when (ct.IsCancellationRequested is false)
         {
             // 解密失败/格式非法——降级失败（信任根仍通过签名；密文损坏返回失败）
+            _logger.LogWarning("微信事件解密失败：msg_encrypt AES 解密/XML 解析异常 ChannelId={ChannelId}", _channel.ChannelId);
             return Task.FromResult(new SsoChannelAuthResult(false, null, "WECHAT_EVENT_DECRYPT_FAILED", 0));
+        }
+    }
+
+    /// <summary>
+    /// URL 验证握手（微信后台服务器配置验证契约——GET 请求，装配层 HandleEvent 分派）。
+    /// <para>双模式判定（URL 是否带 <c>msg_signature</c>）：</para>
+    /// <para>① <b>安全模式</b>（带 <c>msg_signature</c>）：<c>msg_signature = SHA1(sort(token, timestamp, nonce, echostr密文))</c>
+    /// ——4 参验签（复用 <see cref="WeChatEventCrypto.VerifySignature"/>，echostr 即"待校验密文消息体"）+ AES 解密
+    /// echostr（<see cref="WeChatEventCrypto.DecryptMsg"/>，明文 = random16 + len4 + echostr明文 + appid）→ 回显<b>解密明文</b>
+    /// （回显密文必失败——微信官方 WXBizMsgCrypt.VerifyURL 语义）。</para>
+    /// <para>② <b>明文模式</b>（无 <c>msg_signature</c>，带 <c>signature</c>）：<c>signature = SHA1(sort(token, timestamp, nonce))</c>
+    /// ——3 参验签（<see cref="WeChatEventCrypto.VerifySignature3"/>）→ 原样回显 <c>echostr</c> 原文。</para>
+    /// <para>返回：验签+解密成功后回显明文 echostr（text/plain）；任何失败（模板/禁用/配置缺失/参数缺失/验签失败/
+    /// 解密失败）返回 null——装配层映射 400（微信后台统一显示"token 验证失败"，不区分具体原因）。</para>
+    /// <para>信任根一票否决：漏验 msg_signature/signature = 可伪造任意 openid = 体系崩溃（对齐
+    /// <see cref="AuthenticateAsync"/> 同款纵深防御——本方法可被直连调用，验签信任根须自持）。</para>
+    /// </summary>
+    /// <param name="context">事件上下文——query 透传参数（msg_signature/signature/timestamp/nonce/echostr）。</param>
+    /// <returns>回显明文 echostr（text/plain）；失败 null。</returns>
+    public Task<string?> VerifyUrlAsync(SsoChannelEventContext context, CancellationToken ct = default)
+    {
+        if (_channel is null)
+            return Task.FromResult<string?>(null);
+        if (!_channel.IsEnabled)
+        {
+            _logger.LogWarning("微信 URL 验证拒绝：通道已禁用 ChannelId={ChannelId}", _channel.ChannelId);
+            return Task.FromResult<string?>(null);
+        }
+
+        _channel.Extra.TryGetValue("Token", out var token);
+        _channel.Extra.TryGetValue("EncodingAESKey", out var encodingAesKey);
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(encodingAesKey))
+        {
+            _logger.LogWarning("微信 URL 验证拒绝：凭证缺失（Token/EncodingAESKey）ChannelId={ChannelId}", _channel.ChannelId);
+            return Task.FromResult<string?>(null);
+        }
+
+        if (context.Parameters == null)
+        {
+            _logger.LogWarning("微信 URL 验证拒绝：参数包缺失 ChannelId={ChannelId}", _channel.ChannelId);
+            return Task.FromResult<string?>(null);
+        }
+
+        if (!context.Parameters.TryGetValue("timestamp", out var timestamp)
+            || !context.Parameters.TryGetValue("nonce", out var nonce)
+            || !context.Parameters.TryGetValue("echostr", out var echoStr)
+            || string.IsNullOrEmpty(timestamp) || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(echoStr))
+        {
+            _logger.LogWarning("微信 URL 验证拒绝：验签参数缺失 ChannelId={ChannelId}", _channel.ChannelId);
+            return Task.FromResult<string?>(null);
+        }
+
+        try
+        {
+            // 安全模式：带 msg_signature（4 参 SHA1 含 echostr 密文）——AES 解密后回显明文
+            if (context.Parameters.TryGetValue("msg_signature", out var msgSignature) && !string.IsNullOrEmpty(msgSignature))
+            {
+                if (!WeChatEventCrypto.VerifySignature(token!, timestamp!, nonce!, echoStr!, msgSignature))
+                {
+                    _logger.LogWarning("微信 URL 验证失败：msg_signature 校验不通过（安全模式）ChannelId={ChannelId}", _channel.ChannelId);
+                    return Task.FromResult<string?>(null);
+                }
+
+                var plain = WeChatEventCrypto.DecryptMsg(encodingAesKey!, echoStr!);
+                _logger.LogInformation("微信 URL 验证通过（安全模式）：ChannelId={ChannelId} 回显解密明文", _channel.ChannelId);
+                return Task.FromResult<string?>(plain);
+            }
+
+            // 明文模式：3 参 signature（signature 优先；兼容装配层透传命名）
+            if (!context.Parameters.TryGetValue("signature", out var signature) || string.IsNullOrEmpty(signature))
+            {
+                _logger.LogWarning("微信 URL 验证拒绝：无 msg_signature 且无 signature ChannelId={ChannelId}", _channel.ChannelId);
+                return Task.FromResult<string?>(null);
+            }
+            if (!WeChatEventCrypto.VerifySignature3(token!, timestamp!, nonce!, signature))
+            {
+                _logger.LogWarning("微信 URL 验证失败：signature 校验不通过（明文模式）ChannelId={ChannelId}", _channel.ChannelId);
+                return Task.FromResult<string?>(null);
+            }
+
+            _logger.LogInformation("微信 URL 验证通过（明文模式）：ChannelId={ChannelId} 回显 echostr", _channel.ChannelId);
+            return Task.FromResult<string?>(echoStr);
+        }
+        catch (Exception) when (ct.IsCancellationRequested is false)
+        {
+            // 解密失败/格式非法——防御性拒（微信后台统一"token 验证失败"）
+            _logger.LogWarning("微信 URL 验证解密失败：echostr AES 解密/格式异常 ChannelId={ChannelId}", _channel.ChannelId);
+            return Task.FromResult<string?>(null);
         }
     }
 
@@ -124,14 +271,46 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
             return null;
 
         // 微信官方 URL 参数名 = msg_signature；装配层亦可能透传 "signature"（兼容两种命名）
-        if (!context.Parameters.TryGetValue("msg_signature", out var signature))
+        // 预声明 + 独立 TryGetValue（out var 置于复合 || 条件中编译器不保证已赋值——CS0165 保守判定）
+        string? signature = null;
+        string? timestamp = null;
+        string? nonce = null;
+        string? msgEncrypt = null;
+        if (!context.Parameters.TryGetValue("msg_signature", out signature))
             context.Parameters.TryGetValue("signature", out signature);
-        if (!context.Parameters.TryGetValue("timestamp", out var timestamp)
-            || !context.Parameters.TryGetValue("nonce", out var nonce)
-            || !context.Parameters.TryGetValue("msg_encrypt", out var msgEncrypt)
-            || string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
+        context.Parameters.TryGetValue("timestamp", out timestamp);
+        context.Parameters.TryGetValue("nonce", out nonce);
+        context.Parameters.TryGetValue("msg_encrypt", out msgEncrypt);
+
+        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
             || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(msgEncrypt))
-            return null;
+        {
+            // ⚠️ 安全模式 POST 消息推送：msg_encrypt 不在 query——在 body XML 的 <Encrypt> 字段（装配层
+            // 已把 rawBody 存入 __raw）。从 __raw 提取 Encrypt 密文补充 msg_encrypt，验签/解密链继续
+            // （对齐 AuthenticateAsync 同款提取——本方法可被直连调用，纵深防御）。
+            string? encryptFromBody = null;
+            if (context.Parameters.TryGetValue("__raw", out var rawBody) && !string.IsNullOrEmpty(rawBody))
+            {
+                try
+                {
+                    encryptFromBody = WeChatEventCrypto.ExtractEncrypt(rawBody);
+                }
+                catch (Exception) when (ct.IsCancellationRequested is false)
+                {
+                    // __raw 非 XML——URL 验证/直调场景，保持原参数缺失语义
+                }
+            }
+            if (!string.IsNullOrEmpty(encryptFromBody))
+            {
+                msgEncrypt = encryptFromBody;
+                if (context.Parameters is Dictionary<string, string?> dict)
+                    dict["msg_encrypt"] = encryptFromBody;
+            }
+
+            if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
+                || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(msgEncrypt))
+                return null;
+        }
 
         // 信任根一票否决：验签失败 → 拒绝（绝不解密伪造密文）
         if (!WeChatEventCrypto.VerifySignature(token!, timestamp!, nonce!, msgEncrypt!, signature!))
@@ -139,11 +318,12 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
 
         try
         {
-            // 安全模式 AES 解密 → FromUserName(openid) + MsgType/Event（评审 F4）
+// 安全模式 AES 解密 → FromUserName(openid) + MsgType/Event（评审 F4）+ Content（图文 Description 源）
             var xml = WeChatEventCrypto.DecryptMsg(encodingAesKey!, msgEncrypt!);
             var openId = WeChatEventCrypto.ExtractFromUserName(xml);
             var toUserName = WeChatEventCrypto.ExtractToUserName(xml);
             var (msgType, eventValue) = WeChatEventCrypto.ExtractMsgTypeAndEvent(xml);
+            var msgContent = WeChatEventCrypto.ExtractContent(xml);
 
             // 富化共享参数字典（评审 F4——MsgType/Event 进 Parameters，供编排/handler 消费；装配层构造
             // Dictionary 实例经 record 传入——原地富化跨调用方可见）
@@ -154,25 +334,47 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
                 dict["event"] = eventValue ?? "";
                 dict["to_user_name"] = toUserName;
                 dict["from_user_name"] = openId;
+                if (msgContent is not null)
+                    dict["content"] = msgContent;
             }
 
             // handler 委托 first-non-null-wins（微信被动回复 = 业务决策，归消费方 IEventReplyHandler——
-            // 平台库不注册 handler，防过度设计）：业务内容包微信 XML 被动回复信封（text/xml）
+            // 平台库不注册 handler，防过度设计）：业务内容包微信 XML 被动回复信封（text/xml——文本；
+            // news——图文 V0.1.1）
+            _logger.LogInformation("微信事件入站：ChannelId={ChannelId} MsgType={MsgType} Event={Event} OpenId={OpenId} Content={Content}",
+                _channel.ChannelId, msgType ?? "", eventValue ?? "", openId, msgContent ?? "");
             foreach (var handler in _handlers)
             {
                 if (!string.Equals(handler.ChannelType, ChannelType, StringComparison.Ordinal))
                     continue;
                 var reply = await handler.HandleAsync(context, ct);
                 if (reply is null)
+                {
+                    _logger.LogInformation("微信事件 handler 返回 null（不处理）：Handler={Handler} ChannelId={ChannelId}",
+                        handler.GetType().Name, _channel.ChannelId);
                     continue;
+                }
+
+                // 图文（news）信封优先（V0.1.1：NewsArticles 非空——标题/描述/URL 结构化）；否则文本信封
+                if (reply.NewsArticles is { Count: > 0 })
+                {
+                    _logger.LogInformation("微信事件回复（图文 news）：Handler={Handler} ChannelId={ChannelId} Title={Title} Url={Url}",
+                        handler.GetType().Name, _channel.ChannelId,
+                        reply.NewsArticles[0].Title, reply.NewsArticles[0].Url);
+                    var newsXml = BuildNewsReplyXml(openId, toUserName, reply.NewsArticles);
+                    return new EventReplyResult(newsXml, "text/xml");
+                }
 
                 // 微信 XML 被动回复（text）：ToUserName=原 FromUserName(openid——回复对象)/
-                // FromUserName=原 ToUserName(公众号 id)；图文(news)信封归后续迭代
+                // FromUserName=原 ToUserName(公众号 id)
+                _logger.LogInformation("微信事件回复（文本 text）：Handler={Handler} ChannelId={ChannelId}",
+                    handler.GetType().Name, _channel.ChannelId);
                 var xmlReply = BuildTextReplyXml(openId, toUserName, reply.Content);
                 return new EventReplyResult(xmlReply, "text/xml");
             }
 
             // 微信 5 秒超时约束：无业务回复 → 200 空回复（text/xml）——规避超时，异步客服消息兜底归 Phase 2/消费方
+            _logger.LogWarning("微信事件无 handler 回复：ChannelId={ChannelId}（200 空回复兜底——发消息无回复的症状源）", _channel.ChannelId);
             return new EventReplyResult("", "text/xml");
         }
         catch (Exception) when (ct.IsCancellationRequested is false)
@@ -198,5 +400,38 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
                $"<CreateTime>{createTime}</CreateTime>" +
                $"<MsgType><![CDATA[text]]></MsgType>" +
                $"<Content><![CDATA[{content}]]></Content></xml>";
+    }
+
+    /// <summary>
+    /// 微信 XML 被动回复（news）信封（V0.1.1 图文扩展）——<c>&lt;xml&gt;&lt;ToUserName&gt;...&lt;/ToUserName&gt;
+    /// &lt;FromUserName&gt;...&lt;/FromUserName&gt;&lt;CreateTime&gt;unix&lt;/CreateTime&gt;
+    /// &lt;MsgType&gt;&lt;![CDATA[news]]&gt;&lt;/MsgType&gt;&lt;ArticleCount&gt;{n}&lt;/ArticleCount&gt;
+    /// &lt;Articles&gt;&lt;item&gt;&lt;Title&gt;...&lt;/Title&gt;&lt;Description&gt;...&lt;/Description&gt;
+    /// &lt;PicUrl&gt;...&lt;/PicUrl&gt;&lt;Url&gt;...&lt;/Url&gt;&lt;/item&gt;&lt;/Articles&gt;&lt;/xml&gt;</c>。
+    /// </summary>
+    /// <param name="toUserName">回复对象（原 FromUserName = openid）。</param>
+    /// <param name="fromUserName">公众号 id（原 ToUserName）。</param>
+    /// <param name="articles">图文条目（Title/Description/Url/PicUrl——handler 业务结构）。</param>
+    private static string BuildNewsReplyXml(string toUserName, string fromUserName, IReadOnlyList<EventReplyNewsArticle> articles)
+    {
+        var createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<xml><ToUserName><![CDATA[{toUserName}]]></ToUserName>");
+        sb.Append($"<FromUserName><![CDATA[{fromUserName}]]></FromUserName>");
+        sb.Append($"<CreateTime>{createTime}</CreateTime>");
+        sb.Append("<MsgType><![CDATA[news]]></MsgType>");
+        sb.Append($"<ArticleCount>{articles.Count}</ArticleCount>");
+        sb.Append("<Articles>");
+        foreach (var a in articles)
+        {
+            sb.Append("<item>");
+            sb.Append($"<Title><![CDATA[{a.Title}]]></Title>");
+            sb.Append($"<Description><![CDATA[{a.Description}]]></Description>");
+            sb.Append($"<PicUrl><![CDATA[{a.PicUrl ?? ""}]]></PicUrl>");
+            sb.Append($"<Url><![CDATA[{a.Url}]]></Url>");
+            sb.Append("</item>");
+        }
+        sb.Append("</Articles></xml>");
+        return sb.ToString();
     }
 }

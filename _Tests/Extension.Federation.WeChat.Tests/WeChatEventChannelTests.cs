@@ -248,4 +248,193 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
             return Task.FromResult(Result);
         }
     }
+
+    // ═══════════════════ URL 验证握手（微信后台服务器配置验证契约——VerifyUrlAsync） ═══════════════════
+
+    /// <summary>构造合法 URL 验证样本（安全模式：echostr 密文 + msg_signature 4 参；明文模式：echostr 原文 + signature 3 参）。</summary>
+    private static (string EchoCipher, string Timestamp, string Nonce, string MsgSignature, string Signature3, string EchoPlain) BuildValidUrlVerify()
+    {
+        var echoPlain = "4375120948345356249";   // 微信后台随机串（明文模式回显原文）
+        var timestamp = "1714036504";
+        var nonce = "1514711492";
+        // 安全模式：echostr = AES 密文（结构 random16+len4+msg+appid——EncryptMsg 复用），msg_signature 含 echostr 密文
+        var echoCipher = WeChatEventCrypto.EncryptMsg(echoPlain, TestAesKey, TestAppId);
+        var msgSignature = WeChatEventCrypto.ComputeSignature(TestToken, timestamp, nonce, echoCipher);
+        // 明文模式：signature 3 参（不含消息体）
+        var signature3 = WeChatEventCrypto.ComputeSignature3(TestToken, timestamp, nonce);
+        return (echoCipher, timestamp, nonce, msgSignature, signature3, echoPlain);
+    }
+
+    /// <summary>安全模式 URL 验证：msg_signature 4 参验签通过 + AES 解密 echostr → 回显<b>解密明文</b>
+    /// （回显密文必失败——微信官方 WXBizMsgCrypt.VerifyURL 语义）。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_SecurityMode_VerifiesAndDecryptsEcho()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (echoCipher, timestamp, nonce, msgSignature, _, echoPlain) = BuildValidUrlVerify();
+
+        var plain = await channel.VerifyUrlAsync(
+            WeChatTestHost.CreateEventContext(
+                ("msg_signature", msgSignature), ("timestamp", timestamp), ("nonce", nonce), ("echostr", echoCipher)),
+            CancellationToken.None);
+
+        Assert.Equal(echoPlain, plain);   // 解密明文（非密文回显）
+    }
+
+    /// <summary>明文模式 URL 验证：signature 3 参验签通过 → 原样回显 echostr 原文。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_PlainTextMode_VerifiesSignature3_EchoesRaw()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (echoCipher, timestamp, nonce, _, signature3, echoPlain) = BuildValidUrlVerify();
+
+        var plain = await channel.VerifyUrlAsync(
+            WeChatTestHost.CreateEventContext(
+                ("signature", signature3), ("timestamp", timestamp), ("nonce", nonce), ("echostr", echoPlain)),
+            CancellationToken.None);
+
+        Assert.Equal(echoPlain, plain);   // 明文回显原文
+    }
+
+    /// <summary>安全模式 URL 验证：篡改 msg_signature → null（信任根一票否决——验签失败拒，绝不解密伪造密文）。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_SecurityMode_TamperedMsgSignature_ReturnsNull()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (echoCipher, timestamp, nonce, msgSignature, _, _) = BuildValidUrlVerify();
+        var tampered = msgSignature[..^1] + (msgSignature[^1] == '0' ? '1' : '0');
+
+        var plain = await channel.VerifyUrlAsync(
+            WeChatTestHost.CreateEventContext(
+                ("msg_signature", tampered), ("timestamp", timestamp), ("nonce", nonce), ("echostr", echoCipher)),
+            CancellationToken.None);
+
+        Assert.Null(plain);
+    }
+
+    /// <summary>明文模式 URL 验证：篡改 signature → null（信任根一票否决）。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_PlainTextMode_TamperedSignature_ReturnsNull()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (_, timestamp, nonce, _, signature3, echoPlain) = BuildValidUrlVerify();
+        var tampered = signature3[..^1] + (signature3[^1] == '0' ? '1' : '0');
+
+        var plain = await channel.VerifyUrlAsync(
+            WeChatTestHost.CreateEventContext(
+                ("signature", tampered), ("timestamp", timestamp), ("nonce", nonce), ("echostr", echoPlain)),
+            CancellationToken.None);
+
+        Assert.Null(plain);
+    }
+
+    /// <summary>URL 验证缺参（无 timestamp/echostr）→ null（参数缺失——微信后台"token 验证失败"）。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_MissingParams_ReturnsNull()
+    {
+        using var _ = this;
+        var channel = await Setup();
+
+        var plain = await channel.VerifyUrlAsync(
+            WeChatTestHost.CreateEventContext(("timestamp", "1234567890")),
+            CancellationToken.None);
+
+        Assert.Null(plain);
+    }
+
+    /// <summary>URL 验证模板实例（channel=null）→ null（不可认证语义对齐）。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_TemplateInstance_ReturnsNull()
+    {
+        using var _ = this;
+        var channel = new WeChatEventChannel(new StubDomainUser(), []);
+        var plain = await channel.VerifyUrlAsync(
+            WeChatTestHost.CreateEventContext(("msg_signature", "x"), ("timestamp", "1"), ("nonce", "n"), ("echostr", "c")),
+            CancellationToken.None);
+        Assert.Null(plain);
+    }
+
+    // ═══════════════════ POST 消息推送（安全模式——msg_encrypt 在 body XML <Encrypt>） ═══════════════════
+
+    /// <summary>构造合法安全模式 POST 推送样本：body = 微信封装 XML（&lt;Encrypt&gt; 密文——内部再嵌消息 XML），
+    /// query 带 msg_signature（4 参 SHA1 含 Encrypt 密文）+ timestamp/nonce；__raw = body 封装 XML。</summary>
+    private static (string Encrypt, string Timestamp, string Nonce, string Signature, string RawBody) BuildValidPush()
+    {
+        // 内层消息 XML（FromUserName=openid + 文本 Content）
+        var innerXml = $"<xml><ToUserName><![CDATA[gh_test]]></ToUserName><FromUserName><![CDATA[{TestOpenId}]]></FromUserName><CreateTime>1234567890</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[你好，欢迎使用]]></Content><MsgId>1234567890123456</MsgId></xml>";
+        // 外层封装 XML：<Encrypt> 密文（EncryptMsg 产物）
+        var encrypt = WeChatEventCrypto.EncryptMsg(innerXml, TestAesKey, TestAppId);
+        var rawBody = $"<xml><ToUserName><![CDATA[gh_test]]></ToUserName><Encrypt><![CDATA[{encrypt}]]></Encrypt></xml>";
+        var timestamp = "1714112445";
+        var nonce = "415670741";
+        var signature = WeChatEventCrypto.ComputeSignature(TestToken, timestamp, nonce, encrypt);
+        return (encrypt, timestamp, nonce, signature, rawBody);
+    }
+
+    /// <summary>安全模式 POST 推送：msg_encrypt 不在 query（在 body XML &lt;Encrypt&gt;，经 __raw 提取）→
+    /// 验签解密通过 → openid + 富化 Parameters（external_user_id/content）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PushEncryptInBodyXml_ExtractsFromRaw()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (encrypt, timestamp, nonce, signature, rawBody) = BuildValidPush();
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody)),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(TestOpenId, result.ExternalUserId);   // FromUserName = openid
+        Assert.Null(result.FailReason);
+    }
+
+    /// <summary>安全模式 POST 推送 HandleEventAsync：msg_encrypt 从 body XML &lt;Encrypt&gt;（__raw）提取 →
+    /// 验签解密 → MsgType/Content 富化 → handler 图文/文本回复。</summary>
+    [Fact]
+    public async Task HandleEventAsync_PushEncryptInBodyXml_ExtractsContent_ReturnsXmlReply()
+    {
+        using var _ = this;
+        var handler = new FakeEventReplyHandler
+        {
+            Result = new EventReplyResult("登录链接：https://sso.example.com/landing?ticket=t-1", "text/plain"),
+        };
+        var channel = await Setup(svc => svc.AddScoped<IEventReplyHandler>(_ => handler));
+        var (_, timestamp, nonce, signature, rawBody) = BuildValidPush();
+        var context = WeChatTestHost.CreateEventContext(
+            ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody));
+
+        var reply = await channel.HandleEventAsync(context, CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal("text/xml", reply!.ContentType);
+        Assert.Contains("<MsgType><![CDATA[text]]></MsgType>", reply.Content);
+        // 富化验证：msg_type=text + content=消息原文（图文 Description 源）+ openid
+        Assert.Equal("text", context.Parameters["msg_type"]);
+        Assert.Equal("你好，欢迎使用", context.Parameters["content"]);
+        Assert.Equal(TestOpenId, context.Parameters["external_user_id"]);
+    }
+
+    /// <summary>安全模式 POST 推送验签失败（篡改签名）→ null（信任根一票否决——从 __raw 提取的 Encrypt 参与验签）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PushEncryptInBodyXml_TamperedSignature_Rejected()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (encrypt, timestamp, nonce, signature, rawBody) = BuildValidPush();
+        var tampered = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("msg_signature", tampered), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody)),
+            CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("WECHAT_SIGNATURE_INVALID", result.FailReason);
+    }
 }

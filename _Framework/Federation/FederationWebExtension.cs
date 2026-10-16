@@ -10,10 +10,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Ticket;
 using TKW.Framework.Domain.Web.Extensions;
 using TKWF.Ext.TrustCenter;
 
@@ -96,6 +98,9 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         {
             endpoints.MapPost($"{prefix}/{{platformId}}/event", HandleEvent).AllowAnonymous();
             endpoints.MapPost($"{prefix}/{{platformId}}/event/{{channelId}}", HandleEvent).AllowAnonymous();
+            // 微信 URL 验证握手（GET——微信后台服务器配置验证契约：signature/msg_signature+timestamp+nonce+echostr）
+            endpoints.MapGet($"{prefix}/{{platformId}}/event", HandleEvent).AllowAnonymous();
+            endpoints.MapGet($"{prefix}/{{platformId}}/event/{{channelId}}", HandleEvent).AllowAnonymous();
         }
         if (endpointOptions.OauthCallbackEndpointEnabled)
         {
@@ -112,6 +117,10 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             endpoints.MapPost($"{prefix}/trust/issue", HandleTrustIssue);   // 已认证端点（不经 AllowAnonymous）
         if (endpointOptions.IdentityClaimEndpointEnabled)
             endpoints.MapPost($"{prefix}/identity/claim", HandleIdentityClaim).AllowAnonymous();
+
+        // 测试端点（默认关——生产禁用；联调验证 AccessCode 闭环用）
+        if (endpointOptions.TestAccessCodeEndpointEnabled)
+            endpoints.MapGet($"{prefix}/test/accesscode/{{code}}", HandleTestAccessCode).AllowAnonymous();
     }
 
     // ─────────────────────────── 端点处理器（匿名游客帧） ───────────────────────────
@@ -159,16 +168,28 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     /// <para><b>缺陷修复（2026-10-11 对外路由命名空间）</b>：channelType 按平台段推导 <c>{cfg.PlatformType}_event</c>
     /// 精确匹配 <c>*_event</c> 通道模板——原 <c>CreateAsync(channelId, null)</c> 走 null 分支（IsOAuthChannel
     /// 白名单仅 <c>*_oauth/*_oidc</c>）致 event 通道不可达（双注册错选 OAuth 通道 / 单注册 404）。</para>
-    /// <para><b>URL 验证握手（echostr——微信回调 URL 验证契约）</b>：query 含 echostr 且验签通过 → 原样回显
-    /// （text/plain；安全模式加密 echostr 解密归后续迭代——微信后台 URL 验证配置时使用）。</para>
+    /// <para><b>URL 验证握手（echostr——微信回调 URL 验证契约，GET）</b>：query 含 echostr 即验证请求 →
+    /// 通道 <c>VerifyUrlAsync</c> 双模式验签（安全 msg_signature 4 参 + AES 解密 echostr / 明文 signature 3 参）
+    /// → 回显明文 echostr（text/plain）。安全模式回显密文必失败（微信后台统一"token 验证失败"）。</para>
     /// <para><b>微信 5 秒超时约束（外部身份联邦 E3）</b>：handler 委托为空 → 200 空回复（text/xml）兜底——
     /// 异步客服消息机制归 Phase 2/消费方（本端点不实现客服 API）。</para></summary>
     private static async Task<IResult> HandleEvent(HttpContext ctx, string platformId, string? channelId, CancellationToken ct)
     {
+        var logger = ctx.RequestServices.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+            .CreateLogger("Federation.Web.Event");
+        logger.LogInformation("微信事件端点收到请求：Method={Method} Path={Path} PlatformId={PlatformId} ChannelId={ChannelId}",
+            ctx.Request.Method, ctx.Request.Path, platformId, channelId ?? "");
+
         var registry = GetGuest(ctx).Use<IChannelRegistry>();
         var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
         if (cfg is null)
+        {
+            logger.LogWarning("微信事件端点通道解析失败：PlatformId={PlatformId} ChannelId={ChannelId} FailReason={FailReason}",
+                platformId, channelId ?? "", failReason ?? "");
             return MapFailReason(failReason);
+        }
+        logger.LogInformation("微信事件端点通道解析成功：ChannelId={ChannelId} PlatformType={PlatformType}",
+            cfg.ChannelId, cfg.PlatformType);
 
         string rawBody;
         using (var reader = new StreamReader(ctx.Request.Body))
@@ -200,6 +221,18 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
         try
         {
+            // URL 验证握手（GET——微信后台服务器配置验证契约，query 含 echostr 即验证请求）：
+            // 通道 VerifyUrlAsync 双模式验签（安全 msg_signature 4 参 + AES 解密 echostr / 明文 signature 3 参）
+            // → 回显明文 echostr（text/plain）。必须在 AuthenticateAsync 之前——验证请求无 msg_encrypt，
+            // 走事件验签（要求 msg_encrypt）会被参数检查拦截（WECHAT_EVENT_PARAMS_MISSING）。
+            if (parameters.TryGetValue("echostr", out var echo) && !string.IsNullOrEmpty(echo))
+            {
+                var echoPlain = await channel.VerifyUrlAsync(new SsoChannelEventContext(parameters), ct);
+                return echoPlain is null
+                    ? Results.BadRequest(new ErrorResponse("WECHAT_URL_VERIFY_FAILED", null))
+                    : Results.Text(echoPlain, contentType: "text/plain");
+            }
+
             // 验签（信任根一票否决——平台库通道内部完成）；失败 → FailReason 映射 4xx
             var result = await channel.AuthenticateAsync(new SsoChannelAuthContext(parameters), ct);
             if (!result.Success)
@@ -207,10 +240,6 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
             // 已验签外部身份（供编排 uid 只读查询——评审 F7：GetByChannelAsync 只读不建号）
             parameters["external_user_id"] = result.ExternalUserId ?? "";
-
-            // URL 验证握手（echostr——微信回调 URL 验证契约）：query 含 echostr 且验签通过 → 原样回显
-            if (parameters.TryGetValue("echostr", out var echo) && !string.IsNullOrEmpty(echo))
-                return Results.Text(echo, contentType: "text/plain");
 
             // 事件编排（uid 只读查询 + 平台化回复 + handler first-non-null-wins）→ 微信 XML 被动回复（text/xml）
             var reply = await GetGuest(ctx).Use<IEventOrchestrator>()
@@ -296,6 +325,42 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             external_user_id = result.ExternalUserId,
             platform_uid = result.PlatformUid,
         });
+    }
+
+    /// <summary>测试端点（GET {prefix}/test/accesscode/{code}，匿名游客帧，默认关）——AccessCode 闭环验证：
+    /// <see cref="ISsoSubAppBridge.ClaimAsync"/> 语义复用（credential 为空——测试端点仅验 AccessCode 可兑现性，
+    /// 不走子应用 credential 鉴权）；或直调 <c>ISealedTicketService&lt;FederatedIdentity&gt;</c>。实现：经
+    /// <c>ISealedTicketService&lt;FederatedIdentity&gt;.RedeemAsync(code)</c>（面①密封票据——v4.10.77 TicketRedeemContext
+    /// CAS，拆分命名 ADR109 D4）原子取回 payload → 200 载荷 JSON
+    /// （uid/channelId/openid/channelType——图文落地页联调验证）；失败/过期/已用/核销人不符 → null → 404（契约语义）。</summary>
+    private static async Task<IResult> HandleTestAccessCode(HttpContext ctx, string code, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return Results.BadRequest(new ErrorResponse("CODE_REQUIRED", null));
+
+        try
+        {
+            var identity = await GetGuest(ctx).Use<ISealedTicketService<TKW.Framework.Domain.FederatedIdentity>>()
+                .RedeemAsync(code, context: null, ct);
+            if (identity is null)
+                return Results.Json(new ErrorResponse("ACCESS_CODE_NOT_FOUND", null),
+                    statusCode: StatusCodes.Status404NotFound);
+
+            return Results.Ok(new
+            {
+                ok = true,
+                uid = identity.UId,
+                channel_id = identity.ChannelId,
+                external_user_id = identity.ExternalUserId,
+                channel_type = identity.ChannelType,
+            });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 载荷解密失败等信任根问题——fail-closed 拒信任（错误码机器可读）；成功/失败/过期/已用由 null 分支覆盖
+            var reason = ex.Message ?? "ACCESS_CODE_REDEEM_FAILED";
+            return Results.Json(new ErrorResponse(reason, null), statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     // ─────────────────────────── 辅助 ───────────────────────────

@@ -40,8 +40,24 @@ public sealed record SsoChannelEventContext(IReadOnlyDictionary<string, string?>
 /// <summary>
 /// 事件平台化回复（外部身份联邦 E3 评审 F5）——<c>Content</c> = 响应体（微信 XML 被动回复 text/xml）；
 /// 空 <c>Content</c> + "text/xml" = 200 空回复（微信 5 秒超时约束兜底——异步客服消息机制归 Phase 2/消费方）。
+/// <para><b>V0.1.1 图文扩展（非破坏）</b>：<see cref="NewsArticles"/> 可空——平台库通道（WeChatEventChannel）
+/// 检测非空时构建图文（news）信封（<c>&lt;MsgType&gt;news&lt;/MsgType&gt;</c> + <c>&lt;Articles&gt;</c>），
+/// 否则沿用 <see cref="Content"/> 文本信封。handler 返回业务图文结构，信道信封归通道。</para>
 /// </summary>
-public sealed record EventReplyResult(string Content, string ContentType);
+/// <param name="Content">响应体文本（图文场景可留空——<see cref="NewsArticles"/> 承载内容）。</param>
+/// <param name="ContentType">Content-Type（text/xml / text/plain...）。</param>
+/// <param name="NewsArticles">图文条目列表（可空——非图文回复）。</param>
+public sealed record EventReplyResult(
+    string Content,
+    string ContentType,
+    IReadOnlyList<EventReplyNewsArticle>? NewsArticles = null);
+
+/// <summary>图文（news）消息条目——公众号被动回复图文结构（标题/描述/跳转链接/封面图）。</summary>
+/// <param name="Title">图文标题。</param>
+/// <param name="Description">图文描述（微信显示于标题下方）。</param>
+/// <param name="Url">点击跳转链接（用户点击图文后访问）。</param>
+/// <param name="PicUrl">封面图 URL（可空——微信默认无图样式）。</param>
+public sealed record EventReplyNewsArticle(string Title, string Description, string Url, string? PicUrl = null);
 
 /// <summary>
 /// SSO channel 契约（IdP 适配器接口——供平台适配扩展 <c>TKWF.Federation.{平台}</c> 实现）。
@@ -83,4 +99,15 @@ public interface ISsoChannel : IDomainService
     /// </summary>
     Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
         => Task.FromResult<EventReplyResult?>(null);
+
+    /// <summary>
+    /// URL 验证握手（微信后台服务器配置验证契约——GET 请求；装配层 HandleEvent 分派）。
+    /// <para><b>DIM 默认 null = 通道不支持 URL 验证</b>（镜像 <see cref="HandleEventAsync"/> DIM 模式——非事件通道/
+    /// 无验证契约的平台库零强制）。事件通道（如 <c>wechat_event</c>）实现：双模式验签（安全 msg_signature /
+    /// 明文 signature）+ 解密 echostr → 回显明文（text/plain）。</para>
+    /// <para>返回：验签+解密成功 → 回显明文 echostr；任何失败（参数缺失/验签失败/解密失败/不支持）→ null
+    /// （装配层映射 400——微信后台统一显示"token 验证失败"，不区分具体原因）。</para>
+    /// </summary>
+    Task<string?> VerifyUrlAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        => Task.FromResult<string?>(null);
 }

@@ -44,4 +44,11 @@ public class FederationEndpointOptions
 
     /// <summary>子应用兑现端点开关（POST {prefix}/identity/claim——匿名 + 子应用 credential 鉴权；统一 401 防枚举，Oracle 条件 4）。</summary>
     public bool IdentityClaimEndpointEnabled { get; set; } = true;
+
+    /// <summary>
+    /// <b>测试端点开关（默认 false——生产禁用，联调/本地验证用）</b>：
+    /// GET {prefix}/test/accesscode/{code}——匿名兑现 AccessCode 并返回载荷（FederatedIdentity：uid/channelId/openid），
+    /// 供微信图文消息落地页（UserH5 未就绪前）验证 AccessCode 签发→消费闭环。生产必须关闭
+    /// （匿名兑现端点不应暴露于公网——AccessCode 虽 32 字节高熵不可枚举，但属调试面）。</summary>
+    public bool TestAccessCodeEndpointEnabled { get; set; } = false;
 }

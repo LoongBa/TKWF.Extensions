@@ -253,21 +253,21 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("wechat-mp", FederationEndpointHost.Channel.LastEventContext.Parameters["channel_id"]);
     }
 
-    /// <summary>URL 验证握手（echostr——微信回调 URL 验证契约）：query 含 echostr 且验签通过 → 原样回显（text/plain）。</summary>
+    /// <summary>URL 验证握手（echostr——微信回调 URL 验证契约）：GET query 含 echostr 且验签通过 → 原样回显（text/plain）。
+    /// 双模式验签（VerifyUrlAsync——安全 msg_signature 4 参 + AES 解密 echostr / 明文 signature 3 参）。</summary>
     [Fact]
     public async Task Event_Echostr_UrlVerification_ReturnsEcho()
     {
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsync(
-            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1&echostr=echo-abc",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1&echostr=echo-abc");
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var body = await resp.Content.ReadAsStringAsync();
         Assert.Equal("echo-abc", body);                                          // 验签通过 → 原样回显
-        Assert.True(FederationEndpointHost.Channel.Authenticated);               // 验签（AuthenticateAsync）已执行
+        Assert.True(FederationEndpointHost.Channel.UrlVerified);                // VerifyUrlAsync 已执行
     }
 
     /// <summary>handler first-non-null-wins（评审 F8）：Fake 通道平台回复 null → 编排委托 IEventReplyHandler 集合

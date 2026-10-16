@@ -33,6 +33,38 @@ internal static class WeChatEventCrypto
     }
 
     /// <summary>
+    /// 计算明文模式 <c>signature = SHA1(sort(token, timestamp, nonce))</c>（十六进制小写）——
+    /// 微信 URL 验证（明文模式）/ 明文消息推送验签用（3 参，无消息体参与）。
+    /// <para>排序语义同 <see cref="ComputeSignature"/>（Ordinal 字典序）。</para>
+    /// </summary>
+    public static string ComputeSignature3(string token, string timestamp, string nonce)
+    {
+        var sorted = new[] { token, timestamp, nonce };
+        Array.Sort(sorted, StringComparer.Ordinal);
+        var raw = string.Concat(sorted);
+        return Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// 校验明文模式签名（3 参 signature）——URL 验证（明文）/ 明文消息推送。
+    /// <para>恒定时间比对；长度不符直接 false（防 500）。</para>
+    /// </summary>
+    public static bool VerifySignature3(string token, string timestamp, string nonce, string signature)
+    {
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(timestamp) || string.IsNullOrEmpty(nonce)
+            || string.IsNullOrEmpty(signature))
+            return false;
+
+        var expected = ComputeSignature3(token, timestamp, nonce);
+        var actual = signature.ToLowerInvariant();
+        if (expected.Length != actual.Length)
+            return false;
+
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(expected), Encoding.ASCII.GetBytes(actual));
+    }
+
+    /// <summary>
     /// 校验事件推送签名（msg_signature）——信任根一票否决。
     /// <para>恒定时间比对（防时序攻击——签名比较属机密比较）；签名长度不符直接 false（不抛——防 500 泄漏）。</para>
     /// </summary>
@@ -164,6 +196,55 @@ internal static class WeChatEventCrypto
         if (string.IsNullOrWhiteSpace(value))
             throw new InvalidOperationException("微信消息 XML 缺 ToUserName");
         return value.Trim();
+    }
+
+    /// <summary>
+    /// 从解密 XML 提取 <c>Content</c>（文本消息原文——用户发给公众号的消息内容；图文消息回复
+    /// <c>Description</c> 用）。缺节点返回 null（不抛——非文本消息（image/event/voice）无 <c>Content</c>
+    /// 节点）；非法 XML 抛 <see cref="InvalidOperationException"/>（对齐 <see cref="ExtractMsgTypeAndEvent"/>）。
+    /// </summary>
+    public static string? ExtractContent(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
+            throw new InvalidOperationException("微信消息 XML 为空");
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(xml);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            throw new InvalidOperationException("微信消息 XML 非法", ex);
+        }
+
+        var value = doc.Root?.Element("Content")?.Value;
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>
+    /// 从<b>安全模式消息推送 body</b>提取 <c>&lt;Encrypt&gt;</c> 密文（POST 推送封装 XML——微信官方：
+    /// <c>&lt;xml&gt;&lt;ToUserName&gt;..&lt;/ToUserName&gt;&lt;Encrypt&gt;&lt;![CDATA[密文]]&gt;&lt;/Encrypt&gt;&lt;/xml&gt;</c>，
+    /// 验签/解密的密文消息体 = Encrypt 值；URL 验证场景 echostr 即密文无需此提取）。缺节点返回 null
+    /// （不抛——明文模式推送无 Encrypt 节点）；非法 XML 抛 <see cref="InvalidOperationException"/>。
+    /// </summary>
+    public static string? ExtractEncrypt(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
+            throw new InvalidOperationException("微信消息 XML 为空");
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(xml);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            throw new InvalidOperationException("微信消息 XML 非法", ex);
+        }
+
+        var value = doc.Root?.Element("Encrypt")?.Value;
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     /// <summary>

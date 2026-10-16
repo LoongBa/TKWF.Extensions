@@ -228,7 +228,8 @@ internal static class FederationEndpointHost
     }
 
     /// <summary>Fake 通道——AuthenticateAsync 记录上下文 + 返回可配置 Result（默认成功 ext-100/AuthLevel 2）；
-    /// HandleEventAsync 记录事件上下文 + 返回可配置 EventReply（默认 null——编排转 handler 委托，first-non-null-wins）。</summary>
+    /// HandleEventAsync 记录事件上下文 + 返回可配置 EventReply（默认 null——编排转 handler 委托，first-non-null-wins）；
+    /// VerifyUrlAsync（URL 验证握手双模式验签）记录执行 + 回显可配置（默认原样 query echostr）。</summary>
     internal sealed class FakeSsoChannel : ISsoChannel
     {
         public FakeSsoChannel(string channelId) => ChannelId = channelId;
@@ -240,8 +241,14 @@ internal static class FederationEndpointHost
         public SsoChannelAuthContext? LastContext { get; private set; }
         public SsoChannelEventContext? LastEventContext { get; private set; }
         public bool Authenticated { get; private set; }
+        public bool UrlVerified { get; private set; }
+        public string? UrlVerifyEcho { get; set; }
 
-        public void Reset() { LastContext = null; LastEventContext = null; Authenticated = false; EventReply = null; }
+        public void Reset()
+        {
+            LastContext = null; LastEventContext = null; Authenticated = false; EventReply = null;
+            UrlVerified = false; UrlVerifyEcho = null;
+        }
 
         public Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
         {
@@ -254,6 +261,15 @@ internal static class FederationEndpointHost
         {
             LastEventContext = context;
             return Task.FromResult(EventReply);
+        }
+
+        public Task<string?> VerifyUrlAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        {
+            UrlVerified = true;
+            LastEventContext = context;
+            // 回显可配置（默认取 query echostr 原样——验签通过语义）
+            var echo = UrlVerifyEcho ?? (context.Parameters.TryGetValue("echostr", out var e) ? e : null);
+            return Task.FromResult(echo);
         }
     }
 

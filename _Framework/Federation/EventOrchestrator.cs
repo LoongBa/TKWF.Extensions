@@ -84,7 +84,20 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
             {
                 var map = await ChannelMap.GetByChannelAsync(channelId, externalUserId, ct);
                 if (map is not null && context.Parameters is Dictionary<string, string?> dict)
+                {
                     dict["uid"] = map.UId;
+                    _logger.LogInformation("事件编排 uid 命中：ChannelId={ChannelId} OpenId={OpenId} UId={UId}",
+                        channelId, externalUserId, map.UId);
+                }
+                else
+                {
+                    _logger.LogWarning("事件编排 uid 未命中（openid 未绑定 → handler 不触发 → 空回复）：ChannelId={ChannelId} OpenId={OpenId}",
+                        channelId, externalUserId);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("事件编排缺 external_user_id（验签后未富化/参数缺失）：ChannelId={ChannelId}", channelId);
             }
 
             // 平台化回复（微信 XML 等——平台库通道实现；null = 无平台回复，走 handler 委托）

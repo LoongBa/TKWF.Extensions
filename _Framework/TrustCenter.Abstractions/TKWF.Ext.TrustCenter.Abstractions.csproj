@@ -16,7 +16,7 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>TrustCenter.Abstractions/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.TrustCenter.Abstractions</PackageId>
-    <Description>TKWF 信任中心契约抽象（TrustCenter——ISsoChannel / IToken2Service / IAccessCodeService + DTO）——依赖倒置（ADR48 D7 / TrustCenter 剥离）：信任内核主包实现契约，Federation 连接层与平台库经契约消费（零实体、零 SG1、不引主包）</Description>
+    <Description>TKWF 信任中心契约抽象（TrustCenter——ISsoChannel / IToken2Service / ISealedTicketService / IAuthorizationCodeService + DTO）——依赖倒置（ADR48 D7 / TrustCenter 剥离）：信任内核主包实现契约，Federation 连接层与平台库经契约消费（零实体、零 SG1、不引主包）</Description>
   </PropertyGroup>
 
   <ItemGroup>

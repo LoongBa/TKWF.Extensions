@@ -4,6 +4,8 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Ticket;
 using TKWF.Ext.AuthCenter;
 using TKWF.Ext.Federation;
 using TKWF.Ext.TrustCenter;
@@ -512,6 +514,102 @@ public sealed class FederationWebExtensionTests
         var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
         Assert.NotNull(body);
         Assert.Equal("AUTHENTICATION_FAILED", body!.Code);
+    }
+
+    // ═══════════════════ 测试端点（ticket 闭环——2026-10-16 路径/命名专题改造） ═══════════════════
+
+    /// <summary>TestTicket：GET /feberation/{platformId}/test/{channelId}/{ticket——平台段 + 通道段选区通过 →
+    /// RedeemAsync(ticket, context:null) → 200 载荷 JSON（channel_id 取自签入载荷 FederatedIdentity.ChannelId——
+    /// 用户裁定 3：单通道也必须能取出、与选区分支无关）。</summary>
+    [Fact]
+    public async Task TestTicket_ByPlatformAndChannel_ReturnsPayload()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Ticket.RedeemResult = new FederatedIdentity(
+            UId: "u-100", ChannelId: "wechat-mp", ExternalUserId: "ext-100", ChannelType: "wechat_event");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        var root = doc.RootElement;
+        Assert.True(root.GetProperty("ok").GetBoolean());
+        Assert.Equal("u-100", root.GetProperty("uid").GetString());
+        Assert.Equal("wechat-mp", root.GetProperty("channel_id").GetString());   // 签入载荷 ChannelId（选区无关）
+        Assert.Equal("ext-100", root.GetProperty("external_user_id").GetString());
+        Assert.Equal("wechat_event", root.GetProperty("channel_type").GetString());
+        Assert.Equal("ticket-1", FederationEndpointHost.Ticket.LastTicket);   // RedeemAsync 收到 ticket
+        Assert.Null(FederationEndpointHost.Ticket.LastContext);               // 测试端点 Redeem context=null（可转让语义）
+    }
+
+    /// <summary>TestTicket 平台段错配（channelId 存在但 PlatformType != 路由 platformId）→ 404 CHANNEL_NOT_FOUND
+    /// （统一防枚举——对齐平台集成面校验语义，不触达 Redeem）。</summary>
+    [Fact]
+    public async Task TestTicket_PlatformMismatch_404()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/dingtalk/test/wechat-mp/ticket-1");
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
+        Assert.Null(FederationEndpointHost.Ticket.LastTicket);                 // 平台错配不触达 Redeem
+    }
+
+    /// <summary>TestTicket 未知通道 → 404 CHANNEL_NOT_FOUND（选区失败映射）。</summary>
+    [Fact]
+    public async Task TestTicket_UnknownChannel_404()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/unknown-channel/ticket-1");
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
+        Assert.Null(FederationEndpointHost.Ticket.LastTicket);
+    }
+
+    /// <summary>TestTicket 无效 ticket（Redeem 返回 null——未发现/过期/已用/核销人不符）→ 404 TICKET_NOT_FOUND（契约语义）。</summary>
+    [Fact]
+    public async Task TestTicket_UnknownTicket_404()
+    {
+        FederationEndpointHost.Reset();                                        // RedeemResult 默认 null
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/unknown-ticket");
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("TICKET_NOT_FOUND", body!.Code);
+        Assert.Equal("unknown-ticket", FederationEndpointHost.Ticket.LastTicket); // Redeem 被调（选区通过）
+    }
+
+    /// <summary>TestTicket 通道禁用（显式 channelId + IsEnabled=false）→ 403 CHANNEL_DISABLED（MapFailReason 显式映射）。</summary>
+    [Fact]
+    public async Task TestTicket_DisabledChannel_403()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = false },   // 禁用通道
+        };
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("CHANNEL_DISABLED", body!.Code);
+        Assert.Null(FederationEndpointHost.Ticket.LastTicket);                 // 禁用不触达 Redeem
     }
 
     // ═══════════════════ 配置绑定（RoutePrefix/端点开关可配性——DomainHost 单例禁多宿主黑盒） ═══════════════════

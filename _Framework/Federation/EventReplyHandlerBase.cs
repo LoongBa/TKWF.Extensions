@@ -16,7 +16,10 @@ namespace TKWF.Ext.Federation;
 /// <see cref="BuildReplyAsync"/>（业务规则：检查 context → 返回载荷或 null）。</para>
 /// <para>高内聚核心：经 <see cref="ISealedTicketService{T}"/>（<c>ISealedTicketService&lt;FederatedIdentity&gt;</c>
 /// ——TrustCenter DB 后端）签密封票据（FederatedIdentity 载荷 AES-GCM 加密落库 + ExpectedClaimant 原子 CAS），
-/// 自动构造 <see cref="EventReplyNewsArticle"/> 图文链接（URL 指内置测试端点）——减少业务 handler 样板代码。
+/// 自动构造 <see cref="EventReplyNewsArticle"/> 图文链接（URL 指内置测试端点
+/// <c>{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——platformId 经
+/// <see cref="IChannelRegistry"/> 从 identity.ChannelId 反查，BaseUrl 空 = 相对路径默认指向本服务同源）——
+/// 减少业务 handler 样板代码。
 /// （ADR109 D4 拆分命名——面① 密封票据替代旧 <c>IAccessCodeService.IssueAsync(payloadJson, ttl, claimant)</c>。）</para>
 /// <para>注册：消费方 <c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, X&gt;()</c>
 /// （ADR92 集合版守卫工厂——帧内供给 IDomainUser；守卫工厂 ActivatorUtilities 构造，子类 ctor 仅 IDomainUser，
@@ -29,8 +32,8 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 
     private readonly IOptions<FederationEventReplyOptions>? _eventReplyOptions;
 
-    /// <summary>测试端点 URL 基址（消费方部署域名——图文链接拼接用；空 = 测试 handler 不回复图文）。</summary>
-    protected string? TestAccessCodeEndpointBaseUrl => _eventReplyOptions?.Value.TestAccessCodeEndpointBaseUrl;
+    /// <summary>测试端点 URL 基址（消费方部署域名——图文链接拼接用；空 = 相对路径 <c>/feberation/.../test/...</c> 默认指向本服务同源）。</summary>
+    protected string? TestTicketEndpointBaseUrl => _eventReplyOptions?.Value.TestTicketEndpointBaseUrl;
 
     /// <summary>内置测试 handler 注册开关（默认 false——P1-1 fail-safe；false 时 BuildReplyAsync 应返回 null）。</summary>
     protected bool TestEventReplyHandlerEnabled => _eventReplyOptions?.Value.TestEventReplyHandlerEnabled ?? false;
@@ -62,9 +65,16 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         var identity = JsonSerializer.Deserialize<FederatedIdentity>(payload.PayloadJson);
         if (identity is null)
             return null;
+
+        // 反查平台段（channelId → PlatformType——图文链接 {platformId} 段；查不到 → 不回复，
+        // 对齐"无法构造有效图文链接则不拦截业务 handler"语义）
+        var channelCfg = await User.Use<IChannelRegistry>().GetByAliasOrIdAsync(identity.ChannelId, ct);
+        if (channelCfg is null)
+            return null;
+
         var issue = await User.Use<ISealedTicketService<FederatedIdentity>>()
             .IssueAsync(identity, payload.Ttl, new SealedTicketOptions(ExpectedClaimant: payload.ExpectedClaimant), ct);
-        var url = BuildTestAccessCodeUrl(issue.Ticket);
+        var url = BuildTestTicketUrl(issue.Ticket, channelCfg.PlatformType, identity.ChannelId);
         return new EventReplyResult(
             Content: string.Empty,
             ContentType: "text/xml",
@@ -76,14 +86,18 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 
     /// <summary>
     /// 子类实现业务规则——返回载荷（非 null = 回复图文）或 null（不处理）。
-    /// <para>建议：测试/业务场景需检查部署基址（<see cref="TestAccessCodeEndpointBaseUrl"/>）非空才返回载荷
-    /// （空 = 无法拼图文链接，返回 null 不拦截其它 handler——方案 P1-2/P2-1 修复）。</para>
+    /// <para>基类负责签票据 + 反查平台段 + 拼图文链接（含相对路径兜底）——子类无需检查部署基址。</para>
     /// </summary>
     protected abstract Task<EventReplyPayload?> BuildReplyAsync(SsoChannelEventContext context, CancellationToken ct);
 
-    /// <summary>构造测试端点 URL（{BaseUrl}/{RoutePrefix}/test/accesscode/{code}——与 FederationWebExtension 端点路径一致）。</summary>
-    protected string BuildTestAccessCodeUrl(string code)
-        => $"{TestAccessCodeEndpointBaseUrl?.TrimEnd('/')}/{RoutePrefix.Trim('/')}/test/accesscode/{code}";
+    /// <summary>构造测试端点 URL（{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——与 FederationWebExtension
+    /// 端点路径一致；BaseUrl 空 → 相对路径（以 / 开头，默认指向本服务同源——微信可点击）。</summary>
+    protected string BuildTestTicketUrl(string ticket, string platformId, string channelId)
+    {
+        var relative = $"{RoutePrefix.Trim('/')}/{platformId}/test/{channelId}/{ticket}";
+        var baseUrl = TestTicketEndpointBaseUrl?.TrimEnd('/');
+        return string.IsNullOrEmpty(baseUrl) ? $"/{relative}" : $"{baseUrl}/{relative}";
+    }
 
     /// <summary>
     /// 子类载荷 DTO（Title/Description/PayloadJson/Ttl/ExpectedClaimant/PicUrl——签密封票据与图文构造输入；

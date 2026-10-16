@@ -32,7 +32,7 @@ public sealed record Token2IssueResult(string Token, int ExpiresIn);
 /// <para>🔒 验签安全加固（对齐 Authentication Oracle C1）：alg 强制 ES256 / 曲线强制 P-256 /
 /// exp·iat leeway / kid 白名单 / iss 校验 / Base64Url 边界。</para>
 /// <para><b>契约归属（TrustCenter 剥离 2026-10-09）</b>：信任内核契约——TrustCenter 纯签发（token2），
-/// Federation 编排面经本契约调签发（调 IToken2Service/IAccessCodeService 为合法 L2 间接层）。</para>
+/// Federation 编排面经本契约调签发（调 IToken2Service/ISealedTicketService&lt;T&gt;/IAuthorizationCodeService 为合法 L2 间接层）。</para>
 /// </summary>
 public interface IToken2Service : IDomainService
 {

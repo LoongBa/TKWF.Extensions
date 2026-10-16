@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Ticket;
 using TKW.Framework.Domain.Web.Extensions;
 using TKW.Framework.Domain.Web.Hosting;
 using TKW.Framework.Enumerations;
@@ -51,6 +52,7 @@ internal static class FederationEndpointHost
     public static FakeEventReplyHandler EventHandler1 { get; } = new("handler-1");
     public static FakeEventReplyHandler EventHandler2 { get; } = new("handler-2");
     public static FakeEventOrchestrator Orchestrator { get; } = new();
+    public static FakeSealedTicketService Ticket { get; } = new();
 
     /// <summary>共享宿主状态复位（跨用例防污染——负向/正向断言前置调用，对齐 AuthCenter V0.8.0 复位范式）。</summary>
     public static void Reset()
@@ -68,6 +70,7 @@ internal static class FederationEndpointHost
         EventHandler1.Reset();
         EventHandler2.Reset();
         Orchestrator.Reset();
+        Ticket.Reset();
     }
 
     private static TestServer CreateServer()
@@ -109,11 +112,15 @@ internal static class FederationEndpointHost
             // 测试宿主 Replace 为普通 Scoped Fake 编排（复刻真实行为：通道 HandleEventAsync + uid 只读富化 +
             // handler first-non-null-wins——无守卫依赖，规避守卫工厂与 TestMetaContext 空上下文的发现不确定性）
             svc.Replace(ServiceDescriptor.Scoped<IEventOrchestrator>(_ => Orchestrator));
+            // ISealedTicketService<FederatedIdentity>：面① 密封票据（测试端点 HandleTestTicket RedeemAsync 依赖）——
+            // 契约在主框架 TKW.Framework.Domain.Ticket；宿主仅启用 Federation（无 TrustCenter 初始器注册）→ AddScoped 直注 Fake
+            svc.AddScoped<ISealedTicketService<FederatedIdentity>>(_ => Ticket);
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
         {
-            e.Add<FederationWebExtension<TestUserInfo>>();
+            // 测试端点开关打开（默认 false——测试端点只在这些用例中冒烟；其余端点不受影响）
+            e.Add<FederationWebExtension<TestUserInfo>>(x => x.ConfigureOptions = o => o.TestTicketEndpointEnabled = true);
         })
         .BeforeRouting((app, _) =>
         {
@@ -447,5 +454,29 @@ internal static class FederationEndpointHost
 
             return Task.FromResult<EventReplyResult?>(null);
         }
+    }
+
+    /// <summary>Fake 面① 密封票据服务（ISealedTicketService&lt;FederatedIdentity&gt;——测试端点 HandleTestTicket
+    /// RedeemAsync 依赖）：记录 ticket/context + 返回可配置 RedeemResult（null = 未发现/过期/已用 → 404）。</summary>
+    internal sealed class FakeSealedTicketService : ISealedTicketService<FederatedIdentity>
+    {
+        public FederatedIdentity? RedeemResult { get; set; }
+        public string? LastTicket { get; private set; }
+        public TicketRedeemContext? LastContext { get; private set; }
+
+        public void Reset() { RedeemResult = null; LastTicket = null; LastContext = null; }
+
+        public Task<SealedTicketResult> IssueAsync(FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<FederatedIdentity?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
+        {
+            LastTicket = ticket;
+            LastContext = context;
+            return Task.FromResult(RedeemResult);
+        }
+
+        public Task<int> CleanupExpiredAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 }

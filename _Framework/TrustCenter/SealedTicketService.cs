@@ -141,8 +141,8 @@ internal sealed class SealedTicketService<T> : DomainServiceBase, ISealedTicketS
         return deleted;
     }
 
-    private T? DecryptPayload<T>(SealedTicketEntity row)
-        => string.IsNullOrEmpty(row.PayloadEncrypted) ? default : JsonSerializer.Deserialize<T>(_keys.Decrypt(row.PayloadEncrypted));
+    private TPayload? DecryptPayload<TPayload>(SealedTicketEntity row)
+        => string.IsNullOrEmpty(row.PayloadEncrypted) ? default : JsonSerializer.Deserialize<TPayload>(_keys.Decrypt(row.PayloadEncrypted));
 
     private static string NewTicketCode()
         => Base64UrlEncode(RandomNumberGenerator.GetBytes(32));

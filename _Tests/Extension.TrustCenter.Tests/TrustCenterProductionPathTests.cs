@@ -16,9 +16,11 @@ namespace TKWF.Ext.TrustCenter.Tests;
 /// （TrustCenterExtensionInitializer ConfigureServices + FreeSql SQLite 基础设施 + AddLogging）+
 /// <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> + <c>User.Use&lt;接口&gt;()</c>
 /// （AOP 路径：设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂）——
-/// 验证 TrustCenter 三钩子 + 信任内核门面（IToken2Service/ISsoClientService/IAccessCodeService）完整链路。
+/// 验证 TrustCenter 三钩子 + 信任内核门面（IToken2Service/ISsoClientService——拆分命名 ADR109 D4 后
+/// 面① ISealedTicketService 见 SealedTicketServiceTests、面② IAuthorizationCodeService 见
+/// AuthorizationCodeServiceTests，旧 IAccessCodeService 已删）完整链路。
 /// <para><b>TrustCenter 剥离（2026-10-09）</b>：自 Federation.Tests SsoProductionPathTests 拆分迁入——
-/// token2/accesscode/client 三用例（信任内核）；<see cref="ISsoProfileService"/> 跨扩展用例（连接层）留 Federation.Tests。</para>
+/// token2/client 用例（信任内核）；<see cref="ISsoProfileService"/> 跨扩展用例（连接层）留 Federation.Tests。</para>
 /// <para>对齐 AuthenticationProductionPathTests 范式。DataService 不手动注册——测试经 <c>Use&lt;具体类&gt;()</c>
 /// NoAop 路径直建（IEntityDAC 从 DI 解析，红线合规）。</para>
 /// </summary>
@@ -29,7 +31,8 @@ public class TrustCenterProductionPathTests : TestHostBase
     protected override void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<SsoClientEntity>();
-        fsql.CodeFirst.SyncStructure<AccessCodeEntity>();
+        fsql.CodeFirst.SyncStructure<SealedTicketEntity>();
+        fsql.CodeFirst.SyncStructure<AuthorizationCodeEntity>();
     }
 
     protected override void ConfigureHost(IServiceCollection services)
@@ -80,24 +83,5 @@ public class TrustCenterProductionPathTests : TestHostBase
         Assert.StartsWith("app-", client.AppId);
         Assert.True(await clientService.IsOriginAllowedAsync(client.AppId, "https://app.example.com", CancellationToken.None));
         Assert.False(await clientService.IsOriginAllowedAsync(client.AppId, "https://evil.example.com", CancellationToken.None));
-    }
-
-    /// <summary>生产路径：accesscode 全链——签发 → 消费 → 重放拒（原子 CAS）。</summary>
-    [Fact]
-    public async Task Use_IAccessCodeService_IssueConsumeReplay()
-    {
-        using var _ = this;
-        var (_, user) = BindTestScope();
-
-        var accessCodeService = user.Use<IAccessCodeService>();
-        var issued = await accessCodeService.IssueAsync(
-            new AccessCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic", OpenId: "openid-xxx"), CancellationToken.None);
-
-        var consumed = await accessCodeService.ConsumeAsync(issued.Code, default, "1.2.3.4", CancellationToken.None);
-        Assert.Equal("u-100", consumed.UId);
-        Assert.Equal("app-1", consumed.TargetAppId);
-
-        await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
-            () => accessCodeService.ConsumeAsync(issued.Code, default, null, CancellationToken.None));
     }
 }

@@ -15,15 +15,15 @@ namespace TKWF.Ext.TrustCenter;
 /// <summary>
 /// TrustCenter 扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线（TrustCenter 剥离开发方案 §5.2）。
 /// <para>注册形态（对齐 AuthCenterExtensionInitializer V4.10.53 三态 + ADR92）：
-/// <b>门面（AddConstructibleService）</b>——IToken2Service / IAccessCodeService / ISsoClientService
-/// （接口 : IDomainService → 接口可构造守卫工厂 + 实现类 throw-factory，消费方经
+/// <b>门面（AddConstructibleService）</b>——IToken2Service / ISsoClientService / ISealedTicketService&lt;T&gt; /
+/// IAuthorizationCodeService（接口 : IDomainService → 接口可构造守卫工厂 + 实现类 throw-factory，消费方经
 /// <c>User.Use&lt;接口&gt;()</c> 解析）；<b>多实现集合（TryAddEnumerableConstructible）</b>——
 /// <see cref="ISsoChannel"/>（契约在 TrustCenter.Abstractions——Oracle P1-1；<b>集合注册责任归平台网关库扩展方法</b>
 /// <c>AddXxxFederationChannels()</c> 内部 <c>TryAddEnumerableConstructible&lt;ISsoChannel, X&gt;()</c>，
 /// TrustCenter 初始器零 ISsoChannel 具体实现故<b>不注册任何集合元素</b>——未装配库时
 /// <c>IEnumerable&lt;ISsoChannel&gt;</c> 帧内解析为空（"未注册通道自然跳过" F5）；
 /// <b>编排面不迁入</b>（ISsoChannelFactory/SsoLogin 归 Federation，方案 §5.2/§5.3）。</para>
-/// <para>零 DataService 手动注册（ADR61/D17 铁律）——2 实体 DataService 经 SG1 消费方聚合自动注册；
+/// <para>零 DataService 手动注册（ADR61/D17 铁律）——3 实体 DataService 经 SG1 消费方聚合自动注册；
 /// Options（TrustCenterOptions）+ 密钥基础设施（keyed ISymmetricKeyProvider——
 /// <see cref="SymmetricKeyProviderKeys.TrustCenter"/>，v4.10.70 主框架常量并入）。</para>
 /// </summary>
@@ -67,11 +67,10 @@ namespace TKWF.Ext.TrustCenter;
 
         // 门面（AddConstructibleService）——消费方 User.Use<接口>() 帧内解析
         services.AddConstructibleService<IToken2Service, Token2Service>();
-        services.AddConstructibleService<IAccessCodeService, AccessCodeService>();
         services.AddConstructibleService<ISsoClientService, SsoClientService>();
-        // 拆分命名（2026-10-16，ADR109 D4——AccessCode 拆 SealedTicket/AuthorizationCode）：
+        // 拆分命名（2026-10-16，ADR109 D4——AccessCode 拆 SealedTicket/AuthorizationCode，旧命名 2026-10-16 全删）：
         // 面① 密封票据 DB CAS 后端（SealedTicketService<T>——逐 T 注册，蓝图 D1 当前仅 FederatedIdentity 一例；
-        //       替代旧 AccessCodeService 适配器注册，去适配器间接层，P2 单一事实源）
+        //       P2 单一事实源，无适配器间接层）
         services.AddConstructibleService<ISealedTicketService<FederatedIdentity>, SealedTicketService<FederatedIdentity>>();
         // 面② OAuth 授权码（AuthorizationCodeService——SSO 联邦流）
         services.AddConstructibleService<IAuthorizationCodeService, AuthorizationCodeService>();

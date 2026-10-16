@@ -15,18 +15,23 @@ namespace TKWF.Ext.Federation.Tests;
 /// <summary>
 /// 事件回复 handler 基类 + 内置测试 handler 测试（2026-10-15——方案
 /// docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md，Oracle APPROVE WITH CONDITIONS 条件吸收；
-/// 2026-10-16 拆分命名 ADR109 D4 适配——面① 密封票据 <see cref="ISealedTicketService{T}"/>）。
+/// 2026-10-16 拆分命名 ADR109 D4 适配——面① 密封票据 <see cref="ISealedTicketService{T}"/>；
+/// 2026-10-16 用户裁定——BaseUrl 空 → 相对路径（默认指向本服务同源），URL 形态
+/// <c>{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>（platformId 经 registry 反查））。
 /// <para>生产路径宿主（真实 DI：<see cref="TestHostBase.BindTestScope"/> + <c>DomainUser&lt;TestUserInfo&gt;.BindScope</c>
 /// + <c>User.Use&lt;T&gt;()</c> AOP）+ Fake <see cref="ISealedTicketService{T}"/>（记录 IssueAsync payload/claimant）
-/// + <see cref="IOptions{FederationEventReplyOptions}"/>（开关/BaseUrl 配置）。</para>
+/// + Fake <see cref="IChannelRegistry"/>（channelId → PlatformType 反查）+ <see cref="IOptions{FederationEventReplyOptions}"/>
+/// （开关/BaseUrl 配置）。</para>
 /// <para>覆盖：① 模板方法——子类返回载荷 → 签密封票据（FederatedIdentity 载荷反序列化 + ExpectedClaimant）+ 图文（news）
-/// 链接（URL 含 /test/accesscode/{ticket}）；② null 透传——子类返回 null → HandleAsync null（不拦截）；
-/// ③ TestEventReplyHandler 业务规则——ChannelType=wechat_event / 开关关 null / BaseUrl 空 null /
-/// 开关开 + BaseUrl 配 → FederatedIdentity 载荷（UId/ChannelId/ExternalUserId）+ ExpectedClaimant null。</para>
+/// 链接（URL 含 /{platformId}/test/{channelId}/{ticket}——platformId 经 registry 反查）；② null 透传——子类返回 null
+/// → HandleAsync null（不拦截）；③ 反查失败——载荷 ChannelId 不在 registry → 不回复；④ TestEventReplyHandler 业务规则
+/// ——ChannelType=wechat_event / 开关关 null / BaseUrl 空 → 相对路径 / 开关开 + BaseUrl 配 → FederatedIdentity 载荷
+/// （UId/ChannelId/ExternalUserId）+ ExpectedClaimant null。</para>
 /// </summary>
 public sealed class EventReplyHandlerBaseTests : TestHostBase
 {
     private readonly FakeSealedTicketService _codes = new();
+    private readonly FakeChannelRegistry _registry = new();
     private FederationEventReplyOptions _eventReplyOptions = new();
 
     protected override TestUserInfo CreateUser() => new("event-reply-tester", "事件回复基类测试用户");
@@ -36,12 +41,15 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         // Fake 密封票据服务（面①——记录 payload/claimant）
         services.AddScoped<ISealedTicketService<FederatedIdentity>>(_ => _codes);
 
+        // Fake 通道注册表（channelId → PlatformType 反查——图文链接 {platformId} 段）
+        services.AddScoped<IChannelRegistry>(_ => _registry);
+
         // 领域 Options（开关 + BaseUrl + RoutePrefix——按测试配置）
         services.AddOptions<FederationEventReplyOptions>();
         services.Configure<FederationEventReplyOptions>(o =>
         {
             o.TestEventReplyHandlerEnabled = _eventReplyOptions.TestEventReplyHandlerEnabled;
-            o.TestAccessCodeEndpointBaseUrl = _eventReplyOptions.TestAccessCodeEndpointBaseUrl;
+            o.TestTicketEndpointBaseUrl = _eventReplyOptions.TestTicketEndpointBaseUrl;
             o.RoutePrefix = _eventReplyOptions.RoutePrefix;
         });
 
@@ -55,7 +63,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         _eventReplyOptions = new FederationEventReplyOptions
         {
             TestEventReplyHandlerEnabled = true,
-            TestAccessCodeEndpointBaseUrl = baseUrl,
+            TestTicketEndpointBaseUrl = baseUrl,
             RoutePrefix = routePrefix,
         };
     }
@@ -82,12 +90,12 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         Assert.Equal("probe-channel", _codes.LastIssuedIdentity.ChannelId);
         Assert.Equal("probe-ext", _codes.LastIssuedIdentity.ExternalUserId);
         Assert.Equal("claimant-1", _codes.LastClaimant);
-        // 图文（news）链接返回
+        // 图文（news）链接返回（platformId 经 registry 反查：probe-channel → probe）
         Assert.NotNull(reply);
         Assert.NotNull(reply.NewsArticles);
         var article = Assert.Single(reply.NewsArticles);
         Assert.Equal("探针回复", article.Title);
-        Assert.Contains("/test/accesscode/ac-1", article.Url);           // Fake 返回 ticket="ac-1"
+        Assert.Contains("/probe/test/probe-channel/ac-1", article.Url);      // Fake 返回 ticket="ac-1"
         Assert.StartsWith("https://api.example.com/feberation", article.Url);
     }
 
@@ -105,6 +113,24 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
 
         Assert.Null(reply);
         Assert.False(_codes.Issued);                                     // 未签密封票据
+    }
+
+    /// <summary>模板方法：载荷 ChannelId 不在 registry（反查失败——无法构造有效图文链接）→ 不签票据不回复
+    /// （first-non-null-wins 语义——不拦截其它 handler）。</summary>
+    [Fact]
+    public async Task HandleAsync_ChannelNotInRegistry_ReturnsNull()
+    {
+        EnableTestHandler();                                             // 开关开 + BaseUrl 配
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        // TestEventReplyHandler（channel_id=unknown-channel——registry 无映射）验证反查失败语义
+        var handler = user.Use<TestEventReplyHandler>();
+        var reply = await handler.HandleAsync(new SsoChannelEventContext(
+            new Dictionary<string, string?> { ["external_user_id"] = "openid-1", ["channel_id"] = "unknown-channel" }),
+            CancellationToken.None);
+
+        Assert.Null(reply);
+        Assert.False(_codes.Issued);                                     // 反查失败 → 未签密封票据
     }
 
     // ═══════════════════ 2. TestEventReplyHandler 业务规则 ═══════════════════
@@ -133,9 +159,10 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         Assert.False(_codes.Issued);
     }
 
-    /// <summary>BaseUrl 未配置（P1-2/P2-1）→ 返回 null（不签无意义密封票据、不拦截业务 handler）。</summary>
+    /// <summary>BaseUrl 空（用户裁定 1——默认测试 handler 应默认指向本服务）→ 相对路径图文链接
+    /// （以 / 开头，默认指向本服务同源——微信可点击）；URL = /feberation/wechat/test/wx-1/ac-1。</summary>
     [Fact]
-    public async Task TestHandler_BaseUrlMissing_ReturnsNull()
+    public async Task TestHandler_BaseUrlEmpty_ReturnsRelativeUrl()
     {
         EnableTestHandler(baseUrl: string.Empty);                        // 开关开但 BaseUrl 空
         using var _ = this;
@@ -143,11 +170,15 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var handler = user.Use<TestEventReplyHandler>();
 
         var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?> { ["external_user_id"] = "openid-1", ["uid"] = "u-1" }),
+            new Dictionary<string, string?> { ["external_user_id"] = "openid-1", ["uid"] = "u-1", ["channel_id"] = "wx-1" }),
             CancellationToken.None);
 
-        Assert.Null(reply);
-        Assert.False(_codes.Issued);
+        // 签票据仍发生（相对路径兜底——不拦截业务 handler）
+        Assert.True(_codes.Issued);
+        Assert.NotNull(reply);
+        var article = Assert.Single(reply.NewsArticles!);
+        Assert.StartsWith("/feberation/wechat/test/wx-1/ac-1", article.Url);   // 相对路径（无域名前缀）
+        Assert.False(article.Url.StartsWith("http"));
     }
 
     /// <summary>开关开 + BaseUrl 配 → FederatedIdentity 载荷（UId/ChannelId/ExternalUserId）+ ExpectedClaimant null + 图文链接。</summary>
@@ -177,10 +208,10 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         Assert.Equal("wx-1", _codes.LastIssuedIdentity.ChannelId);
         Assert.Equal("openid-1", _codes.LastIssuedIdentity.ExternalUserId);
         Assert.Equal("wechat_event", _codes.LastIssuedIdentity.ChannelType);
-        // 图文链接（URL 指内置测试端点）
+        // 图文链接（URL 指内置测试端点——platformId 经 registry 反查：wx-1 → wechat）
         Assert.NotNull(reply);
         var article = Assert.Single(reply.NewsArticles!);
-        Assert.Contains("/test/accesscode/ac-1", article.Url);
+        Assert.Contains("/wechat/test/wx-1/ac-1", article.Url);
         Assert.StartsWith("https://api.example.com/feberation", article.Url);
     }
 
@@ -194,12 +225,12 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var handler = user.Use<TestEventReplyHandler>();
 
         var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?> { ["external_user_id"] = "openid-1" }),
+            new Dictionary<string, string?> { ["external_user_id"] = "openid-1", ["channel_id"] = "wx-1" }),
             CancellationToken.None);
 
         Assert.NotNull(reply);
         var article = Assert.Single(reply.NewsArticles!);
-        Assert.StartsWith("https://api.example.com/sso/test/accesscode/", article.Url);
+        Assert.StartsWith("https://api.example.com/sso/wechat/test/wx-1/", article.Url);
     }
 
     // ═══════════════════ 探针子类（模板方法测试） ═══════════════════
@@ -249,5 +280,29 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
 
         public Task<int> CleanupExpiredAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
+    }
+
+    /// <summary>Fake 通道注册表（channelId → PlatformType 反查——图文链接 {platformId} 段；
+    /// probe-channel → probe / wx-1 → wechat / wechat-mp → wechat）。</summary>
+    private sealed class FakeChannelRegistry : IChannelRegistry
+    {
+        public List<ChannelConfig> Channels { get; set; } = new()
+        {
+            new() { ChannelId = "probe-channel", PlatformType = "probe", IsEnabled = true },
+            new() { ChannelId = "wx-1", PlatformType = "wechat", IsEnabled = true },
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = true },
+        };
+
+        public Task<ChannelConfig?> GetAsync(string channelId, CancellationToken ct = default)
+            => Task.FromResult(Channels.FirstOrDefault(c => c.ChannelId == channelId));
+
+        public Task<ChannelConfig?> GetByAliasOrIdAsync(string key, CancellationToken ct = default)
+            => Task.FromResult(Channels.FirstOrDefault(c => c.ChannelId == key || c.Alias == key));
+
+        public Task<IReadOnlyList<ChannelConfig>> GetAllAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ChannelConfig>>(Channels);
+
+        public Task<ChannelConfig?> GetDefaultAsync(CancellationToken ct = default)
+            => Task.FromResult(Channels.FirstOrDefault(c => c.IsDefault) ?? Channels.FirstOrDefault(c => c.IsEnabled));
     }
 }

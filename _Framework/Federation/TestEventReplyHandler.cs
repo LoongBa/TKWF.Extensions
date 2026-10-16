@@ -13,10 +13,9 @@ namespace TKWF.Ext.Federation;
 /// 内置测试 handler（开发期对接测试用——方案 docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md）。
 /// <para>受开关 <see cref="FederationEventReplyOptions.TestEventReplyHandlerEnabled"/>（默认 false——P1-1 fail-safe
 /// 显式开启）注册；收到事件（微信未认证号推送，<c>ChannelType=wechat_event</c>）→ 载荷 =
-/// <see cref="FederatedIdentity"/>（openid/uid 填充）→ 基类签 accesscode → 图文链接回复（URL 指内置测试端点
-/// <c>{BaseUrl}/{RoutePrefix}/test/accesscode/{code}</c>）。</para>
-/// <para>测试端点 BaseUrl 未配置（<see cref="FederationEventReplyOptions.TestAccessCodeEndpointBaseUrl"/> 空）→
-/// 返回 null（不签无意义 accesscode、不拦截业务 handler——P1-2/P2-1 修复）。</para>
+/// <see cref="FederatedIdentity"/>（openid/uid 填充）→ 基类签密封票据 → 图文链接回复（URL 指内置测试端点
+/// <c>{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——platformId 经 registry 反查，
+/// BaseUrl 空 = 相对路径默认指向本服务同源）。</para>
 /// <para>消费方接入业务 handler 后保持测试开关关闭（测试设施整体不启用——联动见使用指南"测试设施生命周期"小节）。</para>
 /// </summary>
 public sealed class TestEventReplyHandler : EventReplyHandlerBase
@@ -34,17 +33,13 @@ public sealed class TestEventReplyHandler : EventReplyHandlerBase
     /// 业务规则：构造 FederatedIdentity 载荷（P0-2——测试端点 <c>RedeemAsync&lt;FederatedIdentity&gt;</c>
     /// 反序列化属性对齐：UId/ChannelId/ExternalUserId/ChannelType）。
     /// <para>ExpectedClaimant=null（P0-1——测试端点 Redeem claimant=null，non-null ExpectedClaimant 必致
-    /// CLAIMANT_MISMATCH；可转让语义由 accesscode 高熵随机码自保护）。</para>
+    /// CLAIMANT_MISMATCH；可转让语义由密封票据高熵随机码自保护）。</para>
     /// </summary>
     protected override Task<EventReplyPayload?> BuildReplyAsync(
         SsoChannelEventContext context, CancellationToken ct)
     {
         // P1-1：开关关闭（默认 false）→ 不回复不拦截（测试设施整体不启用，业务 handler 正常流转）
         if (!TestEventReplyHandlerEnabled)
-            return Task.FromResult<EventReplyPayload?>(null);
-
-        // P1-2/P2-1：测试端点 BaseUrl 未配置 → 无法拼图文链接 → 返回 null（不拦截业务 handler）
-        if (string.IsNullOrWhiteSpace(TestAccessCodeEndpointBaseUrl))
             return Task.FromResult<EventReplyPayload?>(null);
 
         var parameters = context.Parameters;
@@ -63,7 +58,7 @@ public sealed class TestEventReplyHandler : EventReplyHandlerBase
         return Task.FromResult<EventReplyPayload?>(
             new EventReplyPayload(
                 Title: "微信接入测试",
-                Description: $"openid={openId} uid={uid}——点击验证 accesscode 兑换闭环",
+                Description: $"openid={openId} uid={uid}——点击验证 ticket 兑换闭环",
                 PayloadJson: payloadJson,
                 Ttl: TimeSpan.FromMinutes(5),
                 ExpectedClaimant: null));   // P0-1：可转让（测试端点 Redeem claimant=null）

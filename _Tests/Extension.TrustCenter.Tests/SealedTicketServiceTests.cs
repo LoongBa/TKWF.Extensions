@@ -90,7 +90,7 @@ public class SealedTicketServiceTests
         var (service, ds) = CreateService();
         var issued = await service.IssueAsync(new PayloadTest(2, "s2"), TimeSpan.FromSeconds(1));
 
-        // 确定性老化：直接落库把 ExpiresAt 改为过去（对齐 AccessCodeServiceTests 既有模式）
+        // 确定性老化：直接落库把 ExpiresAt 改为过去（对齐 SealedTicket 清理/老化既有模式）
         await ds.EntityUpdateWhereAsync(
             m => m.CodeHash == SealedTicketServiceTests.Sha256Hex(issued.Ticket),
             m => new { ExpiresAt = DateTime.UtcNow.AddMinutes(-1) },

@@ -16,11 +16,11 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>TrustCenter/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.TrustCenter</PackageId>
-    <Description>TKWF 扩展：信任中心（TrustCenter，纯信任内核——2026-10-09 自 Federation 剥离）——应用注册（SsoClientEntity）/ token2（ES256 独立密钥域 + JWKS）/ accesscode（授权码）+ ISsoChannel 契约（Abstractions）；内网中枢零外部协议依赖（Federation 对外连接层经契约消费）</Description>
+    <Description>TKWF 扩展：信任中心（TrustCenter，纯信任内核——2026-10-09 自 Federation 剥离）——应用注册（SsoClientEntity）/ token2（ES256 独立密钥域 + JWKS）/ 密封票据 + OAuth 授权码（拆分命名 ADR109 D4）+ ISsoChannel 契约（Abstractions）；内网中枢零外部协议依赖（Federation 对外连接层经契约消费）</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 2026-10-09（TrustCenter 剥离，T1/T2）：信任内核契约包（ISsoChannel/IToken2Service/IAccessCodeService——接口 + DTO） -->
+    <!-- 2026-10-09（TrustCenter 剥离，T1/T2）：信任内核契约包（ISsoChannel/IToken2Service/ISealedTicketService/IAuthorizationCodeService——接口 + DTO） -->
     <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
   </ItemGroup>
 

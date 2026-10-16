@@ -45,13 +45,6 @@ public class TrustCenterOptions
     /// <summary>验签 leeway（秒，默认 30——设计文档 §5.6）。</summary>
     public int ClockSkewSeconds { get; set; } = 30;
 
-    /// <summary>accesscode 有效期（秒，默认 120——Oracle P2-2：60s 偏紧，点击延迟）。</summary>
-    public int AccessCodeExpirationSeconds { get; set; } = 120;
-
-    /// <summary>过期 accesscode 行清理保留天数（默认 7——<see cref="AccessCodeService.CleanupExpiredAsync"/> 清理任务；
-    /// 对齐 BackgroundJobs 清理范式；含 Payload 密文行防业务数据残留）。</summary>
-    public int AccessCodeRetentionDays { get; set; } = 7;
-
     /// <summary>密封票据有效期（秒，默认 120——面① SealedTicketService；拆分命名 ADR109 D4）。</summary>
     public int SealedTicketExpirationSeconds { get; set; } = 120;
 
@@ -63,12 +56,6 @@ public class TrustCenterOptions
 
     /// <summary>过期 OAuth 授权码行清理保留天数（默认 7——AuthorizationCodeService.CleanupExpiredAsync）。</summary>
     public int AuthorizationCodeRetentionDays { get; set; } = 7;
-
-    /// <summary>测试端点 URL 基址（测试 handler 图文链接拼接用——面① 密封票据测试设施；消费方部署域名；空 = 测试 handler 不回复图文）。</summary>
-    public string? AuthorizationCodeEndpointBaseUrl { get; set; }
-
-    /// <summary>测试端点开关（默认 false——fail-safe；面① 密封票据测试设施，只配合测试 handler 使用）。</summary>
-    public bool TestAuthorizationCodeEndpointEnabled { get; set; }
     /// <summary>app client credential / HMAC 密钥 AES-GCM 加密密钥派生文件路径（对齐 AuthCenter SecretEncryptionKeyPath）。</summary>
     public string? SecretEncryptionKeyPath { get; set; }
 

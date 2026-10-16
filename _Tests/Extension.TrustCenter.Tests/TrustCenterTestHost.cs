@@ -11,19 +11,20 @@ using TKWF.Ext.Testing.Shared;
 namespace TKWF.Ext.TrustCenter.Tests;
 
 /// <summary>
-/// TrustCenter 测试公共设施——SQLite 内存库（SsoClient + AccessCode）+ EC 测试密钥。
+/// TrustCenter 测试公共设施——SQLite 内存库（SsoClient + SealedTicket + AuthorizationCode）+ EC 测试密钥。
 /// <para>对齐 AuthenticationTestHost 模式：分层单测用 StubDomainUser 直构门面；生产路径集成测试用
 /// 真实 DI + Initializer ConfigureServices + BindScope + <c>User.Use&lt;接口&gt;()</c>。</para>
 /// <para><b>TrustCenter 剥离（2026-10-09）</b>：自 Federation.Tests SsoTestHost 迁入——实体裁剪为
-/// TrustCenter 2 实体（SsoClientEntity + AccessCodeEntity）；AuthCenter 实体（AuthAccount/PlatformAccountMap/
+/// TrustCenter 实体（SsoClientEntity + SealedTicketEntity + AuthorizationCodeEntity——拆分命名 ADR109 D4
+/// 后旧 AccessCodeEntity 已删）；AuthCenter 实体（AuthAccount/PlatformAccountMap/
 /// UserProfile——SsoProfileService 消费）与 SsoChannelRegistryEntity（连接层）均留 Federation.Tests。</para>
 /// </summary>
 internal static class TrustCenterTestHost
 {
-    /// <summary>TrustCenter 4 实体（信任内核——2026-10-16 拆分命名后：SsoClient + SealedTicket + AuthorizationCode + 旧 AccessCode 过渡保留）。</summary>
+    /// <summary>TrustCenter 3 实体（信任内核——2026-10-16 拆分命名 ADR109 D4：SsoClient + SealedTicket + AuthorizationCode，旧 AccessCode 已删）。</summary>
     private static readonly Type[] EntityTypes =
     [
-        typeof(SsoClientEntity), typeof(SealedTicketEntity), typeof(AuthorizationCodeEntity), typeof(AccessCodeEntity)
+        typeof(SsoClientEntity), typeof(SealedTicketEntity), typeof(AuthorizationCodeEntity)
     ];
 
     /// <summary>注册全部实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）。</summary>

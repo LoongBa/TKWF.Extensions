@@ -47,8 +47,9 @@ public class FederationEndpointOptions
 
     /// <summary>
     /// <b>测试端点开关（默认 false——生产禁用，联调/本地验证用）</b>：
-    /// GET {prefix}/test/accesscode/{code}——匿名兑现 AccessCode 并返回载荷（FederatedIdentity：uid/channelId/openid），
-    /// 供微信图文消息落地页（UserH5 未就绪前）验证 AccessCode 签发→消费闭环。生产必须关闭
-    /// （匿名兑现端点不应暴露于公网——AccessCode 虽 32 字节高熵不可枚举，但属调试面）。</summary>
-    public bool TestAccessCodeEndpointEnabled { get; set; } = false;
+    /// GET {prefix}/{platformId}/test/{channelId}/{ticket}——匿名兑现密封票据并返回载荷
+    /// （FederatedIdentity：uid/channelId/openid，channel_id 取自签入载荷），
+    /// 供微信图文消息落地页（UserH5 未就绪前）验证 ticket 签发→消费闭环。生产必须关闭
+    /// （匿名兑现端点不应暴露于公网——ticket 虽 32 字节高熵不可枚举，但属调试面）。</summary>
+    public bool TestTicketEndpointEnabled { get; set; } = false;
 }

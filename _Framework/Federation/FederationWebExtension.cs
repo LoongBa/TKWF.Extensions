@@ -118,9 +118,9 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         if (endpointOptions.IdentityClaimEndpointEnabled)
             endpoints.MapPost($"{prefix}/identity/claim", HandleIdentityClaim).AllowAnonymous();
 
-        // 测试端点（默认关——生产禁用；联调验证 AccessCode 闭环用）
-        if (endpointOptions.TestAccessCodeEndpointEnabled)
-            endpoints.MapGet($"{prefix}/test/accesscode/{{code}}", HandleTestAccessCode).AllowAnonymous();
+        // 测试端点（默认关——生产禁用；联调验证 ticket 闭环用）——对齐正常端点风格：平台段 + 通道段 + ticket 段
+        if (endpointOptions.TestTicketEndpointEnabled)
+            endpoints.MapGet($"{prefix}/{{platformId}}/test/{{channelId}}/{{ticket}}", HandleTestTicket).AllowAnonymous();
     }
 
     // ─────────────────────────── 端点处理器（匿名游客帧） ───────────────────────────
@@ -327,23 +327,28 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         });
     }
 
-    /// <summary>测试端点（GET {prefix}/test/accesscode/{code}，匿名游客帧，默认关）——AccessCode 闭环验证：
-    /// <see cref="ISsoSubAppBridge.ClaimAsync"/> 语义复用（credential 为空——测试端点仅验 AccessCode 可兑现性，
-    /// 不走子应用 credential 鉴权）；或直调 <c>ISealedTicketService&lt;FederatedIdentity&gt;</c>。实现：经
-    /// <c>ISealedTicketService&lt;FederatedIdentity&gt;.RedeemAsync(code)</c>（面①密封票据——v4.10.77 TicketRedeemContext
+    /// <summary>测试端点（GET {prefix}/{platformId}/test/{channelId}/{ticket}，匿名游客帧，默认关）——ticket 闭环验证：
+    /// 平台段 + 通道段选区校验（<see cref="ResolveChannelAsync"/>——对齐平台集成面统一入口，防跨平台错配/探测）
+    /// → <c>ISealedTicketService&lt;FederatedIdentity&gt;.RedeemAsync(ticket)</c>（面①密封票据——v4.10.77 TicketRedeemContext
     /// CAS，拆分命名 ADR109 D4）原子取回 payload → 200 载荷 JSON
-    /// （uid/channelId/openid/channelType——图文落地页联调验证）；失败/过期/已用/核销人不符 → null → 404（契约语义）。</summary>
-    private static async Task<IResult> HandleTestAccessCode(HttpContext ctx, string code, CancellationToken ct)
+    /// （uid/channelId/openid/channelType——图文落地页联调验证，channel_id 取自签入载荷 FederatedIdentity.ChannelId，
+    /// 单通道也可取出、与选区分支无关）；失败/过期/已用/核销人不符 → null → 404（契约语义）。</summary>
+    private static async Task<IResult> HandleTestTicket(HttpContext ctx, string platformId, string channelId, string ticket, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(code))
-            return Results.BadRequest(new ErrorResponse("CODE_REQUIRED", null));
+        if (string.IsNullOrWhiteSpace(ticket))
+            return Results.BadRequest(new ErrorResponse("TICKET_REQUIRED", null));
+
+        var registry = GetGuest(ctx).Use<IChannelRegistry>();
+        var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
+        if (cfg is null)
+            return MapFailReason(failReason);
 
         try
         {
             var identity = await GetGuest(ctx).Use<ISealedTicketService<TKW.Framework.Domain.FederatedIdentity>>()
-                .RedeemAsync(code, context: null, ct);
+                .RedeemAsync(ticket, context: null, ct);
             if (identity is null)
-                return Results.Json(new ErrorResponse("ACCESS_CODE_NOT_FOUND", null),
+                return Results.Json(new ErrorResponse("TICKET_NOT_FOUND", null),
                     statusCode: StatusCodes.Status404NotFound);
 
             return Results.Ok(new
@@ -358,7 +363,7 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // 载荷解密失败等信任根问题——fail-closed 拒信任（错误码机器可读）；成功/失败/过期/已用由 null 分支覆盖
-            var reason = ex.Message ?? "ACCESS_CODE_REDEEM_FAILED";
+            var reason = ex.Message ?? "TICKET_REDEEM_FAILED";
             return Results.Json(new ErrorResponse(reason, null), statusCode: StatusCodes.Status400BadRequest);
         }
     }

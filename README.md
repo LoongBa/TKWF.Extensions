@@ -102,7 +102,7 @@ _TKWF.Extensions/
 │   ├── BlobStoring.Abstractions/    # Blob 存储契约（IBlobStorageService——ADR50 L2 依赖倒置）
 │   ├── FileManagement/              # 文件管理（目录树 + 文件元数据 + 版本化/配额 + 上传安全链）
 │   ├── Federation/                  # 对外连接层（外交部——2026-10-09 三层化：TrustCenter 剥离后连接层壳，/feberation/* 端点 + 编排 + 桥接 + 多通道设施）
-│   ├── TrustCenter.Abstractions/    # 信任契约包（ISsoChannel/IToken2Service/IAccessCodeService——信任内核契约，零实体零 SG1）
+│   ├── TrustCenter.Abstractions/    # 信任契约包（ISsoChannel/IToken2Service/IAuthorizationCodeService——信任内核契约；面① ISealedTicketService<T> 在主框架 Domain.Ticket，零实体零 SG1）
 │   ├── TrustCenter/                 # 信任中心（应用间信任中枢——2026-10-09 自 Federation 剥离，纯信任内核：应用注册/token2/accesscode/ISsoChannel 契约定义）
 │   ├── Federation.WeChat/           # 微信公众平台连接器（大使馆/平台网关库——纯库无装配，TKWF.Federation.WeChat）
 │   ├── Federation.QQ/               # QQ 互联连接器（大使馆/平台网关库——出站-only，TKWF.Federation.QQ）

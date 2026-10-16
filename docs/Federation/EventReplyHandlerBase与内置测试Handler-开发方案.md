@@ -1,19 +1,19 @@
 # EventReplyHandlerBase 与内置测试 Handler 开发方案
 
-> **日期**: 2026-10-15 | **扩展**: Federation（联邦互联连接层） | **关联**: ADR-Federation-外部身份联邦与密封票据适配（E3 事件回复契约）、TrustCenter.Abstractions（ISsoChannel/IAccessCodeService）
-> **状态**: ✅ **Oracle 评审 APPROVE WITH CONDITIONS（2026-10-15）——2 P0 + 2 P1 + 3 P2 全部吸收，修复后实施**
+> **日期**: 2026-10-15 | **扩展**: Federation（联邦互联连接层） | **关联**: ADR-Federation-外部身份联邦与密封票据适配（E3 事件回复契约）、TrustCenter.Abstractions（ISsoChannel/ISealedTicketService/IAuthorizationCodeService）
+> **状态**: ✅ **Oracle 评审 APPROVE WITH CONDITIONS（2026-10-15）——2 P0 + 2 P1 + 3 P2 全部吸收，修复后实施**；**2026-10-16 v0.8.1 修订**（用户裁定：测试端点/ticket 命名联动 + BaseUrl 空 → 相对路径 + 平台段/通道段选区——见 §八 变更记录）
 
 ---
 
 ## 一、目的与目标
 
-本方案为 **Federation 事件回复链路**（外部身份联邦 E3——微信未认证号事件推送 → handler 签 accesscode → 图文回复 → 用户点击兑换）补齐**开发期测试能力**与**业务 handler 开发高内聚设施**：
+本方案为 **Federation 事件回复链路**（外部身份联邦 E3——微信未认证号事件推送 → handler 签密封票据 → 图文回复 → 用户点击兑换）补齐**开发期测试能力**与**业务 handler 开发高内聚设施**：
 
 1. **内置测试 handler**（`TestEventReplyHandler`）——Federation 默认注册，开发期零配置即可完成微信接入对接测试（事件推送 → 图文回复 → 点击 → 测试端点兑换 → 显示载荷，全链路闭环）。
-2. **测试端点联动**——内置 `GET {prefix}/test/accesscode/{code}` 测试端点（已有实现，`TestAccessCodeEndpointEnabled` 默认关）**只配合测试 handler 使用**：消费方接入业务 handler 后关闭（避免生产暴露）。
-3. **`EventReplyHandlerBase` 高内聚基类**——业务 handler 开发时，"经 `IAccessCodeService` 签 accesscode → 构造图文（news）链接"操作**内置在基类**（模板方法 + 受保护方法），子类只需实现业务规则（检查 openid/uid → 返回载荷或 null），减少样板代码、提高可维护性。
+2. **测试端点联动**——内置 `GET {prefix}/{platformId}/test/{channelId}/{ticket}` 测试端点（`TestTicketEndpointEnabled` 默认关，v0.8.1 起沿用正常端点风格：平台段 + 通道段 + ticket 段，选区经 `ResolveChannelAsync` 校验）**只配合测试 handler 使用**：消费方接入业务 handler 后关闭（避免生产暴露）。
+3. **`EventReplyHandlerBase` 高内聚基类**——业务 handler 开发时，"经 `ISealedTicketService<FederatedIdentity>` 签密封票据 → 构造图文（news）链接"操作**内置在基类**（模板方法 + 受保护方法），子类只需实现业务规则（检查 openid/uid → 返回载荷或 null），减少样板代码、提高可维护性。
 
-**读者 3 句话理解目标状态**：Federation 包内有一个默认注册的测试 handler（发图文带 accesscode 链接）+ 一个配套测试端点（点开即兑换显示）；业务方开发自己的 handler 时继承基类只写业务规则；测试设施一旦被业务 handler 替换即整体关闭。
+**读者 3 句话理解目标状态**：Federation 包内有一个默认注册的测试 handler（发图文带 ticket 链接）+ 一个配套测试端点（点开即兑换显示）；业务方开发自己的 handler 时继承基类只写业务规则；测试设施一旦被业务 handler 替换即整体关闭。
 
 ---
 
@@ -22,8 +22,8 @@
 ### 2.1 现象
 
 - **开发期微信接入无内置验证手段**：当前 `IEventReplyHandler` 是裸接口（`HandleAsync` 单方法），Federation 默认**不注册任何 handler**（`FederationExtensionInitializer` 注释明示"事件回复是业务决策，归消费方"）。消费方要验证微信事件链路，必须**先写一个业务 handler 才能测通**——无法先验证"微信→Federation→回复"基础连通性。
-- **业务 handler 样板代码多**：签 accesscode（`IAccessCodeService.IssueAsync`）+ 构造图文链接（`EventReplyNewsArticle` + URL 拼接）+ 组装 `EventReplyResult`——每个业务 handler 重复同一套逻辑，易错且难维护。
-- **测试端点裸暴露风险**：`TestAccessCodeEndpointEnabled`（默认关）是独立开关，无"与测试 handler 生命周期绑定"语义——若消费方忘关端点而接了业务 handler，测试端点仍在生产暴露。
+- **业务 handler 样板代码多**：签密封票据（`ISealedTicketService<FederatedIdentity>.IssueAsync`）+ 构造图文链接（`EventReplyNewsArticle` + URL 拼接）+ 组装 `EventReplyResult`——每个业务 handler 重复同一套逻辑，易错且难维护。
+- **测试端点裸暴露风险**：`TestTicketEndpointEnabled`（默认关）是独立开关，无"与测试 handler 生命周期绑定"语义——若消费方忘关端点而接了业务 handler，测试端点仍在生产暴露。
 
 ### 2.2 触发场景
 
@@ -48,7 +48,7 @@
 ```csharp
 /// <summary>
 /// 事件回复 handler 基类（外部身份联邦 E3 高内聚设施）——模板方法封装：
-/// "经 IAccessCodeService 签 accesscode → 构造图文（news）链接（URL 指测试端点）"。
+/// "经 ISealedTicketService<FederatedIdentity> 签密封票据 → 构造图文（news）链接（URL 指测试端点）"。
 /// 子类只需实现 <see cref="BuildReplyAsync"/>（业务规则：检查 context → 返回载荷或 null）。
 /// </summary>
 public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHandler
@@ -56,18 +56,22 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     // ChannelType 由子类提供（wechat_event 等——编排按此匹配）
     public abstract string ChannelType { get; }
 
-    protected EventReplyHandlerBase(IDomainUser user) : base(user) { }
+    protected EventReplyHandlerBase(IDomainUser user, IOptions<FederationEventReplyOptions>? options = null) : base(user) { }
 
-    /// <summary>模板方法：子类业务载荷 → 签 accesscode → 图文链接回复（IEventReplyHandler.HandleAsync）。</summary>
+    /// <summary>模板方法：子类业务载荷 → 签密封票据 → 图文链接回复（IEventReplyHandler.HandleAsync）。</summary>
     public async Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
     {
         var payload = await BuildReplyAsync(context, ct);   // 子类业务规则；null = 不处理
         if (payload is null) return null;
 
-        // 高内聚核心：签 accesscode（载荷 JSON）→ 图文链接（URL = 测试端点）
-        var code = await User.Use<IAccessCodeService>()
-            .IssueAsync(payload.PayloadJson, payload.Ttl, payload.ExpectedClaimant, ct);
-        var url = BuildTestAccessCodeUrl(code.Code);        // 见 3.3
+        // 高内聚核心：签密封票据（FederatedIdentity 载荷 JSON → AES-GCM 落库 + ExpectedClaimant CAS）
+        var identity = JsonSerializer.Deserialize<FederatedIdentity>(payload.PayloadJson);
+        if (identity is null) return null;
+        var channelCfg = await User.Use<IChannelRegistry>().GetByAliasOrIdAsync(identity.ChannelId, ct);   // 反查平台段
+        if (channelCfg is null) return null;                                                                // 查不到 → 不回复
+        var issue = await User.Use<ISealedTicketService<FederatedIdentity>>()
+            .IssueAsync(identity, payload.Ttl, new SealedTicketOptions(ExpectedClaimant: payload.ExpectedClaimant), ct);
+        var url = BuildTestTicketUrl(issue.Ticket, channelCfg.PlatformType, identity.ChannelId);            // 见 3.3
         return new EventReplyResult(
             Content: string.Empty, ContentType: "text/xml",
             NewsArticles: [new EventReplyNewsArticle(payload.Title, payload.Description, url, payload.PicUrl)]);
@@ -76,8 +80,8 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <summary>子类实现业务规则——返回载荷（非 null = 回复图文）或 null（不处理）。</summary>
     protected abstract Task<EventReplyPayload?> BuildReplyAsync(SsoChannelEventContext context, CancellationToken ct);
 
-    /// <summary>构造测试端点 URL（{BaseUrl}/{RoutePrefix}/test/accesscode/{code}——与 FederationWebExtension 端点一致）。</summary>
-    protected string BuildTestAccessCodeUrl(string code) { ... }
+    /// <summary>构造测试端点 URL（{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——与 FederationWebExtension 端点一致；BaseUrl 空 → 相对路径）。</summary>
+    protected string BuildTestTicketUrl(string ticket, string platformId, string channelId) { ... }
 
     /// <summary>子类载荷 DTO（Title/Description/PayloadJson/Ttl/ExpectedClaimant/PicUrl）。</summary>
     protected sealed record EventReplyPayload(
@@ -88,8 +92,9 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 
 **要点**：
 - 继承 `DomainServiceBase`（对齐 ADR90 正确路线——`IDomainUser` 经基类 `User`，不注册 DI）；`IEventReplyHandler : IDomainService` 接口满足（基类派生）。
-- `User.Use<IAccessCodeService>()` 帧内懒加载（对齐 DI004——禁构造注入）。
-- 签名 accesscode 用 `IssueAsync(payloadJson, ttl, expectedClaimant)` 重载（安全数据投递——载荷 JSON 落库加密，expectedClaimant 进原子 CAS）。
+- `User.Use<ISealedTicketService<FederatedIdentity>>()` 帧内懒加载（对齐 DI004——禁构造注入）。
+- 签密封票据用 `ISealedTicketService<T>.IssueAsync(payload, ttl, options)`（面① ADR109 D4——载荷 JSON 落库加密，expectedClaimant 进原子 CAS）。
+- 图文链接平台段经 `IChannelRegistry.GetByAliasOrIdAsync(identity.ChannelId)` 反查 `PlatformType`——v0.8.1 用户裁定；查不到 → 不回复（对齐"无法构造有效图文链接则不回复"语义）。
 - `HandleAsync` 模板方法固定"签票→组图文"；子类只写 `BuildReplyAsync`（业务规则）。
 
 #### ② `TestEventReplyHandler.cs`（内置测试 handler）
@@ -97,19 +102,19 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 ```csharp
 /// <summary>
 /// 内置测试 handler（开发期对接测试用）——受开关 TestEventReplyHandlerEnabled（默认 false）显式启用。
-/// 收到事件（微信未认证号推送）→ 载荷 = FederatedIdentity（openid/uid 填充）→ 签 accesscode → 图文链接回复。
+/// 收到事件（微信未认证号推送）→ 载荷 = FederatedIdentity（openid/uid 填充）→ 签密封票据 → 图文链接回复。
 /// 消费方接入业务 handler 后保持测试开关关闭（测试设施整体不启用）。
 /// </summary>
 public sealed class TestEventReplyHandler : EventReplyHandlerBase
 {
     public override string ChannelType => "wechat_event";   // 仅事件通道
 
-    protected override async Task<EventReplyPayload?> BuildReplyAsync(
+    protected override Task<EventReplyPayload?> BuildReplyAsync(
         SsoChannelEventContext context, CancellationToken ct)
     {
-        // 测试端点 BaseUrl 未配置 → 无法拼图文链接 → 不回复（返回 null 不拦截业务 handler）
-        if (string.IsNullOrWhiteSpace(BaseUrl))
-            return null;
+        // 开关关闭（默认 false）→ 不回复不拦截（测试设施整体不启用，业务 handler 正常流转）
+        if (!TestEventReplyHandlerEnabled)
+            return Task.FromResult<EventReplyPayload?>(null);
 
         // 载荷 = FederatedIdentity 兼容 JSON（P0-2：测试端点 RedeemAsync<FederatedIdentity> 反序列化）
         var openId = context.Parameters.GetValueOrDefault("external_user_id");
@@ -118,9 +123,10 @@ public sealed class TestEventReplyHandler : EventReplyHandlerBase
         var payload = new FederatedIdentity(
             UId: uid ?? openId ?? "", ChannelId: channelId ?? "", ExternalUserId: openId ?? "", ChannelType: "wechat_event");
         var payloadJson = JsonSerializer.Serialize(payload);
-        return new EventReplyPayload(
-            Title: "微信接入测试", Description: $"openid={openId} uid={uid}——点击验证 accesscode 兑换",
-            PayloadJson: payloadJson, Ttl: TimeSpan.FromMinutes(5), ExpectedClaimant: null);  // P0-1：可转让（测试端点 Redeem claimant=null）
+        return Task.FromResult<EventReplyPayload?>(
+            new EventReplyPayload(
+                Title: "微信接入测试", Description: $"openid={openId} uid={uid}——点击验证 ticket 兑换",
+                PayloadJson: payloadJson, Ttl: TimeSpan.FromMinutes(5), ExpectedClaimant: null));  // P0-1：可转让（测试端点 Redeem claimant=null）
     }
 }
 ```
@@ -128,8 +134,8 @@ public sealed class TestEventReplyHandler : EventReplyHandlerBase
 **要点**：
 - `ChannelType = "wechat_event"`——只匹配事件通道（微信未认证号），不影响 OAuth 通道。
 - 载荷 = `FederatedIdentity` 序列化（P0-2 修复——测试端点 `RedeemAsync<FederatedIdentity>` 反序列化属性对齐：`UId`/`ChannelId`/`ExternalUserId`/`ChannelType`）。
-- `ExpectedClaimant = null`（P0-1 修复——测试端点 `RedeemAsync(code, claimant: null)` 与 non-null `ExpectedClaimant` 不匹配必致 `CLAIMANT_MISMATCH`；可转让语义由 accesscode 自身高熵随机码保护）。
-- `BaseUrl` 空 → 返回 null（P1-2/P2-1 修复——不签无意义 accesscode、不拦截业务 handler）。
+- `ExpectedClaimant = null`（P0-1 修复——测试端点 `RedeemAsync(code, context: null)` 与 non-null `ExpectedClaimant` 不匹配必致 `CLAIMANT_MISMATCH`；可转让语义由密封票据自身高熵随机码保护）。
+- `BaseUrl` 空 → 相对路径图文链接（v0.8.1 用户裁定——默认指向本服务同源，微信可点击；不再返回 null）。
 
 #### ③ `FederationEventReplyOptions.cs`（领域配置）
 
@@ -142,8 +148,8 @@ public class FederationEventReplyOptions
     /// <summary>内置测试 handler 注册开关（默认 false——P1-1 fail-safe：显式开启开发期测试；消费方接入业务 handler 后保持关闭）。</summary>
     public bool TestEventReplyHandlerEnabled { get; set; } = false;
 
-    /// <summary>测试端点 URL 基址（图文链接拼接用——消费方部署域名；空 = 测试 handler 不回复图文（返回 null）。</summary>
-    public string? TestAccessCodeEndpointBaseUrl { get; set; }
+    /// <summary>测试端点 URL 基址（图文链接拼接用——消费方部署域名；空 = 相对路径 /{RoutePrefix}/.../test/... 默认指向本服务同源）。</summary>
+    public string? TestTicketEndpointBaseUrl { get; set; }
 
     /// <summary>测试端点 RoutePrefix 对齐（默认 /feberation——与 FederationEndpointOptions.RoutePrefix 一致）。</summary>
     public string RoutePrefix { get; set; } = "/feberation";
@@ -166,19 +172,20 @@ if (services.GetOptions<FederationEventReplyOptions>().TestEventReplyHandlerEnab
 
 ### 3.3 测试端点 URL 拼接
 
-`BuildTestAccessCodeUrl` 实现：
+`BuildTestTicketUrl` 实现：
 ```
-{TestAccessCodeEndpointBaseUrl}/{RoutePrefix}/test/accesscode/{code}
+{TestTicketEndpointBaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}
 ```
-- `TestAccessCodeEndpointBaseUrl`（如 `https://api.example.com`）+ `RoutePrefix`（默认 `/feberation`）→ 与 `FederationWebExtension` 的 `MapGet($"{prefix}/test/accesscode/{{code}}")` 端点路径一致。
-- **BaseUrl 为空**（P1-2/P2-1）→ `BuildReplyAsync` 返回 null（不签 accesscode、不回复图文、不拦截业务 handler）——fail-safe：配置缺失时测试设施静默退出而非产出死链/空签。
+- `TestTicketEndpointBaseUrl`（如 `https://api.example.com`）+ `RoutePrefix`（默认 `/feberation`）+ `platformId`（经 registry 从 identity.ChannelId 反查 `PlatformType`）+ `channelId`（identity.ChannelId）→ 与 `FederationWebExtension` 的 `MapGet($"{prefix}/{{platformId}}/test/{{channelId}}/{{ticket}}")` 端点路径一致（v0.8.1 用户裁定：对齐正常端点风格——平台段 + 通道段 + ticket 段）。
+- **BaseUrl 为空**（v0.8.1 用户裁定——默认测试 handler 应默认指向本服务）→ 相对路径 `/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}`（以 / 开头，默认指向本服务同源——微信可点击）；不再返回 null（原 P1-2/P2-1"空 → null"语义反转）。
+- **反查失败**：载荷 `ChannelId` 不在 registry（无法反查 `PlatformType`——无法构造有效图文链接）→ 不签票据不回复（返回 null，不拦截业务 handler）。
 
 ### 3.4 与测试端点的联动语义（"换 handler 即关"）
 
 | 组件 | 开关 | 默认 | 生命周期 |
 |------|------|------|---------|
 | 内置测试 handler | `TKWF:Federation:EventReply:TestEventReplyHandlerEnabled` | **false**（P1-1 fail-safe——显式开启） | 开发期测试开 true；接入业务 handler 保持 false |
-| 测试端点 | `TKWF:Federation:Web:TestAccessCodeEndpointEnabled` | **false**（显式开启） | 开发期测试开 true；接入业务 handler 保持 false |
+| 测试端点 | `TKWF:Federation:Web:TestTicketEndpointEnabled` | **false**（显式开启） | 开发期测试开 true；接入业务 handler 保持 false |
 
 **联动原则**：测试端点**只配合测试 handler**——开发期验证时同时开两个开关；接入业务 handler 时**两个都关**（测试 handler 关 = 测试链路不再回复；测试端点关 = 生产无暴露）。文档明确写入使用指南（见 §五），并在 `FederationEventReplyOptions`/`FederationEndpointOptions` 注释互相引用。
 
@@ -201,15 +208,15 @@ if (services.GetOptions<FederationEventReplyOptions>().TestEventReplyHandlerEnab
 ### 5.1 使用指南更新（`docs/Federation/联邦互联-使用指南.md`）
 
 新增 **"微信事件链路测试设施"** 小节：
-- 开发期测试流程：装配 Federation + 平台库 → 开 `TestEventReplyHandlerEnabled=true` + `TestAccessCodeEndpointEnabled=true` + 配 `TestAccessCodeEndpointBaseUrl` → 微信后台配置事件推送 URL → 发消息触发 → 收到图文链接 → 点击 → 测试端点显示载荷 JSON（openid/uid）。
-- **业务 handler 替换**：开发 `XxxEventReplyHandler : EventReplyHandlerBase`（继承基类，只写 `BuildReplyAsync` 业务规则）→ `TryAddEnumerableConstructible<IEventReplyHandler, XxxEventReplyHandler>` 注册 → **同时关两个测试开关**（`TestEventReplyHandlerEnabled=false` + `TestAccessCodeEndpointEnabled=false`）。
+- 开发期测试流程：装配 Federation + 平台库 → 开 `TestEventReplyHandlerEnabled=true` + `TestTicketEndpointEnabled=true`（+ 可选配 `TestTicketEndpointBaseUrl` 部署域名；空 = 相对路径默认本服务）→ 微信后台配置事件推送 URL → 发消息触发 → 收到图文链接 → 点击 → 测试端点显示载荷 JSON（openid/uid/channel_id）。
+- **业务 handler 替换**：开发 `XxxEventReplyHandler : EventReplyHandlerBase`（继承基类，只写 `BuildReplyAsync` 业务规则）→ `TryAddEnumerableConstructible<IEventReplyHandler, XxxEventReplyHandler>` 注册 → **同时关两个测试开关**（`TestEventReplyHandlerEnabled=false` + `TestTicketEndpointEnabled=false`）。
 - 基类使用示例（继承 + 业务规则 10 行内）。
 
 ### 5.2 测试计划（`_Tests/Extension.Federation.Tests/` 新增）
 
 | 测试 | 覆盖 |
 |------|------|
-| `EventReplyHandlerBaseTests`：模板方法签票→图文 | 子类返回载荷 → `HandleAsync` 返回 `EventReplyResult`（NewsArticles 非空 + URL 含 `/test/accesscode/{code}` + 载荷 JSON 正确）+ `IAccessCodeService.IssueAsync` 被调（fake 断言） |
+| `EventReplyHandlerBaseTests`：模板方法签票→图文 | 子类返回载荷 → `HandleAsync` 返回 `EventReplyResult`（NewsArticles 非空 + URL 含 `/{platformId}/test/{channelId}/{ticket}` + 载荷 JSON 正确）+ `ISealedTicketService<FederatedIdentity>.IssueAsync` 被调（fake 断言）；platformId 经 registry 反查 |
 | `EventReplyHandlerBaseTests`：null 透传 | 子类返回 null → `HandleAsync` 返回 null（不处理，first-non-null-wins 语义） |
 | `TestEventReplyHandlerTests`：业务规则 | `ChannelType == "wechat_event"`；`BuildReplyAsync` 载荷含 openid/uid；ExpectedClaimant=openId |
 | `FederationExtensionInitializerTests`：开关注册 | `TestEventReplyHandlerEnabled=true` → DI 含 `TestEventReplyHandler`；`false` → 不含（集合空） |
@@ -219,7 +226,7 @@ if (services.GetOptions<FederationEventReplyOptions>().TestEventReplyHandlerEnab
 ## 六、实施边界与依赖
 
 - **不触碰并行任务文件**：`EventOrchestrator.cs`/`FederationEndpointOptions.cs`/`FederationWebExtension.cs`/`ISsoChannel.cs`（TrustCenter.Abstractions）/`WeChatEventChannel.cs`/`WeChatEventCrypto.cs`/`WeChatEventChannelTests.cs`（微信图文并行任务工作区）——本方案仅**新增文件** + 修改 `FederationExtensionInitializer.cs`（非并行任务文件）。
-- **依赖契约**：`IAccessCodeService`（TrustCenter.Abstractions）`IssueAsync(payloadJson, ttl, expectedClaimant)` 重载（已存在）；`SsoChannelEventContext.Parameters`（external_user_id/uid 富化——已存在）；`EventReplyResult.NewsArticles`（V0.1.1 图文扩展——并行任务已实现）；`FederatedIdentity`（主框架 `TKW.Framework.Domain`，已存在——`UId`/`ChannelId`/`ExternalUserId`/`ChannelType` 位置参数 record）。
+- **依赖契约**：`ISealedTicketService<T>`（主框架 `TKW.Framework.Domain.Ticket`）`IssueAsync(payload, ttl, options)` + `RedeemAsync(ticket, context)`（面① ADR109 D4——v4.10.77 TicketRedeemContext CAS）；`IChannelRegistry`（Federation——channelId → PlatformType 反查）；`SsoChannelEventContext.Parameters`（external_user_id/uid 富化——已存在）；`EventReplyResult.NewsArticles`（V0.1.1 图文扩展——并行任务已实现）；`FederatedIdentity`（主框架 `TKW.Framework.Domain`，已存在——`UId`/`ChannelId`/`ExternalUserId`/`ChannelType` 位置参数 record）。
 - **⚠️ 并行任务依赖（P2-3 显式声明）**：本方案测试 handler 可达性依赖并行任务 `WeChatEventChannel.HandleEventAsync` 对**非 URL 验证事件返回 null**（委托 handler 迭代）。若并行任务维持"恒返回非 null"（EventOrchestrator 注释 L22-25 旧述），handler 迭代对 wechat_event 不可达、测试 handler 永不触发——需并行任务收尾时确认：业务事件（文本消息/关注等）返回 null、仅 URL 验证握手返回非 null（echostr 回显）。若不可达，需在 EventOrchestrator 增加显式 handler 委托分支（超出本方案范围，另立迭代）。
 - **无外部依赖变更**：纯 Federation 主包内新增（基类 + 测试 handler + Options），零 NuGet 变更。
 
@@ -243,3 +250,4 @@ if (services.GetOptions<FederationEventReplyOptions>().TestEventReplyHandlerEnab
 | 日期 | 版本 | 内容 |
 |------|------|------|
 | 2026-10-15 | — | 方案初稿 → Oracle APPROVE WITH CONDITIONS（2 P0 + 2 P1 + 3 P2 全部吸收，修订后实施） |
+| 2026-10-16 | v0.8.1 | **测试端点路径与 ticket 改名联动（用户裁定 4 点 + 删旧过渡）**：① 图文链接 BaseUrl 空 → 相对路径 `/feberation/…/test/…`（默认指向本服务同源，微信可点击）——原"空 = null"语义反转；② 端点路径对齐正常端点风格 `GET {prefix}/{platformId}/test/{channelId}/{ticket}`（event 改 test，含平台段 + 通道段 + ticket 段；原 `/test/accesscode/{code}` 废弃）；③ 测试端点返回 JSON 含 `channel_id`（取自签入载荷 `FederatedIdentity.ChannelId`，与选区分支无关）；④ AccessCode 命名全量改 ticket（承载面① `ISealedTicketService` 语义——路径段 + Options 键 `TestAccessCodeEndpointEnabled`→`TestTicketEndpointEnabled`/`TestAccessCodeEndpointBaseUrl`→`TestTicketEndpointBaseUrl`）；⑤ 附加：图文链接平台段经 `IChannelRegistry` 从 identity.ChannelId 反查 `PlatformType`（查不到 → 不回复）；URL 形态/路径/表同步更新 |

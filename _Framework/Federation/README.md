@@ -42,12 +42,12 @@
 | profile API | `ISsoProfileService`——server-to-server（scope 强制 + ILogger 审计 + 永不返回 openid/channel_id/phone） |
 | 依赖方向 | 平台库 → `TrustCenter.Abstractions` + `Federation`（装配）；Federation → `TrustCenter.Abstractions`（编排调签发）+ `AuthCenter.Abstractions`（桥接 + profile 消费）——单向无环 |
 
-> **端点数对齐（实际 13 注册，2026-10-15 核查）**：`FederationWebExtension.ConfigureEndpoints` 实际注册 **13 条**端点（`AllowAnonymous` 12 + 已认证 1）——平台集成面 6（login/event/oauth 各 1 + `channelId` 变体 3）+ 信任/委托面 4（jwks/authorize/start/trust/issue/identity/claim）+ **GET/POST event 双形态 2**（`GET {prefix}/{platformId}/event[/{channelId}]`）+ **test/accesscode 1**（`GET {prefix}/test/accesscode/{code}`）——较文档 10（6+4）多 3。`trust/issue` 无 `AllowAnonymous`（已认证——未认证 401，端点粒度精确判定）。
+> **端点数对齐（实际 14 注册，2026-10-16 v0.8.1 核查）**：`FederationWebExtension.ConfigureEndpoints` 实际注册 **14 条**端点（`AllowAnonymous` 13 + 已认证 1）——平台集成面 6（login/event/oauth 各 1 + `channelId` 变体 3）+ 信任/委托面 4（jwks/authorize/start/trust/issue/identity/claim）+ **GET/POST event 双形态 2**（`GET {prefix}/{platformId}/event[/{channelId}]`）+ **test 端点 2**（`GET {prefix}/{platformId}/test/{channelId}/{ticket}`——v0.8.1 对齐正常端点风格：平台段 + 通道段 + ticket 段，选区经 `ResolveChannelAsync` 校验；原 `/test/accesscode/{code}` 废弃删）。`trust/issue` 无 `AllowAnonymous`（已认证——未认证 401，端点粒度精确判定）。
 
 **组合矩阵**（消费方按需装配，4 档装配梯度——见使用指南 §一 组合矩阵）：
 - 只引 `TKWF.Ext.AuthCenter` = AuthCenter 内部认证（单应用登录）
 - **AuthCenter + TrustCenter = 信任中枢实例**（内部认证 + 跨应用 token2/accesscode，内网两层，无外连端点）
-- **+ TrustCenter.Abstractions 契约消费**（业务层直连信任契约——`IToken2Service`/`IAccessCodeService` 经 L2 间接层）
+- **+ TrustCenter.Abstractions 契约消费**（业务层直连信任契约——`IToken2Service`/面① `ISealedTicketService<T>`/面② `IAuthorizationCodeService` 经 L2 间接层）
 - **AuthCenter + TrustCenter + Federation + 平台库 = 认证中心完整形态**（内网两层 + 对外连接层 + 平台 IdP 接入）
 
 **不包含**：具体平台适配扩展（微信/QQ/Google/Apple/微软 channel 实现，独立立项 `TKWF.Federation.{平台}`，引目标 TrustCenter.Abstractions）；**信任内核**（token2/accesscode/应用注册 → `TKWF.Ext.TrustCenter`）；我方多实例互通（默认不做，iss 域隔离）。
@@ -66,7 +66,7 @@
 
 ```csharp
 using TKWF.Ext.Federation;
-using TKWF.Ext.TrustCenter;    // 信任契约命名空间（IToken2Service/IAccessCodeService/ISsoChannel——随内核迁出）
+using TKWF.Ext.TrustCenter;    // 信任契约命名空间（IToken2Service/ISsoChannel/IAuthorizationCodeService——随内核迁出；面① ISealedTicketService<T> 在主框架 Domain.Ticket）
 
 [TKWFEnabledExtension(typeof(TrustCenterExtensionInitializer<>))]   // 信任内核（token2/accesscode）
 [TKWFEnabledExtension(typeof(FederationExtensionInitializer<>))]    // 对外连接层（编排/端点/桥接）
@@ -177,19 +177,23 @@ token2 签发/验签契约（`IToken2Service`/`Token2IssueRequest`/`Token2Valida
   "iat": 1722240000, "exp": 1722240300, "jti": "<32B base64url>", "scope": "profile:basic" }
 ```
 
-## 四、accesscode 契约（授权码 + 安全数据投递——**已迁 TrustCenter，见其 README §四**）
+## 四、accesscode 契约（授权码 + 安全数据投递——**拆分命名 ADR109 D4 后已删，改两面契约**）
 
-accesscode 服务（`IAccessCodeService`/`AccessCodeIssueRequest`）随信任内核迁入 **`TKWF.Ext.TrustCenter`**（命名空间 `TKWF.Ext.TrustCenter`）。契约形态不变（联邦授权码 Issue/Consume + **安全数据投递增强** Payload/ExpectedClaimant/Issue/Peek/Redeem/Cleanup——方案 §5.5）。Federation 编排链（SsoLogin）经 `User.Use<IAccessCodeService>()` 调签发。**消费方 accesscode 相关类型引用改 `using TKWF.Ext.TrustCenter;`**。契约详情移师 `_Framework/TrustCenter/README.md` §四。
+> **⚠️ 2026-10-16 拆分命名（ADR109 D4）落地 + v0.8.1 删旧过渡（用户裁定）**：旧 `IAccessCodeService`/`AccessCodeIssueRequest`/`AccessCodeEntity`/`AccessCodeService` 已删除——accesscode 概念拆两面，消费方按语义选用：
+> - **面① 密封票据 + 安全数据投递**：`ISealedTicketService<T>`（主框架 `TKW.Framework.Domain.Ticket`）+ TrustCenter `SealedTicketService<T>` DB 后端（表 `TKWF_SealedTicket`）——`IssueAsync(payload, ttl, options)` / `RedeemAsync(ticket, context)` / `CleanupExpiredAsync`；Federation 事件链路与子应用委托面均消费此契约；配置键 `SealedTicketExpirationSeconds`/`SealedTicketRetentionDays`。
+> - **面② OAuth 授权码**：`IAuthorizationCodeService`（`TrustCenter.Abstractions`）+ `AuthorizationCodeService`（表 `TKWF_AuthorizationCode`）——`IssueAsync(request)` / `ConsumeAsync(code, verifier, ip)` / `CleanupExpiredAsync`（SSO 联邦流）；配置键 `AuthorizationCodeExpirationSeconds`/`AuthorizationCodeRetentionDays`。
+>
+> 契约详情移师 `_Framework/TrustCenter/README.md` §四。**消费方引用改 `using TKWF.Ext.TrustCenter;`（面②）/ `using TKW.Framework.Domain.Ticket;`（面①）**。子应用消费方委托面（`SsoSubAppBridge`）已迁面①密封票据（`ISealedTicketService<FederatedIdentity>`）——子应用协议 `code` 参数 = ticket。
 
-**表名变更（破坏性）**：`TKWF_SsoAccessCode` → **`TKWF_AccessCode`**（去 Sso 前缀——语义泛化为数据投递，方案 §5.8）。存量 DBA RENAME（若存量，方案 §六）。
+**表名变更（破坏性）**：`TKWF_SsoAccessCode` → **`TKWF_AccessCode`**（2026-10-09 剥离时改名）→ **2026-10-16 拆分后 `TKWF_SealedTicket`/`TKWF_AuthorizationCode` 双表**（旧 `TKWF_AccessCode` 不复存在）。存量 DBA 依消费方实际使用场景迁移（面①/面②取舍，若存量，方案 ADR109 D4）。
 
-**错误码**：`ACCESS_CODE_NOT_FOUND` / `TICKET_EXPIRED` / `TICKET_CONSUMED`（重放）/ `TICKET_STATE_MISMATCH`（PKCE）/ `CLAIMANT_MISMATCH`（核销人不符）/ `PAYLOAD_TOO_LARGE`。
+**错误码（面① 密封票据契约不泄露判因——`RedeemAsync` 失败返回 null）**：子应用 `ACCESS_CODE_NOT_FOUND`（兑现失败）/ `TICKET_STATE_MISMATCH`（PKCE——面②）等；测试端点 `TICKET_NOT_FOUND`（v0.8.1）。
 
 **与 AuthCenter `IOAuthTicketService` 边界**（并列不迁移）：既有 = 单应用票据（login/bind + PKCE + TTL 5min，服务认证中心内部"票据换令牌"）；accesscode = 联邦互联授权码 + 安全数据投递（channel_id + target_app_id + scope + Payload）——语义不同，各自独立（ADR-SSO 3.3 并存路径）。
 
 ## 五、安全边界
 
-- **数据访问红线合规**：全部实体 SG1 + `*EntityDataService` 委托（零 IFreeSql / 零 IEntityDAC 直注入）；Federation 经 Abstractions 契约消费信任内核（`IToken2Service`/`IAccessCodeService`）与认证内核（`ISsoAccountQueryService`），敏感字段不出契约包。
+- **数据访问红线合规**：全部实体 SG1 + `*EntityDataService` 委托（零 IFreeSql / 零 IEntityDAC 直注入）；Federation 经 Abstractions 契约消费信任内核（`IToken2Service`/面① `ISealedTicketService<T>`/面② `IAuthorizationCodeService`）与认证内核（`ISsoAccountQueryService`），敏感字段不出契约包。
 - **密钥安全**：信任内核（token2 EC 私钥 PEM / AccessCode AES-GCM）密钥归 **TrustCenter**（`TrustCenterOptions`）管理——生产缺密钥 fail-fast；连接层通道注册表（`SsoChannelRegistryEntity` AppSecret/ExtraJson）归 **Federation** keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Federation`——主框架常量已存在直接复用）。kid 轮换支持紧急换钥。
 - **防开放重定向**：`target_app_id → 注册精确 origin（scheme+host）` 白名单（TrustCenter `SsoClientService.IsOriginAllowedAsync`，Ordinal 精确匹配）；不接受自由 `redirect_uri` 参数。
 - **外部 IdP 桥接 fail-hard（P7）**：`IExternalIdpAuthenticator`（契约在 AuthCenter.Abstractions）实现注册于 Federation——未装配 Federation 时 AuthCenter `User.Use<IExternalIdpAuthenticator>()` 抛守卫（不静默降级）；桥接**委托平台库通道认证（协议单源非双实现）**。
@@ -206,6 +210,7 @@ accesscode 服务（`IAccessCodeService`/`AccessCodeIssueRequest`）随信任内
 
 | 版本 | 内容 |
 |------|------|
+| V0.8.1（2026-10-16） | **测试端点路径与 ticket 改名联动（用户裁定 4 点 + 删旧过渡）**：测试端点 `GET {prefix}/test/accesscode/{code}` → **`GET {prefix}/{platformId}/test/{channelId}/{ticket}`**（对齐正常端点风格——平台段 + 通道段 + ticket 段，选区经 `ResolveChannelAsync` 校验，防跨平台错配；原路径废弃）；`TestAccessCodeEndpointEnabled`/`TestAccessCodeEndpointBaseUrl` → `TestTicketEndpointEnabled`/`TestTicketEndpointBaseUrl`（承载面① `ISealedTicketService` ticket 语义）；`HandleTestAccessCode` → `HandleTestTicket`（返回 JSON 含 `channel_id`——取自签入载荷 `FederatedIdentity.ChannelId`，与选区分支无关；错误码 `TICKET_NOT_FOUND`）；图文链接 `BuildTestAccessCodeUrl` → `BuildTestTicketUrl(ticket, platformId, channelId)`——platformId 经 `IChannelRegistry` 从 identity.ChannelId 反查 `PlatformType`（查不到 → 不回复），BaseUrl 空 → 相对路径 `/feberation/…/test/…`（默认指向本服务同源，微信可点击；原"空 = null"语义反转）；TrustCenter 旧 `IAccessCodeService`/`AccessCodeEntity`/`AccessCodeService` 过渡保留全删（用户裁定：项目组已适配，零兼容层）；端点数对齐 14 注册 |
 | V0.7.0（2026-10-11） | **对外路由命名空间迭代（`/sso` → `/feberation` + 平台段，方案 `docs/Federation/对外路由命名空间-开发方案.md`）**：根前缀默认 `/feberation`（`FederationEndpointOptions.RoutePrefix` 可配保留）；平台集成面二级平台段 `{platformId}`（= `ChannelConfig.PlatformType` 开放注册表 `wechat/qq/dingtalk/wecom/alipay/oidc/google/microsoft`，Ordinal 校验防跨平台错配 → 统一 404 `CHANNEL_NOT_FOUND`）+ 三级端点组（login/oauth/event）+ 四级通道实例；信任/委托面根级不挂平台段（`jwks`/`authorize/start`/`trust/issue`/`identity/claim` 仅换前缀）；**B 守卫**（多活跃通道省略通道段 → 400 `CHANNEL_REQUIRED`，单活跃通道降级）；**event 缺陷修复**（channelType 按平台段权威推导 `{PlatformType}_event`——原 null 分支白名单排除 `*_event` 致通道不可达）；alias 全局解析 + 平台段额外校验层；`TKWF:Federation:Web` 端点开关全集收录（含子应用委托 4 开关 `Authorize/OauthCallback/TrustIssue/IdentityClaimEndpointEnabled`，承接 `子应用消费方接入-开发方案.md`——README 首次收录） |
 | V0.5.0（2026-10-09，**待发布**） | **三层架构重构（TrustCenter 剥离，连接层壳重定位，Phase 1-4）**：信任内核（token2/accesscode/应用注册/`ISsoChannel` 契约定义）迁出至 `TKWF.Ext.TrustCenter`（MinVerTagPrefix `TrustCenter/v`）；平台库引目标改 `TrustCenter.Abstractions`（包名保留 `TKWF.Federation.{平台}`）；**新建 `FederationWebExtension<TUserInfo>`**（T3 装配面——`POST /sso/login[ /{channelId}]`/`GET /sso/jwks`/`POST /sso/event/{channelId}` + `FederationEndpointOptions` `TKWF:Federation:Web` 配置分层）；编排面（`ISsoLogin`/`ISsoChannelFactory`）+ 多通道设施（`IChannelRegistry` 系列/`SsoChannelRegistryEntity`/`SsoChannelRegistryService`）**保留归本包**；**新建 `ExternalIdpAuthenticator : IExternalIdpAuthenticator`**（AuthCenter.Abstractions 契约——委托平台库通道认证非双实现，根因修复）；`FederationChannelRegistryOptions` `TKWF:Federation:ChannelRegistry` 独立承载通道注册表密钥；配置节拆分（签发配置迁 `TKWF:TrustCenter`）；破坏性变更段 §八；测试重划（Federation.Tests 连接层 + TrustCenter.Tests 信任内核）+ 全量回归 0 失败（Phase 1-4 累计 1913 用例） |
 | V0.4.0（2026-10-08/10） | **多通道联邦 Phase 2/3（DB 动态权威 + ChannelAlias 双键）**：`SsoChannelRegistryEntity`（`TKWF_SsoChannelRegistry`——AppSecret/ExtraJson AES-GCM 密文列）+ `DbChannelRegistry` + `CompositeChannelRegistry`（DB 命中优先 → 静态回退）+ `ISsoChannelRegistryService` 写入门面（Register/Update/Unregister）；`ChannelConfig.Alias` 双键 + `IChannelRegistry.GetByAliasOrIdAsync`（alias 精确匹配 → ChannelId）+ `SsoChannelRegistryEntity.ChannelAlias` 列；（阶段说明详见使用指南 §3.5b/§3.5c；tag Federation/v0.4.0 2026-10-10） |

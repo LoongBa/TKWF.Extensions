@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Authentication;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Domain.Ticket;
 using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
 using TKWF.Ext.TrustCenter;
@@ -14,22 +13,24 @@ using TKWF.Ext.TrustCenter;
 namespace TKWF.Ext.Federation.Tests;
 
 /// <summary>
-/// 子应用消费方桥接门面测试（2026-10-11——<see cref="SsoSubAppBridge"/> 真实门面 + Fake 依赖）——
+/// 子应用消费方桥接门面测试（2026-10-11——<see cref="SsoSubAppBridge"/> 真实门面 + Fake 依赖；
+/// 2026-10-16 拆分命名 ADR109 D4 适配——面① <see cref="ISealedTicketService{T}"/>）——
 /// <b>生产路径宿主</b>（真实 DI：Initializer <c>AddConstructibleService&lt;ISsoSubAppBridge, SsoSubAppBridge&gt;</c>
 /// 守卫工厂 + FreeSql SQLite + AddLogging）+ <see cref="TestHostBase.BindTestScope"/> +
 /// <c>DomainUser&lt;TestUserInfo&gt;.BindScope(provider)</c> + <c>User.Use&lt;ISsoSubAppBridge&gt;()</c>
 /// （AOP 路径：设 CurrentAopUser → GetRequiredService → 守卫工厂）。
 /// <para>Fake 依赖（<see cref="ISsoClientQueryService"/>/<see cref="ISsoChannelFactory"/>/<see cref="ISsoLogin"/>/
-/// <see cref="IAccessCodeService"/>）经普通 Scoped 注册（bridged 内 <c>User.Use&lt;接口&gt;()</c> AOP 解析）；
+/// <see cref="ISealedTicketService{T}"/>）经普通 Scoped 注册（bridged 内 <c>User.Use&lt;接口&gt;()</c> AOP 解析）；
 /// keyed <see cref="ISymmetricKeyProvider"/>（<see cref="SymmetricKeyProviderKeys.Federation"/>）用最小 Fake
 /// （GetKey 返回固定 32 字节——state 票据 HMAC-SHA256 只用密钥材料，Encrypt/Decrypt 未用抛 NotSupported）。</para>
 /// <para>用例映射：StartAsync（federated 成功——state 票据生成 + 通道 BuildAuthorizeUrlAsync 收到
 /// RedirectUri/State/Scope；非 federated → INVALID_MODE；app 未知/redirect 白名单 → ORIGIN_NOT_ALLOWED；
 /// 通道 null → CHANNEL_NOT_FOUND；channel BuildAuthorizeUrl null → AUTHORIZE_NOT_SUPPORTED）/ CompleteOAuthAsync
-/// （成功：state 验签 → ISsoLogin 认证 → accesscode issue expectedClaimant=app_id → 跳回 URL 含 code+sub_state；
-/// state 缺失 → STATE_INVALID；state 篡改 → 拒绝不跳回）/ IssueForPlatformUserAsync（成功 + app 未知拒）/
-/// ClaimAsync（成功：RedeemAsync 返回 payload；credential 失败 → AUTHENTICATION_FAILED 统一防枚举；
-/// RedeemAsync 抛 TICKET_CONSUMED → 判因透传）。</para>
+/// （成功：state 验签 → ISsoLogin 认证 → 密封票据 issue expectedClaimant=app_id + FederatedIdentity 载荷
+/// mode=federated → 跳回 URL 含 ticket+sub_state；state 缺失 → STATE_INVALID；state 篡改 → 拒绝不跳回）/
+/// IssueForPlatformUserAsync（成功：mode=direct + UId=platformUid；app 未知拒）/ ClaimAsync
+/// （成功：RedeemAsync 返回 FederatedIdentity → 解码身份载荷；credential 失败 → AUTHENTICATION_FAILED 统一防枚举；
+/// RedeemAsync 返回 null → ACCESS_CODE_NOT_FOUND 收敛）。</para>
 /// </summary>
 public sealed class SsoSubAppBridgeTests : TestHostBase
 {
@@ -40,7 +41,7 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
     private readonly FakeSsoClientQueryService _clients = new();
     private readonly FakeSsoChannelFactoryBridge _factory = new();
     private readonly FakeSsoLoginBridge _login = new();
-    private readonly FakeAccessCodeService _codes = new();
+    private readonly FakeSealedTicketService _codes = new();
 
     protected override TestUserInfo CreateUser() => new("bridge-tester", "桥接门面测试用户");
 
@@ -56,7 +57,7 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
         services.AddScoped<ISsoClientQueryService>(_ => _clients);
         services.AddScoped<ISsoChannelFactory>(_ => _factory);
         services.AddScoped<ISsoLogin>(_ => _login);
-        services.AddScoped<IAccessCodeService>(_ => _codes);
+        services.AddScoped<ISealedTicketService<FederatedIdentity>>(_ => _codes);
     }
 
     private AuthorizeStartRequest StartReq(string? mode = "federated", string? channelId = "wx-1",
@@ -191,19 +192,18 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
         Assert.True(result.Success);
         Assert.Equal("sub-st-original", result.SubState);        // 子应用原 state 回传（验签解出）
         Assert.NotNull(result.RedirectUrl);
-        Assert.Contains("code=ac-1", result.RedirectUrl);        // accesscode 跳回参数
+        Assert.Contains("code=ac-1", result.RedirectUrl);        // 密封票据跳回参数（Fake ticket="ac-1"）
         Assert.Contains("state=sub-st-original", result.RedirectUrl);
         // ISsoLogin 收到通道 id + 认证参数
         Assert.True(_login.Invoked);
         Assert.Equal("wx-1", _login.LastChannelId);
         Assert.Equal("auth-code-1", _login.LastContext!.Parameters["code"]);
-        // accesscode issue：expectedClaimant=app_id（防他应用冒领）+ payload=federated 身份
+        // 密封票据 issue：expectedClaimant=app_id（防他应用冒领）+ FederatedIdentity 载荷（mode=federated）
         Assert.Equal(TestAppId, _codes.LastClaimant);
-        Assert.NotNull(_codes.LastPayloadJson);
-        using var doc = JsonDocument.Parse(_codes.LastPayloadJson!);
-        Assert.Equal("federated", doc.RootElement.GetProperty("Mode").GetString());
-        Assert.Equal("wx-1", doc.RootElement.GetProperty("ChannelId").GetString());
-        Assert.Equal("ext-100", doc.RootElement.GetProperty("ExternalUserId").GetString());
+        Assert.NotNull(_codes.LastIssuedIdentity);
+        Assert.Equal("federated", _codes.LastIssuedIdentity!.Extensions!["mode"]);
+        Assert.Equal("wx-1", _codes.LastIssuedIdentity.ChannelId);
+        Assert.Equal("ext-100", _codes.LastIssuedIdentity.ExternalUserId);
     }
 
     /// <summary>(9a)：state 缺失 → STATE_INVALID（防 state 伪造/缺失——不触达认证）。</summary>
@@ -268,10 +268,9 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
         Assert.Contains("code=ac-1", result.RedirectUrl);
         Assert.Contains("state=st-1", result.RedirectUrl);
         Assert.Equal(TestAppId, _codes.LastClaimant);
-        Assert.NotNull(_codes.LastPayloadJson);
-        using var doc = JsonDocument.Parse(_codes.LastPayloadJson!);
-        Assert.Equal("direct", doc.RootElement.GetProperty("Mode").GetString());
-        Assert.Equal("u_platform_1", doc.RootElement.GetProperty("PlatformUid").GetString());
+        Assert.NotNull(_codes.LastIssuedIdentity);
+        Assert.Equal("direct", _codes.LastIssuedIdentity!.Extensions!["mode"]);
+        Assert.Equal("u_platform_1", _codes.LastIssuedIdentity.UId);
     }
 
     /// <summary>trust/issue：app 未知 → ORIGIN_NOT_ALLOWED（缺失统一防枚举）。</summary>
@@ -299,7 +298,10 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
     {
         using var _ = this;
         var (_, user) = BindTestScope();
-        _codes.RedeemPayloadJson = """{"Mode":"federated","ChannelId":"wx-1","ExternalUserId":"ext-100","PlatformUid":null}""";
+        _codes.RedeemIdentity = new FederatedIdentity(
+            UId: string.Empty, ChannelId: "wx-1", ExternalUserId: "ext-100",
+            ChannelType: null, AuthLevel: 2,
+            Extensions: new Dictionary<string, string?> { ["mode"] = "federated" });
         var bridge = user.Use<ISsoSubAppBridge>();
 
         var result = await bridge.ClaimAsync(new IdentityClaimRequest(TestAppId, "secret-ok", "ac-1"), CancellationToken.None);
@@ -310,7 +312,7 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
         Assert.Equal("ext-100", result.ExternalUserId);
         Assert.Null(result.PlatformUid);
         Assert.Equal("ac-1", _codes.LastRedeemCode);
-        Assert.Equal(TestAppId, _codes.LastRedeemClaimant);   // expectedClaimant=app_id 原子 CAS 条件
+        Assert.Equal(TestAppId, _codes.LastRedeemClaimant);   // ExpectedClaimant=app_id 原子 CAS 条件
     }
 
     /// <summary>(10b)：credential 鉴权失败 → AUTHENTICATION_FAILED（统一防 app_id 枚举）。</summary>
@@ -329,19 +331,19 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
         Assert.False(_codes.Redeemed);   // 鉴权前置——未触达 Redeem
     }
 
-    /// <summary>(10c)：RedeemAsync 抛 TICKET_CONSUMED（重放——原子 CAS 已销毁）→ 判因透传（非统一 AUTHENTICATION_FAILED）。</summary>
+    /// <summary>(10c)：RedeemAsync 返回 null（已消费/过期/核销人不符——密封票据契约语义不泄露判因）→ ACCESS_CODE_NOT_FOUND 收敛。</summary>
     [Fact]
-    public async Task ClaimAsync_RedeemConsumed_TicketConsumedPassed()
+    public async Task ClaimAsync_RedeemNull_AccessCodeNotFound()
     {
         using var _ = this;
         var (_, user) = BindTestScope();
-        _codes.RedeemException = new AuthenticationException("TICKET_CONSUMED");   // 真实 AccessCodeService 判因异常
+        _codes.RedeemIdentity = null;   // 密封票据契约：失败/已消费返回 null（不向票据消费方泄露失败原因码）
         var bridge = user.Use<ISsoSubAppBridge>();
 
         var result = await bridge.ClaimAsync(new IdentityClaimRequest(TestAppId, "secret-ok", "ac-consumed"), CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Equal("TICKET_CONSUMED", result.FailReason);   // 判因透传
+        Assert.Equal("ACCESS_CODE_NOT_FOUND", result.FailReason);   // 统一收敛（null 语义）
         Assert.Equal("ac-consumed", _codes.LastRedeemCode);
     }
 
@@ -420,47 +422,35 @@ public sealed class SsoSubAppBridgeTests : TestHostBase
         }
     }
 
-    /// <summary>Fake accesscode 服务（IAccessCodeService）——记录 IssueAsync(payload,ttl,claimant)/RedeemAsync(code,claimant)
-    /// + 可配置 payload/异常。</summary>
-    private sealed class FakeAccessCodeService : IAccessCodeService
+    /// <summary>Fake 密封票据服务（ISealedTicketService&lt;FederatedIdentity&gt;——面①）——记录
+    /// IssueAsync(payload, options)/RedeemAsync(ticket, context) + 可配置 RedeemIdentity（null = 失败收敛）。</summary>
+    private sealed class FakeSealedTicketService : ISealedTicketService<FederatedIdentity>
     {
-        public string? LastPayloadJson { get; private set; }
+        public FederatedIdentity? LastIssuedIdentity { get; private set; }
         public string? LastClaimant { get; private set; }
         public string? LastRedeemCode { get; private set; }
         public string? LastRedeemClaimant { get; private set; }
         public bool Issued { get; private set; }
         public bool Redeemed { get; private set; }
-        public string? RedeemPayloadJson { get; set; }
-        public Exception? RedeemException { get; set; }
+        public FederatedIdentity? RedeemIdentity { get; set; }
 
-        public Task<AccessCodeIssueResult> IssueAsync(AccessCodeIssueRequest request, CancellationToken ct = default)
-            => throw new NotSupportedException("桥接门面测试只用安全数据投递重载");
-
-        public Task<AccessCodeConsumeResult> ConsumeAsync(string code, string? codeVerifier = null, string? ipAddress = null, CancellationToken ct = default)
-            => throw new NotSupportedException();
-
-        public Task<AccessCodeIssueResult> IssueAsync(string? payloadJson, TimeSpan ttl, string? expectedClaimant, CancellationToken ct = default)
+        public Task<SealedTicketResult> IssueAsync(FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
         {
             Issued = true;
-            LastPayloadJson = payloadJson;
-            LastClaimant = expectedClaimant;
-            return Task.FromResult(new AccessCodeIssueResult("ac-1", 120));
+            LastIssuedIdentity = payload;
+            LastClaimant = options?.ExpectedClaimant;
+            return Task.FromResult(new SealedTicketResult("ac-1", 120));
         }
 
-        public Task<T?> PeekAsync<T>(string code, CancellationToken ct = default)
-            => throw new NotSupportedException();
-
-        public Task<T?> RedeemAsync<T>(string code, string? claimant, CancellationToken ct = default)
+        public Task<FederatedIdentity?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
         {
             Redeemed = true;
-            LastRedeemCode = code;
-            LastRedeemClaimant = claimant;
-            if (RedeemException is not null) throw RedeemException;
-            if (RedeemPayloadJson is null) return Task.FromResult<T?>(default);
-            return Task.FromResult(JsonSerializer.Deserialize<T>(RedeemPayloadJson));
+            LastRedeemCode = ticket;
+            LastRedeemClaimant = context?.ExpectedClaimant;
+            return Task.FromResult(RedeemIdentity);
         }
 
-        public Task<int> CleanupExpiredAsync(int? retentionDays = null, CancellationToken ct = default)
+        public Task<int> CleanupExpiredAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
     }
 

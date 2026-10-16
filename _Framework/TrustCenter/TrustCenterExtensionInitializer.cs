@@ -69,10 +69,12 @@ namespace TKWF.Ext.TrustCenter;
         services.AddConstructibleService<IToken2Service, Token2Service>();
         services.AddConstructibleService<IAccessCodeService, AccessCodeService>();
         services.AddConstructibleService<ISsoClientService, SsoClientService>();
-        // E2（外部身份联邦与会话绑定守卫）：同一实现类注册 ISealedTicketService<FederatedIdentity> 附加契约
-        // （DB 后端适配器——消费方 User.Use<ISealedTicketService<FederatedIdentity>>() 帧内解析到本实现；
-        //  框架 D3 内存版 InMemorySealedTicketService 由消费方按需另注册，二选一不冲突）
-        services.AddConstructibleService<ISealedTicketService<FederatedIdentity>, AccessCodeService>();
+        // 拆分命名（2026-10-16，ADR109 D4——AccessCode 拆 SealedTicket/AuthorizationCode）：
+        // 面① 密封票据 DB CAS 后端（SealedTicketService<T>——逐 T 注册，蓝图 D1 当前仅 FederatedIdentity 一例；
+        //       替代旧 AccessCodeService 适配器注册，去适配器间接层，P2 单一事实源）
+        services.AddConstructibleService<ISealedTicketService<FederatedIdentity>, SealedTicketService<FederatedIdentity>>();
+        // 面② OAuth 授权码（AuthorizationCodeService——SSO 联邦流）
+        services.AddConstructibleService<IAuthorizationCodeService, AuthorizationCodeService>();
     }
 
     /// <summary>

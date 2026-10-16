@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.WebUtilities;
@@ -13,6 +12,7 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
+using TKW.Framework.Domain.Ticket;
 using TKWF.Ext.TrustCenter;
 
 namespace TKWF.Ext.Federation;
@@ -33,7 +33,7 @@ namespace TKWF.Ext.Federation;
 public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
 {
     private const string TicketSeparator = "|";
-    private static readonly TimeSpan TicketTtl = TimeSpan.FromSeconds(120);   // accesscode 短 TTL（对齐 TrustCenter 默认）
+    private static readonly TimeSpan TicketTtl = TimeSpan.FromSeconds(120);   // 密封票据短 TTL（对齐 TrustCenter 默认）
 
     private readonly ILogger<SsoSubAppBridge> _logger;
     private readonly ISymmetricKeyProvider _keyProvider;
@@ -41,7 +41,7 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
     private ISsoClientQueryService? _clients;
     private ISsoChannelFactory? _channels;
     private ISsoLogin? _login;
-    private IAccessCodeService? _codes;
+    private ISealedTicketService<FederatedIdentity>? _ticket;
 
     public SsoSubAppBridge(
         IDomainUser user,
@@ -56,7 +56,7 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
     private ISsoClientQueryService Clients => _clients ??= User.Use<ISsoClientQueryService>();
     private ISsoChannelFactory Channels => _channels ??= User.Use<ISsoChannelFactory>();
     private ISsoLogin Login => _login ??= User.Use<ISsoLogin>();
-    private IAccessCodeService Codes => _codes ??= User.Use<IAccessCodeService>();
+    private ISealedTicketService<FederatedIdentity> Ticket => _ticket ??= User.Use<ISealedTicketService<FederatedIdentity>>();
     private IChannelRegistry Registry => _registry ??= User.Use<IChannelRegistry>();
 
     private IChannelRegistry? _registry;
@@ -127,14 +127,22 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
             if (!result.Success)
                 return new OAuthCallbackResult(false, null, null, result.FailReason ?? "LOGIN_FAILED");
 
-            // ③ 签 accesscode（payload = 外部身份，expectedClaimant=app_id 防他应用冒领）
-            string payloadJson = JsonSerializer.Serialize(new IdentityPayload("federated", channelId, result.ExternalUserId, null));
-            var code = await Codes.IssueAsync(payloadJson, TicketTtl, appId, ct);
+            // ③ 签密封票据（面① ADR109 D4——FederatedIdentity 载荷：mode=federated 进 Extensions，
+            //    expectedClaimant=app_id 防他应用冒领；UId 空——子应用自行映射 external_user_id）
+            var identity = new FederatedIdentity(
+                UId: string.Empty,
+                ChannelId: channelId,
+                ExternalUserId: result.ExternalUserId ?? string.Empty,
+                ChannelType: null,
+                AuthLevel: result.AuthLevel,
+                Extensions: new Dictionary<string, string?> { ["mode"] = "federated" });
+            var issued = await Ticket.IssueAsync(
+                identity, TicketTtl, new SealedTicketOptions(ExpectedClaimant: appId), ct);
 
-            // ④ 302 跳回子应用（code + 子应用原 state 回传）
+            // ④ 302 跳回子应用（ticket + 子应用原 state 回传）
             return new OAuthCallbackResult(true, AppendQuery(redirect, new Dictionary<string, string?>
             {
-                ["code"] = code.Code,
+                ["code"] = issued.Ticket,
                 ["state"] = subState,
             }), subState, null);
         }
@@ -164,16 +172,24 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
             if (!await IsRedirectAllowedAsync(request.AppId, request.Redirect, ct))
                 return new TrustIssueResult(false, null, null, "ORIGIN_NOT_ALLOWED");
 
-            // ③ 签 accesscode（payload = Platform uid，expectedClaimant=app_id）
-            string payloadJson = JsonSerializer.Serialize(new IdentityPayload("direct", null, null, platformUid));
-            var code = await Codes.IssueAsync(payloadJson, TicketTtl, request.AppId, ct);
+            // ③ 签密封票据（面①——FederatedIdentity 载荷：mode=direct，UId=platformUid 承载，
+            //    expectedClaimant=app_id）
+            var identity = new FederatedIdentity(
+                UId: platformUid ?? string.Empty,
+                ChannelId: string.Empty,
+                ExternalUserId: string.Empty,
+                ChannelType: null,
+                AuthLevel: 2,
+                Extensions: new Dictionary<string, string?> { ["mode"] = "direct" });
+            var issued = await Ticket.IssueAsync(
+                identity, TicketTtl, new SealedTicketOptions(ExpectedClaimant: request.AppId), ct);
 
-            // ④ 302 跳回子应用（code）
+            // ④ 302 跳回子应用（ticket）
             return new TrustIssueResult(true, AppendQuery(request.Redirect, new Dictionary<string, string?>
             {
-                ["code"] = code.Code,
+                ["code"] = issued.Ticket,
                 ["state"] = request.State,
-            }), code.Code, null);
+            }), issued.Ticket, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -191,26 +207,37 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
             if (!await Clients.ValidateClientCredentialAsync(request.AppId, request.ClientSecret, ct))
                 return new IdentityClaimResult(false, null, null, null, null, "AUTHENTICATION_FAILED");
 
-            // ② RedeemAsync 原子取回（CAS 单次 + ExpectedClaimant=app_id 联合判定无 TOCTOU；判因透传）
-            var payload = await Codes.RedeemAsync<IdentityPayload>(request.Code, request.AppId, ct);
-            if (payload is null)
+            // ② RedeemAsync 原子取回（CAS 单次 + TicketRedeemContext.ExpectedClaimant=app_id 联合判定无 TOCTOU；
+            //    密封票据契约语义——失败/过期/已用/核销人不符返回 null，不泄露判因码）
+            var identity = await Ticket.RedeemAsync(
+                request.Code, new TicketRedeemContext(ExpectedClaimant: request.AppId), ct);
+            if (identity is null)
                 return new IdentityClaimResult(false, null, null, null, null, "ACCESS_CODE_NOT_FOUND");
 
-            return new IdentityClaimResult(true, payload.Mode, payload.ChannelId, payload.ExternalUserId, payload.PlatformUid, null);
+            // ③ 解码 FederatedIdentity → 子应用身份载荷（mode 经 Extensions 承载——拆分命名面① 往返保真）
+            string mode = (identity.Extensions?.TryGetValue("mode", out var m) == true && !string.IsNullOrEmpty(m))
+                ? m!
+                : (string.IsNullOrEmpty(identity.UId) ? "federated" : "direct");
+            return new IdentityClaimResult(
+                true,
+                mode,
+                NullIfEmpty(identity.ChannelId),
+                NullIfEmpty(identity.ExternalUserId),
+                string.Equals(mode, "direct", StringComparison.Ordinal) ? identity.UId : null,
+                null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            string? failReason = ExtractTicketFailReason(ex) ?? "CHANNEL_REGISTRY_UNAVAILABLE";
-            if (failReason == "CHANNEL_REGISTRY_UNAVAILABLE")
-                _logger.LogError(ex, "identity/claim 编排异常：AppId={AppId}", request.AppId);
-            return new IdentityClaimResult(false, null, null, null, null, failReason);
+            _logger.LogError(ex, "identity/claim 编排异常：AppId={AppId}", request.AppId);
+            return new IdentityClaimResult(false, null, null, null, null, "CHANNEL_REGISTRY_UNAVAILABLE");
         }
     }
 
     // ─────────────────────────── 内部辅助 ───────────────────────────
 
-    /// <summary>accesscode payload 契约（serialize/deserialize——字段与 IdentityClaimResult 对齐）。</summary>
-    private sealed record IdentityPayload(string Mode, string? ChannelId, string? ExternalUserId, string? PlatformUid);
+    /// <summary>空字符串归一为 null（FederatedIdentity 非空字符串字段 → 子应用载荷可空语义）。</summary>
+    private static string? NullIfEmpty(string? value)
+        => string.IsNullOrEmpty(value) ? null : value;
 
     /// <summary>redirect 白名单校验（origin = scheme + host，Ordinal 精确——防开放重定向）。</summary>
     private async Task<bool> IsRedirectAllowedAsync(string appId, string redirect, CancellationToken ct)
@@ -272,17 +299,6 @@ public sealed class SsoSubAppBridge : DomainServiceBase, ISsoSubAppBridge
     /// <summary>跳回 URL 追加 query 参数（保留既有 query；QueryHelpers 处理编码）。</summary>
     private static string AppendQuery(string url, IReadOnlyDictionary<string, string?> query)
         => QueryHelpers.AddQueryString(url, query);
-
-    /// <summary>RedeemAsync 判因异常 → 机器可读原因码（消息含 ACCESS_CODE_NOT_FOUND/TICKET_* 等）；未知异常 null。</summary>
-    private static string? ExtractTicketFailReason(Exception ex)
-    {
-        if (ex.Message.Contains("ACCESS_CODE_NOT_FOUND", StringComparison.Ordinal)) return "ACCESS_CODE_NOT_FOUND";
-        if (ex.Message.Contains("TICKET_CONSUMED", StringComparison.Ordinal)) return "TICKET_CONSUMED";
-        if (ex.Message.Contains("CLAIMANT_MISMATCH", StringComparison.Ordinal)) return "CLAIMANT_MISMATCH";
-        if (ex.Message.Contains("TICKET_EXPIRED", StringComparison.Ordinal)) return "TICKET_EXPIRED";
-        if (ex.Message.Contains("TICKET_STATE_MISMATCH", StringComparison.Ordinal)) return "TICKET_STATE_MISMATCH";
-        return null;
-    }
 
     private static string ToBase64Url(byte[] data)
         => Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');

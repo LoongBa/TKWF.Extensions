@@ -123,6 +123,8 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 ## 四、accesscode 契约（联邦授权码 + 安全数据投递）
 
+> **⚠️ 拆分命名（ADR109 D4，2026-10-16——框架组蓝图：实体/服务/契约拆分）**：accesscode 概念拆两面——**面① 密封票据**：`ISealedTicketService<T>`（`SealedTicketService<T>` DB 后端，表 `TKWF_SealedTicket`——Federation 事件链路消费 `ISealedTicketService<FederatedIdentity>`）；**面② 授权码**：`IAuthorizationCodeService`（TrustCenter.Abstractions 新增契约，`AuthorizationCodeService`，表 `TKWF_AuthorizationCode`）。**旧 `AccessCode` 命名保留过渡**（`IAccessCodeService`/`AccessCodeEntity`/`AccessCodeService` 暂存），随 v0.3.0 全迁后删除。**配置键拆 6**：`SealedTicketExpirationSeconds`/`SealedTicketRetentionDays`/`AuthorizationCodeExpirationSeconds`/`AuthorizationCodeRetentionDays`/`AuthorizationCodeEndpointBaseUrl`/`TestAuthorizationCodeEndpointEnabled`——旧 `AccessCodeExpirationSeconds`/`AccessCodeRetentionDays` 暂保留（待全迁删）。
+
 ### 通路 A——联邦授权码（SSO 联邦流，`AccessCodeIssueRequest` 重载）
 
 | 字段 | 规格 |

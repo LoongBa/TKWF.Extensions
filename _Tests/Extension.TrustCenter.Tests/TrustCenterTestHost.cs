@@ -20,10 +20,10 @@ namespace TKWF.Ext.TrustCenter.Tests;
 /// </summary>
 internal static class TrustCenterTestHost
 {
-    /// <summary>TrustCenter 2 实体（信任内核）。</summary>
+    /// <summary>TrustCenter 4 实体（信任内核——2026-10-16 拆分命名后：SsoClient + SealedTicket + AuthorizationCode + 旧 AccessCode 过渡保留）。</summary>
     private static readonly Type[] EntityTypes =
     [
-        typeof(SsoClientEntity), typeof(AccessCodeEntity)
+        typeof(SsoClientEntity), typeof(SealedTicketEntity), typeof(AuthorizationCodeEntity), typeof(AccessCodeEntity)
     ];
 
     /// <summary>注册全部实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）。</summary>

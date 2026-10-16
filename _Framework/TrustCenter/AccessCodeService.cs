@@ -315,7 +315,9 @@ internal sealed class AccessCodeService : DomainServiceBase, IAccessCodeService,
     /// <summary>
     /// E2：<see cref="ISealedTicketService{T}"/> 兑换适配——委托既有 <see cref="RedeemAsync{T}(string, string?, CancellationToken)"/>
     /// （原子 CAS + ExpectedClaimant 无 TOCTOU）→ 解密 payload → <see cref="FederatedIdentity"/>。
-    /// <para>claimant 传 null（可转让语义——票据身份由 UId 一致性校验保证，见框架 D5）。</para>
+    /// <para>V4.10.77（ADR109 Phase 2）：签名对齐 <c>TicketRedeemContext</c>——<paramref name="context"/>?.ExpectedClaimant
+    /// 作 claimant 传入（可核销人 CAS 接线；null = 可转让语义——票据身份由 UId 一致性校验保证，见框架 D5）。
+    /// 既有位置传参调用（ticket, ct）自动匹配（ct 命名参数签名后置，源码兼容）。</para>
     /// <para><b>契约语义对齐（"失败/过期/已用返回 null"）</b>：底层 DB 后端以 <see cref="AuthenticationException"/>
     /// （原因码 ACCESS_CODE_NOT_FOUND/TICKET_EXPIRED/TICKET_CONSUMED/CLAIMANT_MISMATCH）抛错，
     /// 适配层映射为 null（自密封票据契约视角"未成功即 null"，不向票据消费方泄露失败原因码；
@@ -324,11 +326,11 @@ internal sealed class AccessCodeService : DomainServiceBase, IAccessCodeService,
     /// fail-closed 拒信任（README §五），与契约"非 null 即已信任"语义一致。</para>
     /// </summary>
     async Task<FederatedIdentity?> ISealedTicketService<FederatedIdentity>.RedeemAsync(
-        string ticket, CancellationToken ct = default)
+        string ticket, TicketRedeemContext? context, CancellationToken ct)
     {
         try
         {
-            return await RedeemAsync<FederatedIdentity>(ticket, claimant: null, ct);
+            return await RedeemAsync<FederatedIdentity>(ticket, claimant: context?.ExpectedClaimant, ct);
         }
         catch (AuthenticationException)
         {

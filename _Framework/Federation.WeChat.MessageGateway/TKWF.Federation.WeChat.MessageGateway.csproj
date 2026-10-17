@@ -14,7 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
-    <MinVerTagPrefix>WeChat.MessageGateway/v</MinVerTagPrefix>
+    <MinVerTagPrefix>Federation.WeChat.MessageGateway/v</MinVerTagPrefix>
     <PackageId>TKWF.Federation.WeChat.MessageGateway</PackageId>
     <Description>TKWF 运行库（纯逻辑零实体零持久化——微信公众号消息网关核心判定，对齐 DataPort/Tagging 运行库提炼先例）：路由规则判定 / 幂等键规范化 / 转发决策与降级链 / 熔断状态机（三态纯内存）；零 AspNetCore 零 FreeSql 零扩展引用</Description>
   </PropertyGroup>

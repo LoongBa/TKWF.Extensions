@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.WeChatOperations.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <!-- Options.ConfigurationExtensions 已由根 Directory.Build.props 全局注入（Section 绑定 services.Configure<T>(section)） -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="FreeSql" />
+    <PackageReference Include="FreeSql.Provider.Sqlite" />
+    <PackageReference Include="FreeSql.Extensions.Linq" />
+    <PackageReference Include="FreeSql.DbContext" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FreeSql" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="Microsoft.Extensions.Options" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 被测扩展（DisableTransitiveProjectReferences=true——显式声明所需引用见下） -->
+    <ProjectReference Include="..\..\_Framework\WeChatOperations\TKWF.Ext.WeChatOperations.csproj" />
+    <!-- 平台网关库（WeChatOptions/WeChatChannelConfig/WeChatApiClient/IWeChatCredentialResolver/WechatEventReplyHandlerBase/WechatEventContext/WechatReplyPayload/NewsReplyTemplateV2/WeChatSelfMenuInfoResult——通讯/事件信封类型） -->
+    <ProjectReference Include="..\..\_Framework\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
+    <!-- 网关运行库（纯逻辑零持久化——V0.2.0 增网关模块：WeChatMessageRouteRuleMatcher/WeChatMessageIdempotencyKeyBuilder/WeChatMessageForwardDecider/WeChatMessageConstants（MatchModes/ForwardModes/EndpointAuthTypes）——门面集成测试断言 MatchedRule/降级链/幂等键/转发模式常量） -->
+    <ProjectReference Include="..\..\_Framework\Federation.WeChat.MessageGateway\TKWF.Federation.WeChat.MessageGateway.csproj" />
+    <!-- Federation 主包（IEventReplyHandler/IChannelRegistry/ChannelConfig/IChannelSource/StaticChannelRegistry/CompositeChannelRegistry/SsoChannelFactory/SsoLogin/FederationStaticChannelOptions——handler 通道反查 + 多通道设施） -->
+    <ProjectReference Include="..\..\_Framework\Federation\TKWF.Ext.Federation.csproj" />
+    <!-- C 基座（TestHostBase/TestUserInfo/TestMetaContext/TestUserHelper） -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+  </ItemGroup>
+
+</Project>

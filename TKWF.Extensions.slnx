@@ -249,6 +249,20 @@
   <Folder Name="/_Framework/Federation.Alipay/">
     <Project Path="_Framework/Federation.Alipay/TKWF.Federation.Alipay.csproj" />
   </Folder>
+  <!-- WeChatOperations 微信公众号运营扩展（数据底座 V0.1.0 骨架——实体 SG1；通讯走平台库 Federation.WeChat；测试项目随门面任务建） -->
+  <Folder Name="/_Framework/WeChatOperations/">
+    <Project Path="_Framework/WeChatOperations/TKWF.Ext.WeChatOperations.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.WeChatOperations.Tests/">
+    <Project Path="_Tests/Extension.WeChatOperations.Tests/TKWF.Ext.WeChatOperations.Tests.csproj" />
+  </Folder>
+  <!-- Federation.WeChat.MessageGateway 运行库（2026-10-18 十·〇 ① 三部分分层裁定——纯逻辑零实体零持久化，对齐 DataPort/Tagging 运行库提炼先例） -->
+  <Folder Name="/_Framework/Federation.WeChat.MessageGateway/">
+    <Project Path="_Framework/Federation.WeChat.MessageGateway/TKWF.Federation.WeChat.MessageGateway.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.Federation.WeChat.MessageGateway.Tests/">
+    <Project Path="_Tests/Extension.Federation.WeChat.MessageGateway.Tests/TKWF.Federation.WeChat.MessageGateway.Tests.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>

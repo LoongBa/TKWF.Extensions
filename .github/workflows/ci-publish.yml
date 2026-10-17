@@ -42,25 +42,26 @@ env:
 jobs:
   # 方案 1（2026-09-16，CI 负载治理）：changes 检测——分支 push 且纯 docs/文档变更 → docs-only=true，
   # build-test 跳过全量构建（纯文档提交不再空转 runner）。tag push / PR 永远全量（发布链路必须）。
+  # 2026-10-17 扩展（受影响面定向测试）：test-targets 输出——tag/PR/分支 push 均按变更推导受影响
+  # 测试项目（契约包/CPM 变更 → __ALL__ 全量；单扩展变更 → 反向图列表；空 diff → 空跳过 Test）。
   changes:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       docs-only: ${{ steps.filter.outputs.docs-only }}
+      test-targets: ${{ steps.filter.outputs.test-targets }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Detect docs-only changes
+      - name: Detect docs-only changes & affected test targets
         id: filter
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "branch" ]]; then
             CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
-            echo "changed:"
-            echo "$CHANGED"
             # 所有变更均在 docs/ 或 *.md → docs-only；跳过全量构建
             if [[ -z "$(echo "$CHANGED" | grep -vE '^(docs/|.*\.md$)')" ]]; then
               echo "docs-only=true" >> "$GITHUB_OUTPUT"
@@ -68,9 +69,48 @@ jobs:
               echo "docs-only=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            # tag/PR/manual 全量
+            # tag/PR/manual 全量（build 必须全量——发布链路编译门）
             echo "docs-only=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # ── 受影响测试项目推导（2026-10-17 定向测试）──
+          # 适用范围：tag push（diff=tag 引入变更）/PR（base..head）/分支 push（before..sha）
+          # 契约包（*.Abstractions/）或 CPM（Directory.Packages.props）变更 → __ALL__（影响面不可静态穷举，纪律矩阵建议 L2）
+          # 单扩展变更 → 反向图：受影响扩展自身测试项目 + ProjectReference 引用它的测试项目
+          # 空 diff（tag 指向 main 已测 commit）→ 空（跳过 Test——main 已全量测过）
+          TARGETS=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            CHANGED=$(git diff --name-only "$BASE" "${{ github.sha }}" || true)
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
+          else
+            CHANGED=""   # workflow_dispatch：无 diff 基准 → fallback 全量
+          fi
+          if [[ -z "$CHANGED" ]]; then
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              TARGETS="__ALL__"   # manual：无法推导 → 全量（fallback 安全）
+            else
+              TARGETS=""          # 空 diff（tag 指向已测 commit）→ 跳过 Test
+            fi
+          elif echo "$CHANGED" | grep -qE '^_Framework/[^/]+\.Abstractions/|^Directory\.Packages\.props$'; then
+            TARGETS="__ALL__"     # 契约包/CPM 变更 → 全量（纪律矩阵红线）
+          else
+            # 受影响扩展目录（_Framework/{Ext}/）
+            EXTS=$(echo "$CHANGED" | grep -oE '^_Framework/[^/]+/' | sort -u)
+            for ext in $EXTS; do
+              # 反斜杠转义（csproj ProjectReference 用 Windows 路径 _Framework\{Ext}\）
+              esc=$(echo "$ext" | sed 's#^_Framework/##; s#/$##' | sed 's/\./\\./g')
+              # 该扩展自身测试项目 + 引用它的测试项目（grep ProjectReference）
+              for csproj in $(grep -rlE "_Framework\\\\$esc\\\\" _Tests --include='*.csproj' 2>/dev/null || true); do
+                TARGETS="$TARGETS $csproj"
+              done
+            done
+            # 去重
+            TARGETS=$(echo "$TARGETS" | tr ' ' '\n' | sort -u | grep -v '^$' | tr '\n' ' ')
+          fi
+          echo "test-targets=$TARGETS" >> "$GITHUB_OUTPUT"
+          echo "test-targets resolved: '$TARGETS'"
 
   build-test:
     needs: changes
@@ -157,8 +197,28 @@ jobs:
       - name: Build
         run: dotnet build TKWF.Extensions.slnx -c Release --no-restore --nologo
 
+      # 2026-10-17 受影响面定向测试（CI 化——docs/测试纪律-受影响面定向测试.md §五）：
+      # test-targets = __ALL__（契约包/CPM 变更/manual fallback）→ 全量 slnx test；
+      #                空（tag 指向 main 已测 commit 空 diff）→ 跳过 Test（发布链路编译门已由 Build 保证）；
+      #                列表（单扩展变更 → 反向图）→ 循环 dotnet test 逐个（dotnet test 不支持多项目 MSB1008）。
+      # ⚠️ 全量 slnx test 保留原行为（--no-build 复用 Build 产物）；列表循环同用 --no-build。
       - name: Test
-        run: dotnet test TKWF.Extensions.slnx -c Release --no-build --verbosity normal
+        shell: bash
+        env:
+          TEST_TARGETS: ${{ needs.changes.outputs.test-targets }}
+        run: |
+          if [[ "$TEST_TARGETS" == "__ALL__" ]]; then
+            echo "== Full test (affected scope: __ALL__) =="
+            dotnet test TKWF.Extensions.slnx -c Release --no-build --verbosity normal
+          elif [[ -z "$TEST_TARGETS" ]]; then
+            echo "== No affected tests (empty diff / docs-only) — skip Test =="
+          else
+            echo "== Affected-scope test: $TEST_TARGETS =="
+            for proj in $TEST_TARGETS; do
+              echo "--- dotnet test $proj ---"
+              dotnet test "$proj" -c Release --no-build --verbosity normal
+            done
+          fi
 
       - name: Pack
         if: startsWith(github.ref, 'refs/tags/')
@@ -199,3 +259,65 @@ jobs:
             --source https://api.nuget.org/v3/index.json \
             --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
+
+  # 2026-10-17 Actions run 历史清理（对齐主框架 cleanup-runs + 用户裁定 OR 组合条件）：
+  # 保留规则（任一命中即保留，删除需同时超出——时间窗与数量互补）：
+  #   ① created_at ≥ now−3天 → 全留（近期排查/发布状态——频繁 CI 时近期 run 都有价值，条数不限）
+  #   ② 3 天外：success 最近 10 条 + failure 最近 5 条 → 保留（历史审计 + 失败排查/稳定性估算）
+  #   ③ 其余（3 天外 + 超出数量序列 + cancelled/skipped）→ 删除
+  # 删除失败仅告警不阻断（对齐制品清理）；当前运行（in_progress）恒跳过。
+  # 触发：非 docs-only 运行后（needs: changes）——docs-only 提交不空转 runner。
+  cleanup-runs:
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write    # 删除 workflow run 需 actions: write
+    steps:
+      - name: Cleanup old workflow runs (3-day window OR success-10/failure-5)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowId = 'ci-publish.yml';
+            const keepDays = 3;
+            const keepSuccess = 10;
+            const keepFailure = 5;
+            const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000;
+            let page = 1, seen = 0, deleted = 0, kept = 0, keptSuccess = 0, keptFailure = 0;
+            while (true) {
+              const resp = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowId,
+                per_page: 100,
+                page
+              });
+              const runs = resp.data.workflow_runs;
+              for (const r of runs) {
+                seen++;
+                // 当前运行（in_progress，conclusion=null）恒跳过——本 cleanup job 自身亦受保护
+                if (r.status === 'in_progress') { kept++; continue; }
+                const created = new Date(r.created_at).getTime();
+                // ① 3 天内全留
+                if (created >= cutoff) { kept++; continue; }
+                // ② 3 天外：success 最近 10 / failure 最近 5（列表按创建倒序——计数即"最近 N 条"）
+                if (r.conclusion === 'success' && keptSuccess < keepSuccess) { keptSuccess++; kept++; continue; }
+                if (r.conclusion === 'failure' && keptFailure < keepFailure) { keptFailure++; kept++; continue; }
+                // ③ 其余（3 天外 + 超出数量 + cancelled/skipped/其他）→ 删
+                try {
+                  await github.rest.actions.deleteWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: r.id
+                  });
+                  deleted++;
+                  core.info(`Deleted run ${r.id} (${r.created_at}, ${r.conclusion})`);
+                } catch (e) {
+                  core.warning(`Delete failed for run ${r.id}: ${e.message}`);  // 仅告警不阻断
+                }
+              }
+              if (runs.length < 100) break;
+              page++;
+            }
+            core.info(`Cleanup done: ${deleted} deleted, ${kept} kept (success ${keptSuccess}, failure ${keptFailure}, ${seen} seen)`);

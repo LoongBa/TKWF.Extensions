@@ -105,14 +105,28 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
             if (platformReply is not null)
                 return platformReply;
 
-            // handler first-non-null-wins（评审 F8——按 ChannelType 匹配；消费方业务回复）
+            // handler 委托（W3 双桶解析——2026-10-16 两级模型）：
+            //   桶 1：通道特定绑定（实现 IChannelSpecificEventReplyHandler 且 ChannelId 精确匹配——first-non-null-wins）
+            //   桶 2：ChannelType 匹配（现状语义——默认共用；绑定桶全 null 时回退）
+            //   绑定桶优先（精确覆盖）——消费方为特定 channelId 定制 handler，其余通道走类型桶默认。
             foreach (var handler in _handlers)
             {
-                if (!string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
-                    continue;
-                var reply = await handler.HandleAsync(context, ct);
-                if (reply is not null)
-                    return reply;
+                if (handler is IChannelSpecificEventReplyHandler specific
+                    && string.Equals(specific.ChannelId, channelId, StringComparison.Ordinal))
+                {
+                    var reply = await handler.HandleAsync(context, ct);
+                    if (reply is not null)
+                        return reply;
+                }
+            }
+            foreach (var handler in _handlers)
+            {
+                if (string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
+                {
+                    var reply = await handler.HandleAsync(context, ct);
+                    if (reply is not null)
+                        return reply;
+                }
             }
 
             return null;

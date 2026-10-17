@@ -53,10 +53,24 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <summary>
     /// 模板方法：子类业务载荷 → 签密封票据（高内聚）→ 图文链接回复（<see cref="IEventReplyHandler.HandleAsync"/>）。
     /// <para>返回 null = 不处理（first-non-null-wins 语义——编排取首个非 null）。</para>
+    /// <para>数据流（W2 方案 B——机制归基类、决策归子类）：入口按 <c>context.Parameters["channel_id"]</c> 反查
+    /// <see cref="ChannelConfig"/>（一次查询）→ 组装 <see cref="ReplyContext"/> 传子类 <see cref="BuildReplyAsync"/>
+    /// （子类零 registry 查询，可读 <c>Channel.Extra</c> 配置）→ 签密封票据 → 图文链接拼装。</para>
     /// </summary>
     public async Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
     {
-        var payload = await BuildReplyAsync(context, ct);
+        // 反查通道配置（channel_id → ChannelConfig——入口一次查询，供子类 ReplyContext + 平台段 URL 共用；
+        // 查不到 → 不回复，对齐"无法构造有效图文链接则不拦截业务 handler"语义）
+        var parameters = context.Parameters;
+        var channelId = parameters.TryGetValue("channel_id", out var cid) ? cid : null;
+        if (string.IsNullOrWhiteSpace(channelId))
+            return null;
+        var channelCfg = await User.Use<IChannelRegistry>().GetByAliasOrIdAsync(channelId, ct);
+        if (channelCfg is null)
+            return null;
+
+        // 子类业务规则（收 ReplyContext——决策输入齐备）
+        var payload = await BuildReplyAsync(new ReplyContext(context, channelCfg), ct);
         if (payload is null)
             return null;
 
@@ -66,15 +80,12 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         if (identity is null)
             return null;
 
-        // 反查平台段（channelId → PlatformType——图文链接 {platformId} 段；查不到 → 不回复，
-        // 对齐"无法构造有效图文链接则不拦截业务 handler"语义）
-        var channelCfg = await User.Use<IChannelRegistry>().GetByAliasOrIdAsync(identity.ChannelId, ct);
-        if (channelCfg is null)
-            return null;
-
         var issue = await User.Use<ISealedTicketService<FederatedIdentity>>()
             .IssueAsync(identity, payload.Ttl, new SealedTicketOptions(ExpectedClaimant: payload.ExpectedClaimant), ct);
-        var url = BuildTestTicketUrl(issue.Ticket, channelCfg.PlatformType, identity.ChannelId);
+        // URL 模式（模板驱动两级模型）：LinkTemplate 配置 → 占位符替换（{ticket} 等）；空 → 回退内置测试端点 URL
+        var url = string.IsNullOrWhiteSpace(payload.LinkTemplate)
+            ? BuildTestTicketUrl(issue.Ticket, channelCfg.PlatformType, channelCfg.ChannelId)
+            : BuildTemplateUrl(payload.LinkTemplate, issue.Ticket, channelCfg, identity);
         return new EventReplyResult(
             Content: string.Empty,
             ContentType: "text/xml",
@@ -86,9 +97,15 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 
     /// <summary>
     /// 子类实现业务规则——返回载荷（非 null = 回复图文）或 null（不处理）。
-    /// <para>基类负责签票据 + 反查平台段 + 拼图文链接（含相对路径兜底）——子类无需检查部署基址。</para>
+    /// <para>基类负责入口预查通道配置 + 签票据 + 拼图文链接（含相对路径兜底）——子类无须查 registry，
+    /// 直接经 <see cref="ReplyContext.Channel"/>（含 <c>Extra</c> 配置字典）做业务决策。</para>
     /// </summary>
-    protected abstract Task<EventReplyPayload?> BuildReplyAsync(SsoChannelEventContext context, CancellationToken ct);
+    protected abstract Task<EventReplyPayload?> BuildReplyAsync(ReplyContext context, CancellationToken ct);
+
+    /// <summary>事件回复决策上下文（W2 方案 B——基类备好决策输入传子类）：
+    /// <see cref="Context"/> 原始事件参数 + <see cref="Channel"/> 已解析的通道配置
+    /// （含 <see cref="ChannelConfig.PlatformType"/> / <see cref="ChannelConfig.Extra"/>——模板/通道级配置读取）。</summary>
+    protected sealed record ReplyContext(SsoChannelEventContext Context, ChannelConfig Channel);
 
     /// <summary>构造测试端点 URL（{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——与 FederationWebExtension
     /// 端点路径一致；BaseUrl 空 → 相对路径（以 / 开头，默认指向本服务同源——微信可点击）。</summary>
@@ -99,10 +116,20 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         return string.IsNullOrEmpty(baseUrl) ? $"/{relative}" : $"{baseUrl}/{relative}";
     }
 
+    /// <summary>构造自定义模板 URL（模板驱动两级模型——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}</c>）。</summary>
+    protected string BuildTemplateUrl(string linkTemplate, string ticket, ChannelConfig channel, FederatedIdentity identity)
+        => linkTemplate
+            .Replace("{ticket}", ticket)
+            .Replace("{uid}", identity.UId ?? string.Empty)
+            .Replace("{openid}", identity.ExternalUserId ?? string.Empty)
+            .Replace("{channel_id}", channel.ChannelId)
+            .Replace("{channel_type}", channel.PlatformType);
+
     /// <summary>
-    /// 子类载荷 DTO（Title/Description/PayloadJson/Ttl/ExpectedClaimant/PicUrl——签密封票据与图文构造输入；
+    /// 子类载荷 DTO（Title/Description/PayloadJson/Ttl/ExpectedClaimant/PicUrl/LinkTemplate——签密封票据与图文构造输入；
     /// PayloadJson = <see cref="FederatedIdentity"/> 序列化 JSON——基类反序列化后经
-    /// <see cref="ISealedTicketService{T}"/> 签发）。
+    /// <see cref="ISealedTicketService{T}"/> 签发；LinkTemplate 空 = 内置测试端点 URL，非空 = 模板 URL
+    /// （占位符 <c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}</c> 签票后替换——模板驱动两级模型第一级）。
     /// </summary>
     protected sealed record EventReplyPayload(
         string Title,
@@ -110,5 +137,6 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         string PayloadJson,
         TimeSpan Ttl,
         string? ExpectedClaimant = null,
-        string? PicUrl = null);
+        string? PicUrl = null,
+        string? LinkTemplate = null);
 }

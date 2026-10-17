@@ -516,6 +516,69 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("AUTHENTICATION_FAILED", body!.Code);
     }
 
+    /// <summary>W3 双桶解析（2026-10-16）：通道特定绑定优先——EventHandler1 绑定 wechat-mp（IChannelSpecificEventReplyHandler）
+    /// 精确命中 → 回复（handler1）；同 ChannelType 的 handler2（类型桶）不触达。</summary>
+    [Fact]
+    public async Task Event_BoundHandler_PriorityOverTypeBucket()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.EventHandler1.BindChannelId = "wechat-mp";   // 绑定桶
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("<xml><Content><![CDATA[from-bound]]></Content></xml>", "text/xml");
+        FederationEndpointHost.EventHandler2.Result = new EventReplyResult("<xml><Content><![CDATA[from-type]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("from-bound", body);                    // 绑定桶优先
+        Assert.DoesNotContain("from-type", body);
+        Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);   // 绑定 handler 被调
+        Assert.Equal(0, FederationEndpointHost.EventHandler2.Invoked);   // 类型桶不触达（绑定命中短路）
+    }
+
+    /// <summary>W3 双桶解析：绑定未命中（绑定 channelId ≠ 事件通道）且绑定 handler 的 ChannelType 不参与
+    /// （dingtalk_event vs wechat_event）→ 回退类型桶默认（handler2 共用）。</summary>
+    [Fact]
+    public async Task Event_BoundHandler_MissingChannel_FallsBackToTypeBucket()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.EventHandler1.BindChannelId = "other-channel";   // 绑定不匹配
+        FederationEndpointHost.EventHandler1.ChannelType = "dingtalk_event";   // 类型桶亦不参与（纯绑定 handler）
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("<xml><Content><![CDATA[from-bound]]></Content></xml>", "text/xml");
+        FederationEndpointHost.EventHandler2.Result = new EventReplyResult("<xml><Content><![CDATA[from-type]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("from-type", body);                     // 回退类型桶
+        Assert.DoesNotContain("from-bound", body);
+        Assert.Equal(0, FederationEndpointHost.EventHandler1.Invoked);   // 绑定不匹配 + 类型不参与 → 未触达
+        Assert.Equal(1, FederationEndpointHost.EventHandler2.Invoked);   // 类型桶兜底
+    }
+
+    /// <summary>W3 双桶解析：默认共用——无绑定声明（BindChannelId=null）→ 全走类型桶（现状语义，默认所有 channelId 共用）。</summary>
+    [Fact]
+    public async Task Event_NoBinding_DefaultTypeBucketShared()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.EventHandler1.BindChannelId = null;       // 默认共用（类型桶）
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("<xml><Content><![CDATA[from-shared]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("from-shared", body);                  // 类型桶命中（默认共用）
+        Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);
+    }
+
     // ═══════════════════ 测试端点（ticket 闭环——2026-10-16 路径/命名专题改造） ═══════════════════
 
     /// <summary>TestTicket：GET /feberation/{platformId}/test/{channelId}/{ticket——平台段 + 通道段选区通过 →

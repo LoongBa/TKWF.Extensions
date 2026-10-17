@@ -391,18 +391,22 @@ internal static class FederationEndpointHost
     }
 
     /// <summary>Fake 事件回复处理器（IEventReplyHandler——事件编排 first-non-null-wins F8）：
-    /// 记录 Invoked/LastContext + 返回可配置 Result（null = 不处理）。</summary>
-    internal sealed class FakeEventReplyHandler : IEventReplyHandler
+    /// 记录 Invoked/LastContext + 返回可配置 Result（null = 不处理）。
+    /// 支持 W3 绑定（可选实现 <see cref="IChannelSpecificEventReplyHandler"/>——BindChannelId 可配置，默认 null = 类型桶）。</summary>
+    internal sealed class FakeEventReplyHandler : IEventReplyHandler, IChannelSpecificEventReplyHandler
     {
         public FakeEventReplyHandler(string name) => Name = name;
 
         private string Name { get; }
         public string ChannelType { get; set; } = "wechat_event";
+        public string? BindChannelId { get; set; }                       // W3：null = 类型桶共用；非 null = 精确绑定
         public EventReplyResult? Result { get; set; }
         public int Invoked { get; private set; }
         public SsoChannelEventContext? LastContext { get; private set; }
 
-        public void Reset() { Result = null; Invoked = 0; LastContext = null; }
+        public void Reset() { Result = null; Invoked = 0; LastContext = null; BindChannelId = null; ChannelType = "wechat_event"; }
+
+        string IChannelSpecificEventReplyHandler.ChannelId => BindChannelId ?? string.Empty;
 
         public Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
         {
@@ -442,7 +446,20 @@ internal static class FederationEndpointHost
                     dict["uid"] = map.UId;
             }
 
-            // ③ handler first-non-null-wins（按 ChannelType 匹配）
+            // ③ handler 委托（W3 双桶解析——同步真实 EventOrchestrator 语义）：
+            //    桶 1：通道特定绑定（IChannelSpecificEventReplyHandler 且 ChannelId 精确匹配——first-non-null-wins）
+            //    桶 2：ChannelType 匹配（默认共用——绑定桶全 null 时回退）
+            foreach (var handler in new[] { EventHandler1, EventHandler2 })
+            {
+                if (handler is IChannelSpecificEventReplyHandler specific
+                    && !string.IsNullOrEmpty(specific.ChannelId)
+                    && string.Equals(specific.ChannelId, channelId, StringComparison.Ordinal))
+                {
+                    var reply = handler.HandleAsync(context, ct).GetAwaiter().GetResult();
+                    if (reply is not null)
+                        return Task.FromResult(reply);
+                }
+            }
             foreach (var handler in new[] { EventHandler1, EventHandler2 })
             {
                 if (!string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))

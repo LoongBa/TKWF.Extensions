@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Federation.WeChat.MessageGateway</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>WeChat.MessageGateway/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.WeChat.MessageGateway</PackageId>
+    <Description>TKWF 运行库（纯逻辑零实体零持久化——微信公众号消息网关核心判定，对齐 DataPort/Tagging 运行库提炼先例）：路由规则判定 / 幂等键规范化 / 转发决策与降级链 / 熔断状态机（三态纯内存）；零 AspNetCore 零 FreeSql 零扩展引用</Description>
+  </PropertyGroup>
+
+  <!-- 纯 BCL + System.Threading——零第三方依赖运行库（Directory.Build.props 自动注入 MinVer/打包属性/README）。
+       不引 AspNetCore（端点归扩展/消费方装配层）、不引 FreeSql（零持久化）、不引任何扩展项目（运行库判据）。 -->
+
+</Project>

@@ -1,10 +1,12 @@
 # TKWF.Federation.WeChat 微信公众平台连接器技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.4.0（2026-10-17——事件回复 Handler 三件套） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**——AGENTS §8：`TKWF.Ext.*`=扩展（有装配/持久化）/ `TKWF.*`=库（纯逻辑））/ **零持久化零 Store**（tkwf-extension 铁律——纯内存态 access_token 缓存）/ **双向**（OAuth 身份获取 + 事件推送验签）/ **凭证自持**（`WeChatOptions`——Oracle P2-4，不复用 Authentication `IPlatformCredentialService`）/ **信任根一票否决**（事件推送 `msg_signature` + AES 验签——漏验 = 可伪造任意 openid = 体系崩溃）/ **不引 AspNetCore**（Oracle 评审点 5——库纯逻辑 + HttpClient，入站端点归 Federation 扩展/消费方装配层，库只提供验签逻辑类）
 
 > ✅ **实施进度（2026-10-05）**：V0.1.0 **全部落地**——`WeChatApiClient` 出站客户端 + `WeChatOptions`/`WeChatChannelConfig` 配置 + `WeChatUserInfo` 响应裁剪（T3）+ **`WeChatOauthChannel`（wechat_oauth）/ `WeChatEventChannel`（wechat_event）+ `WeChatEventCrypto` / `AddWeChatFederationChannels()` 注册方法**（T4-T6）+ 测试 18 用例全绿（生产路径 + 信任根正负路径）。组件清单全部 ✅ 已实现。
+
+> ✅ **实施进度（2026-10-17）**：V0.4.0 **全部落地**——`WechatEventReplyHandlerBase`（平台基类——**二级分发** + 图文工具 + **协议门控**）+ `WechatTemplateEventReplyHandler`（模板驱动，**消费方显式注册**）+ `WechatProbeEventReplyHandler`（探针，**开关门控默认关**）+ `WechatEventContext`/`WechatReplyPayload`/`WechatEventReplyOptions` 支撑类型；**`WeChatEventChannel` 编排放权**（`HandleEventAsync` 返回 null + `__decrypted_xml` 富化 + 异常哨兵——W3 绑定桶对微信可达）；`AddWeChatFederationChannels()` 增 `TKWF:Federation:WeChat:EventReply` 节（`ProbeEventReplyHandlerEnabled` 默认 false）+ Probe 注册；模板 JSON 键 `[JsonPropertyName]` 缺陷修复（ADR D8）；测试 WeChat.Tests 86 用例全绿（方案 `docs/Federation/Wechat事件回复Handler基类与二级分发-开发方案.md` Oracle PASS WITH CONDITIONS——P0×2/P1×4/P2×7 全部吸收）。
 
 ---
 
@@ -70,6 +72,7 @@ services.AddWeChatFederationChannels();   // 内部 TryAddEnumerableConstructibl
 
 - **`[Options("TKWF:Federation:WeChat")]`**：SG1 在消费方生成 GeneratedOptionsBindings，宿主启动期自动绑定（对齐 AuthCenterOptions/FederationOptions 先例）；亦可在消费方 ConfigureExtensions 编程覆盖。
 - **凭证承载形态**（Oracle 评审点 4 P2）：开发——明文 `appsettings.json` 配置；生产——**AES-GCM 密文**或装配注入（K8s secret mount）；**AppSecret 永不明文进配置库**。channel 凭证归本库自持，与 Federation `SsoSecretKeyStore`/Authentication `PlatformCredentialService` 均独立。
+- **`TKWF:Federation:WeChat:EventReply`** 节（V0.4.0——平台层 `WechatEventReplyOptions`，事件回复 handler 开关，方案 §3.5）：`ProbeEventReplyHandlerEnabled` **默认 false**（fail-safe——探针启用开关；开发期开 true 验证全分支 `PROBE:branch=...`，接入业务 handler 后保持 false 与业务 handler 互斥——Oracle P2-5）。`TestTicketEndpointBaseUrl`/`RoutePrefix` 继续归属主包 `FederationEventReplyOptions`（测试端点是 Federation 主包编排面能力，方案 §3.5）。
 
 ### 4. 编排（Federation 白名单 + `/{prefix}/{platformId}/login` 路由——已实现通道 + 装配层编排）
 
@@ -91,14 +94,17 @@ Federation 扩展按 channel 类型路由：`wechat_oauth` → 302 微信 author
 | `WeChatUserInfo` | `sns/userinfo` 响应裁剪 record（OpenId/Nickname/Avatar/UnionId，对齐 Authentication 既有语义） | DTO | ✅ 已实现（T3） |
 | `WeChatOauthChannel` | `ISsoChannel`（`ChannelType="wechat_oauth"`）——authorize 构造 + 回调 code→openid，OAuth 身份获取 | 对外（上游 IdP 适配） | ✅ 已实现（T4） |
 | `WeChatEventChannel` + `WeChatEventCrypto` | `ISsoChannel`（`ChannelType="wechat_event"`）——事件推送验签（`msg_signature` + AES 解密）+ `FromUserName`→openid | 对外（上游 IdP 适配） | ✅ 已实现（T5） |
-| `AddWeChatFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel>`——channel 业务参数经 Options 注入，不占 ctor `IDomainUser` 槽，ADR92 兼容） | 装配 | ✅ 已实现（T6） |
+| `AddWeChatFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel>`——channel 业务参数经 Options 注入，不占 ctor `IDomainUser` 槽，ADR92 兼容；V0.2.0 起增 `AddOptions<WechatEventReplyOptions>` + `TryAddEnumerableConstructible<IEventReplyHandler, WechatProbeEventReplyHandler>`——探针无条件注册 IOptions 门控） | 装配 | ✅ 已实现（T6 / 2026-10-17） |
+| `WechatEventReplyHandlerBase` | 平台基类（`DomainServiceBase, IEventReplyHandler`，`ChannelType="wechat_event"`）——**二级分发**（MsgType/Event → 强类型虚方法 OnSubscribe/OnClick/OnText...，未覆盖 → `OnDefaultAsync` 兜底 null）/ 图文工具（`BuildTextReply`/`BuildNewsReply` 多图文 + `ReadNewsTemplate`/`ReplacePlaceholders`）/ **协议门控**（unsubscribe/MASSSENDJOBFINISH/TEMPLATESENDJOBFINISH 强制禁回复——副作用可做回复被吞）；**不继承** 主包 `EventReplyHandlerBase`（两基类并列——Oracle P1-1，方案 §3.1）；`__decrypted_xml` 字段类型化解析（`WechatEventContext`/`WechatReplyPayload`——子类零 XML 感知） | WeChat 事件回复 | ✅ 已实现（2026-10-17，方案 §3.2） |
+| `WechatTemplateEventReplyHandler` | 模板驱动 handler（继承平台基类，覆盖 `OnDefaultAsync` 读 `Channel.Extra["news_reply"]` 模板——占位符 `{uid}/{openid}/{channel_id}/...`，纯图文零签票耦合）；**消费方显式注册**（平台库不默认注册——Oracle P0-1）；模板缺失/损坏/`Enabled=false` → **返回 null**（不回复不干预——Oracle P0-2） | WeChat 事件回复 | ✅ 已实现（2026-10-17，方案 §3.3） |
+| `WechatProbeEventReplyHandler` | 诊断探针 handler（继承平台基类，覆盖全部分支）——**无条件注册** + `IOptions<WechatEventReplyOptions>` 惰性判断 `ProbeEventReplyHandlerEnabled`（默认 **false** fail-safe——Oracle P1-3）；开关开 → 可回复分支 `PROBE:branch=...` 可区分回复 / 门控分支基类强制 null + ILogger；与业务 handler **互斥**（Oracle P2-5） | WeChat 事件回复 | ✅ 已实现（2026-10-17，方案 §3.3/§3.5） |
 
 ## 四、双通道契约（T4/T5 已实现）
 
 | 通道 | 场景 | 流程 |
 |------|------|------|
 | `wechat_oauth`（形态 A/认证服务号） | 网页静默 OAuth 身份获取 | `/{prefix}/{platformId}/login` 按 channel 路由 → 302 微信 `authorize?appid&redirect_uri&scope=snsapi_base&state`（state 绑定会话防 CSRF，回调域名 = SSO 域名）→ 回调 code → `WeChatApiClient.GetOpenIdAsync(appId, code)` → `(channel_id, openid) → uid` → Federation 签 token2 |
-| `wechat_event`（形态 B/未认证号） | 公众号事件推送入站 | 微信推送事件 → 接收端点（**验 `msg_signature` + AES 解密**；`FromUserName` = openid）→ 进程内调 Federation `ISsoAccessCodeService.IssueAsync`（帧内 AOP，零 HMAC 自签——Oracle 评审点 4 P1-2）→ 得 accesscode → 被动回复图文链接 |
+| `wechat_event`（形态 B/未认证号） | 公众号事件推送入站 | 微信推送事件 → 接收端点（**验 `msg_signature` + AES 解密**；`FromUserName` = openid）→ **`WeChatEventChannel.HandleEventAsync`（V0.2.0 编排放权）**：验签解密成功 → 富化 `Parameters` + 存 **`__decrypted_xml`** 明文 XML（Oracle P1-4——平台基类 Parse 数据源）→ **返回 null**（"无平台回复"——编排器 `EventOrchestrator` 双桶迭代：W3 绑定桶优先 → ChannelType 桶回退，微信可达 G4/G5）→ handler（`WechatEventReplyHandlerBase` 派生）**组装被动回复 XML 信封**（text/news 多图文——G6 信封上移平台基类）；无回复 → 端点 200 空回复兜底（5 秒超时）；异常（解密失败/格式非法）→ 返回空哨兵（与"无平台回复"区分，不触发 handler 双桶——Oracle P2-3） |
 
 - **联盟锚点配合**（T5）：`snsapi_base` 联盟服务号场景 → `FederationAnchorOpenId`（经 Abstractions `ISsoAccountLinkService.SetFederationAnchorAsync`）；商户 openid2 → `ISsoChannelMapService.LinkAsync` → `PlatformAccountMap`；反查直认经既有契约。
 - **`WeChatAuthenticationProvider` 不迁移**：既有 = 认证中心**内部认证方式**（短信/微信 → token1 签发）；本库 channel = **联邦 IdP 适配**（外部身份源 → token2 联邦流）——两会话永不交叉（见 §七）。
@@ -142,6 +148,7 @@ Federation 扩展按 channel 类型路由：`wechat_oauth` → 302 微信 author
 
 | 版本 | 内容 |
 |------|------|
+| V0.4.0（2026-10-17） | **事件回复 Handler 三件套（方案 `docs/Federation/Wechat事件回复Handler基类与二级分发-开发方案.md` Oracle PASS WITH CONDITIONS——P0×2/P1×4/P2×7 全部吸收 + ADR `docs/Federation/ADR/ADR-Federation-平台特定事件回复Handler基类与二级分发.md` 已实施）**：`WechatEventReplyHandlerBase`（平台基类——二级分发虚方法集（8 事件 + 7 消息 + OnDefaultAsync 兜底 null）/ 图文工具（多图文 text/news 信封）/ 协议门控（unsubscribe/MASSSENDJOBFINISH/TEMPLATESENDJOBFINISH 强制 null）/ `__decrypted_xml` 类型化解析）+ `WechatTemplateEventReplyHandler`（模板驱动，消费方显式注册 Oracle P0-1）+ `WechatProbeEventReplyHandler`（探针，无条件注册 + `ProbeEventReplyHandlerEnabled` 默认 false 门控 Oracle P1-3）+ `WechatEventContext`/`WechatReplyPayload`/`WechatEventReplyOptions`；**`WeChatEventChannel` 编排放权**（`HandleEventAsync` 返回 null + `__decrypted_xml` 富化 + 异常哨兵 Oracle P2-3——W3 绑定桶对微信可达）；`AddWeChatFederationChannels()` 增 EventReply Options + Probe 注册；**主包 `TestEventReplyHandler` 迁移删除**（能力迁 Template/Probe——ADR D7，承接 `NewsReplyTemplateKey` 常量 Oracle P2-2）；模板 JSON 键 `[JsonPropertyName]` 显式映射 snake_case 缺陷修复（ADR D8）；测试 WeChat.Tests 86 + Federation.Tests 79 全绿 + slnx 0 错误 |
 | V0.1.0（2026-10-05） | T3 平台网关库骨架（commit 968715a）：`WeChatApiClient` 出站客户端（access_token L1 缓存 + 并发锁 + 提前 5min 刷新 + code→openid + sns/userinfo 降级）+ `WeChatOptions`/`WeChatChannelConfig`（`TKWF:Federation:WeChat` 节，凭证自持 Oracle P2-4）+ `WeChatUserInfo` record；纯库（无 Initializer 无 `[TKWFExtension]`），csproj 引 Federation 扩展实现 ISsoChannel（Oracle P1-1 单向依赖）+ `Microsoft.Extensions.Http`（不引 AspNetCore，Oracle 评审点 5）；**T4 `WeChatOauthChannel`（wechat_oauth）/ T5 `WeChatEventChannel` + `WeChatEventCrypto`（wechat_event 信任根一票否决）/ T6 `AddWeChatFederationChannels()` 注册方法 全部落地**；测试 18 用例全绿（生产路径 + 探针门面 + 信任根正负路径）；slnx 已接线 |
 
 <!-- EOF -->

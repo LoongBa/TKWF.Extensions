@@ -1,7 +1,7 @@
 # ADR-Federation-事件回复handler基类与内置测试设施
 
 > **版本**：v0.1（随开发方案评审——Oracle APPROVE WITH CONDITIONS 后实施落地）
-> **状态**：已实施（提交 `95ca9e6`——EventReplyHandlerBase / TestEventReplyHandler / FederationEventReplyOptions / Initializer 条件注册 / EventReplyHandlerBaseTests）
+> **状态**：⚠️ **已废弃**（2026-10-17）——被 `ADR-Federation-平台特定事件回复Handler基类与二级分发.md` 演进替换。原决策 `EventReplyHandlerBase`（保留，平台无关签票基类）与 `TestEventReplyHandler`（已删除，能力迁平台层 Template/Probe）的接受与推翻记录见新 ADR。本文件永久保留（AGENTS §4 生命周期）。
 > **关联**：开发方案 `docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md`（Oracle APPROVE WITH CONDITIONS——2 P0 + 2 P1 + 3 P2 全部吸收）；ADR-Federation-外部身份联邦与密封票据适配（E3 事件回复契约）；TrustCenter.Abstractions（`ISsoChannel`/`IAccessCodeService`）；联邦互联指南 `docs/Federation/联邦互联-使用指南.md` §5.1
 > **日期**：2026-10-15
 

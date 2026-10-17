@@ -346,7 +346,7 @@ services.TryAddEnumerableConstructible<IEventReplyHandler, MyBizHandler>();   //
 | # | 变更 | 级别 | 说明 |
 |---|---|---|---|
 | 1 | `WeChatEventChannel` ctor 删 `IEnumerable<IEventReplyHandler>` | 内部（非公共契约——工厂 ActivatorUtilities 构造，P2-6 核查后无调用点改动） | 无消费方感知 |
-| 2 | `WeChatEventChannel.HandleEventAsync` 行为：恒非 null → 返回 null（异常哨兵空回复） | **平台库 v0.2.0 破坏性**（行为） | 消费方 handler 迭代路径从"通道内部"移到"编排器"——语义等价（first-non-null-wins + ChannelType 匹配 + 空回复兜底），但依赖编排器双桶（已存在） |
+| 2 | `WeChatEventChannel.HandleEventAsync` 行为：恒非 null → 返回 null（异常哨兵空回复） | **平台库 v0.4.0 破坏性**（行为） | 消费方 handler 迭代路径从"通道内部"移到"编排器"——语义等价（first-non-null-wins + ChannelType 匹配 + 空回复兜底），但依赖编排器双桶（已存在） |
 | 3 | `TestEventReplyHandler` 删除 + `TestEventReplyHandlerEnabled` 开关移除 + `EventReplyHandlerBase.TestEventReplyHandlerEnabled` 属性移除 | **Federation 主包 v0.9.0 破坏性** | 消费方若注册/继承测试 handler → 编译失败；改平台层 Template/Probe。`NewsReplyTemplateKey` 常量持平台层（P2-2） |
 | 4 | handler 注册入口变化（主包 Initializer 删除 → 平台库 Probe 无条件注册 + Template 消费方显式） | 配置/装配 | 消费方经 `AddWeChatFederationChannels()` 自动获得 Probe（开关默认关）；Template/业务 handler 显式注册 |
 | 5 | `IEventReplyHandler`/`EventReplyHandlerBase` 契约 | **零破坏** | 保留不动；平台基类为纯新增 |
@@ -382,7 +382,7 @@ services.TryAddEnumerableConstructible<IEventReplyHandler, MyBizHandler>();   //
 |---|---|
 | `docs/Federation/联邦互联-使用指南.md` §5.1 | 测试设施段改写：`TestEventReplyHandler` → 平台层 Template/Probe 三段式 + 注册方式 + 开关配置迁移（`TestEventReplyHandlerEnabled` → `TKWF:Federation:WeChat:EventReply:ProbeEventReplyHandlerEnabled`）+ Probe 与业务 handler 互斥（P2-5） |
 | `docs/Federation.WeChat/微信公众平台连接器-使用指南.md` | 事件回复段落新增：平台基类 + 二级分发分支表 + 业务 handler 示例（P2-7 补全） |
-| `_Framework/Federation.WeChat/README.md` | §三 组件清单补基类/Template/Probe + Options；§四 通道契约表更新（HandleEventAsync 返回 null + `__decrypted_xml`）；版本记录 V0.2.0 |
+| `_Framework/Federation.WeChat/README.md` | §三 组件清单补基类/Template/Probe + Options；§四 通道契约表更新（HandleEventAsync 返回 null + `__decrypted_xml`）；版本记录 V0.4.0 |
 | `_Framework/Federation/README.md` | TestEventReplyHandler 段落更新（架构决策/版本记录） |
 | `docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md` | 标注"已被本方案演进/替换"（不删除——历史保留） |
 | `docs/Federation/ADR/ADR-Federation-事件回复handler基类与内置测试设施.md` | 标注"已废弃" + 引用新 ADR（AGENTS §4 生命周期——不删文件） |

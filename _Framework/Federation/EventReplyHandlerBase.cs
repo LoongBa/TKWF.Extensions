@@ -35,9 +35,6 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <summary>测试端点 URL 基址（消费方部署域名——图文链接拼接用；空 = 相对路径 <c>/feberation/.../test/...</c> 默认指向本服务同源）。</summary>
     protected string? TestTicketEndpointBaseUrl => _eventReplyOptions?.Value.TestTicketEndpointBaseUrl;
 
-    /// <summary>内置测试 handler 注册开关（默认 false——P1-1 fail-safe；false 时 BuildReplyAsync 应返回 null）。</summary>
-    protected bool TestEventReplyHandlerEnabled => _eventReplyOptions?.Value.TestEventReplyHandlerEnabled ?? false;
-
     /// <summary>测试端点 RoutePrefix（图文链接 URL 拼接——默认 /feberation，对齐 FederationEndpointOptions.RoutePrefix）。</summary>
     protected string RoutePrefix => _eventReplyOptions?.Value.RoutePrefix ?? "/feberation";
 

@@ -11,9 +11,11 @@ namespace TKWF.Ext.Federation;
 /// 实现本接口的 handler 声明 <see cref="ChannelId"/>：编排解析序 = <b>精确 channelId 绑定桶优先</b>
 /// （实现本接口且 <c>ChannelId</c> 匹配事件通道的 handler，桶内 first-non-null-wins）→
 /// <b>ChannelType 桶回退</b>（<see cref="IEventReplyHandler.ChannelType"/> 匹配——现状语义）。</para>
-/// <para>默认 handler（如 <see cref="TestEventReplyHandler"/>）<b>不实现</b>本接口 = 服务所有同类型通道
-/// （默认共用）；实现本接口 = 为特定 channelId 覆盖（<b>后续扩展</b>——本期提供契约缝 + 编排支持，
-/// 消费方按需实现）。</para>
+/// <para>默认 handler（按 <c>ChannelType</c> 匹配的类型桶，如平台库
+/// <c>WechatTemplateEventReplyHandler</c>/<c>WechatProbeEventReplyHandler</c>——方案
+/// docs/Federation/Wechat事件回复Handler基类与二级分发-开发方案.md §3.3）<b>不实现</b>本接口 =
+/// 服务所有同类型通道（默认共用）；实现本接口 = 为特定 channelId 覆盖（<b>后续扩展</b>——本期提供
+/// 契约缝 + 编排支持，消费方按需实现）。</para>
 /// </summary>
 public interface IChannelSpecificEventReplyHandler : IEventReplyHandler
 {

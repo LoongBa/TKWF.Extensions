@@ -3,6 +3,8 @@
 > **日期**: 2026-10-15 | **扩展**: Federation（联邦互联连接层） | **关联**: ADR-Federation-外部身份联邦与密封票据适配（E3 事件回复契约）、TrustCenter.Abstractions（ISsoChannel/ISealedTicketService/IAuthorizationCodeService）
 > **状态**: ✅ **Oracle 评审 APPROVE WITH CONDITIONS（2026-10-15）——2 P0 + 2 P1 + 3 P2 全部吸收，修复后实施**；**2026-10-16 v0.8.1 修订**（用户裁定：测试端点/ticket 命名联动 + BaseUrl 空 → 相对路径 + 平台段/通道段选区——见 §八 变更记录）
 
+> ⚠️ **本方案已被 `docs/Federation/Wechat事件回复Handler基类与二级分发-开发方案.md` 演进/替换（2026-10-17）**：`EventReplyHandlerBase` 保留（平台无关签票基类——平台基类 `WechatEventReplyHandlerBase` **不继承**它，两基类并列，Oracle P1-1）；`TestEventReplyHandler` 已删除（能力迁平台层 Template/Probe）。本文档保留作历史参考。相关演进决策见 `docs/Federation/ADR/ADR-Federation-平台特定事件回复Handler基类与二级分发.md`。
+
 ---
 
 ## 一、目的与目标

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -28,34 +27,31 @@ namespace TKWF.Federation.WeChat;
 /// <para>注册：库扩展方法 <c>AddWeChatFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92）；
 /// channel 业务参数经 Options 注入不占 ctor IDomainUser 槽（SSO.WeChat §5.2 P1-3）。</para>
 /// <para><b>事件链（外部身份联邦 E3——ADR-Federation-外部身份联邦与密封票据适配 E3）</b>：
-/// <see cref="HandleEventAsync"/> 复用验签/解密链 + 提取 MsgType/Event 富化 Parameters（评审 F4）→
-/// 委托 <see cref="IEventReplyHandler"/>（消费方实现，按 ChannelType=wechat_event 匹配，first-non-null-wins）
-/// → 业务内容包<b>微信 XML 被动回复</b>（text/xml；<c>ToUserName</c>=原 FromUserName(openid)/
-/// <c>FromUserName</c>=原 ToUserName(公众号)）——handler 委托为空返回 200 空回复（微信 5 秒超时兜底，
-/// 异步客服消息机制归 Phase 2/消费方）。</para>
+/// <see cref="HandleEventAsync"/> 复用验签/解密链 + 提取 MsgType/Event/Content 富化 Parameters（评审 F4）
+/// + 新增富化 <c>Parameters["__decrypted_xml"]</c>（解密后明文 XML——平台基类 Parse 数据源，Oracle P1-4）→
+/// 返回 <b>null</b>（"无平台回复"——编排器 EventOrchestrator 转 handler 双桶迭代：W3 绑定桶优先
+/// → ChannelType 桶回退，微信可达——方案 §3.4 G4/G5）——通道回归"验签+解密+取身份+富化"，XML 信封/迭代权
+/// 上移平台基类与编排器（G6）。解密失败/格式非法 → 返回空哨兵 <c>EventReplyResult("", "text/xml")</c>
+/// （Oracle P2-3——与正常路径 null 区分，编排器短路空回复不触发 handler 双桶；200 空回复兜底由端点层保证）。</para>
 /// </summary>
 [DiContractIgnore]
 public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
 {
     private readonly ChannelConfig? _channel;
-    private readonly IReadOnlyList<IEventReplyHandler> _handlers;
     private readonly ILogger<WeChatEventChannel> _logger;
 
     /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
     /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
-    /// <paramref name="handlers"/> = IEventReplyHandler 集合（消费方注册，ADR92 集合版守卫工厂帧内供给——
-    /// 平台库不注册 handler，防过度设计）；凭证（Token/EncodingAESKey——事件验签信任根）在
-    /// <c>AuthenticateAsync</c>/<c>HandleEventAsync</c> 从 cfg.Extra 使用。
-    /// <paramref name="logger"/> = 结构化日志（工厂 ActivatorUtilities 从 DI 自动解析，无需调用点改动）。</summary>
+    /// 凭证（Token/EncodingAESKey——事件验签信任根）在 <c>AuthenticateAsync</c>/<c>HandleEventAsync</c>
+    /// 从 cfg.Extra 使用。<paramref name="logger"/> = 结构化日志（工厂 ActivatorUtilities 从 DI 自动解析，
+    /// 无需调用点改动）。</summary>
     public WeChatEventChannel(
         IDomainUser user,
-        IEnumerable<IEventReplyHandler> handlers,
         ChannelConfig? channel = null,
         ILogger<WeChatEventChannel>? logger = null)
         : base(user)
     {
         _channel = channel;
-        _handlers = handlers?.ToList() ?? throw new ArgumentNullException(nameof(handlers));
         // 模板实例（集合类型索引源——ctor channel=null）可能直构不经 DI——logger 缺失时 NullLogger 容错（不抛）
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatEventChannel>.Instance;
     }
@@ -249,7 +245,7 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
     }
 
     /// <inheritdoc />
-    public async Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
+    public Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
     {
         // 与 AuthenticateAsync 同款守卫（模板实例/禁用/配置缺失/参数缺失/验签失败/解密失败 → null——
         // 错误语义由装配层 AuthenticateAsync 先行映射（WebExtension 验签成功后才会调本方法）；null 仅表示无平台回复）。
@@ -258,17 +254,17 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
         // 不可用"external_user_id 已存在即跳过验签"优化（存在直调伪造 openid 绕过信任根的漏洞）。
         // Phase 2 契约微调选项（记录，不阻断）：AuthenticateAsync 返回解密 XML 供 HandleEventAsync 复用，需契约微调。
         if (_channel is null)
-            return null;
+            return Task.FromResult<EventReplyResult?>(null);
         if (!_channel.IsEnabled)
-            return null;
+            return Task.FromResult<EventReplyResult?>(null);
 
         _channel.Extra.TryGetValue("Token", out var token);
         _channel.Extra.TryGetValue("EncodingAESKey", out var encodingAesKey);
         if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(encodingAesKey))
-            return null;
+            return Task.FromResult<EventReplyResult?>(null);
 
         if (context.Parameters == null)
-            return null;
+            return Task.FromResult<EventReplyResult?>(null);
 
         // 微信官方 URL 参数名 = msg_signature；装配层亦可能透传 "signature"（兼容两种命名）
         // 预声明 + 独立 TryGetValue（out var 置于复合 || 条件中编译器不保证已赋值——CS0165 保守判定）
@@ -309,16 +305,16 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
 
             if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
                 || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(msgEncrypt))
-                return null;
+                return Task.FromResult<EventReplyResult?>(null);
         }
 
         // 信任根一票否决：验签失败 → 拒绝（绝不解密伪造密文）
         if (!WeChatEventCrypto.VerifySignature(token!, timestamp!, nonce!, msgEncrypt!, signature!))
-            return null;
+            return Task.FromResult<EventReplyResult?>(null);
 
         try
         {
-// 安全模式 AES 解密 → FromUserName(openid) + MsgType/Event（评审 F4）+ Content（图文 Description 源）
+            // 安全模式 AES 解密 → FromUserName(openid) + MsgType/Event（评审 F4）+ Content（图文 Description 源）
             var xml = WeChatEventCrypto.DecryptMsg(encodingAesKey!, msgEncrypt!);
             var openId = WeChatEventCrypto.ExtractFromUserName(xml);
             var toUserName = WeChatEventCrypto.ExtractToUserName(xml);
@@ -336,102 +332,25 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
                 dict["from_user_name"] = openId;
                 if (msgContent is not null)
                     dict["content"] = msgContent;
+                // Oracle P1-4：解密后明文 XML 入 Parameters——平台基类 WechatEventMessage.Parse 数据源
+                // （EventKey/经纬度/PicUrl/MediaId 等未富化字段从 __decrypted_xml XDocument 提取——通道不新增 Extract）
+                dict["__decrypted_xml"] = xml;
             }
 
-            // handler 委托 first-non-null-wins（微信被动回复 = 业务决策，归消费方 IEventReplyHandler——
-            // 平台库不注册 handler，防过度设计）：业务内容包微信 XML 被动回复信封（text/xml——文本；
-            // news——图文 V0.1.1）
             _logger.LogInformation("微信事件入站：ChannelId={ChannelId} MsgType={MsgType} Event={Event} OpenId={OpenId} Content={Content}",
                 _channel.ChannelId, msgType ?? "", eventValue ?? "", openId, msgContent ?? "");
-            foreach (var handler in _handlers)
-            {
-                if (!string.Equals(handler.ChannelType, ChannelType, StringComparison.Ordinal))
-                    continue;
-                var reply = await handler.HandleAsync(context, ct);
-                if (reply is null)
-                {
-                    _logger.LogInformation("微信事件 handler 返回 null（不处理）：Handler={Handler} ChannelId={ChannelId}",
-                        handler.GetType().Name, _channel.ChannelId);
-                    continue;
-                }
 
-                // 图文（news）信封优先（V0.1.1：NewsArticles 非空——标题/描述/URL 结构化）；否则文本信封
-                if (reply.NewsArticles is { Count: > 0 })
-                {
-                    _logger.LogInformation("微信事件回复（图文 news）：Handler={Handler} ChannelId={ChannelId} Title={Title} Url={Url}",
-                        handler.GetType().Name, _channel.ChannelId,
-                        reply.NewsArticles[0].Title, reply.NewsArticles[0].Url);
-                    var newsXml = BuildNewsReplyXml(openId, toUserName, reply.NewsArticles);
-                    return new EventReplyResult(newsXml, "text/xml");
-                }
-
-                // 微信 XML 被动回复（text）：ToUserName=原 FromUserName(openid——回复对象)/
-                // FromUserName=原 ToUserName(公众号 id)
-                _logger.LogInformation("微信事件回复（文本 text）：Handler={Handler} ChannelId={ChannelId}",
-                    handler.GetType().Name, _channel.ChannelId);
-                var xmlReply = BuildTextReplyXml(openId, toUserName, reply.Content);
-                return new EventReplyResult(xmlReply, "text/xml");
-            }
-
-            // 微信 5 秒超时约束：无业务回复 → 200 空回复（text/xml）——规避超时，异步客服消息兜底归 Phase 2/消费方
-            _logger.LogWarning("微信事件无 handler 回复：ChannelId={ChannelId}（200 空回复兜底——发消息无回复的症状源）", _channel.ChannelId);
-            return new EventReplyResult("", "text/xml");
+            // 正常路径：验签解密成功 + 富化完成 → 返回 null（"无平台回复"——编排器 EventOrchestrator 接收后
+            // 转 handler 双桶迭代：W3 绑定桶优先 → ChannelType 桶回退。方案 §3.4——G4 W3 绑定桶对微信可达 /
+            // G5 迭代权统一编排器 / G6 XML 信封上移平台基类（通道回归"验签+解密+取身份+富化"，对齐 WeCom/DingTalk））
+            return Task.FromResult<EventReplyResult?>(null);
         }
         catch (Exception) when (ct.IsCancellationRequested is false)
         {
-            // 解密失败/格式非法——防御性拒（装配层 AuthenticateAsync 已先行映射失败语义）
-            return null;
+            // 解密失败/格式非法——空哨兵（Oracle P2-3）：返回非 null 空回复（与正常路径 null 区分——
+            // 编排器短路，不触发 handler 双桶；200 空回复兜底由端点层保证，微信 5 秒超时规避）
+            _logger.LogWarning("微信事件解密失败：msg_encrypt AES 解密/XML 解析异常 ChannelId={ChannelId}", _channel.ChannelId);
+            return Task.FromResult<EventReplyResult?>(new EventReplyResult("", "text/xml"));
         }
-    }
-
-    /// <summary>
-    /// 微信 XML 被动回复（text）信封——<c>&lt;xml&gt;&lt;ToUserName&gt;&lt;![CDATA[...]]&gt;&lt;/ToUserName&gt;
-    /// &lt;FromUserName&gt;...&lt;/FromUserName&gt;&lt;CreateTime&gt;unix&lt;/CreateTime&gt;
-    /// &lt;MsgType&gt;&lt;![CDATA[text]]&gt;&lt;/MsgType&gt;&lt;Content&gt;&lt;![CDATA[...]]&gt;&lt;/Content&gt;&lt;/xml&gt;</c>。
-    /// </summary>
-    /// <param name="toUserName">回复对象（原 FromUserName = openid）。</param>
-    /// <param name="fromUserName">公众号 id（原 ToUserName）。</param>
-    /// <param name="content">业务回复文本（handler 内容）。</param>
-    private static string BuildTextReplyXml(string toUserName, string fromUserName, string content)
-    {
-        var createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        return $"<xml><ToUserName><![CDATA[{toUserName}]]></ToUserName>" +
-               $"<FromUserName><![CDATA[{fromUserName}]]></FromUserName>" +
-               $"<CreateTime>{createTime}</CreateTime>" +
-               $"<MsgType><![CDATA[text]]></MsgType>" +
-               $"<Content><![CDATA[{content}]]></Content></xml>";
-    }
-
-    /// <summary>
-    /// 微信 XML 被动回复（news）信封（V0.1.1 图文扩展）——<c>&lt;xml&gt;&lt;ToUserName&gt;...&lt;/ToUserName&gt;
-    /// &lt;FromUserName&gt;...&lt;/FromUserName&gt;&lt;CreateTime&gt;unix&lt;/CreateTime&gt;
-    /// &lt;MsgType&gt;&lt;![CDATA[news]]&gt;&lt;/MsgType&gt;&lt;ArticleCount&gt;{n}&lt;/ArticleCount&gt;
-    /// &lt;Articles&gt;&lt;item&gt;&lt;Title&gt;...&lt;/Title&gt;&lt;Description&gt;...&lt;/Description&gt;
-    /// &lt;PicUrl&gt;...&lt;/PicUrl&gt;&lt;Url&gt;...&lt;/Url&gt;&lt;/item&gt;&lt;/Articles&gt;&lt;/xml&gt;</c>。
-    /// </summary>
-    /// <param name="toUserName">回复对象（原 FromUserName = openid）。</param>
-    /// <param name="fromUserName">公众号 id（原 ToUserName）。</param>
-    /// <param name="articles">图文条目（Title/Description/Url/PicUrl——handler 业务结构）。</param>
-    private static string BuildNewsReplyXml(string toUserName, string fromUserName, IReadOnlyList<EventReplyNewsArticle> articles)
-    {
-        var createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var sb = new System.Text.StringBuilder();
-        sb.Append($"<xml><ToUserName><![CDATA[{toUserName}]]></ToUserName>");
-        sb.Append($"<FromUserName><![CDATA[{fromUserName}]]></FromUserName>");
-        sb.Append($"<CreateTime>{createTime}</CreateTime>");
-        sb.Append("<MsgType><![CDATA[news]]></MsgType>");
-        sb.Append($"<ArticleCount>{articles.Count}</ArticleCount>");
-        sb.Append("<Articles>");
-        foreach (var a in articles)
-        {
-            sb.Append("<item>");
-            sb.Append($"<Title><![CDATA[{a.Title}]]></Title>");
-            sb.Append($"<Description><![CDATA[{a.Description}]]></Description>");
-            sb.Append($"<PicUrl><![CDATA[{a.PicUrl ?? ""}]]></PicUrl>");
-            sb.Append($"<Url><![CDATA[{a.Url}]]></Url>");
-            sb.Append("</item>");
-        }
-        sb.Append("</Articles></xml>");
-        return sb.ToString();
     }
 }

@@ -165,18 +165,19 @@ _Tests/Extension.{扩展名}.Tests/
 > - **判据**：门面需要数据访问时 → 直接 `User.Use<具体 DataService>()`（如 `User.Use<SsoClientEntityDataService>()`）；**只有当契约需跨扩展消费（数据属主在他扩展主包）时才经 Abstractions 契约包定义接口**——但该接口是**对外的领域服务门面契约**（含业务语义），不是 DataService 的 CRUD 薄包装；零手写 CRUD（SG1 已生成）。
 > - **自检**：新增文件若以 `Store` 结尾或方法仅是 `EntityXxxAsync` 的透传 → 删除，改门面直接组合 DataService。
 
-### 扩展开发强制 Skill 路由（2026-10-05 新增，违反即失败）
+### 扩展开发强制 Skill 路由（2026-10-05 新增，2026-10-18 修正路由组合，违反即失败）
 
-> **扩展仓库也是 TKWF 消费方**（用户裁定 2026-10-05）：扩展用主框架 API 开发（消费框架），产物被装配进消费项目——因此**与消费方项目同款强制 Skill 路由**（参考 `DMP-Lite/Agents_Use_TKWF.md §7`，路由方向面向扩展开发）。任何扩展开发任务必须按表格加载对应 Skill，禁止使用通用 Agent 分类或手动编写绕过。
+> **扩展仓库也是 TKWF 消费方**（用户裁定 2026-10-05）：扩展用主框架 API 开发（消费框架），产物被装配进消费项目——因此**与消费方项目同款强制 Skill 路由**（路由方向面向扩展开发）。**扩展 = "准消费方"**：扩展模块即消费项目中可重用部分拆分为独立模块——门面/Service 设计与消费方领域开发同款（tkwf-service 适用），实体数据底座同款（tkwf-entity 适用）。任何扩展开发任务必须按表格加载对应 Skill，禁止使用通用 Agent 分类或手动编写绕过。
 
 | 任务 | 必须使用的 Skill | 关键参数 | 禁止行为 |
 |------|-----------------|---------|---------|
-| 扩展整体开发/重构/整改（门面/Store/Service/Initializer/测试宿主） | **`tkwf-extension`** | `{Ext}=扩展名` | 禁手写 Store/构造注入/裸 ORM（红线）；禁通用 category 绕过 |
-| 扩展实体编写（Entity） | `tkwf-entity` | `{Ext}=扩展名` `{Entity}=实体名` | 禁手写 `IDomainEntity`/`[Key]`/`IsFromPersistentSource`（SG1 自动生成） |
-| 扩展 Service/业务规则 | `tkwf-service` | `{Ext}=扩展名` | 禁手动写 Service、禁绕过门面范式 |
-| 扩展测试（生产路径 + 契约测试） | `tkwf-test` | `{Ext}=扩展名` | 禁手写测试宿主绕过生产路径（StubDomainUser 掩盖守卫缺陷先例） |
-| 接入/启用/使用他扩展（引用→白名单→Web 装配→`User.Use` 门面） | `tkwf-use-extension` | `{Ext}=被消费扩展名` | 禁绕过白名单/门面 AOP 路径 |
+| 扩展整体开发/重构/整改（门面/Store/Service/Initializer/测试宿主/装配） | **`tkwf-extension`**（扩展范式总纲——门面规则/注册形态/测试宿主/铁律） | `{Ext}=扩展名` | 禁手写 Store/构造注入/裸 ORM（红线）；禁通用 category 绕过 |
+| 扩展门面/Service 设计（领域服务门面 + 业务规则 + DataService 组合） | **`tkwf-extension` + `tkwf-service`**（扩展=准消费方：扩展范式 + 领域 Service 设计） | `{Ext}=扩展名` | 禁手动写 Service、禁绕过门面范式（DomainServiceBase + AddConstructibleService） |
+| 扩展实体设计（Entity 数据底座） | **`tkwf-extension` + `tkwf-entity`**（扩展范式 + 实体声明式编写） | `{Ext}=扩展名` `{Entity}=实体名` | 禁手写 `IDomainEntity`/`[Key]`/`IsFromPersistentSource`（SG1 自动生成） |
+| 扩展测试（生产路径 + 契约测试） | **`tkwf-extension` + `tkwf-test`** | `{Ext}=扩展名` | 禁手写测试宿主绕过生产路径（StubDomainUser 掩盖守卫缺陷先例） |
+| 接入/启用/使用他扩展（引用→白名单→Web 装配→`User.Use` 门面） | **`tkwf-extension` + `tkwf-use-extension`** | `{Ext}=被消费扩展名` | 禁绕过白名单/门面 AOP 路径 |
 
+> **组合语义**：扩展开发任务**必须**含 `tkwf-extension`（扩展范式总纲——铁律/门面形态/注册/测试宿主约定），按子任务叠加 `tkwf-service`（门面/Service 设计）/`tkwf-entity`（实体）/`tkwf-test`（测试）/`tkwf-use-extension`（消费他扩展）。设计阶段（出方案/设计文档）以 `tkwf-extension` + `tkwf-service` 为主体。
 > **前置检查**：接到扩展开发任务时，第一步先加载并阅读对应 Skill 全文，按其规范执行，不得凭记忆或通用做法替代（对齐消费方 `Agents_Use_TKWF.md §7` 前置检查）。
 > **Skill 位置**：主框架 `../_TKWF/docs/AC-Kit/skills/{skill名}/SKILL.md`（本仓库通过软链/路径引用，无需手动加载——OpenCode 按 AGENTS.md 路由自动装载）。
 

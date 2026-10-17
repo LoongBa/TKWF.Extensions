@@ -102,12 +102,12 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 }
 ```
 
-### 5. 表结构（3 实体——`TKWF_SsoClient`/`TKWF_SealedTicket`/`TKWF_AuthorizationCode`，2026-10-16 拆分命名 ADR109 D4）
+### 5. 表结构（3 实体——`TKWF_SsoClient`/`TKWF_SealedTicket`/`TKWF_AuthorizationCode`，2026-10-16 拆分命名 ADR109 D4 + 2026-10-17 v4.10.79 ADR110）
 
 | 表 | 关键列/约束 |
 |----|-----------|
 | `TKWF_SsoClient` | AppId(64 **唯一**——token2 `aud`)/OriginWhitelist(512 JSON——防开放重定向，scheme+host 精确集合)/Scopes(256 JSON，默认 `["profile:basic"]`)/ClientSecretEncrypted(512 AES-GCM)/HmacSecretEncrypted(512 AES-GCM——per-channel + per-app HMAC，`/sso/issue` 验签来源 Oracle P1-4)/IsEnabled |
-| `TKWF_SealedTicket`（面①） | CodeHash(64 **唯一**——只存 SHA256(ticket))/ExpectedClaimant(64?——可核销人进 CAS)/**PayloadEncrypted(4096——AES-GCM 密文列，方案 §5.5）**/ExpiresAt/Used/CreateTime/UpdateTime |
+| `TKWF_SealedTicket`（面①） | CodeHash(64 **唯一**——只存 SHA256(ticket))/ExpectedClaimant(64?——可核销人进 CAS)/**PayloadEncrypted(4096——AES-GCM 密文列，方案 §5.5）**/ExpiresAt/**UsedCount(int——已消费次数，原子逐次 +1）/MaxRedeems(int——有界配额，默认 1）**/CreateTime/UpdateTime（V4.10.79 ADR110：原 `Used` bool 列已替换为计数版，存量表需 `ALTER TABLE` 迁移） |
 | `TKWF_AuthorizationCode`（面②） | CodeHash(64 **唯一**——只存 SHA256(code))/ChannelId(64)/TargetAppId(64)/UId(32)/Scope(128?)/CodeVerifierHash(64? PKCE 可选)/IpAddress(45?)/ExpiresAt/Used/CreateTime/UpdateTime |
 
 ## 三、令牌契约（token2，ES256，独立密钥域）
@@ -135,11 +135,11 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 | 方法 | 语义 |
 |------|------|
-| `IssueAsync(T payload, TimeSpan ttl, SealedTicketOptions? options, ct)` | 签发密封票据——payload 序列化 JSON 后 **UTF8 明文 ≤ 4068 字节**（4096 - 12 nonce - 16 tag，AES-GCM 密文列 `MaxLength(4096)`；超限抛 `PAYLOAD_TOO_LARGE`）；经 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.TrustCenter` 主框架常量）AES-GCM 加密落 `PayloadEncrypted`（**明文不落库**）；`options.ExpectedClaimant` 可空 = 可转让（任意核销人可消费）；`ttl ≤ 0` → 钳制为 `SealedTicketExpirationSeconds`（默认 120） |
-| `RedeemAsync(string ticket, TicketRedeemContext? context, ct)` | **核销取回 + 销毁（单次原子 CAS）**——`EntityUpdateWhereAsync(WHERE CodeHash=? AND used=false AND (ExpectedClaimant IS NULL OR ExpectedClaimant=claimant), set Used=true)`：**核销人 + 并发核销联合判定无 TOCTOU**（v4.10.77 TicketRedeemContext）；影响 0 → 重查判因（已用=重放 / 核销人不符 CAS 不 swap——票据保留合法核销人可兑换 / 过期）；**契约语义：失败/过期/已用/核销人不符 → 返回 null**（不向票据消费方泄露判因码） |
-| `CleanupExpiredAsync(ct)` | 清理过期行**含 Payload 密文**（防业务数据残留）——`ExpiresAt < UtcNow - retentionDays`（默认 `SealedTicketRetentionDays`=7；≤ 0 跳过清理）；**消费方经 `IRecurringBackgroundJobManager` 周期调度**（对齐 Metrics 定时重算范式） |
+| `IssueAsync(T payload, TimeSpan ttl, SealedTicketOptions? options, ct)` | 签发密封票据——payload 序列化 JSON 后 **UTF8 明文 ≤ 4068 字节**（4096 - 12 nonce - 16 tag，AES-GCM 密文列 `MaxLength(4096)`；超限抛 `PAYLOAD_TOO_LARGE`）；经 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.TrustCenter` 主框架常量）AES-GCM 加密落 `PayloadEncrypted`（**明文不落库**）；`options.ExpectedClaimant` 可空 = 可转让（任意核销人可消费）；`options.MaxRedeems` **有界配额**（V4.10.79 ADR110：默认 1 = 单次消费；`>1` 多次消费；守卫 `<1` 抛 `ArgumentOutOfRangeException`——0 不解释为无限，无限 = 显式大值）；`ttl ≤ 0` → 钳制为 `SealedTicketExpirationSeconds`（默认 120） |
+| `RedeemAsync(string ticket, TicketRedeemContext? context, ct)` | **核销取回 + 原子逐次消费（有界配额）**——`EntityUpdateWhereAsync(WHERE CodeHash=? AND UsedCount<MaxRedeems AND (ExpectedClaimant IS NULL OR ExpectedClaimant=claimant), SET UsedCount=UsedCount+1)`（V4.10.79 ADR110）：**核销人 + 并发逐次消费联合判定无 TOCTOU**（并发恰 N 次成功，v4.10.77 TicketRedeemContext + v4.10.79 配额）；影响 0 → 重查判因（**耗尽 UsedCount≥MaxRedeems=重放/竞争败者** / 核销人不符 CAS 不 swap——票据保留、不烧槽位，合法核销人仍可兑换 / 过期）；**契约语义：失败/过期/耗尽/核销人不符 → 返回 null**（不向票据消费方泄露判因码） |
+| `CleanupExpiredAsync(ct)` | 清理**不可再兑换**行**含 Payload 密文**（防业务数据残留）——判据 = 过期 `ExpiresAt < UtcNow - retentionDays` **OR 耗尽 `UsedCount>=MaxRedeems`**（V4.10.79 ADR110 语义扩展；默认 `SealedTicketRetentionDays`=7；≤ 0 跳过清理）；**消费方经 `IRecurringBackgroundJobManager` 周期调度**（对齐 Metrics 定时重算范式） |
 
-> **⚠️ D3 Phase 2 预留字段（未消费，2026-10-16 标注）**：`SealedTicketOptions.TicketType` / `Extensions`（签发期扩展——预留给 PKCE/加密模式/限流等实现变体）与 `TicketRedeemContext.Extensions`（兑换期扩展）为**契约预留字段**——当前 `SealedTicketService<T>` DB 后端**仅消费 `ExpectedClaimant`**，其余字段未接线（YAGNI）。**一次性 + TTL 是契约硬语义**（"原子单次消费" + ttl 必填正数，`ttl<=0` 钳制默认）——"非一次性 / 不限时"票据超出预留能力，若立项需主框架契约语义演进（ADR）+ InMemory 后端同步，扩展侧再跟进表结构（`UsedCount`/`MaxRedeems`、`ExpiresAt` 可空）。
+> **✅ D3 Phase 2 预留字段消费更新（2026-10-17，V4.10.79 ADR110）**：`SealedTicketOptions.MaxRedeems`（有界配额）**已接线消费**——DB 后端 `IssueAsync` 写 `MaxRedeems`（守卫 `<1` 抛）、`RedeemAsync` 原子 `UsedCount+1 WHERE UsedCount<MaxRedeems`、`CleanupExpiredAsync` 判据含耗尽。**仍预留未消费**：`TicketType` / `Extensions`（签发期扩展）与 `TicketRedeemContext.Extensions`（兑换期扩展）未接线（YAGNI）。**一次性（默认 MaxRedeems=1）+ TTL 仍是默认硬语义**；"不限时 / 无限次"票据超出预留能力（`ExpiresAt` 可空 / 无限配额 = 显式大值仍需主框架契约演进，见 ADR110 Phase 2），扩展侧表结构已就绪（`UsedCount`/`MaxRedeems`）。
 
 ### 面② OAuth 授权码（原通路 A——SSO 联邦流，`AuthorizationCodeIssueRequest` 重载）
 
@@ -177,6 +177,7 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 
 | 版本 | 内容 |
 |------|------|
+| V0.3.2（2026-10-17） | **票据有界配额（V4.10.79 ADR110 适配——框架组 Phase 1 发布，扩展组联动）**：CPM 全量 lockstep 4.10.76→**4.10.79**；`TKWF_SealedTicket` 表 `Used` bool → `UsedCount` int + `MaxRedeems` int（存量表 `ALTER TABLE` 迁移）；`SealedTicketOptions.MaxRedeems` 接线——`IssueAsync` 写入 + 守卫 `<1` 抛（0 不解释为无限）+ `RedeemAsync` 原子逐次消费 `SET UsedCount=UsedCount+1 WHERE UsedCount<MaxRedeems`（并发恰 N 次成功，耗尽后返回 null）+ `PeekAsync` 耗尽判据 + `CleanupExpiredAsync` 判据含耗尽（过期 OR 耗尽统一清理）；xCodeGen 重生成实体 .g.cs（DTO/Conditions/DataService）；测试 35 全绿（+5：守卫/多次消费有界/默认单次/错误核销人不烧槽位/耗尽清理）+ Federation 87 全绿 + slnx 0 错误 |
 | V0.3.1（2026-10-16） | **拆分命名 ADR109 D4 删旧过渡（用户裁定：项目组已适配，零兼容层）**：旧 `IAccessCodeService`/`AccessCodeIssueRequest`/`AccessCodeEntity`/`AccessCodeService` + 生成物 + `AccessCodeExpirationSeconds`/`AccessCodeRetentionDays` 配置键**全部删除**——生产契约固定为面① `ISealedTicketService<T>`（`SealedTicketService<T>` 表 `TKWF_SealedTicket`）+ 面② `IAuthorizationCodeService`（`AuthorizationCodeService` 表 `TKWF_AuthorizationCode`）；死配置 `AuthorizationCodeEndpointBaseUrl`/`TestAuthorizationCodeEndpointEnabled`（面② 预留端点从未实现，测试端点实际走 Federation）删除；门面注册收敛（删过渡适配器注册，P2 单一事实源）；测试 30 全绿 + slnx 0 错误 |
 | V0.2.1（2026-10-14） | **SsoClient 注册契约缺口修复（方案①——框架组转达，OAuth 动态注册 RFC 7591 §4.3）**：`RegisterAsync` 返回类型 `SsoClientInfo` → `SsoClientRegistrationResult`（`AppId` + **一次性明文 `ClientSecret`** + `Info` 脱敏快照）——动态注册子应用注册时即拿 secret，兑现身份链路（identity/claim）打通；**安全**：明文仅注册响应返回一次、服务端只存 AES-GCM 密文、**不提供恢复接口**（防 appId 枚举）；契约包 `ISsoClientQueryService`/`SsoClientInfo` 零变更（L2 面零破坏）；测试补注册响应 secret 断言（非空 + 可过校验 + 明文≠密文）+ README/使用指南同步 |
 | V0.1.0（2026-10-09，**待发布**） | **TrustCenter 信任内核（自 Federation 剥离，Phase 1-4）**：项目/命名空间/MinVerTagPrefix（`TrustCenter/v`）确立；`SsoClientEntity`（应用注册——origin 白名单 + scope + AES-GCM credential + per-channel HMAC）/ `Token2Service`（手写 ES256 独立密钥域 + kid 轮换 + JWKS + `DevKeyCache<EcKeySet>`）/ `AccessCodeEntity` + `AccessCodeService`（联邦授权码 Issue/Consume + **安全数据投递增强** Payload + ExpectedClaimant + Issue/Peek/Redeem + CleanupExpiredAsync）/ `TrustCenterExtensionInitializer`（AddConstructibleService 三门面 + keyed `ISymmetricKeyProvider` + DevKeyCache + 生产 fail-fast 预检）；`TrustCenter.Abstractions` 契约包（`ISsoChannel`/`IToken2Service`/`IAccessCodeService` + 不可变 DTO，零实体零 SG1）；编排面（SsoLogin/ISsoChannelFactory）与多通道设施归 Federation；25 测试用例 + 全量回归 0 失败（Phase 1-4 累计 1913 用例）。**✅ v4.10.70 适配（2026-10-10）**：CPM 4.10.69→4.10.70 lockstep + 删 `TrustCenterKeyProviderKeys` 过渡类 + 3 处代码点/5 处注释切 `SymmetricKeyProviderKeys.TrustCenter`（C11 第 5 扩展边界兑现，零行为差异）——统一发布待用户同意 |

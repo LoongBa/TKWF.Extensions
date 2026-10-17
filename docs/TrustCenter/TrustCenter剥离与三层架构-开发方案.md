@@ -180,13 +180,21 @@ Task<T?> PeekAsync<T>(string code, CancellationToken ct);                       
 Task<T?> RedeemAsync<T>(string code, string? claimant, CancellationToken ct);              // 核销取 payload + 销毁
 ```
 
-- **条件进原子 CAS**（无 TOCTOU）：
+- **条件进原子 CAS**（无 TOCTOU；**V4.10.79 ADR110 升级为有界配额**——见下方注记）：
   ```csharp
+  // v4.10.77（ADR109 Phase 2）单次形态：Used bool
   EntityUpdateWhereAsync(
     c => c.CodeHash == hash && c.Used == false && (c.ExpectedClaimant == null || c.ExpectedClaimant == claimant),
     c => new { Used = true }, ct);
   // 影响 0 = 不存在/已用/核销人不符 → 重查判因
+
+  // V4.10.79（ADR110 Phase 1）有界配额形态：UsedCount/MaxRedeems（2026-10-17 v0.3.2 落地）
+  EntityUpdateWhereAsync(
+    c => c.CodeHash == hash && c.UsedCount < c.MaxRedeems && (c.ExpectedClaimant == null || c.ExpectedClaimant == claimant),
+    c => new { UsedCount = c.UsedCount + 1, UpdateTime = DateTime.UtcNow }, ct);
+  // 影响 0 = 不存在/耗尽/核销人不符 → 重查判因（耗尽 UsedCount>=MaxRedeems=重放/竞争败者）
   ```
+  > **注记（2026-10-17）**：本方案 §5.5 原设计为"单次原子 CAS（Used bool）"；框架 v4.10.79 ADR110 将契约升级为**原子逐次消费（有界配额）**——`SealedTicketOptions.MaxRedeems`（默认 1 = 单次，ADR107/109 语义零变更；`>1` 多次，并发恰 N 次成功，耗尽后返回 null；守卫 `<1` 抛）+ `CleanupExpiredAsync` 判据含耗尽。扩展侧 v0.3.2 已适配（表 `TKWF_SealedTicket` `Used` → `UsedCount`+`MaxRedeems`）。
 - **用途由业务层决定**（人工核验/自动核验）——TrustCenter 只提供能力，不规定用途（见转告文档）
 - **不独立扩展**（P9）：TrustCenter 内置能力；未来非信任域场景再评估剥离
 - **Payload 密钥归属**：`PayloadEncrypted` 经 keyed `ISymmetricKeyProvider`（新增 **`SymmetricKeyProviderKeys.TrustCenter`**，`TrustCenterOptions.SecretEncryptionKeyPath` 前 32 字节密钥）——不复用 Federation key（信任域密钥独立，安全域隔离）

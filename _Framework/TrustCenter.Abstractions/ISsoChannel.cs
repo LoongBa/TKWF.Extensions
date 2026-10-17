@@ -34,7 +34,8 @@ public sealed record SsoChannelAuthorizeResult(string Url, string? State, string
 /// <para>参数约定：<c>__raw</c> = 原始 body；query 参数（msg_signature/signature/timestamp/nonce/echostr——
 /// 微信验签参数在 URL query，装配层透传）；<c>channel_id</c>；平台库通道验签解密后富化
 /// <c>external_user_id</c>（openid）/ <c>msg_type</c> / <c>event</c>；编排层 uid 只读查询后富化 <c>uid</c>
-/// （评审 F7——<c>GetByChannelAsync</c> 只读不建号，不调 LinkAsync）。</summary>
+/// （评审 F7——<c>GetByChannelAsync</c> 只读不建号，不调 LinkAsync）。</para>
+/// </summary>
 public sealed record SsoChannelEventContext(IReadOnlyDictionary<string, string?> Parameters);
 
 /// <summary>

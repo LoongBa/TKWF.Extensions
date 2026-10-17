@@ -97,7 +97,8 @@ jobs:
             TARGETS="__ALL__"     # 契约包/CPM 变更 → 全量（纪律矩阵红线）
           else
             # 受影响扩展目录（_Framework/{Ext}/）
-            EXTS=$(echo "$CHANGED" | grep -oE '^_Framework/[^/]+/' | sort -u)
+            # ⚠️ pipefail 防御：无 _Framework/ 变更时 grep -oE 无匹配返回 1 → 命令替换整体 exit 1 → errexit 终止（2026-10-17 CI 实测）
+            EXTS=$(echo "$CHANGED" | grep -oE '^_Framework/[^/]+/' | sort -u || true)
             for ext in $EXTS; do
               # 反斜杠转义（csproj ProjectReference 用 Windows 路径 _Framework\{Ext}\）
               esc=$(echo "$ext" | sed 's#^_Framework/##; s#/$##' | sed 's/\./\\./g')
@@ -106,8 +107,8 @@ jobs:
                 TARGETS="$TARGETS $csproj"
               done
             done
-            # 去重
-            TARGETS=$(echo "$TARGETS" | tr ' ' '\n' | sort -u | grep -v '^$' | tr '\n' ' ')
+            # 去重（⚠️ pipefail 防御：TARGETS 空时 grep -v '^$' 无匹配返回 1 → errexit 终止——同 L437 防）
+            TARGETS=$(echo "$TARGETS" | tr ' ' '\n' | sort -u | grep -v '^$' | tr '\n' ' ' || true)
           fi
           echo "test-targets=$TARGETS" >> "$GITHUB_OUTPUT"
           echo "test-targets resolved: '$TARGETS'"

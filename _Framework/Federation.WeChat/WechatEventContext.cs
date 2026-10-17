@@ -49,7 +49,10 @@ public sealed record WechatEventContext(
     string? OpenId,                     // external_user_id 归一（通道/编排富化——OpenId=external_user_id ?? FromUserName）
     string? UId,                        // uid（编排层只读查询富化——openid 未绑定为 null）
     string? ChannelId,                  // channel_id（装配层传入——registry 选区键）
-    ChannelConfig? Channel = null)      // Channel（基类反查 registry 后富化——Channel.Extra 模板数据源；null = 查不到/未反查）
+    ChannelConfig? Channel = null,      // Channel（基类反查 registry 后富化——Channel.Extra 模板数据源；null = 查不到/未反查）
+    string? MsgId = null,               // MsgId（微信消息 id——消息形态幂等键来源；__decrypted_xml 提取，事件类为 null；V0.2.0 网关幂等）
+    long? CreateTime = null,            // CreateTime（微信原始时间戳 Unix 秒——事件形态幂等键来源；__decrypted_xml 提取，原样留存非 UTC 转换）
+    string? RawXml = null)              // RawXml（__decrypted_xml 解密后明文 XML——网关转发原始报文透传数据源，方案 §十·二 ④；null = 未解密/缺失）
 {
     /// <summary>
     /// SCAN 事件场景值（<see cref="EventKey"/> 去 <c>qrscene_</c> 前缀——方案 §3.2 OnScanAsync 强类型参数；
@@ -103,6 +106,8 @@ public sealed record WechatEventContext(
         string? title = null;
         string? description = null;
         string? url = null;
+        string? msgId = null;
+        long? createTime = null;
         string? status = null;
         int? totalCount = null;
         int? filterCount = null;
@@ -122,6 +127,8 @@ public sealed record WechatEventContext(
                 throw new InvalidOperationException("微信消息 XML 非法（__decrypted_xml）", ex);
             }
 
+            msgId = ExtractText(doc, "MsgId");
+            createTime = ExtractLong(doc, "CreateTime");   // 微信原始时间戳（Unix 秒）——V0.2.0 网关幂等键来源（原样留存）
             eventKey = ExtractText(doc, "EventKey");
             scale = ExtractText(doc, "Scale");
             label = ExtractText(doc, "Label");
@@ -168,7 +175,10 @@ public sealed record WechatEventContext(
             ErrorCount: errorCount,
             OpenId: openId,
             UId: uid,
-            ChannelId: channelId);
+            ChannelId: channelId,
+            MsgId: msgId,
+            CreateTime: createTime,
+            RawXml: xml);
     }
 
     private static string? GetValue(IReadOnlyDictionary<string, string?> parameters, string key)
@@ -190,5 +200,11 @@ public sealed record WechatEventContext(
     {
         var value = ExtractText(doc, name);
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : null;
+    }
+
+    private static long? ExtractLong(XDocument doc, string name)
+    {
+        var value = ExtractText(doc, name);
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l) ? l : null;
     }
 }

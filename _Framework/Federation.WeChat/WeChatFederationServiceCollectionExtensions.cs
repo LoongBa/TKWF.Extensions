@@ -41,8 +41,16 @@ public static class WeChatFederationServiceCollectionExtensions
         // 编程式 configure 覆盖（测试/动态装配注入）
         services.AddOptions<WeChatOptions>().Configure(o => configure?.Invoke(o));
 
-        // 出站客户端：HttpClient 经 typed client 注入（AddHttpClient<WeChatApiClient>——ctor 收 HttpClient）
+        // 出站客户端：HttpClient 经 typed client 注入（AddHttpClient<WeChatApiClient>——ctor 收 HttpClient
+        //   + IWeChatCredentialResolver + ILogger；resolver 非空——DI 容器注入）
         services.AddHttpClient<WeChatApiClient>();
+
+        // 凭证解析可插拔契约（V0.4.1——Oracle P1：DI 注册缺省 Options 实现，ctor 非空不做 ctor 内 fallback；
+        //   OptionsWeChatCredentialResolver 读 TKWF:Federation:WeChat 节 Channels 按 AppId 精确匹配——
+        //   现状 ResolveCredential 语义迁移，Oracle P2-4 凭证自持；扩展可 TryAddEnumerable 注册 DB/KMS 实现
+        //   （DB 命中优先，未命中委托缺省 Options 实现——两源并存，方案 WeChatOperations §3.3.4））
+        services.TryAddSingleton<IWeChatCredentialResolver, OptionsWeChatCredentialResolver>();
+
 
         // 多通道联邦（v0.3.0）：静态通道来源——微信 Channels 投影为统一 ChannelConfig（StaticChannelRegistry 聚合选区）
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, WeChatChannelSource>());

@@ -154,6 +154,46 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.Null(reply);                                              // 模板已配置仍被门控吞掉（G2 覆盖模板 handler）
     }
 
+    /// <summary>多图文（V0.4.1）：articles 数组（2 篇）→ News 2 条 + ArticleCount=2 + 占位符逐篇替换。</summary>
+    [Fact]
+    public async Task Template_MultiArticles_ReturnsNewsXmlWithCount()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-multi", uid: "u-multi", openId: "openid-multi"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal("text/xml", reply!.ContentType);
+        Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply.Content);
+        Assert.Contains("<ArticleCount>2</ArticleCount>", reply.Content);
+        // 逐篇占位符替换
+        Assert.Contains("<Title><![CDATA[第一篇 u-multi openid-multi]]></Title>", reply.Content);
+        Assert.Contains("<Title><![CDATA[第二篇 u-multi openid-multi]]></Title>", reply.Content);
+        // PicUrl 逐篇
+        Assert.Contains("<PicUrl><![CDATA[https://img.example.com/a.png]]></PicUrl>", reply.Content);
+        Assert.Contains("<PicUrl><![CDATA[https://img.example.com/b.png]]></PicUrl>", reply.Content);
+    }
+
+    /// <summary>多图文（V0.4.1）：articles 超过 8 篇 → Take(8) 钳制（微信图文被动回复上限）。</summary>
+    [Fact]
+    public async Task Template_MultiArticles_Over8_ClampedTo8()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-multi9", uid: "u-9", openId: "openid-9"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("<ArticleCount>8</ArticleCount>", reply!.Content);
+    }
+
     /// <summary>构造模板驱动事件上下文（unknown_event 类型——路由至 OnDefaultAsync 兜底入口，
     /// 含 uid/openid/channel_id——占位符替换数据源 + registry 反查键）。</summary>
     private static SsoChannelEventContext TemplateEvent(string channelId, string? uid = "u-1", string? openId = "openid-1")
@@ -235,6 +275,28 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
                 Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
                 {
                     ["news_reply"] = "{json 损坏",
+                },
+            },
+            new()
+            {
+                ChannelId = "wx-multi",
+                PlatformType = "wechat",
+                IsEnabled = true,
+                Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["news_reply"] =
+                        """{"enabled":true,"articles":[{"title":"第一篇 {uid} {openid}","description":"desc-a","link":"https://example.com/a","pic_url":"https://img.example.com/a.png"},{"title":"第二篇 {uid} {openid}","description":"desc-b","link":"https://example.com/b","pic_url":"https://img.example.com/b.png"}]}""",
+                },
+            },
+            new()
+            {
+                ChannelId = "wx-multi9",
+                PlatformType = "wechat",
+                IsEnabled = true,
+                Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["news_reply"] =
+                        """{"enabled":true,"articles":[{"title":"第1篇","link":"https://example.com/1","pic_url":"https://img.example.com/1.png"},{"title":"第2篇","link":"https://example.com/2","pic_url":"https://img.example.com/2.png"},{"title":"第3篇","link":"https://example.com/3","pic_url":"https://img.example.com/3.png"},{"title":"第4篇","link":"https://example.com/4","pic_url":"https://img.example.com/4.png"},{"title":"第5篇","link":"https://example.com/5","pic_url":"https://img.example.com/5.png"},{"title":"第6篇","link":"https://example.com/6","pic_url":"https://img.example.com/6.png"},{"title":"第7篇","link":"https://example.com/7","pic_url":"https://img.example.com/7.png"},{"title":"第8篇","link":"https://example.com/8","pic_url":"https://img.example.com/8.png"},{"title":"第9篇","link":"https://example.com/9","pic_url":"https://img.example.com/9.png"}]}""",
                 },
             },
         };

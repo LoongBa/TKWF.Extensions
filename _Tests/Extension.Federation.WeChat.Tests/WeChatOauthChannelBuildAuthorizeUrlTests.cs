@@ -25,7 +25,9 @@ public class WeChatOauthChannelBuildAuthorizeUrlTests
 
     private static WeChatOauthChannel CreateChannel(ChannelConfig? channel)
         => new(new StubDomainUser(),
-            new WeChatApiClient(new System.Net.Http.HttpClient(), Options.Create(new WeChatOptions()), NullLogger<WeChatApiClient>.Instance),
+            new WeChatApiClient(new System.Net.Http.HttpClient(),
+                new OptionsWeChatCredentialResolver(Options.Create(new WeChatOptions())),
+                NullLogger<WeChatApiClient>.Instance),
             channel);
 
     [Fact]

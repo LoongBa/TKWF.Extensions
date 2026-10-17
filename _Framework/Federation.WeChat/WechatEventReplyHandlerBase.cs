@@ -31,8 +31,8 @@ namespace TKWF.Federation.WeChat;
 /// <para><b>图文工具方法</b>（protected——模板/探针/业务 handler 共用）：<see cref="BuildTextReply"/>（信封自
 /// <see cref="WeChatEventChannel"/> 上移 + 携带 ctx）/ <see cref="BuildNewsReply"/>（多图文
 /// <c>&lt;ArticleCount&gt;{n}&lt;/ArticleCount&gt;</c> + <c>&lt;Articles&gt;</c> 遍历，自
-/// <see cref="WeChatEventChannel"/> 上移）/ <see cref="BuildReplyResult"/>（News 优先 text 回退——包
-/// <see cref="EventReplyResult"/>(Content: xml, "text/xml")）/ <see cref="ReadNewsTemplate"/>
+/// <see cref="WeChatEventChannel"/> 上移）/ <see cref="BuildReplyResult"/>（RawXml 原始 XML 透传优先 →
+/// News 优先 text 回退——包 <see cref="EventReplyResult"/>(Content: xml, "text/xml")）/ <see cref="ReadNewsTemplate"/>
 /// （<c>Channel.Extra["news_reply"]</c> JSON 模板——<b>缺失/损坏 → null</b>，Oracle P0-2）/
 /// <see cref="ReplacePlaceholders"/>（占位符替换 <c>{uid}/{openid}/{channel_id}/{channel_type}</c>；
 /// <c>{ticket}</c> 不替换——本基类无签票耦合，方案 §3.3）。</para>
@@ -252,12 +252,15 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     }
 
     /// <summary>
-    /// 业务载荷 → <see cref="EventReplyResult"/>（微信 XML 信封——<b>News 优先 text 回退</b>）。
-    /// <para>返回 null = 空载荷（Content 与 News 均无可用内容——不占 first-non-null-wins 槽，其它 handler 继续；
+    /// 业务载荷 → <see cref="EventReplyResult"/>（微信 XML 信封——<b>RawXml 优先（原始 XML 透传——
+    /// 跳过重组防双重信封，V0.4.2 Oracle P0-1 选 A）→ News 优先 text 回退</b>）。
+    /// <para>返回 null = 空载荷（Content/News/RawXml 均无可用内容——不占 first-non-null-wins 槽，其它 handler 继续；
     /// Handler 模板 ④ 传参防护：空载荷不产生无效 200 回复短路）。</para>
     /// </summary>
     protected static EventReplyResult? BuildReplyResult(WechatEventContext ctx, WechatReplyPayload payload)
     {
+        if (!string.IsNullOrWhiteSpace(payload.RawXml))   // 新增——原始 XML 透传（SyncProxy——P0-1 选 A）
+            return new EventReplyResult(payload.RawXml, "text/xml");
         if (payload.News is { Count: > 0 })
             return new EventReplyResult(BuildNewsReply(ctx, payload.News), "text/xml");
         if (payload.Content is not null)

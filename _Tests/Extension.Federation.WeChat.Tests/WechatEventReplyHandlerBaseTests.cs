@@ -22,7 +22,9 @@ namespace TKWF.Federation.WeChat.Tests;
 /// ② 未覆盖分支 → OnDefaultAsync → null（不回复不拦截，Oracle P0-2）；③ 协议门控——
 /// unsubscribe/MASSSENDJOBFINISH/TEMPLATESENDJOBFINISH 虚方法被调（副作用可做）但回复被吞返回 null（G2）；
 /// ④ 图文工具——News 多图文信封（<c>&lt;ArticleCount&gt;</c> + <c>&lt;Articles&gt;</c>）+ 文本回退 + News 优先（G6）；
-/// ⑤ Parse——__decrypted_xml 缺失容错 / 字段提取 / 非法 XML 抛 InvalidOperationException。</para>
+/// ⑤ RawXml 逃逸口（V0.4.2 Oracle P0-1 选 A——原始 XML 原样透传优先（Content == RawXml 防双重信封）+
+/// 空/空白回退 Content 零回归）；
+/// ⑥ Parse——__decrypted_xml 缺失容错 / 字段提取 / 非法 XML 抛 InvalidOperationException。</para>
 /// </summary>
 public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
 {
@@ -628,6 +630,60 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         Assert.Contains("<ArticleCount>1</ArticleCount>", reply.Content);
         Assert.DoesNotContain("<MsgType><![CDATA[text]]></MsgType>", reply.Content);
         Assert.DoesNotContain("文本回退不应出现", reply.Content);
+    }
+
+    /// <summary>RawXml 逃逸口：非空 → BuildReplyResult 直接返回该原始 XML 原样（Content == RawXml，
+    /// 不包 text/news 信封——Content/News 并存仍被 RawXml 压制，防双重信封，V0.4.2 Oracle P0-1 选 A）。</summary>
+    [Fact]
+    public async Task BuildReply_RawXml_PassthroughEnvelope()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<DispatchProbeHandler>();
+        const string rawXml = "<xml><ToUserName><![CDATA[openid-1]]></ToUserName>" +
+                              "<FromUserName><![CDATA[gh_test]]></FromUserName>" +
+                              "<CreateTime>1234567890</CreateTime>" +
+                              "<MsgType><![CDATA[text]]></MsgType>" +
+                              "<Content><![CDATA[下游自组信封]]></Content></xml>";
+        handler.Payload = new WechatReplyPayload(
+            Content: "文本回退不应出现",
+            News: [new EventReplyNewsArticle("图文标题", "图文描述", "https://example.com/n")],
+            RawXml: rawXml);
+
+        var reply = await handler.HandleAsync(
+            WeChatTestHost.CreateEventContext(
+                ("msg_type", "event"), ("event", "subscribe"),
+                ("from_user_name", "openid-1"), ("to_user_name", "gh_test"),
+                ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal("text/xml", reply!.ContentType);
+        Assert.Equal(rawXml, reply.Content);            // 原样透传——不包任何信封（防双重信封）
+        Assert.DoesNotContain("文本回退不应出现", reply.Content);
+        Assert.DoesNotContain("<ArticleCount>", reply.Content);
+    }
+
+    /// <summary>RawXml 逃逸口回退：空/空白（非空判定不命中）→ 回退 Content 既有 text 路径（存量零回归）。</summary>
+    [Fact]
+    public async Task BuildReply_RawXmlNullOrWhitespace_FallsBackToContent()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<DispatchProbeHandler>();
+        handler.Payload = new WechatReplyPayload(Content: "欢迎关注！", RawXml: "   ");
+
+        var reply = await handler.HandleAsync(
+            WeChatTestHost.CreateEventContext(
+                ("msg_type", "event"), ("event", "subscribe"),
+                ("from_user_name", "openid-1"), ("to_user_name", "gh_test"),
+                ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal("text/xml", reply!.ContentType);
+        Assert.Contains("<MsgType><![CDATA[text]]></MsgType>", reply.Content);
+        Assert.Contains("<Content><![CDATA[欢迎关注！]]></Content>", reply.Content);
     }
 
     // ═══════════════════ Parse（__decrypted_xml 数据源——Oracle P1-4） ═══════════════════

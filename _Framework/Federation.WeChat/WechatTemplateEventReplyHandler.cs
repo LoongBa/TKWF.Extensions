@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -14,6 +17,8 @@ namespace TKWF.Federation.WeChat;
 /// <para>覆盖 <see cref="WechatEventReplyHandlerBase.OnDefaultAsync"/>——读
 /// <c>Channel.Extra["news_reply"]</c> 模板构造图文（占位符 <c>{uid}/{openid}/{channel_id}/{channel_type}</c> 替换）；
 /// 模板<b>缺失 / 损坏 / Enabled=false → 返回 null</b>（不回复不拦截——Oracle P0-2）。</para>
+/// <para><b>多图文升级（V0.4.1，方案 WeChatOperations §3.2.3）</b>：<c>articles</c> 数组优先（多图文 1..8 篇，
+/// 占位符替换逐篇应用），缺省回退单图文字段（title/description/link/pic_url——存量兼容零破坏）。</para>
 /// <para><b>无签票耦合</b>（Oracle 方案 §3.3"无签密封票据耦合"）：本 handler 为纯图文回复场景，
 /// <c>link</c> 模板的 <c>{ticket}</c> 占位符<b>不替换（保留原样）</b>——签票前不可用，
 /// 业务 handler 需签票时选用主包 <see cref="EventReplyHandlerBase"/>（签票专用基类）或
@@ -35,28 +40,77 @@ public sealed class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBas
 
     /// <summary>
     /// 兜底分支（模板驱动）：读 <c>Channel.Extra["news_reply"]</c> 模板 → 构造图文回复载荷。
-    /// <para><b>模板缺失/损坏 → null</b>（<see cref="ReadNewsTemplate"/> Oracle P0-2）；<c>Enabled ≠ true</c> → null
+    /// <para><b>模板缺失/损坏 → null</b>（Oracle P0-2）；<c>Enabled ≠ true</c> → null
     /// （不回复不拦截——业务 handler 正常流转）；<c>Channel</c> 未富化（registry 查不到）→ <c>Channel.Extra</c> 为
     /// null → 模板读取 null → 不回复。</para>
-    /// <para>占位符替换非 ticket 项（<c>{uid}/{openid}/{channel_id}/{channel_type}</c>——<see cref="ReplacePlaceholders(string,WechatEventContext)"/>）；
+    /// <para><b>多图文（V0.4.1）</b>：<see cref="ReadMultiNewsTemplate"/> <c>articles</c> 数组优先（1..8 篇，
+    /// 占位符替换逐篇应用），缺省回退单图文字段（存量兼容）；占位符替换非 ticket 项
+    /// （<c>{uid}/{openid}/{channel_id}/{channel_type}</c>——<see cref="ReplacePlaceholders(string,WechatEventContext)"/>）；
     /// <c>TtlSeconds</c> 无签票业务语义忽略（字段保留模板一致性）。</para>
     /// </summary>
     protected override Task<WechatReplyPayload?> OnDefaultAsync(WechatEventContext ctx, CancellationToken ct)
     {
         // 模板读取（Extra["news_reply"]——通道级图文配置；缺失/损坏 → null，Oracle P0-2）
-        var template = ReadNewsTemplate(ctx.Channel?.Extra);
+        var template = ReadMultiNewsTemplate(ctx.Channel?.Extra);
         if (template is null or { Enabled: not true })
             return Task.FromResult<WechatReplyPayload?>(null);
 
-        // 占位符替换（{uid}/{openid}/{channel_id}/{channel_type}；{ticket} 不替换——无签票耦合，方案 §3.3）
-        var title = ReplacePlaceholders(template.Title ?? string.Empty, ctx);
-        var description = ReplacePlaceholders(template.Description ?? string.Empty, ctx);
-        var link = ReplacePlaceholders(template.Link ?? string.Empty, ctx);
+        // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}；{ticket} 不替换——无签票耦合，方案 §3.3）
+        var articles = BuildArticles(template, ctx);
 
-        WechatReplyPayload payload = new(News:
-        [
-            new EventReplyNewsArticle(title, description, link, template.PicUrl),
-        ]);
+        WechatReplyPayload payload = new(News: articles);
         return Task.FromResult<WechatReplyPayload?>(payload);
+    }
+
+    /// <summary>
+    /// 多图文模板读取（<c>Channel.Extra["news_reply"]</c> JSON——<see cref="NewsReplyTemplateV2"/>；
+    /// <b>缺失/损坏 → null</b>，Oracle P0-2 统一语义——不回退内置模板、不拦截业务 handler；
+    /// <c>enabled=false</c> 由调用方判定）。
+    /// <para>⚠️ 平台基类 <see cref="WechatEventReplyHandlerBase.ReadNewsTemplate"/>（单图文
+    /// <see cref="WechatEventReplyHandlerBase.NewsReplyTemplate"/>）V0.4.0 既有不动——本 handler V0.4.1
+    /// 升级走自有解析（<c>articles</c> 数组优先 + 单图文兼容回退）。</para>
+    /// </summary>
+    private static NewsReplyTemplateV2? ReadMultiNewsTemplate(IReadOnlyDictionary<string, string?>? extra)
+    {
+        if (extra is null || !extra.TryGetValue(NewsReplyTemplateKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<NewsReplyTemplateV2>(raw);
+        }
+        catch (JsonException)
+        {
+            return null;   // 配置损坏 → null（不拦截业务 handler——Oracle P0-2）
+        }
+    }
+
+    /// <summary>
+    /// 图文条目构建——<see cref="NewsReplyTemplateV2.Articles"/> 数组优先（多图文，微信上限 8 篇——
+    /// <c>Take(8)</c> 钳制；空数组视同缺省回退）；缺省回退单图文字段（Title/Description/Link/PicUrl——存量兼容）。
+    /// 占位符替换逐篇应用。
+    /// </summary>
+    private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx)
+    {
+        if (template.Articles is { Count: > 0 })
+        {
+            return template.Articles
+                .Take(8)
+                .Select(a => new EventReplyNewsArticle(
+                    ReplacePlaceholders(a.Title ?? string.Empty, ctx),
+                    ReplacePlaceholders(a.Description ?? string.Empty, ctx),
+                    ReplacePlaceholders(a.Link ?? string.Empty, ctx),
+                    a.PicUrl))
+                .ToList();
+        }
+
+        // 单图文兼容回退（缺 articles 字段 / 空数组 → title/description/link/pic_url 单图文字段）
+        return
+        [
+            new EventReplyNewsArticle(
+                ReplacePlaceholders(template.Title ?? string.Empty, ctx),
+                ReplacePlaceholders(template.Description ?? string.Empty, ctx),
+                ReplacePlaceholders(template.Link ?? string.Empty, ctx),
+                template.PicUrl),
+        ];
     }
 }

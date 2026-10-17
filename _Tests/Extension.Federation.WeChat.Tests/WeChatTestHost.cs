@@ -50,13 +50,16 @@ internal static class WeChatTestHost
 
     /// <summary>
     /// 微信 API 出站桩 HttpMessageHandler——按 URL 路径路由返回固定 JSON（不真打微信）。
-    /// <para>仅路由 <c>sns/oauth2/access_token</c>（code→openid）与 <c>cgi-bin/token</c>（access_token）。
-    /// 其余路径 404（测试只走 code 换 openid 正向 + errcode 负向）。</para>
+    /// <para>路由 <c>sns/oauth2/access_token</c>（code→openid）、<c>cgi-bin/token</c>（access_token）、
+    /// <c>cgi-bin/menu/create</c>（菜单创建——回显 body 校验）+ <c>cgi-bin/get_current_selfmenu_info</c>
+    /// （菜单查询——V0.4.1 菜单 API 用例）+ <c>cgi-bin/menu/delete</c>（菜单删除）。
+    /// 其余路径 404。</para>
     /// </summary>
     public static HttpMessageHandler CreateStubHandler(
         string openId = "oa_test_openid_1",
-        bool failOauth = false)
-        => new StubWeChatHandler(openId, failOauth);
+        bool failOauth = false,
+        string? menuJson = null)
+        => new StubWeChatHandler(openId, failOauth, menuJson);
 
     /// <summary>构造 SsoChannelAuthContext（IReadOnlyDictionary&lt;string,string?&gt; 参数包）。</summary>
     public static SsoChannelAuthContext CreateContext(params (string Key, string? Value)[] parameters)
@@ -71,11 +74,13 @@ internal static class WeChatTestHost
     {
         private readonly string _openId;
         private readonly bool _failOauth;
+        private readonly string? _menuJson;
 
-        public StubWeChatHandler(string openId, bool failOauth)
+        public StubWeChatHandler(string openId, bool failOauth, string? menuJson)
         {
             _openId = openId;
             _failOauth = failOauth;
+            _menuJson = menuJson;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -91,6 +96,19 @@ internal static class WeChatTestHost
             else if (path.EndsWith("/cgi-bin/token", StringComparison.Ordinal))
             {
                 json = "{\"access_token\":\"stub-token\",\"expires_in\":7200}";
+            }
+            else if (path.EndsWith("/cgi-bin/menu/create", StringComparison.Ordinal))
+            {
+                json = _menuJson ?? "{\"errcode\":0,\"errmsg\":\"ok\"}";
+            }
+            else if (path.EndsWith("/cgi-bin/get_current_selfmenu_info", StringComparison.Ordinal))
+            {
+                json = _menuJson
+                    ?? "{\"is_menu_open\":1,\"selfmenu_info\":{\"button\":[{\"type\":\"click\",\"name\":\"测试菜单\",\"key\":\"test_key\"}]}}";
+            }
+            else if (path.EndsWith("/cgi-bin/menu/delete", StringComparison.Ordinal))
+            {
+                json = "{\"errcode\":0,\"errmsg\":\"ok\"}";
             }
             else
             {

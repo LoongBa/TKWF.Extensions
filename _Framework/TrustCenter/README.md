@@ -139,6 +139,8 @@ public class AppSessionService(DomainUser<MyUserInfo> user)
 | `RedeemAsync(string ticket, TicketRedeemContext? context, ct)` | **核销取回 + 销毁（单次原子 CAS）**——`EntityUpdateWhereAsync(WHERE CodeHash=? AND used=false AND (ExpectedClaimant IS NULL OR ExpectedClaimant=claimant), set Used=true)`：**核销人 + 并发核销联合判定无 TOCTOU**（v4.10.77 TicketRedeemContext）；影响 0 → 重查判因（已用=重放 / 核销人不符 CAS 不 swap——票据保留合法核销人可兑换 / 过期）；**契约语义：失败/过期/已用/核销人不符 → 返回 null**（不向票据消费方泄露判因码） |
 | `CleanupExpiredAsync(ct)` | 清理过期行**含 Payload 密文**（防业务数据残留）——`ExpiresAt < UtcNow - retentionDays`（默认 `SealedTicketRetentionDays`=7；≤ 0 跳过清理）；**消费方经 `IRecurringBackgroundJobManager` 周期调度**（对齐 Metrics 定时重算范式） |
 
+> **⚠️ D3 Phase 2 预留字段（未消费，2026-10-16 标注）**：`SealedTicketOptions.TicketType` / `Extensions`（签发期扩展——预留给 PKCE/加密模式/限流等实现变体）与 `TicketRedeemContext.Extensions`（兑换期扩展）为**契约预留字段**——当前 `SealedTicketService<T>` DB 后端**仅消费 `ExpectedClaimant`**，其余字段未接线（YAGNI）。**一次性 + TTL 是契约硬语义**（"原子单次消费" + ttl 必填正数，`ttl<=0` 钳制默认）——"非一次性 / 不限时"票据超出预留能力，若立项需主框架契约语义演进（ADR）+ InMemory 后端同步，扩展侧再跟进表结构（`UsedCount`/`MaxRedeems`、`ExpiresAt` 可空）。
+
 ### 面② OAuth 授权码（原通路 A——SSO 联邦流，`AuthorizationCodeIssueRequest` 重载）
 
 | 字段 | 规格 |

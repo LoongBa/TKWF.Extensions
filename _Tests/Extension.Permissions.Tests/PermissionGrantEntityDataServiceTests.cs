@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Linq.Expressions;
 using TKW.Framework.Domain.Interfaces;
 
@@ -18,6 +20,23 @@ public class PermissionGrantEntityDataServiceTests
     private const string Permission = "Order.Create";
     private const string Provider = "User";
     private const string Key = "u-1001";
+
+    /// <summary>越权授权面守卫（2026-10-15 遗留登记⑥(a)——随 tag 发布验证）：<c>[GenerateController(FromDataService=true,
+    /// ExcludeMethods=Create/Update/Delete)]</c>——标准写 CRUD 不暴露 REST（防已认证用户自授 Admin.All），
+    /// 写入口收敛到 <see cref="PermissionGrantEntityDataService.SetGrantAsync"/>（upsert）/RevokeGrantAsync（撤销）。</summary>
+    [Fact]
+    public void GenerateController_ExcludesStandardCrudWrites()
+    {
+        var attr = typeof(PermissionGrantEntityDataService).GetCustomAttributes(
+            typeof(TKW.Framework.CodeGeneration.GenerateControllerAttribute), inherit: false)
+            .Cast<TKW.Framework.CodeGeneration.GenerateControllerAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attr);                                                     // FromDataService=true 管理 API
+        Assert.True(attr!.FromDataService);
+        Assert.Contains("CreateAsync", attr.ExcludeMethods);                      // 标准写 CRUD 全部排除
+        Assert.Contains("UpdateAsync", attr.ExcludeMethods);
+        Assert.Contains("DeleteAsync", attr.ExcludeMethods);
+    }
 
     [Fact]
     public async Task SetGrantAsync_NewGrant_InsertsAndReturnsDto()

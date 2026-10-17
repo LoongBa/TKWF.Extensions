@@ -5,11 +5,11 @@ using TKW.Framework.CodeGeneration;
 
 namespace TKWF.Ext.TrustCenter
 {
-    /// <summary>
-    /// 密封票据实体（面① 安全数据投递/密封票据——拆分命名 2026-10-16，ADR109 决策 4 修订）。
-    /// <para>自原 <c>AccessCodeEntity</c> 面①拆分：载荷密封 + 单次兑换 + TTL + 可核销人——
+    /// <summary>密封票据实体（面① 安全数据投递/密封票据——拆分命名 2026-10-16，ADR109 决策 4 修订；
+    /// V4.10.79 ADR110 有界配额 2026-10-17 落地）。
+    /// <para>自原 <c>AccessCodeEntity</c> 面①拆分：载荷密封 + 原子逐次消费（有界配额）+ TTL + 可核销人——
     /// 并入框架 <c>ISealedTicketService&lt;T&gt;</c> 的 DB CAS 后端（<c>SealedTicketService&lt;T&gt;</c>）。
-    /// 只存 <c>SHA256(code)</c> 索引不存原文；<c>used</c> 原子 CAS 防重放；
+    /// 只存 <c>SHA256(code)</c> 索引不存原文；<c>UsedCount &lt; MaxRedeems</c> 原子 CAS 防重放/配额耗尽；
     /// <c>ExpectedClaimant</c> 可核销人进 CAS 条件（无 TOCTOU）。</para>
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（不指定 UserType——ADR42 D4）。</para>
     /// </summary>
@@ -28,7 +28,7 @@ namespace TKWF.Ext.TrustCenter
         public string CodeHash { get; set; } = "";
 
         /// <summary>可核销人标识（expected claimant——谁可核销；null = 可转让，任意核销人可消费）。
-        /// <para>进原子 CAS 条件——无 TOCTOU，核销人与并发核销联合判定恰一成功。</para>
+        /// <para>进原子 CAS 条件——无 TOCTOU，核销人与并发核销联合判定恰一次成功。</para>
         /// </summary>
         [FreeSql.DataAnnotations.Column(Position = 3)]
         [MaxLength(64)]
@@ -46,16 +46,22 @@ namespace TKWF.Ext.TrustCenter
         [FreeSql.DataAnnotations.Column(Position = 5)]
         public DateTime ExpiresAt { get; set; }
 
-        /// <summary>单次消费标记（原子 CAS 置 true；重放即拒）。</summary>
+        /// <summary>已消费次数（原子逐次计数——V4.10.79 ADR110 有界配额；<c>UsedCount &lt; MaxRedeems</c> 方可兑换，
+        /// 耗尽后返回 null；Cleanup 判据含耗尽）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 6)]
-        public bool Used { get; set; }
+        public int UsedCount { get; set; }
+
+        /// <summary>最大兑换次数（有界配额——V4.10.79 ADR110；签发时经 <c>SealedTicketOptions.MaxRedeems</c> 写入，
+        /// 默认 1 = 单次消费（ADR107/109 语义零变更）；守卫 &lt;1 抛）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 7)]
+        public int MaxRedeems { get; set; } = 1;
 
         /// <summary>创建时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 7)]
+        [FreeSql.DataAnnotations.Column(Position = 8)]
         public DateTime CreateTime { get; set; } = DateTime.UtcNow;
 
         /// <summary>更新时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 8)]
+        [FreeSql.DataAnnotations.Column(Position = 9)]
         public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
     }
 }

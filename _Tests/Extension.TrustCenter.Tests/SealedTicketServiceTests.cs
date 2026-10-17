@@ -127,6 +127,95 @@ public class SealedTicketServiceTests
     }
 
     [Fact]
+    public async Task Issue_MaxRedeemsZeroOrNegative_Throws()
+    {
+        var (service, _) = CreateService();
+        var payload = new PayloadTest(41, "s41");
+
+        // V4.10.79 ADR110 守卫：MaxRedeems < 1 抛（0 不解释为无限——对齐 InMemory 后端语义）
+        foreach (var bad in new[] { 0, -1, int.MinValue })
+        {
+            var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => service.IssueAsync(payload, TimeSpan.FromSeconds(120), new SealedTicketOptions(MaxRedeems: bad)));
+            Assert.Equal("options", ex.ParamName);
+        }
+    }
+
+    [Fact]
+    public async Task Redeem_MaxRedeemsMulti_BoundedConsumption_UntilExhausted()
+    {
+        var (service, ds) = CreateService();
+        var payload = new PayloadTest(42, "s42");
+        var issued = await service.IssueAsync(
+            payload, TimeSpan.FromSeconds(120), new SealedTicketOptions(MaxRedeems: 3));
+
+        // 有界配额 3：并发/顺序消费恰 3 次成功，第 4 次耗尽返回 null（对齐 InMemory 后端语义）
+        Assert.Equal(payload, await service.RedeemAsync(issued.Ticket));
+        Assert.Equal(payload, await service.RedeemAsync(issued.Ticket));
+        Assert.Equal(payload, await service.RedeemAsync(issued.Ticket));
+
+        Assert.Null(await service.RedeemAsync(issued.Ticket));   // 耗尽
+
+        var row = await ds.EntityGetAsync(m => m.CodeHash == SealedTicketServiceTests.Sha256Hex(issued.Ticket), default);
+        Assert.NotNull(row);
+        Assert.Equal(3, row!.UsedCount);
+        Assert.Equal(3, row.MaxRedeems);
+    }
+
+    [Fact]
+    public async Task Redeem_MaxRedeemsDefaultOne_SingleConsumption()
+    {
+        var (service, ds) = CreateService();
+        var issued = await service.IssueAsync(new PayloadTest(43, "s43"), TimeSpan.FromSeconds(120));
+
+        // 默认 MaxRedeems=1：单次消费（ADR107/109 语义零变更）——第二次耗尽返回 null
+        Assert.NotNull(await service.RedeemAsync(issued.Ticket));
+        Assert.Null(await service.RedeemAsync(issued.Ticket));
+
+        var row = await ds.EntityGetAsync(m => m.CodeHash == SealedTicketServiceTests.Sha256Hex(issued.Ticket), default);
+        Assert.NotNull(row);
+        Assert.Equal(1, row!.MaxRedeems);
+        Assert.Equal(1, row.UsedCount);
+    }
+
+    [Fact]
+    public async Task Redeem_MaxRedeemsMulti_ClaimantMismatchDoesNotBurnQuota()
+    {
+        var (service, _) = CreateService();
+        var issued = await service.IssueAsync(
+            new PayloadTest(44, "s44"),
+            TimeSpan.FromSeconds(120),
+            new SealedTicketOptions(ExpectedClaimant: "alice", MaxRedeems: 2));
+
+        // 错误核销人不烧槽位（CAS compare 失败不 swap——对齐 InMemory 后端 claimant 前置 CAS 语义）
+        Assert.Null(await service.RedeemAsync(issued.Ticket, new TicketRedeemContext(ExpectedClaimant: "bob")));
+
+        // 合法核销人 2 次均成功（配额 2 未被 bob 消耗）
+        Assert.Equal(new PayloadTest(44, "s44"), await service.RedeemAsync(issued.Ticket, new TicketRedeemContext(ExpectedClaimant: "alice")));
+        Assert.Equal(new PayloadTest(44, "s44"), await service.RedeemAsync(issued.Ticket, new TicketRedeemContext(ExpectedClaimant: "alice")));
+        Assert.Null(await service.RedeemAsync(issued.Ticket, new TicketRedeemContext(ExpectedClaimant: "alice")));
+    }
+
+    [Fact]
+    public async Task CleanupExpired_RemovesExhaustedRows_KeepsUsable()
+    {
+        var (service, ds) = CreateService();
+        // 耗尽行（配额 1 消费完）——新 TTL 未过期也应收割（V4.10.79 ADR110：Cleanup 判据 = 过期 OR 耗尽）
+        var exhausted = await service.IssueAsync(new PayloadTest(45, "s45"), TimeSpan.FromSeconds(300), new SealedTicketOptions(MaxRedeems: 1));
+        Assert.NotNull(await service.RedeemAsync(exhausted.Ticket));
+
+        // 未耗尽未过期行不受影响
+        var usable = await service.IssueAsync(new PayloadTest(46, "s46"), TimeSpan.FromSeconds(300), new SealedTicketOptions(MaxRedeems: 2));
+
+        var deleted = await service.CleanupExpiredAsync();
+        Assert.Equal(1, deleted);
+
+        // 耗尽行已删，可用行保留
+        await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(() => service.PeekAsync(exhausted.Ticket));
+        Assert.NotNull(await ds.EntityGetAsync(m => m.CodeHash == SealedTicketServiceTests.Sha256Hex(usable.Ticket), default));
+    }
+
+    [Fact]
     public async Task Issue_PayloadTooLarge_Throws()
     {
         var (service, _) = CreateService();

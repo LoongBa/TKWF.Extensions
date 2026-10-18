@@ -12,12 +12,9 @@
   <PropertyGroup>
 <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>TKWF.Ext.WeChatOperations</RootNamespace>
-    <LangVersion>latest</LangVersion>
+<LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <!-- V0.4.0 起开 ImplicitUsings：主框架 SG1（EntityMetadataGenerator.BuildContributorsSource）生成的
-         GeneratedContributors.g.cs 文件头无 using System.Collections.Generic（模板假设宿主开 ImplicitUsings——
-         主框架测试项目全部 enable）——本扩展新增 IFeatureDefinitionContributor 后首次触发该生成路径 -->
-    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- V0.4.0 曾开 ImplicitUsings 绕行（主框架 SG1 模板缺 using System.Collections.Generic）——4.10.81 模板修复后回退（2026-10-18） -->
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>WeChatOperations/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.WeChatOperations</PackageId>

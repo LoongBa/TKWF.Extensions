@@ -11,6 +11,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat;
 using TKWF.Federation.WeChat.MessageGateway;
 
@@ -37,58 +38,86 @@ namespace TKWF.Ext.WeChatOperations;
 /// </summary>
 public interface IMessageGatewayService : IDomainService
 {
-    /// <summary>路由规则列表（按 ChannelId 过滤；<paramref name="msgType"/>/<paramref name="eventType"/> 可空 = 全部）。</summary>
+    /// <summary>路由规则列表（按 ChannelId 过滤；<paramref name="msgType"/>/<paramref name="eventType"/> 可空 = 全部）。
+    /// <para>REST：<c>GET /api/wechat-ops/gateway/rules?channel_id=&amp;msg_type=&amp;event_type=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/rules", RestMethod = "GET")]
     Task<IReadOnlyList<MessageRouteRuleEntity>> ListRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default);
 
-    /// <summary>保存路由规则（Id=0 新建 + <b>完全重复同键检测</b>——ChannelId+MsgType+Event+MatchMode+TriggerKey 全同 → 更新既有；已有更新）。</summary>
+    /// <summary>保存路由规则（Id=0 新建 + <b>完全重复同键检测</b>——ChannelId+MsgType+Event+MatchMode+TriggerKey 全同 → 更新既有；已有更新）。
+    /// <para>REST：<c>POST /api/wechat-ops/gateway/rules</c>（单复杂参数 MessageRouteRuleEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/rules", RestMethod = "POST")]
     Task<long> SaveRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default);
 
-    /// <summary>删除路由规则（物理删）。</summary>
+    /// <summary>删除路由规则（物理删）。
+    /// <para>REST：<c>DELETE /api/wechat-ops/gateway/rules/{ruleId}</c>。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/rules/{ruleId}", RestMethod = "DELETE")]
     Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default);
 
-    /// <summary>下游端点列表（按 ChannelId 过滤；DTO 投影<b>不含 AuthToken 密文</b>——Oracle P1 安全）。</summary>
+    /// <summary>下游端点列表（按 ChannelId 过滤；DTO 投影<b>不含 AuthToken 密文</b>——Oracle P1 安全）。
+    /// <para>REST：<c>GET /api/wechat-ops/gateway/endpoints?channel_id=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/endpoints", RestMethod = "GET")]
     Task<IReadOnlyList<DownstreamEndpointDto>> ListEndpointsAsync(string channelId, CancellationToken ct = default);
 
-    /// <summary>保存下游端点——新（Id=0）创建 / 已有更新；<paramref name="authTokenPlain"/> 为<b>明文</b>
-    /// （null = 保持库中既有密文不变）——门面经 keyed <see cref="ISymmetricKeyProvider"/> AES-GCM 加密落库（明文永不落库）。</summary>
+    /// <summary>保存下游端点——新（Id=0）创建 / 已有更新；<paramref name="request"/> 承载鉴权令牌<b>明文</b>
+    /// （<see cref="SaveEndpointRequest.AuthTokenPlain"/> null = 保持库中既有密文不变）——门面经 keyed
+    /// <see cref="ISymmetricKeyProvider"/> AES-GCM 加密落库（明文永不落库）。
+    /// <para>REST：<c>POST /api/wechat-ops/gateway/endpoints</c>（单复杂参数 SaveEndpointRequest → [FromBody]——AuthToken 走 body 防 URL 泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    Task<long> SaveEndpointAsync(DownstreamEndpointEntity entity, string? authTokenPlain = null, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/endpoints", RestMethod = "POST")]
+    Task<long> SaveEndpointAsync(SaveEndpointRequest request, CancellationToken ct = default);
 
-    /// <summary>删除下游端点（<b>被路由规则引用禁止删除</b>——引用保护；物理删）。</summary>
+    /// <summary>删除下游端点（<b>被路由规则引用禁止删除</b>——引用保护；物理删）。
+    /// <para>REST：<c>DELETE /api/wechat-ops/gateway/endpoints/{id}</c>。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/endpoints/{id}", RestMethod = "DELETE")]
     Task<bool> DeleteEndpointAsync(long id, CancellationToken ct = default);
 
-    /// <summary>网关状态只读（Enabled/规则数/下游数——无敏感明细；方案 §十·六 ③）。</summary>
+    /// <summary>网关状态只读（Enabled/规则数/下游数——无敏感明细；方案 §十·六 ③）。
+    /// <para>REST：<c>GET /api/wechat-ops/gateway/status</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/status", RestMethod = "GET")]
     Task<WeChatGatewayStatusDto> GetGatewayStatusAsync(CancellationToken ct = default);
 
     /// <summary>网关全局开关（进程内运行时覆盖——重启回落 <see cref="WeChatMessageGatewayOptions.GatewayEnabled"/> 配置值；
-    /// 对齐 <c>WeChatApiClient</c> 纯内存缓存先例，不落库）。</summary>
+    /// 对齐 <c>WeChatApiClient</c> 纯内存缓存先例，不落库）。
+    /// <para>REST：<c>POST /api/wechat-ops/gateway/enabled</c>（单复杂参数 SetGatewayEnabledRequest → [FromBody]）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    Task SetGatewayEnabledAsync(bool enabled, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/enabled", RestMethod = "POST")]
+    Task SetGatewayEnabledAsync(SetGatewayEnabledRequest request, CancellationToken ct = default);
+
+    /// <summary>转发日志查询（<see cref="MessageForwardLogEntity"/>——全链留痕：Queued/Success/Fail/Timeout/SkippedDuplicate/NoRule；
+    /// ChannelId 必填；<paramref name="from"/>/<paramref name="to"/> 可空 = 不过滤（按 CreateTime 过滤，含边界）。
+    /// <para>REST：<c>GET /api/wechat-ops/gateway/forward-logs?channel_id=&amp;from=&amp;to=</c>；CreateTime 降序。</para>
+    /// <para>V0.4.0 新增（反馈 §二 网关端点补全——转发网关页面对账列表）。</para></summary>
+    [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/gateway/forward-logs", RestMethod = "GET")]
+    Task<IReadOnlyList<MessageForwardLogEntity>> ListForwardLogsAsync(string channelId, DateTime? from = null, DateTime? to = null, CancellationToken ct = default);
 
     /// <summary>
     /// <b>转发编排核心</b>（handler 挂载调用点——方案 §十·五 ①）：幂等检查（最前短路）→ 路由规则匹配
     /// （运行库 matcher——实体投影 descriptor + <see cref="RouteRuleCriteria"/>）→ 转发决策（运行库 decider——
     /// ForwardMode 分支：LocalOnly 本地 / AsyncCopy 异步抄送 / <b>SyncProxy/PreprocessSync 真实出站透传
     /// （V0.3.0——成功 RawXml 原样接管回复；失败降级本地渲染链）</b>）→ 返回
-    /// <see cref="GatewayRouteResult"/>。非运营端点（不加 [RequirePermission]——handler 帧内调用）。
+    /// <see cref="GatewayRouteResult"/>。非运营端点（不加 [RequirePermission]）——handler 帧内调用。
     /// </summary>
     /// <param name="ctx">微信回调上下文（平台库 <see cref="WechatEventContext"/>——MsgId/CreateTime/RawXml 幂等与转发数据源）。</param>
     /// <param name="ct">取消令牌。</param>
     /// <returns>网关决策结果（<see cref="GatewayRouteResult"/>——Handled=true 由网关接管本次回复（幂等跳过 /
     /// SyncProxy 透传结果 RawXml 原样返回）；Handled=false handler 继续本地渲染链（LocalOnly/AsyncCopy 本地回复 /
     /// NoRule 默认兜底 / SyncProxy 透传失败降级）。</returns>
+    /// <para><c>ExposeRest=false</c>：微信回调事件路径内部入口（帧内调用），不生成 REST 端点。</para>
+    [ApiExpose(ExposeRest = false)]
     Task<GatewayRouteResult> RouteAsync(WechatEventContext ctx, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class MessageGatewayService : DomainServiceBase, IMessageGatewayService
+[GenerateController]
+public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewayService
 {
     /// <summary>进程内网关开关运行时覆盖（null = 未覆盖，用 <see cref="WeChatMessageGatewayOptions.GatewayEnabled"/> 配置值；
     /// 进程重启即清零——对齐 <c>WeChatApiClient</c> 纯内存缓存先例）。</summary>
@@ -226,25 +255,42 @@ internal sealed class MessageGatewayService : DomainServiceBase, IMessageGateway
     }
 
     /// <inheritdoc />
-    public async Task<long> SaveEndpointAsync(DownstreamEndpointEntity entity, string? authTokenPlain = null, CancellationToken ct = default)
+    public async Task<long> SaveEndpointAsync(SaveEndpointRequest request, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(entity);
-        if (string.IsNullOrWhiteSpace(entity.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(entity));
-        if (string.IsNullOrWhiteSpace(entity.Name)) throw new ArgumentException("Name 必填", nameof(entity));
-        if (string.IsNullOrWhiteSpace(entity.BaseUrl)) throw new ArgumentException("BaseUrl 必填", nameof(entity));
-        if (entity.AuthType is < 0 or > 2) throw new ArgumentException("AuthType 无效（0=None/1=Bearer/2=Header）", nameof(entity));
-        if (entity.AuthType != WeChatEndpointAuthTypes.None && string.IsNullOrWhiteSpace(authTokenPlain))
-            throw new ArgumentException("鉴权类型非 None 须填 authToken 明文（AuthTokenCipher 密文不可直接提交——门面加密落库）", nameof(authTokenPlain));
-        if (entity.TimeoutSeconds <= 0)
-            entity.TimeoutSeconds = _options.DefaultSyncTimeoutSeconds;   // 默认 2 秒（微信 5 秒时限留本地兜底余量）
-        if (entity.TimeoutSeconds > 3)
-            throw new ArgumentException("TimeoutSeconds 上限 3 秒（防运维误配吞掉兜底窗口——方案 §十·二 ② fail-fast）", nameof(entity));
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.Name)) throw new ArgumentException("Name 必填", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.BaseUrl)) throw new ArgumentException("BaseUrl 必填", nameof(request));
+        if (request.AuthType is < 0 or > 2) throw new ArgumentException("AuthType 无效（0=None/1=Bearer/2=Header）", nameof(request));
+        if (request.AuthType != WeChatEndpointAuthTypes.None && string.IsNullOrWhiteSpace(request.AuthTokenPlain))
+            throw new ArgumentException("鉴权类型非 None 须填 authToken 明文（AuthTokenCipher 密文不可直接提交——门面加密落库）", nameof(request));
+        if (request.TimeoutSeconds <= 0)
+            request = request with { TimeoutSeconds = _options.DefaultSyncTimeoutSeconds };   // 默认 2 秒（微信 5 秒时限留本地兜底余量）
+        if (request.TimeoutSeconds > 3)
+            throw new ArgumentException("TimeoutSeconds 上限 3 秒（防运维误配吞掉兜底窗口——方案 §十·二 ② fail-fast）", nameof(request));
+
+        // 构造实体（wire DTO → 领域实体——AuthToken 承载于 DTO 明文，服务端加密落库）
+        var entity = new DownstreamEndpointEntity
+        {
+            Id = request.Id ?? 0,
+            ChannelId = request.ChannelId,
+            Name = request.Name,
+            BaseUrl = request.BaseUrl,
+            Path = request.Path,
+            HttpMethod = string.IsNullOrWhiteSpace(request.HttpMethod) ? "POST" : request.HttpMethod,
+            TimeoutSeconds = request.TimeoutSeconds,
+            IsEnabled = request.IsEnabled,
+            AuthType = request.AuthType,
+            RetryCount = request.RetryCount,
+            Remark = request.Remark,
+        };
 
         // ChannelId+Name 冲突预查（唯一索引 UX——TOCTOU 由数据库兜底；方案 §十·一 ③）
         var existing = await EpDs.EntityGetAsync(e => e.ChannelId == entity.ChannelId && e.Name == entity.Name, ct);
         if (existing is not null && (entity.Id == 0 || existing.Id != entity.Id))
             throw new InvalidOperationException($"下游端点冲突：ChannelId+Name 已被占用（Id={existing.Id}）");
 
+        var authTokenPlain = request.AuthTokenPlain;
         var now = DateTime.UtcNow;
         if (entity.Id == 0)
         {
@@ -295,10 +341,25 @@ internal sealed class MessageGatewayService : DomainServiceBase, IMessageGateway
     }
 
     /// <inheritdoc />
-    public Task SetGatewayEnabledAsync(bool enabled, CancellationToken ct = default)
+    public Task SetGatewayEnabledAsync(SetGatewayEnabledRequest request, CancellationToken ct = default)
     {
-        _gatewayEnabledOverride = enabled;
+        ArgumentNullException.ThrowIfNull(request);
+        _gatewayEnabledOverride = request.Enabled;
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MessageForwardLogEntity>> ListForwardLogsAsync(string channelId, DateTime? from = null, DateTime? to = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelId))
+            return Array.Empty<MessageForwardLogEntity>();
+        return await LogDs.EntitySelectAsync(
+            l => l.ChannelId == channelId
+                && (from == null || l.CreateTime >= from.Value)
+                && (to == null || l.CreateTime <= to.Value),
+            0, 500,
+            q => q.OrderByDescending(l => l.CreateTime),
+            ct);
     }
 
     /// <inheritdoc />

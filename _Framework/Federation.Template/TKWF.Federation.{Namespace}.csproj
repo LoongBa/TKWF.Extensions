@@ -22,7 +22,7 @@
   <ItemGroup>
     <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
          扩展不引库。{Platform}OauthChannel 等实现 ISsoChannel 在此库内） -->
-    <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+    <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

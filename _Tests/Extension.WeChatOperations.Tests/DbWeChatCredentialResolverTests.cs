@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -143,13 +144,8 @@ public class DbWeChatCredentialResolverTests : WeChatOperationsTestHost
         string? appSecretPlain, string? tokenPlain = null)
     {
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = channelId,
-            AppId = appId,
-            DisplayName = "凭证测试",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: appSecretPlain, tokenPlain: tokenPlain, ct: TestContext.Current.CancellationToken);
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: channelId, AppId: appId, DisplayName: "凭证测试", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: appSecretPlain, Token: tokenPlain), ct: TestContext.Current.CancellationToken);
     }
 }

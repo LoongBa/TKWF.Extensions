@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
@@ -33,6 +34,10 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// </summary>
 public class WeChatOperationsTestHost : IDisposable
 {
+    /// <summary>FeatureManagement 测试面 MetaContext 换装锁（进程级静态 ProjectMetaContextBase.Instance——镜像
+    /// FeatureManagementTestHost s_metaContextLock 串行化语义，防并行用例交叉污染）。</summary>
+    private static readonly object s_featureMetaContextLock = new();
+
     private ServiceProvider? _provider;
     private string? _dbPath;
     private bool _disposed;
@@ -107,6 +112,8 @@ public class WeChatOperationsTestHost : IDisposable
         fsql.CodeFirst.SyncStructure<DownstreamEndpointEntity>();
         fsql.CodeFirst.SyncStructure<MessageForwardLogEntity>();
         fsql.CodeFirst.SyncStructure<WeChatMessageIdempotencyEntity>();
+        // V0.4.0 ③ FeatureManagement 消费面——FeatureValue 表（消息业务总开关 DB 存值；IsEnabledAsync 查库路径）
+        fsql.CodeFirst.SyncStructure<TKWF.Ext.FeatureManagement.FeatureValueEntity>();
     }
 
     /// <summary>额外服务/基础设施注册（AddLogging + IFreeSql + UnitOfWorkManager 已在 BindScope 注册——见上）。</summary>
@@ -116,6 +123,30 @@ public class WeChatOperationsTestHost : IDisposable
         //    6 门面 AddConstructibleService + handler TryAddEnumerableConstructible + keyed ISymmetricKeyProvider +
         //    DbWeChatCredentialResolver（TryAddEnumerable Scoped）+ DbWeChatChannelSource（Insert(0) 前置）+ AddOptions）
         new WeChatOperationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // ①b V0.4.0 ③ FeatureManagement 消费面（消息业务总开关 DB 化——生产路径最小等价面，对齐
+        //    Extension.FeatureManagement.Tests FeatureManagementTestHost 装配形态）：IMemoryCache + 本地事件总线 +
+        //    Feature 贡献者集合（WeChatOperations 自身 Contributor 手动实例化——轻量宿主无消费方 SG1 扫描,
+        //    镜像 FeatureTestMetaContext Install 语义）+ FeatureManagement Initializer ConfigureServices。
+        services.TryAddSingleton<IMemoryCache>(new MemoryCache(new MemoryCacheOptions()));
+        services.AddSingleton<TKW.Framework.Domain.Events.ILocalEventBus, TKW.Framework.Domain.Events.LocalEventBus>();
+        services.AddSingleton<TKW.Framework.Domain.Events.IDistributedEventBus, TKW.Framework.Domain.Events.LocalDistributedEventBus>();
+        // FeatureOptions.BindConfiguration 依赖 IConfiguration（空配置——默认值生效，对齐 FeatureManagementTestHost）
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
+        lock (s_featureMetaContextLock)
+        {
+            var original = TKW.Framework.CodeGeneration.ProjectMetaContextBase.Instance;
+            try
+            {
+                WeChatOperationsFeatureMetaContext.Install();
+                new TKWF.Ext.FeatureManagement.FeatureManagementExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+            }
+            finally
+            {
+                WeChatOperationsFeatureMetaContext.Restore(original);
+            }
+        }
 
         // ② 平台库装配——AddWeChatFederationChannels（WeChatOptions 编程覆盖 + WeChatApiClient typed client +
         //    OptionsWeChatCredentialResolver 缺省实现 + 双通道 + WeChatChannelSource Options 源）
@@ -156,6 +187,8 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddSingleton<IEntityDAC<DownstreamEndpointEntity>>(sp => new FreeSqlEntityDAC<DownstreamEndpointEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<MessageForwardLogEntity>>(sp => new FreeSqlEntityDAC<MessageForwardLogEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<WeChatMessageIdempotencyEntity>>(sp => new FreeSqlEntityDAC<WeChatMessageIdempotencyEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        // V0.4.0 ③ FeatureManagement 消费面——FeatureValue 实体 IEntityDAC（消息业务总开关 DB 存值路径）
+        services.AddSingleton<IEntityDAC<TKWF.Ext.FeatureManagement.FeatureValueEntity>>(sp => new FreeSqlEntityDAC<TKWF.Ext.FeatureManagement.FeatureValueEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
 
         // ⑦ DataService 可构造注册（测试镜像生产 ADR61 可构造工厂，非 throw-factory——接线型 GetRequiredService 需要；
         //    单例对齐 IEntityDAC（⑥）——同 UoW 同连接数据可见）
@@ -172,6 +205,8 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddSingleton<DownstreamEndpointEntityDataService>();
         services.AddSingleton<MessageForwardLogEntityDataService>();
         services.AddSingleton<WeChatMessageIdempotencyEntityDataService>();
+        // V0.4.0 ③ FeatureManagement 消费面——FeatureValue DataService（消息业务总开关 DB 存值路径）
+        services.AddSingleton<TKWF.Ext.FeatureManagement.FeatureValueEntityDataService>();
 
         // ⑧ ITransactionManager（MenuService 写路径事务包裹——Noop Begin/Commit 空操作，
         //    DataService 逐操作经 UnitOfWorkManager 持久化）
@@ -262,6 +297,48 @@ public class WeChatOperationsTestHost : IDisposable
 
         public IReadOnlyList<TKWF.Ext.Federation.ChannelConfig> GetChannels() => _channels;
     }
+}
+
+/// <summary>
+/// 测试用 ProjectMetaContext（V0.4.0 ③ FeatureManagement 消费面）——override <c>Contributors["Feature"]</c>
+/// 返回 <see cref="WeChatOperationsFeatureDefinitionContributor"/> 清单（<c>WeChatOperations.MessageBusiness</c>
+/// Boolean DefaultValue=true）。镜像 FeatureManagementTestHost FeatureTestMetaContext 形态——轻量宿主无消费方
+/// SG1 扫描，FeatureManagement Initializer <c>CreateContributorInstances</c> 经此读取编译期清单。
+/// <c>ProjectMetaContextBase.Instance</c> setter 是 protected，经子类公开 Install/Restore；静态隔离约束（镜像
+/// Permissions/Navigation 测试）：进程级单例，宿主锁串行化（<see cref="WeChatOperationsTestHost"/>）。</summary>
+internal sealed class WeChatOperationsFeatureMetaContext : TKW.Framework.CodeGeneration.ProjectMetaContextBase
+{
+    public static void Install() => Instance = new WeChatOperationsFeatureMetaContext();
+
+    public static void Restore(TKW.Framework.CodeGeneration.IProjectMetaContext? original) => Instance = original;
+
+    /// <inheritdoc />
+    public override IReadOnlyDictionary<string, IReadOnlyList<TKW.Framework.CodeGeneration.ContributorDescriptor>> Contributors => new Dictionary<string, IReadOnlyList<TKW.Framework.CodeGeneration.ContributorDescriptor>>
+    {
+        [TKW.Framework.CodeGeneration.ContributorTargetKinds.Feature] = new[]
+        {
+            new TKW.Framework.CodeGeneration.ContributorDescriptor(
+                "TKWF.Ext.WeChatOperations.WeChatOperationsFeatureDefinitionContributor",
+                "WeChatOperationsFeatureDefinitionContributor",
+                typeof(WeChatOperationsFeatureDefinitionContributor),
+                TKW.Framework.CodeGeneration.ContributorTargetKinds.Feature),
+        },
+    };
+
+    /// <summary>编译期实例化 override——测试桩镜像 Initializer 消费路径（CreateContributorInstances，V4.10.32 A+ 阶段 4）。</summary>
+    public override IReadOnlyList<object> CreateContributorInstances(string targetKind)
+        => targetKind == TKW.Framework.CodeGeneration.ContributorTargetKinds.Feature
+            ? new object[] { new WeChatOperationsFeatureDefinitionContributor() }
+            : Array.Empty<object>();
+
+    /// <inheritdoc />
+    public override TKW.Framework.CodeGeneration.ProjectConfiguration Configuration => null!;
+
+    /// <inheritdoc />
+    public override TKW.Framework.CodeGeneration.MetadataChangeLog ChangeLog => null!;
+
+    /// <inheritdoc />
+    public override string MetadataSchemaVersion => "test";
 }
 
 /// <summary>

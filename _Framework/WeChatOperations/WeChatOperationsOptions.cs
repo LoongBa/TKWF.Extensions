@@ -5,8 +5,9 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 微信公众号运营扩展配置（<c>TKWF:WeChatOperations</c> 节——运营侧领域配置）。
-/// <para>配置分层（AGENTS §8）：领域决策（默认兜底文案等）归本节；表现层暴露面（RoutePrefix/端点开关）
-/// 归 <see cref="WeChatOperationsEndpointOptions"/>（<c>TKWF:WeChatOperations:Web</c>——POCO 不镜像领域配置）。</para>
+/// <para>配置分层（AGENTS §8）：领域决策（默认兜底文案等）归本节；表现层暴露面（REST 路由）由 SG1b
+/// <c>[GenerateController]</c> 生成端点的 <c>[ApiExpose(RestRoute)]</c> 常量承载（V0.4.0 起替换手写
+/// WebExtension——路由编译期确定性 + 配置单一事实源）；领域行为无 Web 层镜像开关（防表现层绕过）。</para>
 /// <para><see cref="SecretEncryptionKeyPath"/>/<see cref="IsProduction"/>：凭证 AES-GCM 密钥文件路径/生产模式
 /// 标记（keyed <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> 键 WeChatOperations——
 /// 生产缺密钥 fail-fast / 开发随机兜底，对齐 AuthCenter E4）。</para>

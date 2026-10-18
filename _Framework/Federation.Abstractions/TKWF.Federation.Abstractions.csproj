@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Federation</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Federation.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Federation.Abstractions</PackageId>
+    <Description>TKWF 联邦通道编排契约抽象（Federation.Abstractions——IChannelRegistry / IChannelSource / ChannelConfig / IEventReplyHandler / IEventOrchestrator + DTO）——依赖倒置（ADR48 D7 / 2026-10-18 ④ 裁定）：联邦连接契约收口，Federation 主包实现契约、平台库与扩展经契约消费（零实体、零 SG1、零 Initializer；namespace 保持 TKWF.Ext.Federation——跨程序集同 namespace，消费方零 using 迁移）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 2026-10-18（④ 裁定）：契约包只放接口 + 不可变 DTO（record）——零实体、零 SG1 分析器（对齐 TrustCenter.Abstractions 形态）；
+         但契约继承 IDomainService（User.Use 帧内解析准入）需要 TKWF.Domain——非零框架引用（对齐 Permissions.Abstractions 先例，双模式条件化） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- 事件上下文/回复结果（SsoChannelEventContext/EventReplyResult——定义于 TrustCenter.Abstractions 纯 BCL 契约包，非主包） -->
+    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

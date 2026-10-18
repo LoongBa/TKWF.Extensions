@@ -19,27 +19,36 @@ namespace TKWF.Ext.WeChatOperations;
 /// </summary>
 public interface IMaterialService : IDomainService
 {
-    /// <summary>素材列表（<paramref name="kind"/> 可空 = 全部；1 Text / 2 News）。</summary>
+    /// <summary>素材列表（<paramref name="kind"/> 可空 = 全部；1 Text / 2 News）。
+    /// <para>REST：<c>GET /api/wechat-ops/materials?kind=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/materials", RestMethod = "GET")]
     Task<IReadOnlyList<MaterialEntity>> ListAsync(int? kind = null, CancellationToken ct = default);
 
-    /// <summary>保存素材（Id=0 新建 / 已有更新）。</summary>
+    /// <summary>保存素材（Id=0 新建 / 已有更新）。
+    /// <para>REST：<c>POST /api/wechat-ops/materials</c>（单复杂参数 MaterialEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/materials", RestMethod = "POST")]
     Task<long> SaveAsync(MaterialEntity material, CancellationToken ct = default);
 
-    /// <summary>删除素材（被规则引用时抛 <see cref="InvalidOperationException"/>——先查引用）。</summary>
+    /// <summary>删除素材（被规则引用时抛 <see cref="InvalidOperationException"/>——先查引用）。
+    /// <para><c>ExposeRest=false</c>：删除为高操作权限能力（引用保护——防误删），对齐既有 15 端点映射不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(ExposeRest = false)]
     Task<bool> DeleteAsync(long materialId, CancellationToken ct = default);
 
     /// <summary>素材引用清单（跨回复规则聚合——欢迎语/关键词/Click 映射/全消息类型/Default；返回引用位置 DTO
-    /// 含 SceneType 语义 + 规则 Id——DMP-Lite 5.2 引用反查"引用 N 处"+清单）。</summary>
+    /// 含 SceneType 语义 + 规则 Id——DMP-Lite 5.2 引用反查"引用 N 处"+清单）。
+    /// <para><c>ExposeRest=false</c>：引用反查为素材管理内部能力，不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(ExposeRest = false)]
     Task<IReadOnlyList<MaterialReferenceDto>> GetReferencesAsync(long materialId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class MaterialService : DomainServiceBase, IMaterialService
+[GenerateController]
+public sealed class MaterialService : DomainServiceBase, IMaterialService
 {
     private MaterialEntityDataService? _ds;
     private MaterialEntityDataService Ds => _ds ??= User.Use<MaterialEntityDataService>();

@@ -7,6 +7,7 @@ using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 
@@ -35,7 +36,7 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        var confirmed = await service.PublishAsync("ch-menu", MenuV1, ct: TestContext.Current.CancellationToken);
+        var confirmed = await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(confirmed);   // 拉取确认（发布成功语义）
         // ① menu/create 收到 raw JSON 透传
@@ -79,8 +80,8 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        await service.PublishAsync("ch-menu", MenuV1, ct: TestContext.Current.CancellationToken);
-        await service.PublishAsync("ch-menu", MenuV2, ct: TestContext.Current.CancellationToken);
+        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
+        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken);
 
         var fsql = provider.GetRequiredService<IFreeSql>();
         var versions = await fsql.Select<MenuVersionEntity>().Where(v => v.ChannelId == "ch-menu")
@@ -102,11 +103,11 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        await service.PublishAsync("ch-menu", MenuV1, ct: TestContext.Current.CancellationToken);
-        await service.PublishAsync("ch-menu", MenuV2, ct: TestContext.Current.CancellationToken);
+        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
+        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken);
         var v1 = (await service.ListVersionsAsync("ch-menu", TestContext.Current.CancellationToken))[0];
 
-        var confirmed = await service.RollbackAsync(v1.Id, ct: TestContext.Current.CancellationToken);
+        var confirmed = await service.RollbackAsync("ch-menu", new RollbackMenuRequest(v1.Id), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(confirmed);
         // menu/create 第三次收到 v1 的 AfterJson
@@ -160,7 +161,7 @@ public class MenuServiceTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
-        await service.PublishAsync("ch-menu", MenuV1, ct: TestContext.Current.CancellationToken);
+        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
 
         await service.DeleteAsync("ch-menu", ct: TestContext.Current.CancellationToken);
 
@@ -183,7 +184,7 @@ public class MenuServiceTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         var service = user.Use<IMenuService>();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RollbackAsync(99999, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RollbackAsync("ch-menu", new RollbackMenuRequest(99999), TestContext.Current.CancellationToken));
         Assert.Contains("不存在", ex.Message);
     }
 
@@ -195,7 +196,7 @@ public class MenuServiceTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         var service = user.Use<IMenuService>();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync("ch-unknown", MenuV1, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync("ch-unknown", new PublishMenuRequest(MenuV1), TestContext.Current.CancellationToken));
         Assert.Contains("配置不存在", ex.Message);
     }
 
@@ -203,13 +204,8 @@ public class MenuServiceTests : WeChatOperationsTestHost
     private static async Task SeedConfigAsync(DomainUser<TestUserInfo> user)
     {
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-menu",
-            AppId = "wx-menu-1",
-            DisplayName = "菜单号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: "menu-secret", ct: TestContext.Current.CancellationToken);
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-menu", AppId: "wx-menu-1", DisplayName: "菜单号", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: "menu-secret"), ct: TestContext.Current.CancellationToken);
     }
 }

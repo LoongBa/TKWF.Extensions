@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using TKW.Framework.Domain;
+using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat.MessageGateway;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -170,15 +171,10 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        var id = await svc.SaveEndpointAsync(new DownstreamEndpointEntity
-        {
-            ChannelId = ChA,
-            Name = "下游A",
-            BaseUrl = "https://down.example.com",
-            HttpMethod = "POST",
-            TimeoutSeconds = 2,
-            AuthType = WeChatEndpointAuthTypes.Bearer,
-        }, authTokenPlain: "super-secret-token-2026", TestContext.Current.CancellationToken);
+        var id = await svc.SaveEndpointAsync(new SaveEndpointRequest(
+            Id: null, ChannelId: ChA, Name: "下游A", BaseUrl: "https://down.example.com",
+            HttpMethod: "POST", TimeoutSeconds: 2, AuthType: WeChatEndpointAuthTypes.Bearer, AuthTokenPlain: "super-secret-token-2026"),
+            TestContext.Current.CancellationToken);
 
         var ep = await provider.GetRequiredService<IFreeSql>().Select<DownstreamEndpointEntity>()
             .Where(e => e.Id == id).FirstAsync(TestContext.Current.CancellationToken);
@@ -199,16 +195,12 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        var withToken = await svc.SaveEndpointAsync(new DownstreamEndpointEntity
-        {
-            ChannelId = ChA, Name = "带令牌", BaseUrl = "https://a.example.com", TimeoutSeconds = 2,
-            AuthType = WeChatEndpointAuthTypes.Bearer,
-        }, authTokenPlain: "token-abc", TestContext.Current.CancellationToken);
-        await svc.SaveEndpointAsync(new DownstreamEndpointEntity
-        {
-            ChannelId = ChA, Name = "无鉴权", BaseUrl = "https://b.example.com", TimeoutSeconds = 2,
-            AuthType = WeChatEndpointAuthTypes.None,
-        }, authTokenPlain: null, TestContext.Current.CancellationToken);
+        var withToken = await svc.SaveEndpointAsync(new SaveEndpointRequest(
+            Id: null, ChannelId: ChA, Name: "带令牌", BaseUrl: "https://a.example.com", TimeoutSeconds: 2,
+            AuthType: WeChatEndpointAuthTypes.Bearer, AuthTokenPlain: "token-abc"), TestContext.Current.CancellationToken);
+        await svc.SaveEndpointAsync(new SaveEndpointRequest(
+            Id: null, ChannelId: ChA, Name: "无鉴权", BaseUrl: "https://b.example.com", TimeoutSeconds: 2,
+            AuthType: WeChatEndpointAuthTypes.None), TestContext.Current.CancellationToken);
 
         var dtos = await svc.ListEndpointsAsync(ChA, TestContext.Current.CancellationToken);
         Assert.Equal(2, dtos.Count);
@@ -232,10 +224,9 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        var epId = await svc.SaveEndpointAsync(new DownstreamEndpointEntity
-        {
-            ChannelId = ChA, Name = "被引用端点", BaseUrl = "https://down.example.com", TimeoutSeconds = 2,
-        }, authTokenPlain: null, TestContext.Current.CancellationToken);
+        var epId = await svc.SaveEndpointAsync(new SaveEndpointRequest(
+            Id: null, ChannelId: ChA, Name: "被引用端点", BaseUrl: "https://down.example.com", TimeoutSeconds: 2),
+            TestContext.Current.CancellationToken);
         await svc.SaveRuleAsync(new MessageRouteRuleEntity
         {
             ChannelId = ChA, Name = "引用端点规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.AsyncCopy, EndpointId = epId,
@@ -259,10 +250,9 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        var id = await svc.SaveEndpointAsync(new DownstreamEndpointEntity
-        {
-            ChannelId = ChA, Name = "独立端点", BaseUrl = "https://down.example.com", TimeoutSeconds = 2,
-        }, authTokenPlain: null, TestContext.Current.CancellationToken);
+        var id = await svc.SaveEndpointAsync(new SaveEndpointRequest(
+            Id: null, ChannelId: ChA, Name: "独立端点", BaseUrl: "https://down.example.com", TimeoutSeconds: 2),
+            TestContext.Current.CancellationToken);
 
         var deleted = await svc.DeleteEndpointAsync(id, TestContext.Current.CancellationToken);
         Assert.True(deleted);
@@ -281,10 +271,9 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         var svc = user.Use<IMessageGatewayService>();
 
         await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "状态规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
-        await svc.SaveEndpointAsync(new DownstreamEndpointEntity
-        {
-            ChannelId = ChA, Name = "状态端点", BaseUrl = "https://down.example.com", TimeoutSeconds = 2,
-        }, authTokenPlain: null, TestContext.Current.CancellationToken);
+        await svc.SaveEndpointAsync(new SaveEndpointRequest(
+            Id: null, ChannelId: ChA, Name: "状态端点", BaseUrl: "https://down.example.com", TimeoutSeconds: 2),
+            TestContext.Current.CancellationToken);
 
         var status = await svc.GetGatewayStatusAsync(TestContext.Current.CancellationToken);
         Assert.False(status.Enabled);          // Options 默认 false（fail-closed）
@@ -303,10 +292,10 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         var svc = user.Use<IMessageGatewayService>();
         try
         {
-            await svc.SetGatewayEnabledAsync(true, TestContext.Current.CancellationToken);
+            await svc.SetGatewayEnabledAsync(new SetGatewayEnabledRequest(true), TestContext.Current.CancellationToken);
             Assert.True((await svc.GetGatewayStatusAsync(TestContext.Current.CancellationToken)).Enabled);
 
-            await svc.SetGatewayEnabledAsync(false, TestContext.Current.CancellationToken);
+            await svc.SetGatewayEnabledAsync(new SetGatewayEnabledRequest(false), TestContext.Current.CancellationToken);
             Assert.False((await svc.GetGatewayStatusAsync(TestContext.Current.CancellationToken)).Enabled);
         }
         finally

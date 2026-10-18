@@ -52,6 +52,10 @@
     <ProjectReference Include="..\..\_Framework\Federation\TKWF.Ext.Federation.csproj" />
     <!-- C 基座（TestHostBase/TestUserInfo/TestMetaContext/TestUserHelper） -->
     <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
+    <!-- V0.4.0 ③ 消息业务总开关 DB 化：FeatureManagement 消费（IFeatureManager/IFeatureDefinitionContributor/
+         FeatureManagementExtensionInitializer/InMemoryFeatureDefinitionRepository——测试宿主装配生产路径；
+         DisableTransitiveProjectReferences=true 显式声明） -->
+    <ProjectReference Include="..\..\_Framework\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 
@@ -56,7 +57,7 @@ public class MenuClickKeyTests : WeChatOperationsTestHost
         var service = user.Use<IMenuService>();
 
         // 发布菜单（menu/create raw 透传——快照取拉取确认的嵌套菜单结构）
-        await service.PublishAsync(Ch, """{"button":[{"type":"click","name":"提交菜单","key":"RAW"}]}""",
+        await service.PublishAsync(Ch, new PublishMenuRequest("""{"button":[{"type":"click","name":"提交菜单","key":"RAW"}]}"""),
             TestContext.Current.CancellationToken);
 
         var keys = await service.GetClickKeysAsync(Ch, TestContext.Current.CancellationToken);
@@ -106,13 +107,8 @@ public class MenuClickKeyTests : WeChatOperationsTestHost
     private static async Task SeedConfigAsync(DomainUser<TestUserInfo> user)
     {
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = Ch,
-            AppId = "wx-menu-key",
-            DisplayName = "菜单键号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: "menu-key-secret", ct: TestContext.Current.CancellationToken);
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: Ch, AppId: "wx-menu-key", DisplayName: "菜单键号", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: "menu-key-secret"), ct: TestContext.Current.CancellationToken);
     }
 }

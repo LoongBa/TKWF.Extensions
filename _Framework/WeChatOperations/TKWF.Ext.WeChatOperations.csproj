@@ -10,10 +10,14 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+<TargetFramework>net10.0</TargetFramework>
     <RootNamespace>TKWF.Ext.WeChatOperations</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <!-- V0.4.0 起开 ImplicitUsings：主框架 SG1（EntityMetadataGenerator.BuildContributorsSource）生成的
+         GeneratedContributors.g.cs 文件头无 using System.Collections.Generic（模板假设宿主开 ImplicitUsings——
+         主框架测试项目全部 enable）——本扩展新增 IFeatureDefinitionContributor 后首次触发该生成路径 -->
+    <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>WeChatOperations/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.WeChatOperations</PackageId>
@@ -32,20 +36,19 @@
     <!-- 网关运行库（纯逻辑零实体零持久化——V0.2.0 增网关模块：路由规则判定/幂等键规范化/转发决策与降级链/熔断状态机；
          MessageGatewayService.RouteAsync 经其静态类型组合，非 DI 服务直用——方案 §十·〇 ①） -->
     <ProjectReference Include="..\Federation.WeChat.MessageGateway\TKWF.Federation.WeChat.MessageGateway.csproj" />
-    <!-- L2 门控核查（门面任务，设计文档 §3.3.4 接入点 ②）：Federation 主包契约（ChannelConfig/IChannelSource/
-         IChannelRegistry/IEventReplyHandler）无 Abstractions 契约包收口（Federation 无独立 Abstractions 项目）——
-         显式需求引用 Federation 主包。⚠️ L2 源头禁令 TKWF0022 判据 = 引用含 ExtensionInitializer<T> 的程序集；
-         本扩展虽为扩展项目但需 Federation 契约类型（ChannelConfig 投影 / IChannelSource 注册 / IEventReplyHandler
-         集合注册 / CompositeChannelRegistry 组合语义）——Federation.WeChat 平台库自身 ProjectReference Federation
-         （分析器出口仅拦"扩展项目直引扩展实现"，平台库先例 Oracle P1-1 单向依赖合法，库引扩展为同型先例；
-         本扩展契约引用面与平台库一致，显式声明注释声明依据）。生产包依赖由 CPM/NuGet 拓扑决定，不经源码引用点火。 -->
-    <ProjectReference Include="..\Federation\TKWF.Ext.Federation.csproj" />
+<!-- L2 门控核查（门面任务 + 2026-10-18 ④ 裁定）：Federation 契约（ChannelConfig/IChannelSource/
+         IChannelRegistry/IEventReplyHandler）已收口 Abstractions 契约包（namespace 保持 TKWF.Ext.Federation 跨程序集同，
+         本扩展只消费契约无需引 Federation 主包实现；编排实现 DI 装配归 Federation 扩展——消费方白名单 Federation） -->
+    <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
 <!-- 信任契约包（TrustCenter.Abstractions——WechatEventReplyHandlerBase/EventReplyNewsArticle/SsoChannelEventContext
          等事件回复信封类型所在；平台库 Federation.WeChat 经其实现 ISsoChannel，本扩展 handler 消费事件信封闭包类型） -->
     <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
     <!-- 权限契约包（Permisisions.Abstractions——[RequirePermission] 门面权限标注；设计文档 §3.3.5 Oracle P1，
          只读查询 WeChatOperations.Query / 写操作 WeChatOperations.Manage） -->
     <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+    <!-- V0.4.0 ③ 消息业务总开关 DB 化：FeatureManagement 消费（IFeatureManager.IsEnabledAsync——运行时开关 DB 权威
+         + 版本缓存失效 + 分布式事件；Options MessageBusinessEnabled 保留为启动默认值语义，FeatureDefinition DefaultValue 对齐） -->
+    <ProjectReference Include="..\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
   </ItemGroup>
 
   <ItemGroup>

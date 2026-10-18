@@ -38,13 +38,16 @@ public interface IWeChatOperationsStatusService : IDomainService
     /// <param name="channelId">公众号隔离 id（未配置 → 全部返回未连接 + 零值，不抛）。</param>
     /// <param name="ct">取消令牌。</param>
     /// <returns>四卡聚合结果（<see cref="WeChatOperationsStatusDto"/>——只读、无凭证）。</returns>
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/status</c>。</para>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/status", RestMethod = "GET")]
     Task<WeChatOperationsStatusDto> GetStatusSummaryAsync(string channelId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class WeChatOperationsStatusService : DomainServiceBase, IWeChatOperationsStatusService
+[GenerateController]
+public sealed class WeChatOperationsStatusService : DomainServiceBase, IWeChatOperationsStatusService
 {
     private readonly ILogger? _logger;
 

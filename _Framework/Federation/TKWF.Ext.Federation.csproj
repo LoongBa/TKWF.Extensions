@@ -26,6 +26,9 @@
     <!-- 2026-10-09（TrustCenter 剥离，T1/T2）：信任内核契约包（ISsoChannel/IToken2Service/IAccessCodeService）——
          信任内核迁出后 Federation 经契约消费（编排面 SsoChannelFactory 需要 ISsoChannel 类型；L2 间接层合法） -->
     <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
+    <!-- 2026-10-18（④ 裁定）：通道编排契约包（IChannelRegistry/IChannelSource/ChannelConfig/IEventReplyHandler/IEventOrchestrator
+         迁入 Abstractions——namespace 保持 TKWF.Ext.Federation 跨程序集同，实现类（Composite/Static/EventOrchestrator）继续在本主包实现契约 -->
+    <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

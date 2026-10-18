@@ -27,41 +27,56 @@ namespace TKWF.Ext.WeChatOperations;
 public interface IMenuService : IDomainService
 {
     /// <summary>拉取当前生效菜单（get_current_selfmenu_info——拉微信 → 存 MenuSnapshot 本地基准 + 记 PublishLog Read）；
-    /// 返回结构化结果（菜单未配置 → null）。</summary>
+    /// 返回结构化结果（菜单未配置 → null）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/menu</c>。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/menu", RestMethod = "GET")]
     Task<WeChatSelfMenuInfoResult?> GetCurrentAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>发布/全量覆盖自定义菜单（menu/create raw JSON 透传 → 拉取确认 → 事务：MenuSnapshot 更新 +
-    /// MenuVersion 追加 + MenuPublishLog Create）——返回发布后当前菜单结构（确认拉取）。</summary>
+    /// MenuVersion 追加 + MenuPublishLog Create）——返回发布后当前菜单结构（确认拉取）。
+    /// <para>REST：<c>POST /api/wechat-ops/channels/{channelId}/menu</c>（单复杂参数 <see cref="PublishMenuRequest"/> → [FromBody]——menuJson 走 body 防 URL/日志泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    Task<WeChatSelfMenuInfoResult?> PublishAsync(string channelId, string menuJson, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/menu", RestMethod = "POST")]
+    Task<WeChatSelfMenuInfoResult?> PublishAsync(string channelId, PublishMenuRequest request, CancellationToken ct = default);
 
-    /// <summary>本地基准快照（MenuSnapshot——最近一次发布/拉取确认的完整 JSON；无 → null）。</summary>
+    /// <summary>本地基准快照（MenuSnapshot——最近一次发布/拉取确认的完整 JSON；无 → null）。
+    /// <para><c>ExposeRest=false</c>：快照原子读取为内部能力（click key 收集数据源），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(ExposeRest = false)]
     Task<string?> GetSnapshotAsync(string channelId, CancellationToken ct = default);
 
-    /// <summary>版本历史（MenuVersion——按 VersionNo 升序；回滚数据源列表）。</summary>
+    /// <summary>版本历史（MenuVersion——按 VersionNo 升序；回滚数据源列表）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/menu/versions</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/menu/versions", RestMethod = "GET")]
     Task<IReadOnlyList<MenuVersionEntity>> ListVersionsAsync(string channelId, CancellationToken ct = default);
 
-    /// <summary>回滚到指定版本（加载该版本 AfterJson 重新发布 → 追加新版本 + 审计——同 PublishAsync 全链）。</summary>
+    /// <summary>回滚到指定版本（加载该版本 AfterJson 重新发布 → 追加新版本 + 审计——同 PublishAsync 全链）。
+    /// <para>REST：<c>POST /api/wechat-ops/channels/{channelId}/menu/rollback</c>（单复杂参数 <see cref="RollbackMenuRequest"/> → [FromBody]）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    Task<WeChatSelfMenuInfoResult?> RollbackAsync(long versionId, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/menu/rollback", RestMethod = "POST")]
+    Task<WeChatSelfMenuInfoResult?> RollbackAsync(string channelId, RollbackMenuRequest request, CancellationToken ct = default);
 
-    /// <summary>删除当前自定义菜单（menu/delete + PublishLog Delete 审计——本地快照/版本保留可追溯）。</summary>
+    /// <summary>删除当前自定义菜单（menu/delete + PublishLog Delete 审计——本地快照/版本保留可追溯）。
+    /// <para><c>ExposeRest=false</c>：删除为高操作权限能力，对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(ExposeRest = false)]
     Task DeleteAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>菜单树 click 类型按钮标识列表（递归收集 click 按钮 Key——DMP-Lite 5.4 自动生成映射行；
     /// 数据源 = 本地基准快照 JSON（<see cref="MenuSnapshotEntity.MenuJson"/>——发布/拉取确认的结构化 poco 序列化）；
-    /// 快照空/解析失败 → 空列表）。</summary>
+    /// 快照空/解析失败 → 空列表）。
+    /// <para><c>ExposeRest=false</c>：click key 为菜单映射管理内部能力（映射页数据源），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(ExposeRest = false)]
     Task<IReadOnlyList<string>> GetClickKeysAsync(string channelId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class MenuService : DomainServiceBase, IMenuService
+[GenerateController]
+public sealed class MenuService : DomainServiceBase, IMenuService
 {
     private readonly WeChatApiClient _apiClient;
     private readonly ITransactionManager _transactionManager;
@@ -107,9 +122,11 @@ internal sealed class MenuService : DomainServiceBase, IMenuService
     }
 
     /// <inheritdoc />
-    public async Task<WeChatSelfMenuInfoResult?> PublishAsync(string channelId, string menuJson, CancellationToken ct = default)
+    public async Task<WeChatSelfMenuInfoResult?> PublishAsync(string channelId, PublishMenuRequest request, CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(menuJson);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.MenuJson);
+        var menuJson = request.MenuJson;
         var cfg = await ResolveConfigAsync(channelId, ct);
         var token = await _apiClient.GetAccessTokenAsync(cfg.AppId, "mp", ct);
         var beforeJson = await GetSnapshotAsync(channelId, ct);
@@ -161,12 +178,16 @@ internal sealed class MenuService : DomainServiceBase, IMenuService
             q => q.OrderBy(v => v.VersionNo), ct);
 
     /// <inheritdoc />
-    public async Task<WeChatSelfMenuInfoResult?> RollbackAsync(long versionId, CancellationToken ct = default)
+    public async Task<WeChatSelfMenuInfoResult?> RollbackAsync(string channelId, RollbackMenuRequest request, CancellationToken ct = default)
     {
-        var version = await VerDs.EntityGetAsync(v => v.Id == versionId, ct);
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.VersionId <= 0) throw new ArgumentException("versionId 必填", nameof(request));
+        var version = await VerDs.EntityGetAsync(v => v.Id == request.VersionId, ct);
         if (version is null)
-            throw new InvalidOperationException($"菜单版本不存在：Id={versionId}");
-        return await PublishAsync(version.ChannelId, version.AfterJson, ct);
+            throw new InvalidOperationException($"菜单版本不存在：Id={request.VersionId}");
+        if (version.ChannelId != channelId)
+            throw new InvalidOperationException($"菜单版本不属于该公众号：版本属 ChannelId={version.ChannelId}，请求属 {channelId}");
+        return await PublishAsync(version.ChannelId, new PublishMenuRequest(version.AfterJson), ct);
     }
 
     /// <inheritdoc />

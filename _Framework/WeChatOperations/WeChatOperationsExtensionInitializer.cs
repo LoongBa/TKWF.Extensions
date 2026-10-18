@@ -43,6 +43,12 @@ namespace TKWF.Ext.WeChatOperations;
 /// </list>
 /// </summary>
 [TKWFExtension("WeChatOperations")]
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.FeatureManagement.IFeatureManager), MinVersion = "0.4.0")]
+// 2026-10-18 ④ 裁定：通道编排契约迁 Federation.Abstractions 独立契约包（版本线独立——V0.1.0 起步，
+//   MinVersion 对齐契约包版本而非 Federation 主包；namespace 保持 TKWF.Ext.Federation 跨程序集同）
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelRegistry), MinVersion = "0.1.0")]
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IEventReplyHandler), MinVersion = "0.1.0")]
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelSource), MinVersion = "0.1.0")]
 public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {

@@ -6,6 +6,7 @@ using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.KeyManagement;
+using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 
@@ -26,14 +27,9 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         var service = user.Use<IChannelConfigService>();
         var aesKey = WeChatOperationsTestSupport.GenerateEncodingAESKey();
 
-        var id = await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-1",
-            AppId = "wx0001",
-            DisplayName = "主号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: "secret-plain-1", tokenPlain: "token-plain-1", encodingAesKeyPlain: aesKey,
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-1", AppId: "wx0001", DisplayName: "主号", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: "secret-plain-1", Token: "token-plain-1", EncodingAesKey: aesKey),
             ct: TestContext.Current.CancellationToken);
 
         Assert.True(id > 0);
@@ -64,14 +60,9 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         using var _ = this;
         var (provider, user) = BindScope();
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-2",
-            AppId = "wx0002",
-            DisplayName = "二号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: "secret-2", ct: TestContext.Current.CancellationToken);
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-2", AppId: "wx0002", DisplayName: "二号", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: "secret-2"), ct: TestContext.Current.CancellationToken);
 
         var dto = await service.GetAsync("wx0002", ct: TestContext.Current.CancellationToken);
 
@@ -93,29 +84,18 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         using var _ = this;
         var (provider, user) = BindScope();
         var service = user.Use<IChannelConfigService>();
-        var id = await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-3",
-            AppId = "wx0003",
-            DisplayName = "三号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: "secret-3", ct: TestContext.Current.CancellationToken);
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-3", AppId: "wx0003", DisplayName: "三号", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: "secret-3"), ct: TestContext.Current.CancellationToken);
 
         var fsql = provider.GetRequiredService<IFreeSql>();
         var before = await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
             .FirstAsync(TestContext.Current.CancellationToken);
 
         // 更新——不传任何明文（null = 保持既有密文）
-        await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            Id = id,
-            ChannelId = "ch-3",
-            AppId = "wx0003",
-            DisplayName = "三号-改名",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, ct: TestContext.Current.CancellationToken);
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: id, ChannelId: "ch-3", AppId: "wx0003", DisplayName: "三号-改名", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
 
         var after = await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
             .FirstAsync(TestContext.Current.CancellationToken);
@@ -130,23 +110,14 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-dup",
-            AppId = "wx-dup-1",
-            DisplayName = "第一",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, ct: TestContext.Current.CancellationToken);
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-dup", AppId: "wx-dup-1", DisplayName: "第一", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-dup",   // 同 ChannelId
-            AppId = "wx-dup-2",
-            DisplayName = "第二",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, ct: TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-dup",   // 同 ChannelId
+            AppId: "wx-dup-2", DisplayName: "第二", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("冲突", ex.Message);
     }
@@ -158,14 +129,9 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         using var _ = this;
         var (provider, user) = BindScope();
         var service = user.Use<IChannelConfigService>();
-        var id = await service.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = "ch-del",
-            AppId = "wx-del",
-            DisplayName = "待删",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, ct: TestContext.Current.CancellationToken);
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-del", AppId: "wx-del", DisplayName: "待删", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
 
         var deleted = await service.DeleteAsync(id, ct: TestContext.Current.CancellationToken);
 

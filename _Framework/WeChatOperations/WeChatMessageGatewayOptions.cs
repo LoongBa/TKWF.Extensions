@@ -6,9 +6,9 @@ namespace TKWF.Ext.WeChatOperations;
 /// <summary>
 /// 微信公众号消息网关配置（<c>TKWF:WeChatOperations:Gateway</c> 独立子节——方案 §十·六 ② 配置分层）。
 /// <para>配置分层（AGENTS §8）：领域安全/转发决策（<see cref="GatewayEnabled"/> fail-closed 默认关、
-/// 幂等保留期/超时、异步重试/退避、同步超时上限）归本节——Web 层 <see cref="WeChatOperationsEndpointOptions"/>
-/// （<c>:Web</c>）不存在关闭领域行为的对应开关（防表现层绕过）；配置节挂 <c>TKWF:WeChatOperations</c> 根下保内聚
-/// （对齐 Federation <c>:ChannelRegistry</c>/<c>:Web</c> 拆节先例）。</para>
+/// 幂等保留期/超时、异步重试/退避、同步超时上限）归本节——<b>不存在</b>关闭领域行为的 Web 层对应开关
+/// （V0.4.0 起端点由 SG1b <c>[GenerateController]</c> 生成、非匿名 fail-closed——防表现层绕过）；配置节挂
+/// <c>TKWF:WeChatOperations</c> 根下保内聚（对齐 Federation <c>:ChannelRegistry</c>/<c>:Web</c> 拆节先例）。</para>
 /// <para><see cref="GatewayEnabled"/> <b>默认 false（fail-closed）</b>——未开全局开关/未配规则时既有
 /// <see cref="WeChatOperationsReplyHandler"/> 行为零回归（RouteAsync 首行判定直接返回未接管，不查库不转发）。</para>
 /// </summary>

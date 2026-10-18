@@ -216,6 +216,10 @@
   <Folder Name="/_Framework/Federation/">
     <Project Path="_Framework/Federation/TKWF.Ext.Federation.csproj" />
   </Folder>
+  <!-- Federation.Abstractions 契约包（2026-10-18 ④ 裁定——通道编排契约收口：IChannelRegistry/IChannelSource/ChannelConfig/IEventReplyHandler/IEventOrchestrator 迁入；namespace 保持 TKWF.Ext.Federation 跨程序集同） -->
+  <Folder Name="/_Framework/Federation.Abstractions/">
+    <Project Path="_Framework/Federation.Abstractions/TKWF.Federation.Abstractions.csproj" />
+  </Folder>
   <!-- TrustCenter 剥离（2026-10-09，T1/T2）：信任内核迁出为独立扩展——Abstractions 契约包 + 主包 + 测试项目 -->
   <Folder Name="/_Framework/TrustCenter.Abstractions/">
     <Project Path="_Framework/TrustCenter.Abstractions/TKWF.Ext.TrustCenter.Abstractions.csproj" />

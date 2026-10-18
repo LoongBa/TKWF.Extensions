@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
+using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 
@@ -43,14 +44,9 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var channelService = user.Use<IChannelConfigService>();
-        await channelService.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = Ch,
-            AppId = "wx-status-1",
-            DisplayName = "状态测试号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, appSecretPlain: "secret-status", ct: TestContext.Current.CancellationToken);
+        await channelService.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: Ch, AppId: "wx-status-1", DisplayName: "状态测试号", IsEnabled: true,
+            ChannelType: "wechat_event", AppSecret: "secret-status"), ct: TestContext.Current.CancellationToken);
 
         var status = await user.Use<IWeChatOperationsStatusService>()
             .GetStatusSummaryAsync(Ch, TestContext.Current.CancellationToken);
@@ -67,14 +63,9 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var channelService = user.Use<IChannelConfigService>();
-        await channelService.SaveAsync(new WeChatChannelConfigEntity
-        {
-            ChannelId = Ch,
-            AppId = "wx-status-2",
-            DisplayName = "无凭证号",
-            IsEnabled = true,
-            ChannelType = "wechat_event",
-        }, ct: TestContext.Current.CancellationToken);
+        await channelService.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: Ch, AppId: "wx-status-2", DisplayName: "无凭证号", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
 
         var status = await user.Use<IWeChatOperationsStatusService>()
             .GetStatusSummaryAsync(Ch, TestContext.Current.CancellationToken);

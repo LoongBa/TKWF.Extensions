@@ -53,6 +53,42 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
     private IMessageGatewayService? _gateway;
     private IMessageGatewayService Gateway => _gateway ??= User.Use<IMessageGatewayService>();
 
+    /// <summary>消息业务总开关读源（V0.4.0 DB 化——FeatureManagement 消费：<c>WeChatOperations.MessageBusiness</c>
+    /// feature 布尔判定，fail-closed（未定义/解析失败 → false）；Options <see cref="WeChatOperationsOptions.MessageBusinessEnabled"/>
+    /// 保留为<b>启动期默认值</b>语义（FeatureDefinition DefaultValue="true" 对齐），运行时切换经
+    /// FeatureManagement 管理 API 写 DB（版本号缓存失效 + 分布式事件）。DI004 合规——门面经基类
+    /// <c>User.Use&lt;IFeatureManager&gt;()</c> 懒加载（AOP 帧内解析，不构造注入）。</summary>
+    private TKWF.Ext.FeatureManagement.IFeatureManager? _featureManager;
+    private TKWF.Ext.FeatureManagement.IFeatureManager FeatureManager => _featureManager ??= User.Use<TKWF.Ext.FeatureManagement.IFeatureManager>();
+
+    /// <summary>
+    /// 消息业务总开关判定（V0.4.0 起 FeatureManagement DB 化 + Options 启动语义双源——十处分支统一入口）。
+    /// <para>语义（DMP-Lite 5.8——关闭后本地回复停发统一维护提示；转发网关已先行不受控）：
+    /// ① <see cref="WeChatOperationsOptions.MessageBusinessEnabled"/> 显式 <c>false</c>（启动期关闭）→ 关闭；
+    /// ② Options <c>true</c>（默认）→ 运行时经 FeatureManagement DB 权威：<c>WeChatOperations.MessageBusiness</c>
+    /// 存值覆盖（DB 写 <c>SetValueAsync</c> → 运行时可切换）；<b>未存值 → 默认开（"true"——业务语义默认开放，
+    /// 与 V0.2.1 Options 默认一致；勿用 IsEnabledAsync——其对未定义/未存值恒 fail-closed false，不读 DefaultValue）</b>。
+    /// fail-closed：FeatureManager 域外解析 / 读源异常 → 关闭（维护提示兜底，不静默放开）。</para>
+    /// </summary>
+    private async Task<bool> IsMessageBusinessEnabledAsync(CancellationToken ct)
+    {
+        // ① 启动期 Options 显式关闭 → 关闭（保留 V0.2.1 配置语义；测试经 ConfigureOptions 可控制）
+        if (!_options.MessageBusinessEnabled) return false;
+        // ② Options 默认开 → 运行时 DB 权威（GetValueAsync 显式默认 "true"——未存值默认开 = 业务默认开放语义）
+        try
+        {
+            var raw = await FeatureManager.GetValueAsync(
+                WeChatOperationsFeatureNames.MessageBusiness, User, defaultValue: "true", ct);
+            return bool.TryParse(raw, out var enabled) && enabled;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 总开关读源异常——fail-closed（停发本地回复；不吞掉回复路径抛异常：维护提示兜底）
+            _logger?.LogWarning(ex, "消息业务总开关 DB 读源异常——fail-closed 停发本地回复（维护提示兜底）");
+            return false;
+        }
+    }
+
     /// <summary>本次消息匹配过程逐行追踪（P2-2——DMP-Lite 5.6 §4 日志详情"匹配过程"灰框逐行推演）：Handler 实例
     /// 随请求作用域创建（每次调用新实例）——<b>实例生命周期 = 单次回复</b>，无需清理；进
     /// <see cref="RecordInteractionAsync"/> 序列化为 <see cref="InteractionLogEntity.MatchTraceJson"/>
@@ -109,7 +145,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
 
         // 订阅 +1（副作用——即使无回复也计数；回复可被消费）
         await RecordStatAsync(ctx, 1, ct);
@@ -134,7 +170,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
 
         var content = ctx.Content ?? string.Empty;
 
@@ -197,7 +233,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
 
         // Click 映射——TriggerKey=EventKey（菜单 key）；未映射 → null（不回复）
         if (string.IsNullOrWhiteSpace(ctx.EventKey)) return null;
@@ -220,7 +256,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
 
         // Scan 规则（可含 TriggerKey=场景值——扫码带参）；无规则 → null
         var rule = await RuleDs.EntitySelectAsync(r => r.ChannelId == ctx.ChannelId && r.SceneType == WeChatReplySceneTypes.Scan
@@ -246,7 +282,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.Image, triggerKey: null, triggerType: 4, ct);
     }
 
@@ -258,7 +294,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.Voice, triggerKey: null, triggerType: 5, ct);
     }
 
@@ -270,7 +306,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.Video, triggerKey: null, triggerType: 6, ct);
     }
 
@@ -282,7 +318,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.ShortVideo, triggerKey: null, triggerType: 7, ct);
     }
 
@@ -294,7 +330,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.Location, triggerKey: null, triggerType: 8, ct);
     }
 
@@ -306,7 +342,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         if (gate.Handled) return gate.Result;
 
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
-        if (!_options.MessageBusinessEnabled) return await MaintenanceReply(ctx, ct);
+        if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.Link, triggerKey: null, triggerType: 9, ct);
     }
 

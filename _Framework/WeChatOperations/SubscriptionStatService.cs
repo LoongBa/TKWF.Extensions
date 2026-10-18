@@ -25,12 +25,16 @@ public interface ISubscriptionStatService : IDomainService
     /// 记录订阅/取关计数（<paramref name="eventType"/>：1=subscribe / 2=unsubscribe）——每日 upsert：
     /// 按 (ChannelId, StatDate=UtcNow.Date, Source) 查 → 命中更新（对应列 +1 + NetCount 重算）/ 未命中创建。
     /// <paramref name="source"/> 可空 = 汇总行（不细分来源——存量调用零适配）；来源值见 <see cref="WeChatSubscriptionSources"/>。
+    /// <para><c>ExposeRest=false</c>：事件驱动内部写入（handler 帧内调用），不生成 REST 端点——对外只读（趋势/汇总）。</para>
     /// </summary>
+    [ApiExpose(ExposeRest = false)]
     Task RecordAsync(string channelId, int eventType, string? source = null, CancellationToken ct = default);
 
     /// <summary>按日趋势（[from, to] 闭区间——ChannelId + StatDate 过滤；<paramref name="source"/> 可空 = 仅汇总行；
-    /// 非空 = 仅该来源行；StatDate 升序）。</summary>
+    /// 非空 = 仅该来源行；StatDate 升序）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats?from=&amp;to=&amp;source=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/subscription-stats", RestMethod = "GET")]
     Task<IReadOnlyList<SubscriptionStatEntity>> GetTrendAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default);
 
     /// <summary>
@@ -39,8 +43,10 @@ public interface ISubscriptionStatService : IDomainService
     /// <see cref="SubscriptionStatSummaryDto.NetCountRaw"/> 暴露 + <see cref="SubscriptionStatSummaryDto.IsNetNegative"/> 标记）/
     /// 累计增长率（以区间起始日累计净增为基数估算；期初累计 ≤ 0 不可判定——<see cref="SubscriptionStatSummaryDto.GrowthRate"/> 为 null）。
     /// <paramref name="source"/> 可空 = 仅汇总行；非空 = 仅该来源行（对齐 <see cref="GetTrendAsync"/> 过滤语义）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats/summary?from=&amp;to=&amp;source=</c>。</para>
     /// </summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/subscription-stats/summary", RestMethod = "GET")]
     Task<SubscriptionStatSummaryDto> GetSummaryAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default);
 }
 
@@ -74,7 +80,8 @@ public record SubscriptionStatSummaryDto(
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class SubscriptionStatService : DomainServiceBase, ISubscriptionStatService
+[GenerateController]
+public sealed class SubscriptionStatService : DomainServiceBase, ISubscriptionStatService
 {
     private SubscriptionStatEntityDataService? _ds;
     private SubscriptionStatEntityDataService Ds => _ds ??= User.Use<SubscriptionStatEntityDataService>();

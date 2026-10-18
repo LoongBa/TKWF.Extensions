@@ -51,6 +51,6 @@
 - **信任根一票否决**（有入站回调平台）：验签失败即拒，恒定时间比对；漏验 = 可伪造任意 external_uid = 体系崩溃；
 - **凭证自持**：生产 AES-GCM 密文或装配注入，永不明文进配置库；
 - **不引 AspNetCore**：库纯逻辑 + HttpClient（`Microsoft.Extensions.Http`），入站端点归装配层；
-- **单向依赖**：库 → `TKWF.Ext.Federation`（ISsoChannel 契约）——扩展不引库。
+- **单向依赖**：库 → `TKWF.Federation.Abstractions`（IChannelSource/ChannelConfig 契约——2026-10-18 ④ 裁定契约收口 Abstractions 包）——扩展不引库。
 
 <!-- EOF -->

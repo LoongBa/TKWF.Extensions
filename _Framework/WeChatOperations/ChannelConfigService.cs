@@ -8,40 +8,56 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 公众号渠道配置门面（两源并存 DB 权威 + Options 降级——设计文档 §3.3.4）。
-/// <para><b>凭证安全（Oracle P1）</b>：<see cref="SaveAsync"/> 入参三凭证字段（AppSecret/Token/EncodingAESKey）
-/// 为<b>明文</b>——门面经 keyed <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/>
-/// AES-GCM 加密落库（<c>AppSecretCipher/TokenCipher/EncodingAESKeyCipher</c>）；DTO 投影
-/// (<see cref="WeChatChannelConfigDto"/>) <b>不含凭证</b>——密文不回显，解密仅出站瞬时（DbWeChatCredentialResolver）。</para>
+/// <para><b>凭证安全（Oracle P1）</b>：<see cref="SaveAsync"/> 入参经 <see cref="SaveChannelRequest"/> wire DTO——
+/// 三凭证字段（AppSecret/Token/EncodingAESKey）为<b>明文</b>经 body 传输（V0.4.0 起 GenerateController
+/// 端点 [FromBody] 绑定，防 query string URL 泄漏）；门面经 keyed
+/// <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> AES-GCM 加密落库
+/// （<c>AppSecretCipher/TokenCipher/EncodingAESKeyCipher</c>）；DTO 投影 (<see cref="WeChatChannelConfigDto"/>)
+/// <b>不含凭证</b>——密文不回显，解密仅出站瞬时（DbWeChatCredentialResolver）。</para>
+/// <para>REST 端点（V0.4.0 生成控制器——消费方 SG1b 经 <c>[GenerateController]</c> 聚合 ADR47）：</para>
+/// <list type="bullet">
+/// <item><c>GET /api/wechat-ops/channels</c> → <see cref="ListAsync"/>（List 前缀推导 GET）</item>
+/// <item><c>POST /api/wechat-ops/channels</c> → <see cref="SaveAsync"/>（Create 前缀推导 POST；单复杂参数 SaveChannelRequest [FromBody]）</item>
+/// </list>
 /// <para>消费方：<c>User.Use&lt;IChannelConfigService&gt;()</c>（AddConstructibleService 守卫工厂，帧内解析）。</para>
 /// </summary>
 public interface IChannelConfigService : IDomainService
 {
-    /// <summary>按 AppId 查询公众号配置（DTO 投影不含凭证密文；未命中 → null）。</summary>
+    /// <summary>按 AppId 查询公众号配置（DTO 投影不含凭证密文；未命中 → null）。
+    /// <para><c>ExposeRest=false</c>：单查为运营内部能力（列表已含全部配置），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(ExposeRest = false)]
     Task<WeChatChannelConfigDto?> GetAsync(string appId, CancellationToken ct = default);
 
-    /// <summary>全部公众号配置列表（DTO 投影不含凭证密文）。</summary>
+    /// <summary>全部公众号配置列表（DTO 投影不含凭证密文）。<para>REST：<c>GET /api/wechat-ops/channels</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels", RestMethod = "GET")]
     Task<IReadOnlyList<WeChatChannelConfigDto>> ListAsync(CancellationToken ct = default);
 
-    /// <summary>保存公众号配置——新（Id=0）创建 / 已有更新；<paramref name="appSecretPlain"/>/<paramref name="tokenPlain"/>/
-    /// <paramref name="encodingAesKeyPlain"/> 为<b>明文</b>（null = 保持库中既有密文不变）——门面加密落库。</summary>
+    /// <summary>保存公众号配置——新（Id=0）创建 / 已有更新；<paramref name="request"/> 承载凭证明文
+    /// （AppSecret/Token/EncodingAESKey 为<b>明文</b>，null = 保持库中既有密文不变）——门面加密落库。
+    /// <para>REST：<c>POST /api/wechat-ops/channels</c>（单复杂参数 SaveChannelRequest → [FromBody] 防 URL 凭证泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    Task<long> SaveAsync(WeChatChannelConfigEntity entity, string? appSecretPlain = null, string? tokenPlain = null, string? encodingAesKeyPlain = null, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels", RestMethod = "POST")]
+    Task<long> SaveAsync(SaveChannelRequest request, CancellationToken ct = default);
 
-    /// <summary>删除公众号配置（物理删——配置删除后出站凭证经 Options 降级解析）。</summary>
+    /// <summary>删除公众号配置（物理删——配置删除后出站凭证经 Options 降级解析）。
+    /// <para><c>ExposeRest=false</c>：删除为高操作权限能力，对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
+    [ApiExpose(ExposeRest = false)]
     Task<bool> DeleteAsync(long id, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class ChannelConfigService : DomainServiceBase, IChannelConfigService
+[GenerateController]
+public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigService
 {
     private readonly TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider _keys;
 
@@ -75,11 +91,23 @@ internal sealed class ChannelConfigService : DomainServiceBase, IChannelConfigSe
     }
 
     /// <inheritdoc />
-    public async Task<long> SaveAsync(WeChatChannelConfigEntity entity, string? appSecretPlain = null, string? tokenPlain = null, string? encodingAesKeyPlain = null, CancellationToken ct = default)
+    public async Task<long> SaveAsync(SaveChannelRequest request, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(entity);
-        if (string.IsNullOrWhiteSpace(entity.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(entity));
-        if (string.IsNullOrWhiteSpace(entity.AppId)) throw new ArgumentException("AppId 必填", nameof(entity));
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.AppId)) throw new ArgumentException("AppId 必填", nameof(request));
+
+        // 构造实体（wire DTO → 领域实体——凭证承载于 DTO 明文，服务端加密落库）
+        var entity = new WeChatChannelConfigEntity
+        {
+            Id = request.Id ?? 0,
+            ChannelId = request.ChannelId,
+            AppId = request.AppId,
+            DisplayName = request.DisplayName ?? "",
+            Remark = request.Remark,
+            IsEnabled = request.IsEnabled,
+            ChannelType = request.ChannelType ?? "wechat_event",
+        };
 
         // ChannelId/AppId 冲突预查（唯一索引 UX——TOCTOU 由数据库兜底）
         var existing = await Ds.EntityGetAsync(e => e.ChannelId == entity.ChannelId || e.AppId == entity.AppId, ct);
@@ -97,9 +125,9 @@ internal sealed class ChannelConfigService : DomainServiceBase, IChannelConfigSe
         var now = DateTime.UtcNow;
         if (entity.Id == 0)
         {
-            entity.AppSecretCipher = EncryptOrEmpty(appSecretPlain);
-            entity.TokenCipher = EncryptOrEmpty(tokenPlain);
-            entity.EncodingAESKeyCipher = EncryptOrEmpty(encodingAesKeyPlain);
+            entity.AppSecretCipher = EncryptOrEmpty(request.AppSecret);
+            entity.TokenCipher = EncryptOrEmpty(request.Token);
+            entity.EncodingAESKeyCipher = EncryptOrEmpty(request.EncodingAesKey);
             entity.CreateTime = now;
             entity.UpdateTime = now;
             var created = await Ds.EntityCreateAsync(entity, ct);
@@ -116,9 +144,9 @@ internal sealed class ChannelConfigService : DomainServiceBase, IChannelConfigSe
         db.Remark = entity.Remark;
         db.IsEnabled = entity.IsEnabled;
         db.ChannelType = entity.ChannelType;
-        if (appSecretPlain is not null) db.AppSecretCipher = _keys.Encrypt(appSecretPlain);
-        if (tokenPlain is not null) db.TokenCipher = _keys.Encrypt(tokenPlain);
-        if (encodingAesKeyPlain is not null) db.EncodingAESKeyCipher = _keys.Encrypt(encodingAesKeyPlain);
+        if (request.AppSecret is not null) db.AppSecretCipher = _keys.Encrypt(request.AppSecret);
+        if (request.Token is not null) db.TokenCipher = _keys.Encrypt(request.Token);
+        if (request.EncodingAesKey is not null) db.EncodingAESKeyCipher = _keys.Encrypt(request.EncodingAesKey);
         db.UpdateTime = now;
         await Ds.EntityUpdateAsync(db, ct);
         return db.Id;

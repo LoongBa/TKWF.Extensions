@@ -21,20 +21,25 @@ public interface ILogQueryService : IDomainService
     /// 交互日志筛选（ChannelId 必填；<paramref name="openId"/>/<paramref name="from"/>（含）/<paramref name="to"/>（含）/
     /// <paramref name="triggerType"/>（InteractionLog.TriggerType 值域：1=Subscribe/2=Keyword/3=Click/4=Image/5=Voice/
     /// 6=Video/7=ShortVideo/8=Location/9=Link/10=Scan/11=Default/12=None）可空 = 不过滤；MsgTime 降序）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/logs/interactions?open_id=&amp;trigger_type=&amp;from=&amp;to=</c>。</para>
     /// </summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/logs/interactions", RestMethod = "GET")]
     Task<IReadOnlyList<InteractionLogEntity>> ListInteractionsAsync(
         string channelId, string? openId = null, DateTime? from = null, DateTime? to = null,
         int? triggerType = null, CancellationToken ct = default);
 
-    /// <summary>菜单发布审计（ChannelId + Action=Read/Create/Delete/Test；OperateAt 降序）。</summary>
+    /// <summary>菜单发布审计（ChannelId + Action=Read/Create/Delete/Test；OperateAt 降序）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/logs/publishes</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
+    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/logs/publishes", RestMethod = "GET")]
     Task<IReadOnlyList<MenuPublishLogEntity>> ListPublishLogsAsync(string channelId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
-internal sealed class LogQueryService : DomainServiceBase, ILogQueryService
+[GenerateController]
+public sealed class LogQueryService : DomainServiceBase, ILogQueryService
 {
     private InteractionLogEntityDataService? _iDs;
     private InteractionLogEntityDataService IDs => _iDs ??= User.Use<InteractionLogEntityDataService>();

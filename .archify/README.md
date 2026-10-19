@@ -103,7 +103,7 @@ node $cli finalize <type> ".archify/diagrams/A2-ext-map/candidate.json" `
 **`--repo-root` 必须指向本扩展仓**（`F:\LoongBa_Git\_TKWF.Extensions`），且该
 checkout 的 origin 与 HEAD 需与 candidate 的 `meta.repository`/`revision` 一致，
 否则 `validate` 门禁报 `repository-evidence/origin-mismatch`。当前 revision 为
-`b7b607e0`。
+`3dd778f`。
 
 改完再复检：
 

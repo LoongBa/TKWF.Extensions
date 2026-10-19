@@ -6,6 +6,18 @@
 
 ---
 
+## 架构图
+
+扩展仓架构图总览（archify 生成，自包含 HTML，可直接双击打开）：[`.archify/index.html`](./.archify/index.html)
+
+| ID | 图 |
+|----|----|
+| A2 | 扩展仓全景——50+ 扩展按领域聚类、落地状态、对主框架契约的依赖 |
+
+> 主框架（`_TKWF` / TKW.Framework）自己的架构图在主仓 `.archify/index.html`，由主框架维护。
+
+---
+
 ## 扩展模块一览
 
 > 各扩展模块使用说明

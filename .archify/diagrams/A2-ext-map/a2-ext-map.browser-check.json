@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "b9b00e83-2cef-46ff-9dfc-48f1180850b0",
+  "deliveryReceiptId": "641d5401-a110-4c90-b309-189c404b574c",
   "artifact": {
     "path": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
-    "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
-    "bytes": 769228
+    "sha256": "0579fe2f331aad3929bc8a42058100aa103af3297e50cc777993bf5a044f3180",
+    "bytes": 769779
   },
   "state": {
     "detail": "read",
@@ -55,11 +55,11 @@
         "minimumProjectedNodeTextPx": 6.2707349081364825,
         "minimumProjectedNonEdgeTextPx": 6.2707349081364825,
         "minimumProjectedEdgeTextPx": 7.065616797900263,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -105,11 +105,11 @@
         "minimumProjectedNodeTextPx": 7.016141732283464,
         "minimumProjectedNonEdgeTextPx": 7.016141732283464,
         "minimumProjectedEdgeTextPx": 7.905511811023622,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -155,11 +155,11 @@
         "minimumProjectedNodeTextPx": 7.1,
         "minimumProjectedNonEdgeTextPx": 7.1,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -205,11 +205,11 @@
         "minimumProjectedNodeTextPx": 7.1,
         "minimumProjectedNonEdgeTextPx": 7.1,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -308,11 +308,11 @@
         "minimumProjectedNodeTextPx": 6.2707349081364825,
         "minimumProjectedNonEdgeTextPx": 6.2707349081364825,
         "minimumProjectedEdgeTextPx": 7.065616797900263,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -358,11 +358,11 @@
         "minimumProjectedNodeTextPx": 7.016141732283464,
         "minimumProjectedNonEdgeTextPx": 7.016141732283464,
         "minimumProjectedEdgeTextPx": 7.905511811023622,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -408,11 +408,11 @@
         "minimumProjectedNodeTextPx": 7.1,
         "minimumProjectedNonEdgeTextPx": 7.1,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -458,11 +458,11 @@
         "minimumProjectedNodeTextPx": 7.1,
         "minimumProjectedNonEdgeTextPx": 7.1,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -513,11 +513,11 @@
         "minimumProjectedNodeTextPx": 6.2707349081364825,
         "minimumProjectedNonEdgeTextPx": 6.2707349081364825,
         "minimumProjectedEdgeTextPx": 7.065616797900263,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -563,11 +563,11 @@
         "minimumProjectedNodeTextPx": 7.016141732283464,
         "minimumProjectedNonEdgeTextPx": 7.016141732283464,
         "minimumProjectedEdgeTextPx": 7.905511811023622,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -613,11 +613,11 @@
         "minimumProjectedNodeTextPx": 7.1,
         "minimumProjectedNonEdgeTextPx": 7.1,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -663,11 +663,11 @@
         "minimumProjectedNodeTextPx": 7.1,
         "minimumProjectedNonEdgeTextPx": 7.1,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+        "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "g-rbac"
+          "id": "g-fed"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,

@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "b9b00e83-2cef-46ff-9dfc-48f1180850b0",
+  "receiptId": "641d5401-a110-4c90-b309-189c404b574c",
   "status": "current",
   "command": "deliver",
   "type": "architecture",
   "input": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\candidate.json",
   "output": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
   "specification": {
-    "sha256": "7ebcd41e2d5ea63392a7268a8bee6342521e0b673e8b417e40f455f3661aea54",
-    "bytes": 8854
+    "sha256": "0c050fcf1fbdb0e692c2fb3f436bc1187068252781d44bc705a91c8cb3cd35a9",
+    "bytes": 9261
   },
   "artifact": {
-    "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
-    "bytes": 769228
+    "sha256": "0579fe2f331aad3929bc8a42058100aa103af3297e50cc777993bf5a044f3180",
+    "bytes": 769779
   }
 }

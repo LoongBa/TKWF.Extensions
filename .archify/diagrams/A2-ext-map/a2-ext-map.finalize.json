@@ -5,16 +5,16 @@
   "status": "pass",
   "type": "architecture",
   "quality": "showcase",
-  "startedAt": "2026-10-13T22:31:32.366Z",
+  "startedAt": "2026-10-19T00:00:15.611Z",
   "specification": {
     "path": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\candidate.json",
-    "sha256": "7ebcd41e2d5ea63392a7268a8bee6342521e0b673e8b417e40f455f3661aea54",
-    "bytes": 8854
+    "sha256": "0c050fcf1fbdb0e692c2fb3f436bc1187068252781d44bc705a91c8cb3cd35a9",
+    "bytes": 9261
   },
   "artifact": {
     "path": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
-    "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
-    "bytes": 769228
+    "sha256": "0579fe2f331aad3929bc8a42058100aa103af3297e50cc777993bf5a044f3180",
+    "bytes": 769779
   },
   "stages": {
     "validate": {
@@ -40,8 +40,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "7ebcd41e2d5ea63392a7268a8bee6342521e0b673e8b417e40f455f3661aea54",
-          "bytes": 8854
+          "sha256": "0c050fcf1fbdb0e692c2fb3f436bc1187068252781d44bc705a91c8cb3cd35a9",
+          "bytes": 9261
         },
         "validation": {
           "checksPassed": 9,
@@ -56,7 +56,7 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 574,
+      "durationMs": 547,
       "command": [
         "C:\\Users\\coffe\\AppData\\Local\\fnm_multishells\\43088_1785256759751\\node.exe",
         "C:\\Users\\coffe\\.config\\opencode\\skills\\archify\\bin\\archify.mjs",
@@ -72,19 +72,19 @@
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "b9b00e83-2cef-46ff-9dfc-48f1180850b0",
+        "receiptId": "641d5401-a110-4c90-b309-189c404b574c",
         "ok": true,
         "command": "deliver",
         "type": "architecture",
         "input": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\candidate.json",
         "output": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
         "specification": {
-          "sha256": "7ebcd41e2d5ea63392a7268a8bee6342521e0b673e8b417e40f455f3661aea54",
-          "bytes": 8854
+          "sha256": "0c050fcf1fbdb0e692c2fb3f436bc1187068252781d44bc705a91c8cb3cd35a9",
+          "bytes": 9261
         },
         "artifact": {
-          "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
-          "bytes": 769228
+          "sha256": "0579fe2f331aad3929bc8a42058100aa103af3297e50cc777993bf5a044f3180",
+          "bytes": 769779
         },
         "validation": {
           "checksPassed": 9,
@@ -97,8 +97,8 @@
         "evidence": {
           "verified": true,
           "repository": "https://github.com/LoongBa/TKWF.Extensions",
-          "revision": "b7b607e075ca5a2ba0ea6ff762d935c8ec93ea59",
-          "references": 26
+          "revision": "3dd778f343fb347c1fb980bc1ad96e85f1b4c3bb",
+          "references": 27
         },
         "update": {
           "status": "unavailable",
@@ -116,7 +116,7 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 122,
+      "durationMs": 128,
       "command": [
         "C:\\Users\\coffe\\AppData\\Local\\fnm_multishells\\43088_1785256759751\\node.exe",
         "C:\\Users\\coffe\\.config\\opencode\\skills\\archify\\bin\\archify.mjs",
@@ -128,8 +128,8 @@
         "ok": true,
         "file": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
         "artifact": {
-          "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
-          "bytes": 769228
+          "sha256": "0579fe2f331aad3929bc8a42058100aa103af3297e50cc777993bf5a044f3180",
+          "bytes": 769779
         },
         "checks": [
           {
@@ -196,16 +196,16 @@
             "containerBorderRuns": 0,
             "labelRouteClearanceIssues": 0,
             "labelCanvasOverflowIssues": 0,
-            "minLabelRouteClearance": 36.2,
+            "minLabelRouteClearance": 14,
             "desktopReadabilityIssues": 0,
             "viewportHeightIssues": 0,
             "minProjectedNodeTextPx": 6.2707349081364825,
-            "maxBends": 4,
-            "routesOverSuggestedBends": 1,
-            "maxStretch": 1.567,
+            "maxBends": 3,
+            "routesOverSuggestedBends": 2,
+            "maxStretch": 1.724,
             "routesOverSuggestedStretch": 1,
             "minSegmentPx": 24,
-            "minInteriorSegmentPx": 101,
+            "minInteriorSegmentPx": 82,
             "shortSegmentCount": 0,
             "shortEndpointSegmentCount": 0,
             "shortInteriorSegmentCount": 0,
@@ -237,8 +237,8 @@
                   "artifactIndex": 5
                 },
                 "point": [
-                  296,
-                  484
+                  370,
+                  331
                 ],
                 "sharedNode": "fw"
               },
@@ -269,6 +269,18 @@
             "detours": [
               {
                 "relationship": {
+                  "id": "g-auth-fw",
+                  "from": "g-auth",
+                  "to": "fw",
+                  "label": "User.Use/白名单",
+                  "collectionIndex": 0,
+                  "artifactIndex": 1
+                },
+                "bends": 3,
+                "stretch": 1.193
+              },
+              {
+                "relationship": {
                   "id": "g-msg-fw",
                   "from": "g-msg",
                   "to": "fw",
@@ -276,8 +288,8 @@
                   "collectionIndex": 3,
                   "artifactIndex": 4
                 },
-                "bends": 4,
-                "stretch": 1.567
+                "bends": 3,
+                "stretch": 1.724
               }
             ]
           },
@@ -306,7 +318,7 @@
             "hardFloorMet": true,
             "minimumOwner": {
               "kind": "node",
-              "id": "g-rbac"
+              "id": "g-fed"
             },
             "minimumSourceTextPx": 7.1,
             "minimumProjectedTextPx": 6.2707349081364825,
@@ -315,13 +327,13 @@
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "b9b00e83-2cef-46ff-9dfc-48f1180850b0"
+        "deliveryReceiptId": "641d5401-a110-4c90-b309-189c404b574c"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 937,
+      "durationMs": 1090,
       "command": [
         "C:\\Users\\coffe\\AppData\\Local\\fnm_multishells\\43088_1785256759751\\node.exe",
         "C:\\Users\\coffe\\.config\\opencode\\skills\\archify\\bin\\archify.mjs",
@@ -339,11 +351,11 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "b9b00e83-2cef-46ff-9dfc-48f1180850b0",
+        "deliveryReceiptId": "641d5401-a110-4c90-b309-189c404b574c",
         "artifact": {
           "path": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.html",
-          "sha256": "0398408ab72efac511a3fb2cb986a8770a98190950ae892ddd7192d861a16775",
-          "bytes": 769228
+          "sha256": "0579fe2f331aad3929bc8a42058100aa103af3297e50cc777993bf5a044f3180",
+          "bytes": 769779
         },
         "state": {
           "detail": "read",
@@ -388,11 +400,11 @@
               "minimumProjectedNodeTextPx": 6.2707349081364825,
               "minimumProjectedNonEdgeTextPx": 6.2707349081364825,
               "minimumProjectedEdgeTextPx": 7.065616797900263,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -438,11 +450,11 @@
               "minimumProjectedNodeTextPx": 7.016141732283464,
               "minimumProjectedNonEdgeTextPx": 7.016141732283464,
               "minimumProjectedEdgeTextPx": 7.905511811023622,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -488,11 +500,11 @@
               "minimumProjectedNodeTextPx": 7.1,
               "minimumProjectedNonEdgeTextPx": 7.1,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -538,11 +550,11 @@
               "minimumProjectedNodeTextPx": 7.1,
               "minimumProjectedNonEdgeTextPx": 7.1,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -641,11 +653,11 @@
               "minimumProjectedNodeTextPx": 6.2707349081364825,
               "minimumProjectedNonEdgeTextPx": 6.2707349081364825,
               "minimumProjectedEdgeTextPx": 7.065616797900263,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -691,11 +703,11 @@
               "minimumProjectedNodeTextPx": 7.016141732283464,
               "minimumProjectedNonEdgeTextPx": 7.016141732283464,
               "minimumProjectedEdgeTextPx": 7.905511811023622,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -741,11 +753,11 @@
               "minimumProjectedNodeTextPx": 7.1,
               "minimumProjectedNonEdgeTextPx": 7.1,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -791,11 +803,11 @@
               "minimumProjectedNodeTextPx": 7.1,
               "minimumProjectedNonEdgeTextPx": 7.1,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -846,11 +858,11 @@
               "minimumProjectedNodeTextPx": 6.2707349081364825,
               "minimumProjectedNonEdgeTextPx": 6.2707349081364825,
               "minimumProjectedEdgeTextPx": 7.065616797900263,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -896,11 +908,11 @@
               "minimumProjectedNodeTextPx": 7.016141732283464,
               "minimumProjectedNonEdgeTextPx": 7.016141732283464,
               "minimumProjectedEdgeTextPx": 7.905511811023622,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -946,11 +958,11 @@
               "minimumProjectedNodeTextPx": 7.1,
               "minimumProjectedNonEdgeTextPx": 7.1,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -996,11 +1008,11 @@
               "minimumProjectedNodeTextPx": 7.1,
               "minimumProjectedNonEdgeTextPx": 7.1,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
+              "minimumProjectedNodeText": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
-                "id": "g-rbac"
+                "id": "g-fed"
               },
               "minimumRequiredNodeTextPx": 6,
               "readabilityOk": true,
@@ -1037,16 +1049,18 @@
     "browserCheckReceipt": "F:\\LoongBa_Git\\_TKWF.Extensions\\.archify\\diagrams\\A2-ext-map\\a2-ext-map.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-10-13T22:31:34.297Z",
-  "durationMs": 1931,
+  "finishedAt": "2026-10-19T00:00:17.681Z",
+  "durationMs": 2069,
   "update": {
-    "status": "current",
+    "status": "update_available",
     "installedVersion": "3.0.1",
-    "availableVersion": "3.0.1",
-    "releaseNotes": null,
-    "checkedAt": "2026-10-13T14:07:00.854Z",
+    "availableVersion": "3.1.0",
+    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.1.0",
+    "severity": "normal",
+    "checkedAt": "2026-10-18T23:53:16.739Z",
     "source": "cache",
-    "noticeRequired": false,
-    "noticeText": null
+    "noticeRequired": true,
+    "noticeText": "Archify update: 3.0.1 → 3.1.0. A previous check at 2026-10-18T23:53:16.739Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.1.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
+    "eventKey": "archify@sha256:ffedc53390c9da6e859f41e432c5d2d0615a23cf00a503181f07efbba88a7ce8"
   }
 }

@@ -49,4 +49,8 @@ public class AuthCenterEndpointOptions
 
     /// <summary>验证码独立校验端点开关（POST {prefix}/sms/verify——匿名，scene 白名单 Login/Register/Bind/Reset）。</summary>
     public bool SmsVerifyEndpointEnabled { get; set; } = true;
+
+    /// <summary>外部 IdP 票据 SPA 兑现端点开关（POST {prefix}/login/ticket——V0.10.0 独立路由，不挂 external 前缀；
+    /// 事件取 OpenId 链路"票 → token1"匿名兑换面；验票失败 → 400 TICKET_INVALID / 频控 → 429 TICKET_RATE_LIMITED）。</summary>
+    public bool TicketLoginEndpointEnabled { get; set; } = true;
 }

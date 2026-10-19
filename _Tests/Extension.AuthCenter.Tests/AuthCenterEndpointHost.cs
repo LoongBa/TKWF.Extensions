@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -43,6 +44,7 @@ internal static class AuthCenterEndpointHost
     public static FakeTicketService Ticket { get; } = new();
     public static FakeAuthGrantQueryService Grants { get; } = new();        // V0.8.0 /grants 查询门面
     public static FakeAuthGrantCommandService GrantCommand { get; } = new(); // V0.8.0 /grants 写入门面（未暴露端点，注册保真）
+    public static FakeExternalTicketLoginService TicketLogin { get; } = new();  // V0.10.0 /login/ticket 票据 SPA 兑现门面
 
     private static TestServer CreateServer()
     {
@@ -69,6 +71,7 @@ internal static class AuthCenterEndpointHost
             svc.Replace(ServiceDescriptor.Scoped<IOAuthTicketService>(_ => Ticket));
             svc.Replace(ServiceDescriptor.Scoped<IAuthGrantQueryService>(_ => Grants));       // V0.8.0 /grants 查询
             svc.Replace(ServiceDescriptor.Scoped<IAuthGrantCommandService>(_ => GrantCommand)); // V0.8.0 写入门面（未暴露端点，注册保真）
+            svc.Replace(ServiceDescriptor.Scoped<IExternalTicketLoginService>(_ => TicketLogin)); // V0.10.0 /login/ticket 票据兑现
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -183,6 +186,36 @@ internal static class AuthCenterEndpointHost
             LastParameters = parameters;
             if (GuardExceptionMessage is not null)
                 throw new InvalidOperationException(GuardExceptionMessage);
+            return Task.FromResult(Result);
+        }
+    }
+
+    /// <summary>
+    /// 票据 SPA 兑现门面 Fake（V0.10.0——POST /login/ticket）：Invoked/LastTicket/LastChannelId 捕获 +
+    /// 可配置 Result（成功 TokenResponse）/ GuardExceptionMessage（守卫异常——503 TICKET_SERVICE_NOT_CONFIGURED）/
+    /// RateLimitedMessage（频控异常——429 TICKET_RATE_LIMITED）。
+    /// </summary>
+    internal sealed class FakeExternalTicketLoginService : IExternalTicketLoginService
+    {
+        public bool Invoked { get; private set; }
+        public string? LastTicket { get; private set; }
+        public string? LastChannelId { get; private set; }
+
+        public LoginResult Result { get; set; } =
+            new(true, "u_1", new TokenIssueResult("at-t", "rt-t", 7200), null);
+
+        public string? GuardExceptionMessage { get; set; }
+        public string? RateLimitedMessage { get; set; }
+
+        public Task<LoginResult> LoginAsync(string ticket, string? channelId, string? ipAddress, CancellationToken ct = default)
+        {
+            Invoked = true;
+            LastTicket = ticket;
+            LastChannelId = channelId;
+            if (GuardExceptionMessage is not null)
+                throw new InvalidOperationException(GuardExceptionMessage);
+            if (RateLimitedMessage is not null)
+                throw new AuthenticationException(RateLimitedMessage);
             return Task.FromResult(Result);
         }
     }

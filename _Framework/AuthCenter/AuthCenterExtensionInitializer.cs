@@ -140,8 +140,16 @@ namespace TKWF.Ext.AuthCenter;
         services.AddConstructibleService<ISmsLoginService, SmsLoginService>();
 
         // T5（2026-10-09 三层边界）：外部 IdP 桥接消费门面——桥接认证（IExternalIdpAuthenticator 契约借道
-        // Federation，fail-hard：未装配 → User.Use 抛守卫）→ ISsoChannelMapService 映射 → 建号/复用 → 签 token1
+        // Federation，fail-hard：未装配 → User.Use 抛守卫）→ 构建 FederatedIdentity → 委托共享编排
         services.AddConstructibleService<IExternalIdpLoginService, ExternalIdpLoginService>();
+
+        // V0.10.0（P2-2 全局最优）：联邦登录共享编排门面——code 通道（ExternalIdpLoginService）与
+        // 票据通道（ExternalTicketLoginService）统一委托"identity → 账号回读/建号 → 签发"子编排（P1-1 fallback）
+        services.AddConstructibleService<IFederatedLoginOrchestrator, FederatedLoginOrchestrator>();
+
+        // V0.10.0：外部 IdP 票据 SPA 兑现门面——RedeemAsync 验票（P1-3 统一 TICKET_INVALID）→ 委托共享编排；
+        // 频控强制（P2-4——ctor IRateLimitCheck，Initializer 已 fallback MemoryRateLimitCheck 兜底"始终在"）
+        services.AddConstructibleService<IExternalTicketLoginService, ExternalTicketLoginService>();
 
         // V0.9.0（B.9）：密码登录编排门面——镜像 SmsLoginService（Identifier+Password → Password Provider → 签发）
         services.AddConstructibleService<IPasswordLoginService, PasswordLoginService>();

@@ -56,6 +56,10 @@ public class LoginProtectionOptions
 
     /// <summary>密码登录每小时每 IP 尝试上限（默认 20——V0.9.0 B.9，AuthLoginAttempt 计数）。</summary>
     public int PasswordPerHourPerIp { get; set; } = 20;
+
+    /// <summary>票据 SPA 兑换每分钟每 IP 尝试上限（默认 10——V0.10.0 P2-4 强制频控，<c>ext:ticket:{ip}</c> key——
+    /// <see cref="IRateLimitCheck"/> 点检查；票 32B 高熵不可枚举，IP 维度纵深防御）。</summary>
+    public int TicketRedeemPerMinutePerIp { get; set; } = 10;
 }
 
 /// <summary>

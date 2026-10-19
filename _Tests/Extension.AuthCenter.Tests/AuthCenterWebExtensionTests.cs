@@ -315,6 +315,105 @@ public sealed class AuthCenterWebExtensionTests
         Assert.Equal("INVALID_SCENE", body!.Code);
     }
 
+    // ═══════════════════ V0.10.0 票据 SPA 兑现（POST /login/ticket——独立路由，P2-1） ═══════════════════
+
+    [Fact]
+    public async Task TicketLogin_Success_ReturnsTokenResponse()
+    {
+        // 匿名游客帧 + 独立路由：body = {ticket, channel_id?} → 门面成功 → TokenResponse（官方形态）
+        AuthCenterEndpointHost.TicketLogin.GuardExceptionMessage = null;
+        AuthCenterEndpointHost.TicketLogin.RateLimitedMessage = null;
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
+            new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", "wechat-event-1"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("at-t", body!.AccessToken);
+        Assert.Equal("Bearer", body.TokenType);
+        Assert.True(AuthCenterEndpointHost.TicketLogin.Invoked);
+        Assert.Equal("ticket-32B-base64url-abcdefghijklmnop", AuthCenterEndpointHost.TicketLogin.LastTicket);  // ticket 透传
+        Assert.Equal("wechat-event-1", AuthCenterEndpointHost.TicketLogin.LastChannelId);                       // channel_id 透传
+    }
+
+    [Fact]
+    public async Task TicketLogin_MissingTicket_400()
+    {
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
+            new ExternalTicketLoginRequest("", null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.Equal("INVALID_ARGUMENT", body!.Code);
+    }
+
+    [Fact]
+    public async Task TicketLogin_TicketInvalid_400()
+    {
+        // FailReason → 400 + code（P1-3 统一 TICKET_INVALID）；末尾还原默认 Result（共享宿主防污染）
+        AuthCenterEndpointHost.TicketLogin.Result = new LoginResult(false, null, null, "TICKET_INVALID");
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
+                new ExternalTicketLoginRequest("ticket-expired-xxx", null));
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+            Assert.Equal("TICKET_INVALID", body!.Code);
+        }
+        finally
+        {
+            AuthCenterEndpointHost.TicketLogin.Result = new LoginResult(true, "u_1", new TokenIssueResult("at-t", "rt-t", 7200), null);
+        }
+    }
+
+    [Fact]
+    public async Task TicketLogin_RateLimited_429()
+    {
+        // 频控（P2-4）：AuthenticationException TICKET_RATE_LIMITED → 429（IsRateLimitedCode 前缀判定）
+        AuthCenterEndpointHost.TicketLogin.RateLimitedMessage = "TICKET_RATE_LIMITED";
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
+                new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", null));
+
+            Assert.Equal(HttpStatusCode.TooManyRequests, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+            Assert.Equal("TICKET_RATE_LIMITED", body!.Code);
+        }
+        finally
+        {
+            AuthCenterEndpointHost.TicketLogin.RateLimitedMessage = null;
+        }
+    }
+
+    [Fact]
+    public async Task TicketLogin_Guard_503()
+    {
+        // fail-hard：ISealedTicketService 未装配（TrustCenter 未启用）→ 守卫异常 → 503 TICKET_SERVICE_NOT_CONFIGURED
+        AuthCenterEndpointHost.TicketLogin.GuardExceptionMessage = "领域架构守卫：AddConstructibleService 实现类（ExternalTicketLoginService）帧外解析";
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
+                new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", null));
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+            Assert.Equal("TICKET_SERVICE_NOT_CONFIGURED", body!.Code);
+        }
+        finally
+        {
+            AuthCenterEndpointHost.TicketLogin.GuardExceptionMessage = null;   // 共享宿主还原
+        }
+    }
+
     // ═══════════════════ 配置绑定（RoutePrefix/端点开关可配性——DomainHost 单例禁多宿主黑盒） ═══════════════════
 
     [Fact]
@@ -327,7 +426,8 @@ public sealed class AuthCenterWebExtensionTests
             ["TKWF:AuthCenter:Web:ExternalLoginEndpointEnabled"] = "false",   // T5 新开关（替代 WechatLoginEndpointEnabled）
             ["TKWF:AuthCenter:Web:TokenVerifyEndpointEnabled"] = "false",   // V0.8.0 新开关
             ["TKWF:AuthCenter:Web:GrantsEndpointEnabled"] = "false",         // V0.8.0 新开关
-            ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false"       // V0.8.0 新开关
+            ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false",       // V0.8.0 新开关
+            ["TKWF:AuthCenter:Web:TicketLoginEndpointEnabled"] = "false"      // V0.10.0 新开关（票据 SPA 兑现）
         }).Build();
         var options = new AuthCenterEndpointOptions();
         config.GetSection("TKWF:AuthCenter:Web").Bind(options);
@@ -338,6 +438,7 @@ public sealed class AuthCenterWebExtensionTests
         Assert.False(options.TokenVerifyEndpointEnabled);   // V0.8.0 新开关配置覆盖
         Assert.False(options.GrantsEndpointEnabled);
         Assert.False(options.SmsVerifyEndpointEnabled);
+        Assert.False(options.TicketLoginEndpointEnabled);   // V0.10.0 新开关配置覆盖
         Assert.True(options.SmsSendCodeEndpointEnabled);    // 未配置保持默认
         Assert.True(options.TicketExchangeEndpointEnabled); // 未配置保持默认
     }
@@ -351,6 +452,7 @@ public sealed class AuthCenterWebExtensionTests
         Assert.True(options.GrantsEndpointEnabled);
         Assert.True(options.SmsVerifyEndpointEnabled);
         Assert.True(options.ExternalLoginEndpointEnabled);   // T5 外部 IdP 登录端点默认开放
+        Assert.True(options.TicketLoginEndpointEnabled);     // V0.10.0 票据兑现端点默认开放（暴露面，安全由领域频控承载）
     }
 
     [Fact]

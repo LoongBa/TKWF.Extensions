@@ -87,6 +87,8 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
             endpoints.MapPost($"{prefix}/login/sms", HandleSmsLogin).AllowAnonymous();
         if (endpointOptions.ExternalLoginEndpointEnabled)
             endpoints.MapPost($"{prefix}/login/external/{{channelType}}", HandleExternalLogin).AllowAnonymous();  // T5（2026-10-09）替代 login/wechat
+        if (endpointOptions.TicketLoginEndpointEnabled)
+            endpoints.MapPost($"{prefix}/login/ticket", HandleExternalTicketLogin).AllowAnonymous();  // V0.10.0 票据 SPA 兑现（独立路由——不挂 external 前缀，P2-1）
         if (endpointOptions.PasswordLoginEndpointEnabled)
             endpoints.MapPost($"{prefix}/login/password", HandlePasswordLogin).AllowAnonymous();  // V0.9.0 B.9（P1-NEW-2 对称补全）
         if (endpointOptions.RefreshEndpointEnabled)
@@ -204,6 +206,42 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         {
             // fail-hard（P7）：Federation 未装配 → User.Use<IExternalIdpAuthenticator>() 抛守卫 → 503 显式告知
             return Results.Json(new ErrorResponse("EXTERNAL_IDP_NOT_CONFIGURED", ex.Message),
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (AuthenticationException ex) when (IsRateLimitedCode(ex.Message))
+        {
+            return Results.Json(new ErrorResponse(ex.Message, null), statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        catch (AuthenticationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message, null));
+        }
+    }
+
+    /// <summary>
+    /// 外部 IdP 票据 SPA 兑现端点（V0.10.0——事件取 OpenId 链路"票 → token1"前端兑换面；P2-1 独立路由
+    /// <c>POST {prefix}/login/ticket</c>，不挂 external 前缀）：body = {ticket, channel_id?}；游客帧 →
+    /// <c>guest.Use&lt;IExternalTicketLoginService&gt;()</c> 验票（RedeemAsync null → TICKET_INVALID）+ 共享编排
+    /// （P2-2 orchestrator）→ TokenResponse。fail-hard：ISealedTicketService 未装配（TrustCenter 未启用）
+    /// → 守卫异常 → 503 TICKET_SERVICE_NOT_CONFIGURED。
+    /// </summary>
+    private static async Task<IResult> HandleExternalTicketLogin(HttpContext ctx, [FromBody] ExternalTicketLoginRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Ticket))
+            return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "ticket 必填"));
+
+        try
+        {
+            var ip = ctx.Connection.RemoteIpAddress?.ToString();
+            var result = await GetGuest(ctx).Use<IExternalTicketLoginService>().LoginAsync(req.Ticket, req.ChannelId, ip, ct);
+            return result.Success
+                ? Results.Ok(ToTokenResponse(result.Token!))
+                : Results.BadRequest(new ErrorResponse(result.FailReason ?? "LOGIN_FAILED", null));
+        }
+        catch (InvalidOperationException ex) when (IsDomainGuardException(ex))
+        {
+            // fail-hard：ISealedTicketService（主框架契约，TrustCenter DB 后端注册）/ orchestrator 未装配 → 守卫异常 → 503
+            return Results.Json(new ErrorResponse("TICKET_SERVICE_NOT_CONFIGURED", ex.Message),
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (AuthenticationException ex) when (IsRateLimitedCode(ex.Message))
@@ -337,12 +375,13 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         return guest;
     }
 
-    /// <summary>领域频控错误码（Message 前辍判定——SmsVerificationService 抛 AuthenticationException + 频控码）。</summary>
+    /// <summary>领域频控错误码（Message 前辍判定——SmsVerificationService/ExternalTicketLoginService 抛 AuthenticationException + 频控码）。</summary>
     private static bool IsRateLimitedCode(string message)
         => message.StartsWith("SMS_RESEND_TOO_FREQUENT", StringComparison.Ordinal)
         || message.StartsWith("SMS_HOURLY_LIMIT", StringComparison.Ordinal)
         || message.StartsWith("SMS_DAILY_LIMIT", StringComparison.Ordinal)
-        || message.StartsWith("SMS_VERIFY_ATTEMPT_LIMIT", StringComparison.Ordinal);
+        || message.StartsWith("SMS_VERIFY_ATTEMPT_LIMIT", StringComparison.Ordinal)
+        || message.StartsWith("TICKET_RATE_LIMITED", StringComparison.Ordinal);   // V0.10.0 票据 SPA 兑现频控
 
     /// <summary>领域架构守卫异常判定（T5 2026-10-09）——<c>User.Use&lt;T&gt;()</c> 帧外/未装配守卫工厂
     /// （AddConstructibleService 实现类 throw-factory / 接口守卫工厂）抛 <c>InvalidOperationException</c> + "领域架构守卫" 前缀。
@@ -393,6 +432,10 @@ public sealed record PasswordLoginRequest(string Identifier, string ClientHash, 
 
 /// <summary>刷新请求。</summary>
 public sealed record RefreshRequest(string RefreshToken);
+
+/// <summary>外部 IdP 票据 SPA 兑现请求（V0.10.0——POST {prefix}/login/ticket；channel_id 可选——多通道消歧，
+/// 正常由票载荷 ChannelId 签入，提供时须一致否则 TICKET_INVALID）。</summary>
+public sealed record ExternalTicketLoginRequest(string Ticket, string? ChannelId);
 
 /// <summary>票据换令牌请求（PKCE code_verifier 可选——IssueAsync 时若生成则 Exchange 必传）。</summary>
 public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, string AppId, string? State);

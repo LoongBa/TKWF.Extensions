@@ -28,7 +28,7 @@ public class ExternalIdpLoginServiceTests
         var auth = new FakeExternalIdpAuthenticator();
         var map = new FakeSsoChannelMapService();
         var accountSvc = new FakeAuthAccountService();
-        var accountQuery = new FakeAuthAccountQueryService();
+        var accountQuery = new FakeAuthAccountQueryService(accountSvc.CreatedAccounts);   // P2-3 审核收敛：共享建号台账
         var token = new FakeExternalTokenService();
 
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
@@ -38,6 +38,10 @@ public class ExternalIdpLoginServiceTests
             services.AddSingleton<IAuthAccountService>(accountSvc);
             services.AddSingleton<IAuthAccountQueryService>(accountQuery);
             services.AddSingleton<ITokenService>(token);
+            // V0.10.0（P2-2 共享编排）：ExternalIdpLoginService 仅做桥接认证 + 构建 identity → 委托 orchestrator；
+            // 编排行为（建号/映射/复用/签发断言）由真实 FederatedLoginOrchestrator 承接（内部 Use<T>() 懒加载上方 Fake）
+            services.AddSingleton<IFederatedLoginOrchestrator>(
+                new FederatedLoginOrchestrator(user, NullLogger<FederatedLoginOrchestrator>.Instance));
             register?.Invoke(services, user);
         });
 
@@ -54,6 +58,8 @@ public class ExternalIdpLoginServiceTests
     public async Task Login_Success_CreatesAccount_IssuesFederatedToken()
     {
         var (service, _, map, accountSvc, accountQuery, token) = CreateService();
+        // P2-3 审核收敛：建号路径回读 UId == 建号 UId（真实 created 实体——Fake 联动 CreatedAccounts 台账，
+        // 不再恒返预设 Account 掩盖"回读 UId 与建号 UId"等价关系）
         accountQuery.Account = new AuthAccountEntity
         {
             UId = "u-external-1",
@@ -66,15 +72,14 @@ public class ExternalIdpLoginServiceTests
         var result = await service.LoginAsync(ChannelType, Params());
 
         Assert.True(result.Success);
-        Assert.Equal("u-external-1", result.UserId);
-        Assert.NotNull(result.Token);
-        // 桥接被调（channelType + 参数透传）
-        // 建号 + LinkAsync（无映射）
-        Assert.True(accountSvc.CreateCalled);
+        Assert.Equal(accountSvc.CreatedUid, result.UserId);   // 建号 UId == 回读 UId（生产路径等价——P2-3）
+        Assert.NotNull(accountSvc.CreatedUid);
+        Assert.True(accountSvc.CreateCalled);   // 建号 + LinkAsync（无映射）
         Assert.Equal(1, map.LinkCalls);
-        // token1 契约：authType=federated + channel_type=channelType
+        // token1 契约：authType=federated + channel_type=channelType + UserId=建号 UId
         Assert.Equal(AuthTypes.Federated, token.LastRequest!.AuthType);
         Assert.Equal(ChannelType, token.LastRequest.ChannelType);
+        Assert.Equal(accountSvc.CreatedUid, token.LastRequest.UserId);   // P2-1 收敛：签发 UserId == 回读实体 UId
     }
 
     /// <summary>(a-2) 桥接认证失败 → FailReason 透传（不建号不签发）。</summary>
@@ -115,9 +120,10 @@ public class ExternalIdpLoginServiceTests
         // ⚠️ 不注册 IExternalIdpAuthenticator——模拟 Federation 未装配（桥接契约无实现）
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, _) =>
         {
+            var accountSvc = new FakeAuthAccountService();
             services.AddSingleton<ISsoChannelMapService>(new FakeSsoChannelMapService());
-            services.AddSingleton<IAuthAccountService>(new FakeAuthAccountService());
-            services.AddSingleton<IAuthAccountQueryService>(new FakeAuthAccountQueryService());
+            services.AddSingleton<IAuthAccountService>(accountSvc);
+            services.AddSingleton<IAuthAccountQueryService>(new FakeAuthAccountQueryService(accountSvc.CreatedAccounts));
             services.AddSingleton<ITokenService>(new FakeExternalTokenService());
         });
         var service = new ExternalIdpLoginService(stub, NullLogger<ExternalIdpLoginService>.Instance);
@@ -253,17 +259,23 @@ public class ExternalIdpLoginServiceTests
         }
     }
 
-    /// <summary>Fake 账号写门面——CreateAsync 捕获（建号断言）。</summary>
+    /// <summary>Fake 账号写门面——CreateAsync 捕获（建号断言）+ 建号台账（P2-3 审核收敛：GetByUIdAsync 回读联动
+    /// CreatedAccounts 字典——暴露"回读 UId == 建号 UId"等价关系，消除恒返 Account 掩盖 UId 错配）。</summary>
     internal sealed class FakeAuthAccountService : IAuthAccountService
     {
         public bool CreateCalled { get; private set; }
         public string? CreatedUid { get; private set; }
 
-        public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default) => Task.FromResult<AuthAccountEntity?>(null);
+        /// <summary>建号台账（CreateAsync 落库联动——FakeAuthAccountQueryService 回读共享字典）。</summary>
+        public Dictionary<string, AuthAccountEntity> CreatedAccounts { get; } = new();
+
+        public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)
+            => Task.FromResult(CreatedAccounts.TryGetValue(uid, out var entity) ? entity : null);
         public Task CreateAsync(AuthAccountEntity account, CancellationToken ct = default)
         {
             CreateCalled = true;
             CreatedUid = account.UId;
+            CreatedAccounts[account.UId] = account;
             return Task.CompletedTask;
         }
         public Task UpdateAsync(AuthAccountEntity account, CancellationToken ct = default) => throw new NotSupportedException();
@@ -274,12 +286,26 @@ public class ExternalIdpLoginServiceTests
         public Task UnfreezeAsync(string uid, string operatorName, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
-    /// <summary>Fake 账号查询门面——GetByUIdAsync 返回可配置 Account（回读断言）。</summary>
+    /// <summary>Fake 账号查询门面——P2-3 审核收敛：建号回读（uid ∈ CreatedAccounts）优先返回真实 created 实体
+    /// （暴露"回读 UId == 建号 UId"等价关系）；否则返回可配置 <see cref="Account"/>（映射复用回读断言）。
+    /// 消除恒返 Account 掩盖 UId 错配的保真缺陷。</summary>
     internal sealed class FakeAuthAccountQueryService : IAuthAccountQueryService
     {
+        private readonly Dictionary<string, AuthAccountEntity> _createdAccounts;
+
+        public FakeAuthAccountQueryService(Dictionary<string, AuthAccountEntity> createdAccounts)
+        {
+            _createdAccounts = createdAccounts;
+        }
+
         public AuthAccountEntity? Account { get; set; }
 
-        public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default) => Task.FromResult(Account);
+        public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)
+        {
+            // 建号回读优先（真实 created 实体——生产路径语义）；映射复用回读（Account 预设）
+            if (_createdAccounts.TryGetValue(uid, out var created)) return Task.FromResult<AuthAccountEntity?>(created);
+            return Task.FromResult(Account);
+        }
         public Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default) => Task.FromResult<AuthAccountEntity?>(null);
         public Task<UserProfileEntity?> GetProfileByUIdAsync(string uid, CancellationToken ct = default) => Task.FromResult<UserProfileEntity?>(null);
         public Task<bool> IsWechatBoundAsync(string uid, CancellationToken ct = default) => Task.FromResult(false);

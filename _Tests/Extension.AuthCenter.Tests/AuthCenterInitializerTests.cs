@@ -12,19 +12,24 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// AuthCenterExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册形态（V4.10.53 领域自治根治三态）。
 /// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态：</para>
 /// <list type="bullet">
-/// <item>12 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
+/// <item>20 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
 /// <item><see cref="IAuthenticationProvider"/> 双实现 → V4.10.55（ADR92）<c>TryAddEnumerableConstructible</c>
 ///     （集合版守卫工厂——工厂委托形态 + 帧内 CurrentAopUser 供给；帧外枚举抛守卫）。</item>
 /// <item><see cref="ISmsLoginService"/>/<see cref="IExternalIdpLoginService"/> 登录编排门面（V4.10.55 ADR92/T3 闭环）→
 ///     <c>AddConstructibleService</c>——表现层经 <c>User.Use&lt;门面&gt;()</c> 帧内编排。
 ///     ⚠️ T5（2026-10-09 三层边界）：微信门面（IWechatLoginService）/微信客户端（IWeChatApiClient）已删——
-///     外部 IdP 登录统一经 <see cref="IExternalIdpLoginService"/> 桥接。</item>
+///     外部 IdP 登录统一经 <see cref="IExternalIdpLoginService"/> 桥接。
+///     V0.10.0（P2-2 全局最优）：新增 <see cref="IFederatedLoginOrchestrator"/>（共享编排——code 通道 +
+///     票据通道统一委托）+ <see cref="IExternalTicketLoginService"/>（票据 SPA 兑现）——同款 AddConstructibleService。</item>
 /// </list>
 /// </summary>
 public class AuthCenterInitializerTests
 {
-    /// <summary>12 个 AddConstructibleService 门面（接口 → 实现）+ 3 登录编排门面（V4.10.55 ADR92/T3 闭环）。</summary>
+    /// <summary>20 个 AddConstructibleService 门面（接口 → 实现）——覆盖 Initializer ConfigureServices 全部门面注册。
+    /// V0.10.0 补齐：+IFederatedLoginOrchestrator / +IExternalTicketLoginService（P1-1 审核闭环）；
+    /// 顺带补全既有缺漏：+ISsoAccountQueryService / +ISsoChannelMapService / +ISsoAccountLinkService /
+    /// +IAuthGrantQueryService / +IAuthGrantCommandService / +IPasswordLoginService / +IPasswordResetService。</summary>
     private static readonly (System.Type Interface, System.Type Impl)[] Facades =
     [
         (typeof(ITokenService), typeof(TokenService)),
@@ -37,7 +42,20 @@ public class AuthCenterInitializerTests
         (typeof(IAuthAccountQueryService), typeof(AuthAccountQueryService)),
         (typeof(IAuthAccountService), typeof(AuthAccountService)),
         (typeof(ISmsLoginService), typeof(SmsLoginService)),
-        (typeof(IExternalIdpLoginService), typeof(ExternalIdpLoginService))
+        (typeof(IExternalIdpLoginService), typeof(ExternalIdpLoginService)),
+        // V0.6.0 SSO 消费面契约（实现类复用 AuthAccountQueryService / PlatformAccountMapService）
+        (typeof(ISsoAccountQueryService), typeof(AuthAccountQueryService)),
+        (typeof(ISsoChannelMapService), typeof(PlatformAccountMapService)),
+        (typeof(ISsoAccountLinkService), typeof(AuthAccountQueryService)),
+        // V0.8.0 应用授权双门面
+        (typeof(IAuthGrantQueryService), typeof(AuthGrantQueryService)),
+        (typeof(IAuthGrantCommandService), typeof(AuthGrantCommandService)),
+        // V0.9.0 密码能力
+        (typeof(IPasswordLoginService), typeof(PasswordLoginService)),
+        (typeof(IPasswordResetService), typeof(PasswordResetService)),
+        // V0.10.0 外部 IdP 票据 SPA 兑现（P2-2 共享编排 + 票据门面）
+        (typeof(IFederatedLoginOrchestrator), typeof(FederatedLoginOrchestrator)),
+        (typeof(IExternalTicketLoginService), typeof(ExternalTicketLoginService))
     ];
 
     [Fact]

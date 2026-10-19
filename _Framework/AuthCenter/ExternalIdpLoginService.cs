@@ -11,13 +11,13 @@ namespace TKWF.Ext.AuthCenter;
 
 /// <summary>
 /// 外部 IdP 登录编排门面实现（T5 三层边界 2026-10-09——桥接消费门面，替代已删 WechatLoginService）。
-/// <para>门面内完成 桥接认证（<see cref="IExternalIdpAuthenticator"/>）→ 映射（<see cref="ISsoChannelMapService"/>）→
-/// 建号/复用（<see cref="IAuthAccountService"/>/<see cref="IAuthAccountQueryService"/>）→ 签发
-/// （<see cref="ITokenService"/>）全编排——端点只调一个门面，不串多门面（Oracle P0-1 既定原则保持）。</para>
+/// <para>门面内完成 桥接认证（<see cref="IExternalIdpAuthenticator"/>）→ 构建 <see cref="FederatedIdentity"/> →
+/// 委托共享编排 <see cref="IFederatedLoginOrchestrator"/>（V0.10.0 P2-2——identity → 账号回读/建号 → 签 token1
+/// 全编排收敛共享，端点只调一个门面，不串多门面，Oracle P0-1 既定原则保持）。</para>
 /// <para><b>fail-hard（P7）</b>：<see cref="IExternalIdpAuthenticator"/> 由 Federation 注册（守卫工厂）；
 /// 未装配 Federation → <c>User.Use&lt;IExternalIdpAuthenticator&gt;()</c> 抛守卫异常——<b>不 catch 不降级</b>
 /// （表现层端点映射 503 EXTERNAL_IDP_NOT_CONFIGURED，门面内传播）。</para>
-/// <para>DI004 铁律：领域服务间调用经基类 <c>User.Use&lt;T&gt;()</c> 懒加载（禁构造注入——桥接/映射/账号/签发
+/// <para>DI004 铁律：领域服务间调用经基类 <c>User.Use&lt;T&gt;()</c> 懒加载（禁构造注入——桥接/编排
 /// 均为守卫工厂门面，帧内解析）。注册：<c>AddConstructibleService&lt;IExternalIdpLoginService, ExternalIdpLoginService&gt;</c>。
 /// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
@@ -31,17 +31,11 @@ internal sealed class ExternalIdpLoginService : DomainServiceBase, IExternalIdpL
 
     private readonly ILogger<ExternalIdpLoginService> _logger;
 
-    // DI004 铁律：领域服务经 User.Use<T>() 懒加载（守卫工厂帧内解析——桥接/映射/账号/签发全为守卫工厂门面）
+    // DI004 铁律：领域服务经 User.Use<T>() 懒加载（守卫工厂帧内解析——桥接/编排全为守卫工厂门面）
     private IExternalIdpAuthenticator? _externalAuth;
     private IExternalIdpAuthenticator ExternalAuth => _externalAuth ??= User.Use<IExternalIdpAuthenticator>();
-    private ISsoChannelMapService? _map;
-    private ISsoChannelMapService Map => _map ??= User.Use<ISsoChannelMapService>();
-    private IAuthAccountService? _accountService;
-    private IAuthAccountService AccountService => _accountService ??= User.Use<IAuthAccountService>();
-    private IAuthAccountQueryService? _accountQuery;
-    private IAuthAccountQueryService AccountQuery => _accountQuery ??= User.Use<IAuthAccountQueryService>();
-    private ITokenService? _tokenService;
-    private ITokenService TokenService => _tokenService ??= User.Use<ITokenService>();
+    private IFederatedLoginOrchestrator? _orchestrator;
+    private IFederatedLoginOrchestrator Orchestrator => _orchestrator ??= User.Use<IFederatedLoginOrchestrator>();
 
     public ExternalIdpLoginService(IDomainUser user, ILogger<ExternalIdpLoginService> logger) : base(user)
     {
@@ -71,43 +65,14 @@ internal sealed class ExternalIdpLoginService : DomainServiceBase, IExternalIdpL
             return new LoginResult(false, null, null, ChannelIdRequired);
         }
 
-        // ③ 映射：(channel_id, external_user_id) → uid；无映射 → 建号 + LinkAsync（Phone=null 联邦便捷账号）
-        var mapped = await Map.GetByChannelAsync(channelId, auth.ExternalUserId, ct);
-        string uid;
-        if (mapped != null)
-        {
-            uid = mapped.UId;
-            _logger.LogDebug("外部 IdP 登录命中既有映射——UId={UId}, ChannelId={ChannelId}", uid, channelId);
-        }
-        else
-        {
-            var created = new AuthAccountEntity
-            {
-                UId = AccountIdGenerator.NewUId(),
-                Phone = null,
-                AuthLevel = (int)AuthLevel.Federated,
-                TokenVersion = 0
-            };
-            await AccountService.CreateAsync(created, ct);
-            await Map.LinkAsync(created.UId, channelId, auth.ExternalUserId, ct);
-            uid = created.UId;
-            _logger.LogDebug("外部 IdP 登录建号 + 建立联邦映射——UId={UId}, ChannelId={ChannelId}", uid, channelId);
-        }
-
-        // ④ 回读账号（AuthLevel/IsEnabled/IsFrozen——建号后走查询门面取持久化字段）
-        var account = await AccountQuery.GetByUIdAsync(uid, ct);
-        if (account is null)
-        {
-            _logger.LogWarning("外部 IdP 登录编排失败——账号查询返回 null（UId={UId}）", uid);
-            return new LoginResult(false, null, null, "ACCOUNT_NOT_FOUND");
-        }
-        if (!account.IsEnabled) return new LoginResult(false, null, null, "ACCOUNT_DISABLED");
-        if (account.IsFrozenEffective) return new LoginResult(false, null, null, "ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3）
-
-        // ⑤ 签 token1（authType=federated + channel_type=channelType——T5 契约调整）
-        var token = await TokenService.IssueTokenAsync(new TokenIssueRequest(
-            account.UId, AuthTypes.Federated, account.AuthLevel, ChannelType: channelType), ct);
-        _logger.LogDebug("外部 IdP 登录成功——UId={UId}, ChannelType={ChannelType}", account.UId, channelType);
-        return new LoginResult(true, account.UId, token, null);
+        // ③ 委托共享编排（P2-2）：构建 FederatedIdentity（UId 恒空——认证结果无平台内部 id，走映射/建号路径）
+        //    → IFederatedLoginOrchestrator（映射命中复用 / 建号 + LinkAsync / 回读守卫 / 签 token1）
+        var identity = new FederatedIdentity(
+            UId: string.Empty,
+            ChannelId: channelId,
+            ExternalUserId: auth.ExternalUserId,
+            ChannelType: channelType,
+            AuthLevel: auth.AuthLevel);
+        return await Orchestrator.LoginAsync(identity, ct);
     }
 }

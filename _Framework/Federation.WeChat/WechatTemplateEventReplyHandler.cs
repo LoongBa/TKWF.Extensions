@@ -45,22 +45,24 @@ public sealed class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBas
     /// （不回复不拦截——业务 handler 正常流转）；<c>Channel</c> 未富化（registry 查不到）→ <c>Channel.Extra</c> 为
     /// null → 模板读取 null → 不回复。</para>
     /// <para><b>多图文（V0.4.1）</b>：<see cref="ReadMultiNewsTemplate"/> <c>articles</c> 数组优先（1..8 篇，
-    /// 占位符替换逐篇应用），缺省回退单图文字段（存量兼容）；占位符替换非 ticket 项
-    /// （<c>{uid}/{openid}/{channel_id}/{channel_type}</c>——<see cref="ReplacePlaceholders(string,WechatEventContext)"/>）；
-    /// <c>TtlSeconds</c> 无签票业务语义忽略（字段保留模板一致性）。</para>
+    /// 占位符替换逐篇应用），缺省回退单图文字段（存量兼容）；<b>I2-8 {ticket} 支持</b>——模板含
+    /// <c>{ticket}</c> 时经 <see cref="WechatEventReplyHandlerBase.ResolveTicketAsync"/> 签免登票据
+    /// （<c>TtlSeconds</c> 模板 TTL 优先——票 URL 替换进 link/description）。</para>
     /// </summary>
-    protected override Task<WechatReplyPayload?> OnDefaultAsync(WechatEventContext ctx, CancellationToken ct)
+    protected override async Task<WechatReplyPayload?> OnDefaultAsync(WechatEventContext ctx, CancellationToken ct)
     {
         // 模板读取（Extra["news_reply"]——通道级图文配置；缺失/损坏 → null，Oracle P0-2）
         var template = ReadMultiNewsTemplate(ctx.Channel?.Extra);
         if (template is null or { Enabled: not true })
-            return Task.FromResult<WechatReplyPayload?>(null);
+            return null;
 
-        // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}；{ticket} 不替换——无签票耦合，方案 §3.3）
-        var articles = BuildArticles(template, ctx);
+        // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内）
+        var ticketUrl = await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
 
-        WechatReplyPayload payload = new(News: articles);
-        return Task.FromResult<WechatReplyPayload?>(payload);
+        // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}/{ticket}——I2-8 5 参重载）
+        var articles = BuildArticles(template, ctx, ticketUrl);
+
+        return new WechatReplyPayload(News: articles);
     }
 
     /// <summary>
@@ -88,18 +90,18 @@ public sealed class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBas
     /// <summary>
     /// 图文条目构建——<see cref="NewsReplyTemplateV2.Articles"/> 数组优先（多图文，微信上限 8 篇——
     /// <c>Take(8)</c> 钳制；空数组视同缺省回退）；缺省回退单图文字段（Title/Description/Link/PicUrl——存量兼容）。
-    /// 占位符替换逐篇应用。
+    /// 占位符替换逐篇应用（I2-8：5 参重载含 <c>{ticket}</c>——<paramref name="ticketUrl"/> 可空 → 空串替换）。
     /// </summary>
-    private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx)
+    private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx, string? ticketUrl)
     {
         if (template.Articles is { Count: > 0 })
         {
             return template.Articles
                 .Take(8)
                 .Select(a => new EventReplyNewsArticle(
-                    ReplacePlaceholders(a.Title ?? string.Empty, ctx),
-                    ReplacePlaceholders(a.Description ?? string.Empty, ctx),
-                    ReplacePlaceholders(a.Link ?? string.Empty, ctx),
+                    ReplacePlaceholders(a.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    ReplacePlaceholders(a.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    ReplacePlaceholders(a.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
                     a.PicUrl))
                 .ToList();
         }
@@ -108,9 +110,9 @@ public sealed class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBas
         return
         [
             new EventReplyNewsArticle(
-                ReplacePlaceholders(template.Title ?? string.Empty, ctx),
-                ReplacePlaceholders(template.Description ?? string.Empty, ctx),
-                ReplacePlaceholders(template.Link ?? string.Empty, ctx),
+                ReplacePlaceholders(template.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                ReplacePlaceholders(template.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                ReplacePlaceholders(template.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
                 template.PicUrl),
         ];
     }

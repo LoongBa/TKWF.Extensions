@@ -450,29 +450,34 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
     /// Template 兜底（Oracle P0 选项 A——内部组合，不依赖编排器迭代顺序）：读 <c>Channel.Extra["news_reply"]</c>
     /// JSON（多图文优先 <c>articles</c> → 单图文兼容回退，对齐平台库 <see cref="TKWF.Federation.WeChat.NewsReplyTemplateV2"/>）
     /// → 占位符替换 → 图文信封闭包；模板缺失/损坏/禁回复 → null（不回复——对齐平台模板 handler Oracle P0-2 语义）。
+    /// <para>I2-8：模板含 <c>{ticket}</c> 时经 <see cref="TKWF.Federation.WeChat.WechatEventReplyHandlerBase.ResolveTicketAsync"/>
+    /// 签免登票据（模板 TtlSeconds 优先）——票 URL 替换进 link/description（未启用 → 空串替换，回复结构不变）。</para>
     /// </summary>
-    private Task<WechatReplyPayload?> TemplateFallbackAsync(WechatEventContext ctx, CancellationToken ct)
+    private async Task<WechatReplyPayload?> TemplateFallbackAsync(WechatEventContext ctx, CancellationToken ct)
     {
         var template = ReadNewsTemplateFromChannel(ctx);
-        if (template is null or { Enabled: not true }) return Task.FromResult<WechatReplyPayload?>(null);
+        if (template is null or { Enabled: not true }) return null;
+
+        // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内）
+        var ticketUrl = await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
 
         var articles = template.Articles is { Count: > 0 }
             ? template.Articles.Take(8)   // 微信图文上限 8 篇
                 .Select(a => new EventReplyNewsArticle(
-                    ReplacePlaceholders(a.Title ?? string.Empty, ctx),
-                    ReplacePlaceholders(a.Description ?? string.Empty, ctx),
-                    ReplacePlaceholders(a.Link ?? string.Empty, ctx),
+                    ReplacePlaceholders(a.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    ReplacePlaceholders(a.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    ReplacePlaceholders(a.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
                     a.PicUrl))
                 .ToList()
             : new List<EventReplyNewsArticle> {
                 new(
-                    ReplacePlaceholders(template.Title ?? string.Empty, ctx),
-                    ReplacePlaceholders(template.Description ?? string.Empty, ctx),
-                    ReplacePlaceholders(template.Link ?? string.Empty, ctx),
+                    ReplacePlaceholders(template.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    ReplacePlaceholders(template.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    ReplacePlaceholders(template.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
                     template.PicUrl) };
 
         var payload = new WechatReplyPayload(News: articles);
-        return Task.FromResult<WechatReplyPayload?>(payload);
+        return payload;
     }
 
     /// <summary>读 Channel.Extra["news_reply"] 模板（多图文 V2——自解析；缺失/损坏 → null，对齐 Oracle P0-2）。</summary>

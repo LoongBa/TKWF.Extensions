@@ -106,6 +106,13 @@ namespace TKWF.Ext.Federation;
         // 编排层经 User.Use<IFollowStateService>() 帧内解析——I2-3 接入事件链记录在后）
         services.AddConstructibleService<IFollowStateService, FollowStateService>();
 
+        // 免登入口门面（I2-8 微信免登闭环 {ticket} 缺口 §3.8——签密封票据（ISealedTicketService<FederatedIdentity> 原语）
+        // + 组装免登链接 / 静默授权 URL；契约在 Federation.Abstractions（ILoginEntryService）——守卫工厂门面形态，
+        // 消费方 User.Use<ILoginEntryService>() 帧内解析；Options 默认值兜底（TKWF:Federation:LoginEntry 节——
+        // 基址复用 FederationEventReplyOptions.TestTicketEndpointBaseUrl，不新增 BaseUrl，单一事实源）
+        services.AddConstructibleService<ILoginEntryService, LoginEntryService>();
+        services.AddOptions<FederationLoginEntryOptions>();
+
         // 事件回复领域 Options（TestTicketEndpointBaseUrl/RoutePrefix——EventReplyHandlerBase 签密封票据
         // 图文链接拼接用；测试端点是 Federation 主包编排面能力，此处 AddOptions 兜底默认值——守卫工厂
         // ActivatorUtilities 解析 IOptions 需可解析，对齐上方 AuthCenter 先例）。

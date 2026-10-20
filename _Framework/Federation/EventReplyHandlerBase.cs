@@ -110,13 +110,10 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     }
 
     /// <summary>构造测试端点 URL（{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——与 FederationWebExtension
-    /// 端点路径一致；BaseUrl 空 → 相对路径（以 / 开头，默认指向本服务同源——微信可点击）。</summary>
+    /// 端点路径一致；BaseUrl 空 → 相对路径（以 / 开头，默认指向本服务同源——微信可点击）。
+    /// <para>I2-8 委托 <see cref="LoginEntryService.CombineUrl"/>（单一 URL 组装点——逐字节等价，测试锁定）。</para></summary>
     protected string BuildTestTicketUrl(string ticket, string platformId, string channelId)
-    {
-        var relative = $"{RoutePrefix.Trim('/')}/{platformId}/test/{channelId}/{ticket}";
-        var baseUrl = TestTicketEndpointBaseUrl?.TrimEnd('/');
-        return string.IsNullOrEmpty(baseUrl) ? $"/{relative}" : $"{baseUrl}/{relative}";
-    }
+        => LoginEntryService.CombineUrl(TestTicketEndpointBaseUrl, RoutePrefix, $"{platformId}/test/{channelId}/{ticket}");
 
     /// <summary>构造自定义模板 URL（模板驱动两级模型——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}</c>）。</summary>
     protected string BuildTemplateUrl(string linkTemplate, string ticket, ChannelConfig channel, FederatedIdentity identity)

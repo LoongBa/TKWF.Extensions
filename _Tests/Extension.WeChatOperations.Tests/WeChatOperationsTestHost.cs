@@ -161,6 +161,9 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
         services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
         services.AddConstructibleService<ISsoLogin, SsoLogin>();
+        // 免登入口门面（I2-8——本宿主聚焦运营回复/统计，免登签票断言归 Federation.Tests：
+        // Fake 返回 null = LoginEntry.Enabled=false 等价——模板 {ticket} → 空串替换，其余文本照常渲染）
+        services.AddScoped<ILoginEntryService>(_ => new NullLoginEntryService());
 
         // ④ Stub IHttpClientFactory——微信 API 桩（AddHttpClient 的 DefaultHttpClientFactory 被覆盖）
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(Handler));
@@ -522,4 +525,14 @@ internal sealed class TestDomainUser : IDomainUser
 
     public TService GetOptionalService<TService>() where TService : class => null!;
     public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
+}
+
+/// <summary>免登入口 Fake（返回 null = 未启用语义——运营测试宿主免登签票断言归 Federation.Tests）。</summary>
+internal sealed class NullLoginEntryService : ILoginEntryService
+{
+    public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, CancellationToken ct = default)
+        => Task.FromResult<string?>(null);
+
+    public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
+        => Task.FromResult<string?>(null);
 }

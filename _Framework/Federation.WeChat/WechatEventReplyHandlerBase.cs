@@ -290,10 +290,24 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     }
 
     /// <summary>
-    /// 占位符替换（<c>{uid}/{openid}/{channel_id}/{channel_type}</c>——方案 §3.2 图文工具表）。
-    /// <para>⚠️ <c>{ticket}</c> <b>不替换</b>（保留原样）——本基类无签票耦合（方案 §3.3 无签密封票据耦合）：
-    /// 含 <c>{ticket}</c> 的 link 模板需业务 handler 签票后自行替换（选用主包
-    /// <see cref="EventReplyHandlerBase"/> 或 <c>User.Use&lt;ISealedTicketService&lt;FederatedIdentity&gt;&gt;()</c>）。</para>
+    /// 占位符替换（<c>{uid}/{openid}/{channel_id}/{channel_type}/{ticket}</c>——方案 §3.2 图文工具表；
+    /// I2-8 {ticket} 缺口闭环）。
+    /// <para><c>{ticket}</c> → <paramref name="ticket"/>（可空 → 空串——免登入口未启用/失败时其余文本照常渲染，
+    /// 回复结构不变）；<c>{ticket}</c> 文本替换仅本重载一处（ILoginEntryService 只产出 URL，不做文本替换，§3.8）。
+    /// 无签票场景（非事件回复链路）沿用 4 参重载——<c>{ticket}</c> 保留原样。</para>
+    /// </summary>
+    protected static string ReplacePlaceholders(string text, string? uid, string? openId, string? channelId, string? ticket)
+        => ReplacePlaceholders(text, uid, openId, channelId)
+            .Replace("{ticket}", ticket ?? string.Empty);
+
+    /// <summary>占位符替换便捷重载（ctx 承载 uid/openid/channel_id——<c>{ticket}</c> 不替换语义同上）。</summary>
+    protected static string ReplacePlaceholders(string text, WechatEventContext ctx)
+        => ReplacePlaceholders(text, ctx.UId, ctx.OpenId, ctx.ChannelId);
+
+    /// <summary>占位符替换（<c>{uid}/{openid}/{channel_id}/{channel_type}</c>——方案 §3.2 图文工具表；不含
+    /// <c>{ticket}</c>——无签票场景与既有调用保持；签票场景用 5 参重载（<see cref="ResolveTicketAsync"/> 产出 URL 传入）。
+    /// <para>⚠️ <c>{ticket}</c> <b>本重载不替换</b>（保留原样）——无签票语义；含 ticket 的 link 模板经
+    /// <see cref="ResolveTicketAsync"/> 签票后走 5 参重载（I2-8）。</para>
     /// </summary>
     protected static string ReplacePlaceholders(string text, string? uid, string? openId, string? channelId)
         => text
@@ -302,13 +316,28 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
             .Replace("{channel_id}", channelId ?? string.Empty)
             .Replace("{channel_type}", "wechat_event");
 
-    /// <summary>占位符替换便捷重载（ctx 承载 uid/openid/channel_id——<c>{ticket}</c> 不替换语义同上）。</summary>
-    protected static string ReplacePlaceholders(string text, WechatEventContext ctx)
-        => ReplacePlaceholders(text, ctx.UId, ctx.OpenId, ctx.ChannelId);
+    /// <summary>
+    /// 免登票据 URL 解析（I2-8 微信免登闭环 {ticket} 缺口——签票 + 组装免登链接）。
+    /// <para>经 <see cref="ILoginEntryService"/> 签密封票据（<c>ChannelType="wechat_event"</c>、<c>ctx.OpenId</c>
+    /// 来自编排富化【external_user_id ?? FromUserName】）→ 返回免登链接 URL；返回 null = 未启用/未配置基址/签票失败
+    /// （fail-closed——调用方将 <c>{ticket}</c> 替换为空串，其余文本照常渲染）。</para>
+    /// <para>DI004 零豁免：禁 ctor 注入 <see cref="ILoginEntryService"/>（契约在 Federation.Abstractions）——
+    /// 经基类 <c>User</c> 帧内解析（守卫工厂门面）。</para>
+    /// </summary>
+    /// <param name="ttlSeconds">票据 TTL 秒（可空——调用方按模板 <see cref="NewsReplyTemplate.TtlSeconds"/> 传入，
+    /// null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/> 缺省）。</param>
+    protected async Task<string?> ResolveTicketAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
+    {
+        if (ctx is null || string.IsNullOrWhiteSpace(ctx.ChannelId))
+            return null;
+        return await User.Use<ILoginEntryService>()
+            .BuildTicketUrlAsync(ctx.ChannelId, ChannelType, ctx.OpenId ?? string.Empty, ttlSeconds, ct);
+    }
 
     /// <summary>
     /// 图文模板 DTO（<c>Channel.Extra["news_reply"]</c> JSON——Title/Description/Link 占位符模板；
-    /// TtlSeconds 保留字段一致性（无签票时无业务语义，忽略）。
+    /// I2-8 起 <see cref="TtlSeconds"/> 供 <see cref="ResolveTicketAsync"/> 作票据 TTL 来源——
+    /// 模板 TtlSeconds 优先，缺省 <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。
     /// <para>⚠️ <see cref="JsonPropertyName"/> 显式映射对齐方案文档化 snake_case 键
     /// （<c>title/description/link/pic_url/ttl_seconds/enabled</c>——2026-10-17 缺陷修复：
     /// STJ 默认反序列化大小写敏感 + snake_case 不匹配致模板恒绑定失败，潜伏缺陷自

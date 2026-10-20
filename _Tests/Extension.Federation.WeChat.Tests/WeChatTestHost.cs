@@ -207,6 +207,10 @@ public class WeChatChannelTestHost : TestHostBase
         services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
         services.AddConstructibleService<ISsoLogin, SsoLogin>();
 
+        // 免登入口门面（I2-8——平台库测试宿主聚焦事件回复/解析，免登签票路径不在本宿主断言：
+        // Fake 返回 null = LoginEntry.Enabled=false 等价——模板 {ticket} → 空串替换，其余文本照常渲染）
+        services.AddScoped<ILoginEntryService>(_ => new NullLoginEntryService());
+
         // 探针门面——帧内枚举 ISsoChannel 集合（守卫工厂供给）
         services.AddConstructibleService<IChannelProbe, ChannelProbe>();
 
@@ -221,5 +225,15 @@ public class WeChatChannelTestHost : TestHostBase
         public StubHttpClientFactory(HttpMessageHandler handler) => _handler = handler;
 
         public HttpClient CreateClient(string name) => new(_handler);
+    }
+
+    /// <summary>免登入口 Fake（返回 null = 未启用语义——平台库测试宿主免登签票断言归 Federation.Tests）。</summary>
+    private sealed class NullLoginEntryService : ILoginEntryService
+    {
+        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
+        public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
     }
 }

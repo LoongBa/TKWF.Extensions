@@ -17,7 +17,8 @@ namespace TKWF.Federation.WeChat.Tests;
 /// ChannelConfig.Extra["news_reply"] 模板 JSON——基类 <c>ResolveChannelAsync</c>
 /// 反查数据源）。</para>
 /// <para>覆盖：① 模板配置 → 图文回复（占位符 {uid}/{openid}/{channel_id} 替换 + {channel_type}；
-/// <c>{ticket}</c> <b>保留原样</b>——方案 §3.3 无签票耦合）；② <b>无模板 → null</b>（Oracle P0-2）；
+/// <c>{ticket}</c> <b>I2-8 起签票替换</b>——本宿主 Fake ILoginEntryService 返回 null（未启用语义）→ 空串替换，回复结构不变）；
+/// ② <b>无模板 → null</b>（Oracle P0-2）；
 /// ③ Enabled=false → null；④ 模板损坏（非法 JSON）→ null（不拦截）；⑤ Channel 反查失败（channel_id 不在
 /// registry）→ null。全部经 <c>OnDefaultAsync</c> 兜底入口（事件路由至默认分支——模板驱动的统一响应语义）。</para>
 /// </summary>
@@ -39,7 +40,8 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
     }
 
     /// <summary>模板驱动：配置模板（title/description/link/pic_url/ttl_seconds/enabled）→ 图文 news 信封；
-    /// 占位符 {uid}/{openid}/{channel_id}/{channel_type} 替换成功、<c>{ticket}</c> 保留原样（无签票耦合）。</summary>
+    /// 占位符 {uid}/{openid}/{channel_id}/{channel_type} 替换成功、<c>{ticket}</c> I2-8 起签票替换
+    /// （本宿主 Fake 未启用 → 空串，回复结构不变）。</summary>
     [Fact]
     public async Task Template_Configured_ReplacesPlaceholders_ReturnsNewsXml()
     {
@@ -60,9 +62,9 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         // 占位符替换（uid/openid/channel_id/channel_type）
         Assert.Contains("<Title><![CDATA[欢迎 u-100，openid=openid-100 通道=wx-template]]></Title>", reply.Content);
         Assert.Contains("平台=wechat_event", reply.Content);
-        // {ticket} 保留原样（方案 §3.3——签票前不可用，业务 handler 自行替换）
-        Assert.Contains("保留ticket={ticket}", reply.Content);
-        Assert.Contains("https://sso.example.com/login?ticket={ticket}", reply.Content);
+        // {ticket} I2-8 签票替换：本宿主 Fake ILoginEntryService 未启用 → 空串（回复结构不变，其余文本照常渲染）
+        Assert.Contains("保留ticket=", reply.Content);
+        Assert.Contains("https://sso.example.com/login?ticket=", reply.Content);
         // PicUrl 模板字段
         Assert.Contains("https://img.example.com/cover.png", reply.Content);
     }

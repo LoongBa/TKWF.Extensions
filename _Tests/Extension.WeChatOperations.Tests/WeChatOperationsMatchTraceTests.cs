@@ -7,8 +7,9 @@ using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
-using TKWF.Ext.TrustCenter;
 using TKWF.Federation.WeChat;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 
@@ -133,7 +134,7 @@ public class WeChatOperationsMatchTraceTests : WeChatOperationsTestHost
         => user.Use<WeChatOperationsReplyHandler>();
 
     /// <summary>构造事件上下文参数包。</summary>
-    private static TKWF.Ext.TrustCenter.SsoChannelEventContext Ctx(params (string Key, string? Value)[] parameters)
+    private static TKWF.Ext.Federation.SsoChannelEventContext Ctx(params (string Key, string? Value)[] parameters)
         => WeChatOperationsTestSupport.CreateEventContext(parameters);
 
     /// <summary>取该 channel 最近的交互日志（DB 直查——单条回复场景）。</summary>

@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKWF.Ext.Testing.Shared;
-using TKWF.Ext.TrustCenter;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Federation.WeChat.Tests;
 

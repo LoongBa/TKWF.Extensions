@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Ticket;
-using TKWF.Ext.TrustCenter;
 
 namespace TKWF.Ext.Federation;
 

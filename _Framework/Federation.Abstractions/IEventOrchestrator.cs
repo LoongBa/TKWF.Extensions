@@ -1,7 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.TrustCenter;
 
 namespace TKWF.Ext.Federation;
 

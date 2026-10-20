@@ -8,7 +8,6 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Ticket;
 using TKWF.Ext.AuthCenter;
 using TKWF.Ext.Federation;
-using TKWF.Ext.TrustCenter;
 using Xunit;
 
 namespace TKWF.Ext.Federation.Tests;

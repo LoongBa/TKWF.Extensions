@@ -24,7 +24,6 @@
          但契约继承 IDomainService（User.Use 帧内解析准入）需要 TKWF.Domain——非零框架引用（对齐 Permissions.Abstractions 先例，双模式条件化） -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- 事件上下文/回复结果（SsoChannelEventContext/EventReplyResult——定义于 TrustCenter.Abstractions 纯 BCL 契约包，非主包） -->
-    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

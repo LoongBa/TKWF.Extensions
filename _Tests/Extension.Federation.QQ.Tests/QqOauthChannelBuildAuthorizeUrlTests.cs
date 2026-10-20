@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
-using TKWF.Ext.TrustCenter;
 using Xunit;
 
 namespace TKWF.Federation.QQ.Tests;

@@ -5,8 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
-using TKWF.Ext.TrustCenter;
 using TKWF.Ext.Testing.Shared;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.Federation.Tests;
 

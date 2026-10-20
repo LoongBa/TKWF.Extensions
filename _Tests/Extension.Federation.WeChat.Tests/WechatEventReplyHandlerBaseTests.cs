@@ -7,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
-using TKWF.Ext.TrustCenter;
 
 namespace TKWF.Federation.WeChat.Tests;
 

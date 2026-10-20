@@ -11,7 +11,6 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Federation;
-using TKWF.Ext.TrustCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Federation.DingTalk.Tests;

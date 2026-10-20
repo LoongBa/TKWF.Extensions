@@ -9,8 +9,9 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.TrustCenter;
 using TKWF.Federation.WeChat;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.WeChatOperations;
 

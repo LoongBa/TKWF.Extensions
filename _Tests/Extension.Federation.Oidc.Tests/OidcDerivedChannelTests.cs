@@ -8,7 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
-using TKWF.Ext.TrustCenter;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Federation.Oidc.Tests;

@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
-using TKWF.Ext.TrustCenter;
 
 namespace TKWF.Ext.Federation;
 

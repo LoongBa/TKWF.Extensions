@@ -39,7 +39,6 @@
     <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
 <!-- 信任契约包（TrustCenter.Abstractions——WechatEventReplyHandlerBase/EventReplyNewsArticle/SsoChannelEventContext
          等事件回复信封类型所在；平台库 Federation.WeChat 经其实现 ISsoChannel，本扩展 handler 消费事件信封闭包类型） -->
-    <ProjectReference Include="..\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
     <!-- 权限契约包（Permisisions.Abstractions——[RequirePermission] 门面权限标注；设计文档 §3.3.5 Oracle P1，
          只读查询 WeChatOperations.Query / 写操作 WeChatOperations.Manage） -->
     <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />

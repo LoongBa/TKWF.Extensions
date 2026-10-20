@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using TKWF.Ext.TrustCenter;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Federation.WeChat;
 

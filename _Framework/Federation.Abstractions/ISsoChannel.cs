@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain.Interfaces;
 
-namespace TKWF.Ext.TrustCenter;
+namespace TKWF.Ext.Federation;
 
 /// <summary>channel 认证上下文——可扩展键值模型（区别于既有 ProviderAuthenticateContext 扁平 record 缺陷）。</summary>
 public sealed record SsoChannelAuthContext(IReadOnlyDictionary<string, string?> Parameters);
@@ -67,9 +67,10 @@ public sealed record EventReplyNewsArticle(string Title, string Description, str
 /// （服务 token1 签发）；本契约 = 联邦 IdP 适配（外部身份源，服务 token2 联邦流）——两套并存。</para>
 /// <para>注册：<c>TryAddEnumerableConstructible</c>（集合版守卫工厂，对齐 ADR92）；平台适配扩展 Initializer
 /// 追加实现，未注册通道自然跳过。channel 的 IdP 凭证（如微信 AppId/AppSecret）归平台适配扩展自持（Oracle P2-4）。</para>
-/// <para><b>契约归属（TrustCenter 剥离 2026-10-09）</b>：本契约随信任内核迁入 TrustCenter.Abstractions——
-/// 定义"外部如何接入信任网络"，TrustCenter 经契约感知外部存在，不感知具体平台实现；Federation 编排面
-/// （ISsoChannelFactory/SsoLogin）与平台库均经本契约消费。</para>
+/// <para><b>契约归属（I2 契约收口 2026-10-20）</b>：本契约随通道契约收口迁入 Federation.Abstractions——
+/// 连接层契约与平台库同程序集命名空间（<c>TKWF.Ext.Federation</c>），信任内核（TrustCenter）回归纯信任，
+/// 不再经内核转述通道。TrustCenter.Abstractions 中旧定义已删除（Anson 破坏性迁移：8 平台库 + 消费方
+/// <c>using</c> 改 <c>TKWF.Ext.Federation</c>，零行为变更）。</para>
 /// </summary>
 public interface ISsoChannel : IDomainService
 {

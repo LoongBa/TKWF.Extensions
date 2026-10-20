@@ -6,9 +6,10 @@ using System.Threading.Tasks;
 using FreeSql;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
-using TKWF.Ext.TrustCenter;
 using TKWF.Federation.WeChat;
 using TKWF.Federation.WeChat.MessageGateway;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 

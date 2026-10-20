@@ -358,7 +358,7 @@ internal static class WeChatOperationsTestSupport
         => new StubWeChatHandler(menuJson, menuCreateBodies);
 
     /// <summary>构造 SsoChannelEventContext（handler 用例——Parameters 键值包）。</summary>
-    public static TKWF.Ext.TrustCenter.SsoChannelEventContext CreateEventContext(params (string Key, string? Value)[] parameters)
+    public static TKWF.Ext.Federation.SsoChannelEventContext CreateEventContext(params (string Key, string? Value)[] parameters)
         => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
 
     /// <summary>构造微信内层消息 XML（CDATA 包裹——__decrypted_xml 数据源形态）。</summary>

@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
-using TKWF.Ext.TrustCenter;
 
 namespace TKWF.Federation.QQ;
 

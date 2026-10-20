@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
-using TKWF.Ext.TrustCenter;
 using Xunit;
 
 namespace TKWF.Federation.WeChat.Tests;

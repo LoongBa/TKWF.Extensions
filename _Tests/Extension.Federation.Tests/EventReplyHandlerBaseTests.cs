@@ -8,7 +8,8 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Ticket;
 using TKWF.Ext.Testing.Shared;
-using TKWF.Ext.TrustCenter;
+
+using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.Federation.Tests;
 

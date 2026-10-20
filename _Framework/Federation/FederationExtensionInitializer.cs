@@ -111,7 +111,12 @@ namespace TKWF.Ext.Federation;
         // 消费方 User.Use<ILoginEntryService>() 帧内解析；Options 默认值兜底（TKWF:Federation:LoginEntry 节——
         // 基址复用 FederationEventReplyOptions.TestTicketEndpointBaseUrl，不新增 BaseUrl，单一事实源）
         services.AddConstructibleService<ILoginEntryService, LoginEntryService>();
-        services.AddOptions<FederationLoginEntryOptions>();
+        services.AddOptions<FederationLoginEntryOptions>()
+            .Validate(o => o.TicketTtlSeconds > 0,
+                "FederationLoginEntryOptions.TicketTtlSeconds 必须 > 0 秒（免登票据 TTL，方案 §6.4）")
+            .Validate(o => o.MaxTicketTtlSeconds > 0 && o.TicketTtlSeconds <= o.MaxTicketTtlSeconds,
+                "FederationLoginEntryOptions.TicketTtlSeconds 必须 ≤ MaxTicketTtlSeconds（须与 TKWF:TrustCenter:SealedTicketExpirationSeconds 对齐或更小，方案 §6.4 启动期 fail-fast）")
+            .ValidateOnStart();
 
         // 事件回复领域 Options（TestTicketEndpointBaseUrl/RoutePrefix——EventReplyHandlerBase 签密封票据
         // 图文链接拼接用；测试端点是 Federation 主包编排面能力，此处 AddOptions 兜底默认值——守卫工厂

@@ -180,6 +180,39 @@ public sealed class LoginEntryServiceTests : TestHostBase
         Assert.Equal(expected, LoginEntryService.CombineUrl(baseUrl, routePrefix, path));
     }
 
+    // ── 7. 启动期 fail-fast 校验（方案 §6.4——TicketTtlSeconds ≤ MaxTicketTtlSeconds）──
+
+    /// <summary>TicketTtlSeconds 超过安全上限 → Options 校验抛 OptionsValidationException（启动期 fail-fast）。</summary>
+    [Fact]
+    public void LoginEntryOptions_TtlExceedsMax_FailsValidation()
+    {
+        using var _ = this;
+        var (provider, _) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.TicketTtlSeconds = 9999;
+                o.MaxTicketTtlSeconds = 300;
+            });
+        });
+
+        Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IOptions<FederationLoginEntryOptions>>().Value);
+    }
+
+    /// <summary>默认配置（300 ≤ 300）通过校验。</summary>
+    [Fact]
+    public void LoginEntryOptions_DefaultTtl_PassesValidation()
+    {
+        using var _ = this;
+        var (provider, _) = BindTestScope();
+
+        var options = provider.GetRequiredService<IOptions<FederationLoginEntryOptions>>().Value;
+        Assert.Equal(300, options.TicketTtlSeconds);
+        Assert.Equal(300, options.MaxTicketTtlSeconds);
+        Assert.False(options.Enabled);
+    }
+
     // ── 测试设施 ──
 
     /// <summary>可签发票务服务（Fake ISealedTicketService&lt;FederatedIdentity&gt;——返回固定 ticket + 记录签发载荷）。</summary>

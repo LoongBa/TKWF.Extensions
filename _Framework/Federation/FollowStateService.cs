@@ -67,12 +67,39 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
             }
             else if (IsNewer(evt, state))
             {
-                // 新事件（排序守卫通过）→ 覆盖状态字段
-                ApplyEvent(state, evt);
-                state.UpdateTime = DateTime.UtcNow;
-                await States.EntityUpdateAsync(state, ct);
-                stateDto = ToDto(state);
-                stateChanged = true;
+                // 新事件（守卫初判通过）→ 条件原子更新（§4.3 两处同型：WHERE 内含同一两段比较守卫）。
+                // 并发同用户事件：初判基于可能过期的读态，WHERE 守卫保证只有真正更新的事件才覆盖状态；
+                // 影响 0 行 = 被守卫挡下（行必存在——上方刚读到），状态不变但事件行已落库。
+                var isFollowing = IsFollow(evt.EventType);
+                var receivedAt = evt.ReceivedAt == default ? DateTime.UtcNow : evt.ReceivedAt;
+                var affected = await States.EntityUpdateWhereAsync(
+                    s => s.Id == state.Id
+                         && (s.LastEventAt < evt.OccurredAt
+                             || (s.LastEventAt == evt.OccurredAt && s.LastReceivedAt < evt.ReceivedAt)),
+                    s => new FollowStateEntity
+                    {
+                        IsFollowing = isFollowing,
+                        UnionId = evt.UnionId ?? s.UnionId,
+                        LastEventType = evt.EventType,
+                        LastEventKey = evt.EventKey,
+                        LastSource = evt.Source,
+                        LastEventAt = evt.OccurredAt,
+                        LastReceivedAt = receivedAt,
+                        SubscribedAt = isFollowing ? evt.OccurredAt : s.SubscribedAt,
+                        UnsubscribedAt = isFollowing ? s.UnsubscribedAt : evt.OccurredAt,
+                        UpdateTime = DateTime.UtcNow,
+                    }, ct);
+
+                if (affected > 0)
+                {
+                    stateChanged = true;
+                }
+                else
+                {
+                    _logger.LogDebug("关注状态并发守卫挡下（条件更新 0 行）：ChannelId={ChannelId} ExternalUserId={ExternalUserId} OccurredAt={OccurredAt:O}",
+                        evt.ChannelId, evt.ExternalUserId, evt.OccurredAt);
+                }
+                stateDto = ToDto(await States.EntityGetAsync(s => s.Id == state.Id, ct));
             }
             else
             {

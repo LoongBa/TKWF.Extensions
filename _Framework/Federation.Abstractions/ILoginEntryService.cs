@@ -60,6 +60,14 @@ public sealed class FederationLoginEntryOptions
     /// <summary>票据 TTL 秒（默认 300——必须 ≤ AuthCenter 密封票据 TTL，方案 §6.4）。</summary>
     public int TicketTtlSeconds { get; set; } = 300;
 
+    /// <summary>
+    /// 票据 TTL 安全上限（默认 300 秒——启动期校验 <see cref="TicketTtlSeconds"/> ≤ 本值，超限 fail-fast）。
+    /// <para>方案 §6.4「TicketTtlSeconds ≤ AuthCenter 密封票据 TTL，启动期校验」的本地声明：Federation 只引
+    /// AuthCenter.Abstractions（无 TrustCenter Options 可见性），跨包配置无法自动比对——消费方须令本值与
+    /// <c>TKWF:TrustCenter:SealedTicketExpirationSeconds</c>（默认 120）对齐或更小。</para>
+    /// </summary>
+    public int MaxTicketTtlSeconds { get; set; } = 300;
+
     /// <summary>按 ChannelId 覆盖基址（优先于 FederationEventReplyOptions.TestTicketEndpointBaseUrl）。</summary>
     public Dictionary<string, string> ChannelBaseUrls { get; set; } = new();
 }

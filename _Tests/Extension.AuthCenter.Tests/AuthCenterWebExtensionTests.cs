@@ -339,6 +339,22 @@ public sealed class AuthCenterWebExtensionTests
     }
 
     [Fact]
+    public async Task TicketLogin_SnakeCaseChannelId_BindsChannelId()
+    {
+        AuthCenterEndpointHost.TicketLogin.GuardExceptionMessage = null;
+        AuthCenterEndpointHost.TicketLogin.RateLimitedMessage = null;
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        using var content = new StringContent(
+            """{"ticket":"ticket-32B-base64url-abcdefghijklmnop","channel_id":"wechat-event-1"}""",
+            System.Text.Encoding.UTF8, "application/json");
+        var resp = await client.PostAsync($"{DefaultPrefix}/login/ticket", content);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("wechat-event-1", AuthCenterEndpointHost.TicketLogin.LastChannelId);
+    }
+
+    [Fact]
     public async Task TicketLogin_MissingTicket_400()
     {
         var client = AuthCenterEndpointHost.Server.CreateClient();

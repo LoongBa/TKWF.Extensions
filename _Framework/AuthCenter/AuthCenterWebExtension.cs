@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Authentication;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -233,7 +234,7 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         try
         {
             var ip = ctx.Connection.RemoteIpAddress?.ToString();
-            var result = await GetGuest(ctx).Use<IExternalTicketLoginService>().LoginAsync(req.Ticket, req.ChannelId, ip, ct);
+            var result = await GetGuest(ctx).Use<IExternalTicketLoginService>().LoginAsync(req.Ticket, req.EffectiveChannelId, ip, ct);
             return result.Success
                 ? Results.Ok(ToTokenResponse(result.Token!))
                 : Results.BadRequest(new ErrorResponse(result.FailReason ?? "LOGIN_FAILED", null));
@@ -435,7 +436,21 @@ public sealed record RefreshRequest(string RefreshToken);
 
 /// <summary>外部 IdP 票据 SPA 兑现请求（V0.10.0——POST {prefix}/login/ticket；channel_id 可选——多通道消歧，
 /// 正常由票载荷 ChannelId 签入，提供时须一致否则 TICKET_INVALID）。</summary>
-public sealed record ExternalTicketLoginRequest(string Ticket, string? ChannelId);
+/// <param name="Ticket">32B base64url 密封票据。</param>
+/// <param name="ChannelId">通道 id（键 <c>channelId</c>——minimal API 默认 Web JSON 绑定）。</param>
+public sealed record ExternalTicketLoginRequest(string Ticket, string? ChannelId)
+{
+    /// <summary>snake_case 契约别名（使用指南 body 写作 <c>{"ticket", "channel_id"}</c>；默认绑定大小写不敏感
+    /// 但不做下划线归一，<c>channel_id</c> 不会命中 <see cref="ChannelId"/>——显式映射保证文档契约可用，
+    /// 同时保留 camelCase 客户端可用：两条键并存，不因客户端命名风格静默丢失消歧参数）。</summary>
+    [JsonPropertyName("channel_id")]
+    public string? ChannelIdSnakeCase { get; init; }
+
+    /// <summary>生效通道 id（<c>channelId</c> 优先，其次 <c>channel_id</c>；均空 → null = 由票载荷决定）。</summary>
+    [JsonIgnore]
+    public string? EffectiveChannelId
+        => !string.IsNullOrWhiteSpace(ChannelId) ? ChannelId : ChannelIdSnakeCase;
+}
 
 /// <summary>票据换令牌请求（PKCE code_verifier 可选——IssueAsync 时若生成则 Exchange 必传）。</summary>
 public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, string AppId, string? State);

@@ -4,11 +4,13 @@ using System.IO;
 using System.Security.Cryptography;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.AuthCenter;
+using TKWF.Ext.SecurityLog;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
@@ -23,9 +25,11 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// </summary>
 internal static class AuthenticationTestHost
 {
-    /// <summary>全部 12 实体类型——统一注册真实 FreeSqlEntityDAC（分层单测/生产路径 Use&lt;DataService&gt; 直建源）。
+    /// <summary>全部 15 实体类型——统一注册真实 FreeSqlEntityDAC（分层单测/生产路径 Use&lt;DataService&gt; 直建源）。
     /// <para>V0.9.0（T2/T8）：+UserProfileEntity（凭据/档案分离）+PasswordResetCodeEntity（找回链路底册）
-    /// +PasswordHistoryEntity（密码历史防重用——SetPasswordAsync 历史追加/裁剪依赖）。</para></summary>
+    /// +PasswordHistoryEntity（密码历史防重用——SetPasswordAsync 历史追加/裁剪依赖）。</para>
+    /// <para>V0.11.0（Iteration 1 T1）：+AuthFactorEntity（认证因素唯一权威）+AuthFactorEventEntity（因素事件留痕）
+    /// +AuthAccountFreezeEntity（多原因冻结）——AuthFactorService 直构用例依赖前者两表。</para></summary>
     private static readonly Type[] AllEntityTypes =
     [
         typeof(AuthAccountEntity), typeof(AuthLoginAttemptEntity), typeof(SmsRecordEntity),
@@ -33,10 +37,12 @@ internal static class AuthenticationTestHost
         typeof(PlatformAccountMapEntity), typeof(PlatformCredentialEntity),
         typeof(AuthGrantEntity),   // V0.8.0：应用授权实体（/grants 数据底座）
         typeof(UserProfileEntity), typeof(PasswordResetCodeEntity),   // V0.9.0：档案 1:1 + 重置码
-        typeof(PasswordHistoryEntity)   // V0.9.0：密码历史（历史防重用比对源）
+        typeof(PasswordHistoryEntity),   // V0.9.0：密码历史（历史防重用比对源）
+        typeof(AuthFactorEntity), typeof(AuthFactorEventEntity),   // V0.11.0：因素权威 + 事件留痕
+        typeof(AuthAccountFreezeEntity)   // V0.11.0：多原因冻结
     ];
 
-    /// <summary>注册全部 11 实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）——CreateStub 与生产路径 Provider 共用。</summary>
+    /// <summary>注册全部 15 实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）——CreateStub 与生产路径 Provider 共用。</summary>
     public static void RegisterEntityDacs(IServiceCollection services)
     {
         foreach (var entityType in AllEntityTypes)
@@ -50,7 +56,7 @@ internal static class AuthenticationTestHost
     private static string? _rsaDir;
     private static readonly object RsaGate = new();
 
-    /// <summary>建表（11 实体 SyncStructure——SQLite 方言）。</summary>
+    /// <summary>建表（15 实体 SyncStructure——SQLite 方言）。</summary>
     public static void SyncSchema(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<AuthAccountEntity>();
@@ -65,6 +71,9 @@ internal static class AuthenticationTestHost
         fsql.CodeFirst.SyncStructure<UserProfileEntity>();          // V0.9.0：档案 1:1
         fsql.CodeFirst.SyncStructure<PasswordResetCodeEntity>();    // V0.9.0：重置码
         fsql.CodeFirst.SyncStructure<PasswordHistoryEntity>();      // V0.9.0：密码历史（防重用）
+        fsql.CodeFirst.SyncStructure<AuthFactorEntity>();           // V0.11.0：认证因素（唯一权威）
+        fsql.CodeFirst.SyncStructure<AuthFactorEventEntity>();      // V0.11.0：因素事件留痕
+        fsql.CodeFirst.SyncStructure<AuthAccountFreezeEntity>();    // V0.11.0：多原因冻结
     }
 
     /// <summary>创建使用 SQLite 内存库的 IFreeSql + 建表（每次调用新连接 = 独立内存库）。</summary>
@@ -136,6 +145,15 @@ internal static class AuthenticationTestHost
     /// <paramref name="user"/> 可选（默认匿名 StubDomainUser）——BindTicketAsync 已认证帧测试传
     /// <see cref="AuthenticatedStubUser"/>（经基类 User 供给 UserId）。
     /// </summary>
+    public static void AddAuthRelationSupport(IServiceCollection services, StubDomainUser user)
+    {
+        services.AddSingleton<IAuthFactorService>(new AuthFactorService(
+            user, Options.Create(new SecurityLoggingOptions()), NullLogger<AuthFactorService>.Instance));
+        services.AddSingleton<IFreezeService>(
+            new FreezeService(user, Options.Create(new SecurityLoggingOptions()), NullLogger<FreezeService>.Instance));
+        services.AddSingleton<IFreezeStateProvider>(new FreezeStateProvider(user));
+    }
+
     public static StubDomainUser CreateStub(IFreeSql fsql, StubDomainUser? user = null, Action<IServiceCollection, StubDomainUser>? register = null)
     {
         user ??= new StubDomainUser();

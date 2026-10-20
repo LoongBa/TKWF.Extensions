@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: c5ed00e2bf7cdb717e2204aef2650220d917a92d5381ac7cfe7b3537606205d7]
 // 模型: PasswordHistoryEntity (TKWF.Ext.AuthCenter.PasswordHistoryEntity)
-// 生成时间: 2026-10-07 17:19:40
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;

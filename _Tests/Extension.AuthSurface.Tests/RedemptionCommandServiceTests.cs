@@ -56,7 +56,7 @@ public class RedemptionCommandServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         var user = BindUser(sp, "u-1001");
         var cmd = user.Use<IRedemptionCommandService>();
 
@@ -251,7 +251,7 @@ public class RedemptionCommandServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         var user = BindUser(sp, "u-1001");
         var cmd = user.Use<IRedemptionCommandService>();
 
@@ -277,7 +277,7 @@ public class RedemptionCommandServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         var user = BindUser(sp, "u-1001");
         var cmd = user.Use<IRedemptionCommandService>();
 

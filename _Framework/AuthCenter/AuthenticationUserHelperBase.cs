@@ -25,7 +25,7 @@ public abstract class AuthenticationUserHelperBase<TUserInfo> : DomainUserHelper
     where TUserInfo : class, IUserInfo, new()
 {
     /// <summary>唯一 abstract 工厂 1：平台账号 + 本地角色 → TUserInfo（消费方实现；短信登录路径）。
-    /// 典型实现：<c>new TUserInfo(account.UId, account.Phone ?? account.UId) { Roles = roles.ToList() }</c>。</summary>
+    /// 典型实现：<c>new TUserInfo(account.UId, account.UId) { Roles = roles.ToList() }</c>（V0.11.0：手机号不再落账号列）。</summary>
     protected abstract TUserInfo CreateUserInfoFromAccount(AuthAccountEntity account, IReadOnlyList<string> roles);
 
     /// <summary>唯一 abstract 工厂 2：令牌载荷 + 本地角色 → TUserInfo（消费方实现；微信/OAuth 恢复路径）。
@@ -42,10 +42,13 @@ public abstract class AuthenticationUserHelperBase<TUserInfo> : DomainUserHelper
         var verified = await smsVerification.VerifyCodeAsync(userName, credential, SmsScenes.Login);
         if (!verified) throw new AuthenticationException("SMS_CODE_MISMATCH");
 
-        var account = await accountDataService.GetByPhoneAsync(userName);
+        // V0.11.0（方案 §6.5/T7）：手机号经 AuthFactor 反查 UId（账号不再落 Phone 列）。
+        var factor = await user.Use<IAuthFactorService>().GetByPhoneAsync(userName);
+        var account = factor is null ? null : await accountDataService.GetByUIdAsync(factor.UId);
         if (account == null) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
         if (!account.IsEnabled) throw new AuthenticationException("ACCOUNT_DISABLED");
-        if (account.IsFrozenEffective) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3）
+        // V0.11.0（方案 §6.4/T3）：冻结判定经 IFreezeStateProvider（多原因冻结行集合）——守卫工厂须 user.Use（AOP 帧内）。
+        if (await user.Use<IFreezeStateProvider>().IsFrozenAsync(account.UId)) throw new AuthenticationException("ACCOUNT_FROZEN");
 
         return CreateUserInfoFromAccount(account, []);
     }
@@ -78,7 +81,7 @@ public abstract class AuthenticationUserHelperBase<TUserInfo> : DomainUserHelper
         var account = await user.Use<IAuthAccountQueryService>().GetByUIdAsync(identity.UId);
         if (account is null) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
         if (!account.IsEnabled) throw new AuthenticationException("ACCOUNT_DISABLED");
-        if (account.IsFrozenEffective) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3——与短信钩子对齐）
+        if (await user.Use<IFreezeStateProvider>().IsFrozenAsync(account.UId)) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.11.0 冻结判定（多原因冻结行集合——与短信钩子对齐）
 
         // 角色映射（关键裁定——合成 TokenValidationResult）：IAuthorizationMapper<TUserInfo>.MapRolesAsync(sub, token, ct)
         // 签名强制非可空 TokenValidationResult，联邦路径无 JWT——合成令牌（AuthType=federated + ChannelType 透传），零契约变更。

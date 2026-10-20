@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
@@ -42,16 +41,16 @@ public interface IAuthAccountQueryService : IDomainService
 /// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。
 /// V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：补实现 <see cref="ISsoAccountQueryService"/>——SSO 消费面契约
 /// （返回不可变 DTO <see cref="SsoAccountDto"/>，敏感字段不出契约包）。
-/// V0.6.0（SSO.WeChat 评审 P1-1）：补实现 <see cref="ISsoAccountLinkService"/>——联盟锚点写契约。</para></summary>
+/// V0.11.0（方案 §4.10 T4）：<c>ISsoAccountLinkService</c>（联盟锚点写契约）随锚点列退役删除。</para></summary>
 [DiContractIgnore]
-internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService, ISsoAccountQueryService, ISsoAccountLinkService
+internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQueryService, ISsoAccountQueryService
 {
     private AuthAccountEntityDataService? _dataService;
     private AuthAccountEntityDataService DataService => _dataService ??= User.Use<AuthAccountEntityDataService>();
     private UserProfileEntityDataService? _profileDataService;
     private UserProfileEntityDataService ProfileDataService => _profileDataService ??= User.Use<UserProfileEntityDataService>();
-    private PlatformAccountMapEntityDataService? _channelMapDataService;
-    private PlatformAccountMapEntityDataService ChannelMapDataService => _channelMapDataService ??= User.Use<PlatformAccountMapEntityDataService>();
+    private IAuthFactorService? _factors;
+    private IAuthFactorService Factors => _factors ??= User.Use<IAuthFactorService>();
 
     public AuthAccountQueryService(IDomainUser user) : base(user)
     {
@@ -59,24 +58,24 @@ internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQ
 
     public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)
         => DataService.GetByUIdAsync(uid, ct);
-    public Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default)
-        => DataService.GetByPhoneAsync(phone, ct);
+    /// <inheritdoc cref="IAuthAccountQueryService.GetByPhoneAsync"/>
+    /// <remarks>V0.11.0（方案 §6.5/T7）：手机号不落账号列——经 <see cref="IAuthFactorService.GetByPhoneAsync"/> 反查 UId 再取账号。</remarks>
+    public async Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default)
+    {
+        var factor = await Factors.GetByPhoneAsync(phone, ct);
+        return factor is null ? null : await DataService.GetByUIdAsync(factor.UId, ct);
+    }
 
     /// <summary>按平台内部 id 查档案（1:1 True——UserProfile 属主；档案查询消费面）。</summary>
     public async Task<UserProfileEntity?> GetProfileByUIdAsync(string uid, CancellationToken ct = default)
         => await ProfileDataService.GetByUIdAsync(uid, ct);
 
     /// <inheritdoc cref="IAuthAccountQueryService.IsWechatBoundAsync"/>
-    /// <remarks>V0.9.0 A.8：联邦 Id 归一化——微信绑定判定 = PlatformAccountMap 存在
-    /// <c>wechat_mp</c>/<c>wechat_web</c> channel 行（替代原 AuthAccount 三列 OR 推导）。
-    /// T5（2026-10-09）：常量内联 <see cref="AuthCenterChannelIds"/>（微信双源 Provider 已删）。</remarks>
+    /// <remarks>V0.11.0（方案 §6.5/T7）：绑定判定改经 AuthFactor（Federated 因素 Identifier 前缀
+    /// <c>wechat_mp|</c>/<c>wechat_web|</c>）——因素是联邦身份唯一权威，PlatformAccountMap 通道列随 T1 退役。</remarks>
     public async Task<bool> IsWechatBoundAsync(string uid, CancellationToken ct = default)
-    {
-        var channels = await ChannelMapDataService.GetChannelsByPlatformIdAsync(uid, ct);
-        return channels.Any(c =>
-            c.ChannelId == AuthCenterChannelIds.WechatMp
-            || c.ChannelId == AuthCenterChannelIds.WechatWeb);
-    }
+        => await Factors.IsBoundToChannelAsync(uid, AuthCenterChannelIds.WechatMp, ct)
+            || await Factors.IsBoundToChannelAsync(uid, AuthCenterChannelIds.WechatWeb, ct);
 
     /// <inheritdoc cref="ISsoAccountQueryService.GetByUIdAsync"/>
     /// <remarks>显式接口实现——与 <see cref="IAuthAccountQueryService.GetByUIdAsync"/> 同名同参不同返回类型（实体 vs DTO），
@@ -86,36 +85,15 @@ internal sealed class AuthAccountQueryService : DomainServiceBase, IAuthAccountQ
         var entity = await DataService.GetByUIdAsync(uid, ct);
         if (entity is null) return null;
         var profile = await ProfileDataService.GetByUIdAsync(uid, ct);   // 档案（Nickname/Avatar 分离表）
-        return ToDto(entity, profile);
-    }
-
-    /// <inheritdoc cref="ISsoAccountLinkService.GetByFederationAnchorAsync"/>
-    public async Task<SsoAccountDto?> GetByFederationAnchorAsync(string federationAnchorOpenId, CancellationToken ct)
-    {
-        var entity = await DataService.GetByFederationAnchorAsync(federationAnchorOpenId, ct);
-        if (entity is null) return null;
-        var profile = await ProfileDataService.GetByUIdAsync(entity.UId, ct);
-        return ToDto(entity, profile);
-    }
-
-    /// <inheritdoc cref="ISsoAccountLinkService.SetFederationAnchorAsync"/>
-    public async Task<SsoAccountDto> SetFederationAnchorAsync(string uid, string federationAnchorOpenId, CancellationToken ct)
-    {
-        await DataService.SetFederationAnchorAsync(uid, federationAnchorOpenId, ct);
-        var entity = await DataService.GetByUIdAsync(uid, ct);
-        var profile = await ProfileDataService.GetByUIdAsync(uid, ct);
-        return entity is null
-            ? new SsoAccountDto(uid, federationAnchorOpenId, null, null, 0)
-            : ToDto(entity, profile);
+        return ToDto(entity, profile, await Factors.GetAuthLevelAsync(entity.UId, ct));
     }
 
     /// <summary>实体 + 档案 → SSO 消费面 DTO（Nickname/Avatar 从 UserProfile 1:1 读——V0.9.0 A.1 凭据/档案分离；
-    /// 敏感字段不外泄）。</summary>
-    private static SsoAccountDto ToDto(AuthAccountEntity entity, UserProfileEntity? profile)
+    /// 敏感字段不外泄。V0.11.0 T9：AuthLevel 由调用方经 AuthFactor 派生后传入；T7：联盟锚点字段随列退役）。</summary>
+    private static SsoAccountDto ToDto(AuthAccountEntity entity, UserProfileEntity? profile, int authLevel)
         => new SsoAccountDto(
             UId: entity.UId,
-            FederationAnchorOpenId: entity.FederationAnchorOpenId,
             Nickname: profile?.Nickname,
             AvatarUrl: profile?.Avatar,
-            AuthLevel: entity.AuthLevel);
+            AuthLevel: authLevel);
 }

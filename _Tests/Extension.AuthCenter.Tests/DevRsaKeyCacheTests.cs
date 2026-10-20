@@ -99,12 +99,10 @@ public class DevRsaKeyCacheTests
         return (service, stub);
     }
 
-    private static AuthAccountEntity CreateAccount(string? phone = "13800138000", int authLevel = 1)
+    private static AuthAccountEntity CreateAccount()
         => new()
         {
             UId = AccountIdGenerator.NewUId(),
-            Phone = phone,
-            AuthLevel = authLevel,
             TokenVersion = 0
         };
 }

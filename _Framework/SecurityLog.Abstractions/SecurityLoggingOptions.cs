@@ -18,7 +18,7 @@ namespace TKWF.Ext.SecurityLog
 
         /// <summary>
         /// 启用的事件类型集合（空 = 全部启用）。
-        /// 合法值：Login / Logout / PasswordChange / PasswordReset / Lockout / Register / Challenge / Freeze / Unfreeze。
+        /// 合法值：Login / Logout / PasswordChange / PasswordReset / Lockout / Register / Challenge / Freeze / Unfreeze / Bind / Unbind。
         /// </summary>
         public HashSet<string> EventTypes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

@@ -36,7 +36,7 @@ public class RedemptionAndAppsQueryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         var code = await RedeemCodeAsync(fsql, sp, "u-1001", "精品课程 A");
         await RedeemCodeAsync(fsql, sp, "u-1001", "精品课程 B");
 
@@ -72,7 +72,7 @@ public class RedemptionAndAppsQueryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "edu-course", status: 0, validUntil: DateTime.UtcNow.AddDays(365));
 
         // AuthApp 目录录入——AppName 映射
@@ -96,7 +96,7 @@ public class RedemptionAndAppsQueryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-expired", status: 0, validUntil: DateTime.UtcNow.AddDays(-1));   // 已过期
         await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-revoked", status: 1, validUntil: null);                            // 已吊销
         await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-active", status: 0, validUntil: DateTime.UtcNow.AddDays(30));      // 有效
@@ -115,7 +115,7 @@ public class RedemptionAndAppsQueryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-no-catalog", status: 0, validUntil: null);   // 目录未录入
 
         var user = BindUser(sp, "u-1001");
@@ -135,7 +135,7 @@ public class RedemptionAndAppsQueryServiceTests
     {
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
-        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001", "13800138000");
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
         await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "edu-course", status: 0, validUntil: null);
 
         var user = BindUser(sp, "u-1002");

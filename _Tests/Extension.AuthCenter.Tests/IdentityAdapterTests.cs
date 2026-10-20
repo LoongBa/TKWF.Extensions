@@ -20,12 +20,12 @@ public class IdentityAdapterTests
     [Fact]
     public void UserHelperBase_CreateUserInfoFromAccount_FillsRoles()
     {
-        var account = new AuthAccountEntity { UId = "u-100", Phone = "13800138000", AuthLevel = (int)AuthLevel.Phone };
+        var account = new AuthAccountEntity { UId = "u-100" };
         var helper = new TestAuthUserHelper();
         var userInfo = helper.CreateUserInfoFromAccountForTest(account, ["Member"]);
 
         Assert.Equal("u-100", userInfo.UserIdString);
-        Assert.Equal("13800138000", userInfo.UserName);
+        Assert.Equal("u-100", userInfo.UserName);
         Assert.Contains("Member", userInfo.Roles ?? new List<string>());
     }
 
@@ -80,7 +80,7 @@ public class IdentityAdapterTests
             services.AddSingleton<ITokenService>(tokenService);
         });
         var verifier = new LocalJwtTokenVerifier(stub);
-        var account = new AuthAccountEntity { UId = "u-400", Phone = "13900139000", AuthLevel = (int)AuthLevel.Phone, TokenVersion = 0 };
+        var account = new AuthAccountEntity { UId = "u-400", TokenVersion = 0 };
         await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
 
         var issued = await stub.GetService<ITokenService>().IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
@@ -94,7 +94,7 @@ public class IdentityAdapterTests
     private sealed class TestAuthUserHelper : AuthenticationUserHelperBase<TestUserInfo>
     {
         protected override TestUserInfo CreateUserInfoFromAccount(AuthAccountEntity account, IReadOnlyList<string> roles)
-            => new(account.UId, account.Phone ?? account.UId) { Roles = roles.ToList() };
+            => new(account.UId, account.UId) { Roles = roles.ToList() };
 
         protected override TestUserInfo CreateUserInfoFromToken(TokenValidationResult token, IReadOnlyList<string> roles)
             => new(token.UserId, token.UserId) { Roles = roles.ToList() };

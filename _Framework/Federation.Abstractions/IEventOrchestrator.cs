@@ -11,7 +11,7 @@ namespace TKWF.Ext.Federation;
 /// <para>职责：按 channelId 构造通道 → <c>channel.HandleEventAsync</c> 取<b>平台化回复</b>（微信 XML 等——
 /// 平台库通道实现；null = 无平台回复）→ 委托 <see cref="IEventReplyHandler"/> 集合
 /// first-non-null-wins（消费方业务回复）→ 返回首个非 null <see cref="EventReplyResult"/>。
-/// 编排内经 <see cref="ISsoChannelMapService.GetByChannelAsync"/> 查 uid（<b>只读不建号</b>——评审 F7，
+/// 编排内经 <c>IExternalIdentityService.GetByExternalIdAsync</c> 查 uid（<b>只读不建号</b>——评审 F7，
 /// 不调 LinkAsync）→ 富化 <c>Parameters["uid"]</c> 供 handler 签票据。</para>
 /// <para><b>handler 迭代边界（Oracle P2-3 记录）</b>：handler 委托仅对<b>未实现
 /// <c>HandleEventAsync</c>（恒返回 null）的通道</b>兜底——已平台化自处理回复的通道（如

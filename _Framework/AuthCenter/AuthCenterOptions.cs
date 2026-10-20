@@ -62,6 +62,14 @@ public class LoginProtectionOptions
     public int TicketRedeemPerMinutePerIp { get; set; } = 10;
 }
 
+/// <summary>联邦建号策略（V0.11.0 方案 §6.5 T6 / §6.6——领域决策，Web 层不存在对应开关）。</summary>
+public class FederatedProvisioningOptions
+{
+    /// <summary>外部身份首次登录时自动建号（默认 true）。false → 拒绝建号并返回 <c>ACCOUNT_NOT_PROVISIONED</c>，
+    /// 账号须由管理侧预先创建并完成绑定（避免外部 IdP 用户无限自助开户）。</summary>
+    public bool AutoProvision { get; set; } = true;
+}
+
 /// <summary>
 /// 认证中心配置选项（方案 §5.11——TKWF:AuthCenter 节）。
 /// <para>[Options("TKWF:AuthCenter")]：SG1 在消费方生成 GeneratedOptionsBindings，宿主启动期自动绑定
@@ -123,6 +131,9 @@ public class AuthCenterOptions
 
     /// <summary>登录保护策略（各认证方式窗口/阈值）。</summary>
     public LoginProtectionOptions LoginProtection { get; set; } = new();
+
+    /// <summary>联邦建号策略（V0.11.0 方案 §6.5 T6——<c>TKWF:AuthCenter:FederatedProvisioning</c>）。</summary>
+    public FederatedProvisioningOptions FederatedProvisioning { get; set; } = new();
 
     /// <summary>密码策略（V0.9.0 ADR-密码策略与口令协议 决策 5——领域配置节 <c>TKWF:AuthCenter:PasswordPolicy</c>，
     /// Web 层不存在对应开关——安全行为不可由表现层关闭）。</summary>

@@ -136,7 +136,7 @@ public class JwtAuthenticationMiddlewareTests
     private sealed class TestAuthUserHelper : AuthenticationUserHelperBase<TestUserInfo>
     {
         protected override TestUserInfo CreateUserInfoFromAccount(AuthAccountEntity account, System.Collections.Generic.IReadOnlyList<string> roles)
-            => new(account.UId, account.Phone ?? account.UId) { Roles = roles.ToList() };
+            => new(account.UId, account.UId) { Roles = roles.ToList() };
 
         protected override TestUserInfo CreateUserInfoFromToken(TokenValidationResult token, System.Collections.Generic.IReadOnlyList<string> roles)
             => new(token.UserId, token.UserId) { Roles = roles.ToList() };

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 7b96b2c445b0b3b9d463f674f690f207df1924f486f516c3225c0ebfc6d95d49]
 // 模型: AuthLoginAttemptEntity (TKWF.Ext.AuthCenter.AuthLoginAttemptEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,8 @@ partial class AuthLoginAttemptEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>组合条件：IXAuthLoginAttemptUserAuthTime（AND 连接，单值必填/范围可选）</summary>
-        public static Expression<Func<AuthLoginAttemptEntity, bool>> ByIXAuthLoginAttemptUserAuthTime(string userIdentity, string authType, DateTime? beginAttemptTime = null, DateTime? endAttemptTime = null)
+        /// <summary>组合条件：TKWFIXAuthLoginAttemptUserAuthTime（AND 连接，单值必填/范围可选）</summary>
+        public static Expression<Func<AuthLoginAttemptEntity, bool>> ByTKWFIXAuthLoginAttemptUserAuthTime(string userIdentity, string authType, DateTime? beginAttemptTime = null, DateTime? endAttemptTime = null)
         {
             return x => x.UserIdentity == userIdentity &&
             x.AuthType == authType &&
@@ -51,22 +51,22 @@ partial class AuthLoginAttemptEntity
             var val = authType!;
             return x => x.AuthType.Contains(val);
         }
-        /// <summary>多值模糊搜索：IXAuthLoginAttemptUserAuthTime（按 UserIdentity Or-链）</summary>
-        public static Expression<Func<AuthLoginAttemptEntity, bool>> LikeIXAuthLoginAttemptUserAuthTimeKeywords(string[]? keywords = null)
+        /// <summary>多值模糊搜索：TKWFIXAuthLoginAttemptUserAuthTime（按 UserIdentity Or-链）</summary>
+        public static Expression<Func<AuthLoginAttemptEntity, bool>> LikeTKWFIXAuthLoginAttemptUserAuthTimeKeywords(string[]? keywords = null)
         {
             if (keywords == null || keywords.Length == 0) return None;
             return ConditionsHelper.BuildMultiOrLike<AuthLoginAttemptEntity>(x => x.UserIdentity, keywords) ?? None;
         }
-        /// <summary>跨属性模糊搜索：IXAuthLoginAttemptUserAuthTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
-        public static Expression<Func<AuthLoginAttemptEntity, bool>> LikeIXAuthLoginAttemptUserAuthTime(string? keyword = null)
+        /// <summary>跨属性模糊搜索：TKWFIXAuthLoginAttemptUserAuthTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
+        public static Expression<Func<AuthLoginAttemptEntity, bool>> LikeTKWFIXAuthLoginAttemptUserAuthTime(string? keyword = null)
         {
             if (string.IsNullOrEmpty(keyword)) return None;
             var kw = keyword!;
             return x => x.UserIdentity.Contains(kw) ||
                 x.AuthType.Contains(kw);
         }
-        /// <summary>跨属性精确匹配：IXAuthLoginAttemptUserAuthTime（至少一个字符串属性等于 value）</summary>
-        public static Expression<Func<AuthLoginAttemptEntity, bool>> EqualIXAuthLoginAttemptUserAuthTime(string value)
+        /// <summary>跨属性精确匹配：TKWFIXAuthLoginAttemptUserAuthTime（至少一个字符串属性等于 value）</summary>
+        public static Expression<Func<AuthLoginAttemptEntity, bool>> EqualTKWFIXAuthLoginAttemptUserAuthTime(string value)
         {
             return x => x.UserIdentity == value ||
                 x.AuthType == value;
@@ -108,9 +108,9 @@ partial class AuthLoginAttemptEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<AuthLoginAttemptEntity>
     {
 
-        /// <summary>组合条件：IXAuthLoginAttemptUserAuthTime（AND 连接，单值必填/范围可选）</summary>
-        public PredicateBuilder ByIXAuthLoginAttemptUserAuthTime(string userIdentity, string authType, DateTime? beginAttemptTime = null, DateTime? endAttemptTime = null)
-            => (PredicateBuilder)Update(Conditions.ByIXAuthLoginAttemptUserAuthTime(userIdentity, authType, beginAttemptTime, endAttemptTime));
+        /// <summary>组合条件：TKWFIXAuthLoginAttemptUserAuthTime（AND 连接，单值必填/范围可选）</summary>
+        public PredicateBuilder ByTKWFIXAuthLoginAttemptUserAuthTime(string userIdentity, string authType, DateTime? beginAttemptTime = null, DateTime? endAttemptTime = null)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXAuthLoginAttemptUserAuthTime(userIdentity, authType, beginAttemptTime, endAttemptTime));
 
         /// <summary>模糊搜索：UserIdentity（单个关键字）</summary>
         public PredicateBuilder LikeUserIdentity(string? userIdentity = null)
@@ -120,17 +120,17 @@ partial class AuthLoginAttemptEntity
         public PredicateBuilder LikeAuthType(string? authType = null)
             => (PredicateBuilder)Update(Conditions.LikeAuthType(authType));
 
-        /// <summary>多值模糊搜索：IXAuthLoginAttemptUserAuthTime（按关键词 Or-链）</summary>
-        public PredicateBuilder LikeIXAuthLoginAttemptUserAuthTimeKeywords(string[]? keywords = null)
-            => (PredicateBuilder)Update(Conditions.LikeIXAuthLoginAttemptUserAuthTimeKeywords(keywords));
+        /// <summary>多值模糊搜索：TKWFIXAuthLoginAttemptUserAuthTime（按关键词 Or-链）</summary>
+        public PredicateBuilder LikeTKWFIXAuthLoginAttemptUserAuthTimeKeywords(string[]? keywords = null)
+            => (PredicateBuilder)Update(Conditions.LikeTKWFIXAuthLoginAttemptUserAuthTimeKeywords(keywords));
 
-        /// <summary>跨属性模糊搜索：IXAuthLoginAttemptUserAuthTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
-        public PredicateBuilder LikeIXAuthLoginAttemptUserAuthTime(string? keyword = null)
-            => (PredicateBuilder)Update(Conditions.LikeIXAuthLoginAttemptUserAuthTime(keyword));
+        /// <summary>跨属性模糊搜索：TKWFIXAuthLoginAttemptUserAuthTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
+        public PredicateBuilder LikeTKWFIXAuthLoginAttemptUserAuthTime(string? keyword = null)
+            => (PredicateBuilder)Update(Conditions.LikeTKWFIXAuthLoginAttemptUserAuthTime(keyword));
 
-        /// <summary>跨属性精确匹配：IXAuthLoginAttemptUserAuthTime（至少一个字符串属性等于 value）</summary>
-        public PredicateBuilder EqualIXAuthLoginAttemptUserAuthTime(string value)
-            => (PredicateBuilder)Update(Conditions.EqualIXAuthLoginAttemptUserAuthTime(value));
+        /// <summary>跨属性精确匹配：TKWFIXAuthLoginAttemptUserAuthTime（至少一个字符串属性等于 value）</summary>
+        public PredicateBuilder EqualTKWFIXAuthLoginAttemptUserAuthTime(string value)
+            => (PredicateBuilder)Update(Conditions.EqualTKWFIXAuthLoginAttemptUserAuthTime(value));
 
         /// <summary>时间范围：AttemptTime（begin/end 可选）</summary>
         public PredicateBuilder ByAttemptTimeRange(DateTime? begin = null, DateTime? end = null)

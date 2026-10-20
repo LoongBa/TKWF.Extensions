@@ -13,7 +13,8 @@ namespace TKWF.Ext.AuthCenter
     /// <para>⚠️ <b>最近改密时间承载</b>（Oracle1 B2 修正）：<c>LastPasswordChangedAt</c> <b>不入</b> AuthAccount 列——
     /// 强制轮换判定查本表最新行 <see cref="CreateTime"/>（A.2 白名单：轮换默认关 ≠ 每个部署普遍需要，故不入账号列）。</para>
     /// <para>ClientHash 为客户端算的 <c>{iterations}.{b64salt}.{b64hash}</c> 组装格式（SecurePassword 协议——服务端零明文，
-    /// ADR-密码策略与口令协议 决策 1；存历史仅作防重用比对，不用于登录验证——登录读 AuthAccount.PasswordHash 当前值）。</para>
+    /// ADR-密码策略与口令协议 决策 1；存历史仅作防重用比对，不用于登录验证——登录读 Password 因素
+    /// （<see cref="AuthFactorEntity"/>）的 <c>SecretHash</c> 当前值）。</para>
     /// <para>表名 <c>TKWF_PasswordHistory</c>（ADR100——AuthCenter 表前缀批次）。</para>
     /// </summary>
     [Table("TKWF_PasswordHistory")]

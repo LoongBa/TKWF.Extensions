@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 59c12ec03e952af4025059f9af31e9f28eaf0427c2d68c9d3974a1afec3c5e20]
 // 模型: OAuthTicketEntity (TKWF.Ext.AuthCenter.OAuthTicketEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,8 @@ partial class OAuthTicketEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>精确匹配：UXOAuthTicketTicket（Unique 索引，必填参数）</summary>
-        public static Expression<Func<OAuthTicketEntity, bool>> ByUXOAuthTicketTicket(string ticket)
+        /// <summary>精确匹配：TKWFIXOAuthTicketTicket（Unique 索引，必填参数）</summary>
+        public static Expression<Func<OAuthTicketEntity, bool>> ByTKWFIXOAuthTicketTicket(string ticket)
             => x => x.Ticket == ticket;
 
         /// <summary>恒真表达式（无筛选条件时的 Identity 值）</summary>
@@ -63,9 +63,9 @@ partial class OAuthTicketEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<OAuthTicketEntity>
     {
 
-        /// <summary>精确匹配：UXOAuthTicketTicket（Unique 索引，必填参数）</summary>
-        public PredicateBuilder ByUXOAuthTicketTicket(string ticket)
-            => (PredicateBuilder)Update(Conditions.ByUXOAuthTicketTicket(ticket));
+        /// <summary>精确匹配：TKWFIXOAuthTicketTicket（Unique 索引，必填参数）</summary>
+        public PredicateBuilder ByTKWFIXOAuthTicketTicket(string ticket)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXOAuthTicketTicket(ticket));
         // V4.9: 工厂方法（AOT 兼容，替代 Activator.CreateInstance）
         protected override PredicateBuilderBase<OAuthTicketEntity> CreateBranch() => new PredicateBuilder();
 }

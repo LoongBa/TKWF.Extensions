@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: fe7460939f53a2b9020a0094ef39925e3f6de85626c2e5ff9b2b69562c9620b4]
 // 模型: AuthRefreshTokenEntity (TKWF.Ext.AuthCenter.AuthRefreshTokenEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -32,7 +32,7 @@ public partial record AuthRefreshTokenEntityDto : IDomainDto<AuthRefreshTokenEnt
     public required string Jti { get; init; }
     /// <summary> 平台内部 id（JWT sub 引用）。 </summary>
     public required string UserId { get; init; }
-    /// <summary> 签发时认证方式：sms/wechat/password/redeem。 </summary>
+    /// <summary> 签发时认证方式：sms/federated/password/redeem（T5 2026-10-09——federated 替代 wechat）。 </summary>
     public required string AuthType { get; init; }
     /// <summary> Refresh Token SHA256 hex（不存明文）；唯一索引。 </summary>
     public required string TokenHash { get; init; }

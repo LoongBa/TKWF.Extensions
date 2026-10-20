@@ -44,6 +44,11 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
     private readonly IMemoryCache _cache;
     private readonly ILogger<TokenService> _logger;
 
+    // V0.11.0（方案 §6.4/T3 冻结判定收口）：冻结判定经 IFreezeStateProvider（多原因冻结行集合、帧内缓存）；
+    // 替代 AuthAccount.IsFrozen/FreezeEnd 单槽派生属性（V0.9.0 遗留形态）。
+    private IFreezeStateProvider? _freezeState;
+    private IFreezeStateProvider FreezeState => _freezeState ??= User.Use<IFreezeStateProvider>();
+
     // E4 密钥管理抽象（V0.7.0）：开发模式临时 RSA 密钥集缓存（DI 单例 DevKeyCache——非静态，
     // 替代 V0.5.3 DevRsaKeyCache 进程内静态缓存；测试可并行化）；生产分支（PEM 文件）天然一致不走缓存。
     private readonly DevKeyCache<TokenService.RsaKeySet> _devKeys;
@@ -221,7 +226,7 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
         var account = await AccountDataService.GetByUIdAsync(row.UserId, ct);
         if (account == null || !account.IsEnabled) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
-        if (account.IsFrozenEffective) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.9.0 冻结检查（ADR 决策 3——refresh 续期拦截）
+        if (await FreezeState.IsFrozenAsync(account.UId, ct: ct)) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.11.0 冻结判定（多原因冻结行集合——refresh 续期拦截）
 
         // TokenVersion 闭环：刷新时校验（不匹配 → 拒绝——密码/绑定变更后旧 refresh 失效）
         if (row.TokenVersion != account.TokenVersion) throw new AuthenticationException("REFRESH_STALE");
@@ -235,8 +240,10 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
             throw new AuthenticationException("REFRESH_REUSED");
         }
 
+        // V0.11.0（方案 §6.5/T9）：AuthLevel 由 AuthFactor 派生（账号不再落该列）
+        var authLevel = await User.Use<IAuthFactorService>().GetAuthLevelAsync(account.UId, ct);
         var result = await IssueTokenAsync(new TokenIssueRequest(
-            row.UserId, row.AuthType, account.AuthLevel, row.DeviceInfo), ct);
+            row.UserId, row.AuthType, authLevel, row.DeviceInfo), ct);
 
         return new TokenRefreshResult(result.AccessToken, result.RefreshToken, result.ExpiresIn);
     }

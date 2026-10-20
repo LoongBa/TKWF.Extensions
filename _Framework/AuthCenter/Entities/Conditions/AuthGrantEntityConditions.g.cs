@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: ba3606cd4ebb18c28799375ac9bc94664e1621c1da347a0f503cc296a585ee8b]
 // 模型: AuthGrantEntity (TKWF.Ext.AuthCenter.AuthGrantEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,8 @@ partial class AuthGrantEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>精确匹配：UXAuthGrantUserAppSource（Unique 索引，必填参数）</summary>
-        public static Expression<Func<AuthGrantEntity, bool>> ByUXAuthGrantUserAppSource(string userId, string appId, string source)
+        /// <summary>精确匹配：TKWFIXAuthGrantUserAppSource（Unique 索引，必填参数）</summary>
+        public static Expression<Func<AuthGrantEntity, bool>> ByTKWFIXAuthGrantUserAppSource(string userId, string appId, string source)
             => x => x.UserId == userId && x.AppId == appId && x.Source == source;
 
         /// <summary>恒真表达式（无筛选条件时的 Identity 值）</summary>
@@ -63,9 +63,9 @@ partial class AuthGrantEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<AuthGrantEntity>
     {
 
-        /// <summary>精确匹配：UXAuthGrantUserAppSource（Unique 索引，必填参数）</summary>
-        public PredicateBuilder ByUXAuthGrantUserAppSource(string userId, string appId, string source)
-            => (PredicateBuilder)Update(Conditions.ByUXAuthGrantUserAppSource(userId, appId, source));
+        /// <summary>精确匹配：TKWFIXAuthGrantUserAppSource（Unique 索引，必填参数）</summary>
+        public PredicateBuilder ByTKWFIXAuthGrantUserAppSource(string userId, string appId, string source)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXAuthGrantUserAppSource(userId, appId, source));
         // V4.9: 工厂方法（AOT 兼容，替代 Activator.CreateInstance）
         protected override PredicateBuilderBase<AuthGrantEntity> CreateBranch() => new PredicateBuilder();
 }

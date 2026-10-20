@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -10,51 +7,22 @@ using TKWF.Ext.AuthCenter.DTOs;
 
 namespace TKWF.Ext.AuthCenter;
 
-/// <summary>数据服务：跨系统映射实体——平台内部 id ↔ 业务 app + 业务本地 id + UnionId（统一 DMP 双机制）。</summary>
+/// <summary>数据服务：&#x8DE8;&#x7CFB;&#x7EDF;&#x6620;&#x5C04;&#x5B9E;&#x4F53;&#x2014;&#x2014;&#x5E73;&#x53F0;&#x5185;&#x90E8; id &#x2194; &#x4E1A;&#x52A1; app &#x2B; &#x4E1A;&#x52A1;&#x672C;&#x5730; id &#x2B; UnionId&#xFF08;&#x7EDF;&#x4E00; DMP &#x53CC;&#x673A;&#x5236;&#xFF1A;&#x6620;&#x5C04;&#x8868;/&#x5916;&#x952E;&#xFF09;&#x3002;      &lt;para&gt;SG1 &#x5316;&#xFF1A;&#x58F0;&#x660E;&#x5F0F;&#x5B9E;&#x4F53;&#x2014;&#x2014;&lt;c&gt;partial&lt;/c&gt; &#x2B; &lt;c&gt;[DomainGenerateCode]&lt;/c&gt;&#xFF08;&#x4E0D;&#x6307;&#x5B9A; UserType&#x2014;&#x2014;ADR42 D4&#xFF09;&#x3002;&lt;/para&gt;      &lt;para&gt;DMP V4.0 &#x7BA1;&#x7406;&#x5458;&#x8D70;&#x6620;&#x5C04;&#x8868;&#x3001;&#x4F1A;&#x5458;&#x8D70;&#x5916;&#x952E;&#x2014;&#x2014;Ext &#x4EE5;&#x672C;&#x8868;&#x7EDF;&#x4E00;&#x627F;&#x8F7D;&#xFF1B;DMP &#x8FC1;&#x79FB;&#x65F6;&#x4F1A;&#x5458;&#x6620;&#x5C04;&#x8FC1;&#x5165;&#x672C;&#x8868;&#xFF08;&#x9700;&#x6C42; &#xA7;6 &#x7EA6;&#x675F; 1&#xFF09;&#x3002;&lt;/para&gt;</summary>
 // 提示：标准 CRUD 逻辑和构造函数已由 PlatformAccountMapEntityDataService.g.cs 承载。
-// 这里的分部类仅用于编写特定的业务查询方法（IPlatformAccountMapService 委托路径）。
+// 这里的分部类仅用于编写特定的业务查询方法。
 //
-// 【无删除路径（T7 定稿）】：本分部类刻意【不】提供 AdminDeleteAsync——映射行由
-// IPlatformAccountMapService.LinkAsync 的 upsert 语义全权管理（同键存在则更新 UnionId，否则创建），
-// 无业务驱动的删除场景；删除能力仅存于 .g.cs 内部转发访问器（同程序集 Store 可用），不对外暴露。
- public partial class PlatformAccountMapEntityDataService(IDomainUser user, IEntityDAC<PlatformAccountMapEntity> dac)
-        : DomainDataServiceBase<PlatformAccountMapEntity, PlatformAccountMapEntityDto>(user, dac, hasSoftDelete:false)
+// 【V4.9.40 架构说明】
+// - DataService 为 sealed 分部类，.g.cs 承载所有 CRUD 和搜索能力
+// - 自定义业务逻辑 → 在 `Services/` 下创建 Service 类，标注 `[GenerateController]`
+// - 数据过滤干预 → 实现 IGlobalQueryFilter（初始化器基类 DomainHostInitializerBase 已实现，override Apply<T> 即可）
+// - 不要手动创建 Controller 类（V3.7 起由 SG 自动生成）
+ partial class PlatformAccountMapEntityDataService(IDomainUser user, IEntityDAC<PlatformAccountMapEntity> dac)
+        : DomainDataServiceBase<PlatformAccountMapEntity, PlatformAccountMapEntityDto>(user, dac, hasSoftDelete:false) 
 {
-    /// <summary>创建映射（Link upsert 的新建分支；CreateTime/UpdateTime UTC）。</summary>
-    public async Task CreateAsync(PlatformAccountMapEntity entity, CancellationToken ct = default)
-    {
-        entity.CreateTime = DateTime.UtcNow;
-        entity.UpdateTime = DateTime.UtcNow;
-        await EntityCreateAsync(entity, ct);
-    }
-
-    /// <summary>按唯一三键查询（(PlatformAccountId, BusinessAppId, BusinessLocalId)——Link upsert 判定）。</summary>
-    public async Task<PlatformAccountMapEntity?> GetByKeyAsync(
-        string platformAccountId, string businessAppId, string businessLocalId, CancellationToken ct = default)
-        => await EntityGetAsync(m => m.PlatformAccountId == platformAccountId
-            && m.BusinessAppId == businessAppId && m.BusinessLocalId == businessLocalId, ct);
-
-    /// <summary>按平台内部 id + 业务 app 查询（平台侧 → 业务侧）。</summary>
-    public async Task<PlatformAccountMapEntity?> GetByPlatformAsync(string platformAccountId, string businessAppId, CancellationToken ct = default)
-        => await EntityGetAsync(m => m.PlatformAccountId == platformAccountId && m.BusinessAppId == businessAppId, ct);
-
-    /// <summary>按业务 app + 业务本地 id 查询（业务侧 → 平台侧）。</summary>
-    public async Task<PlatformAccountMapEntity?> GetByBusinessAsync(string businessAppId, string businessLocalId, CancellationToken ct = default)
-        => await EntityGetAsync(m => m.BusinessAppId == businessAppId && m.BusinessLocalId == businessLocalId, ct);
-
-    /// <summary>按微信 unionid 查询全部映射（跨应用身份串联，类 UnionId）。</summary>
-    public async Task<List<PlatformAccountMapEntity>> GetByUnionIdAsync(string unionId, CancellationToken ct = default)
-        => await EntitySelectAsync(m => m.UnionId == unionId, 0, 10_000, null, ct);
-
-    /// <summary>按平台内部 id + channel 前缀查询联邦映射行集合（V0.9.0 A.8——微信绑定判定：
-    /// <c>PlatformAccountId==uid &amp;&amp; ChannelId 前缀匹配</c>；wechat_mp/wechat_web 由 ChannelId 精确段判定）。</summary>
-    public async Task<List<PlatformAccountMapEntity>> GetChannelsByPlatformIdAsync(string platformAccountId, CancellationToken ct = default)
-        => await EntitySelectAsync(m => m.PlatformAccountId == platformAccountId && m.ChannelId != null, 0, 10_000, null, ct);
-
-    /// <summary>更新映射（Link upsert 更新分支；先设 UpdateTime）。</summary>
-    public async Task UpdateAsync(PlatformAccountMapEntity entity, CancellationToken ct = default)
-    {
-        entity.UpdateTime = DateTime.UtcNow;
-        await EntityUpdateAsync(entity, ct);
-    }
+     // 场景：业务驱动的删除（自动按 HasSoftDelete 分派：有软删→软删，无软删→物理删）
+     public async Task<bool> AdminDeleteAsync(long id, CancellationToken ct)
+     {
+         // 公共 DeleteAsync 自动分派——不调用 [Obsolete] 的 InternalHardDeleteAsync（ADR15）
+         return await DeleteAsync(id, ct);
+     }
 }

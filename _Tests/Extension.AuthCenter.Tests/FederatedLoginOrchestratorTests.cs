@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -10,7 +12,7 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// V0.10.0（P2-2 共享编排 + P1-1 fallback）：联邦登录共享编排 <see cref="FederatedLoginOrchestrator"/> 测试——
 /// identity → 账号回读（UId 直读优先）/ 映射复用 / 建号 fallback → 签 token1（authType=federated + channel_type）。
 /// <para>分层逻辑单测：StubDomainUser 直构门面（经基类 User 取上下文）+ Fake 依赖注册进桩 ServiceProvider
-/// （Use&lt;接口&gt;() GetRequiredService 解析——ISsoChannelMapService/IAuthAccountService/IAuthAccountQueryService/
+/// （Use&lt;接口&gt;() GetRequiredService 解析——IExternalIdentityService/IAuthAccountService/IAuthAccountQueryService/
 /// ITokenService 全 Fake）。</para>
 /// </summary>
 public class FederatedLoginOrchestratorTests
@@ -18,41 +20,39 @@ public class FederatedLoginOrchestratorTests
     private const string ChannelId = "wechat-event-1";
     private const string ExternalUserId = "openid-event-1";
 
-    private static (FederatedLoginOrchestrator Service, FakeSsoChannelMapService Map,
+    private static (FederatedLoginOrchestrator Service, FakeExternalIdentityService Map,
         FakeAuthAccountService AccountSvc, FakeAuthAccountQueryService AccountQuery, FakeExternalTokenService Token)
-        CreateService(Action<IServiceCollection, StubDomainUser>? register = null)
+        CreateService(Action<IServiceCollection, StubDomainUser>? register = null, AuthCenterOptions? options = null)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var map = new FakeSsoChannelMapService();
+        var map = new FakeExternalIdentityService();
         var accountSvc = new FakeAuthAccountService();
         var accountQuery = new FakeAuthAccountQueryService(accountSvc.CreatedAccounts);
         var token = new FakeExternalTokenService();
 
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
         {
-            services.AddSingleton<ISsoChannelMapService>(map);
+            services.AddSingleton<IExternalIdentityService>(map);
             services.AddSingleton<IAuthAccountService>(accountSvc);
             services.AddSingleton<IAuthAccountQueryService>(accountQuery);
             services.AddSingleton<ITokenService>(token);
+            AuthenticationTestHost.AddAuthRelationSupport(services, user);
             register?.Invoke(services, user);
         });
 
-        var service = new FederatedLoginOrchestrator(stub, NullLogger<FederatedLoginOrchestrator>.Instance);
+        var service = new FederatedLoginOrchestrator(stub, NullLogger<FederatedLoginOrchestrator>.Instance,
+            Options.Create(options ?? new AuthCenterOptions()));
         return (service, map, accountSvc, accountQuery, token);
     }
 
     private static FederatedIdentity Identity(string? uid = null, string? channelType = "wechat_event")
         => new(uid ?? string.Empty, ChannelId, ExternalUserId, channelType, 2);
 
-    private static AuthAccountEntity Account(string uid, int authLevel = (int)AuthLevel.Federated, bool enabled = true, bool frozen = false, DateTime? freezeEnd = null)
+    private static AuthAccountEntity Account(string uid, bool enabled = true)
         => new()
         {
             UId = uid,
-            Phone = null,
-            AuthLevel = authLevel,
             IsEnabled = enabled,
-            IsFrozen = frozen,
-            FreezeEnd = freezeEnd,
             TokenVersion = 0
         };
 
@@ -82,7 +82,7 @@ public class FederatedLoginOrchestratorTests
     {
         var (service, map, accountSvc, accountQuery, token) = CreateService();
         accountQuery.Account = null;                       // UId 直读未命中
-        map.Mapping = new SsoChannelMapDto("u-mapped-1", ChannelId, ExternalUserId);
+        map.Mapping = new ExternalIdentityDto("u-mapped-1", ChannelId, ExternalUserId, DateTime.UtcNow);
         accountQuery.MappedAccount = Account("u-mapped-1");
 
         // ⚠️ Fake 语义：GetByUIdAsync 返回 Account；映射命中后 orchestrator 再 GetByUIdAsync(mapped.UId)——
@@ -103,7 +103,7 @@ public class FederatedLoginOrchestratorTests
     public async Task Login_EmptyUid_MapHit_Reuses()
     {
         var (service, map, accountSvc, accountQuery, token) = CreateService();
-        map.Mapping = new SsoChannelMapDto("u-mapped-2", ChannelId, ExternalUserId);
+        map.Mapping = new ExternalIdentityDto("u-mapped-2", ChannelId, ExternalUserId, DateTime.UtcNow);
         accountQuery.MappedAccount = Account("u-mapped-2");
 
         var result = await service.LoginAsync(Identity(uid: null));
@@ -139,8 +139,10 @@ public class FederatedLoginOrchestratorTests
     [Fact]
     public async Task Login_UidDirectHit_Frozen_ReturnsFrozen()
     {
-        var (service, _, accountSvc, accountQuery, token) = CreateService();
-        accountQuery.Account = Account("u-frozen-1", frozen: true);
+        var freeze = new FakeFreezeStateProvider("u-frozen-1");
+        var (service, _, accountSvc, accountQuery, token) = CreateService(
+            (services, _) => services.AddSingleton<IFreezeStateProvider>(freeze));
+        accountQuery.Account = Account("u-frozen-1");
 
         var result = await service.LoginAsync(Identity(uid: "u-frozen-1"));
 
@@ -184,7 +186,7 @@ public class FederatedLoginOrchestratorTests
     public async Task Login_MappedButAccountMissing_ReturnsNotFound()
     {
         var (service, map, _, _, token) = CreateService();
-        map.Mapping = new SsoChannelMapDto("u-mapped-3", ChannelId, ExternalUserId);
+        map.Mapping = new ExternalIdentityDto("u-mapped-3", ChannelId, ExternalUserId, DateTime.UtcNow);
         // MappedAccount 未设置 → 回读 null
 
         var result = await service.LoginAsync(Identity(uid: null));
@@ -194,11 +196,28 @@ public class FederatedLoginOrchestratorTests
         Assert.Null(token.LastRequest);
     }
 
+    /// <summary>(i) 无映射 + AutoProvision=false → ACCOUNT_NOT_PROVISIONED（不建号/不绑定/不签发）。</summary>
+    [Fact]
+    public async Task Login_NoMapping_AutoProvisionDisabled_ReturnsNotProvisioned()
+    {
+        var options = new AuthCenterOptions();
+        options.FederatedProvisioning.AutoProvision = false;
+        var (service, map, accountSvc, _, token) = CreateService(options: options);
+
+        var result = await service.LoginAsync(Identity(uid: null));
+
+        Assert.False(result.Success);
+        Assert.Equal("ACCOUNT_NOT_PROVISIONED", result.FailReason);
+        Assert.False(accountSvc.CreateCalled);
+        Assert.Equal(0, map.LinkCalls);
+        Assert.Null(token.LastRequest);
+    }
+
     // ── 测试桩（Fake 门面——仅测试项目，不注册进生产） ──
 
-    internal sealed class FakeSsoChannelMapService : ISsoChannelMapService
+    internal sealed class FakeExternalIdentityService : IExternalIdentityService
     {
-        public SsoChannelMapDto? Mapping { get; set; }
+        public ExternalIdentityDto? Mapping { get; set; }
         public int LinkCalls { get; private set; }
         public int GetCalls { get; private set; }
         public string? LastGetChannelId { get; private set; }
@@ -207,7 +226,7 @@ public class FederatedLoginOrchestratorTests
         public string? LastLinkedChannelId { get; private set; }
         public string? LastLinkedExternalUserId { get; private set; }
 
-        public Task<SsoChannelMapDto?> GetByChannelAsync(string channelId, string externalUserId, CancellationToken ct = default)
+        public Task<ExternalIdentityDto?> GetByExternalIdAsync(string channelId, string externalUserId, CancellationToken ct = default)
         {
             GetCalls++;
             LastGetChannelId = channelId;
@@ -215,15 +234,36 @@ public class FederatedLoginOrchestratorTests
             return Task.FromResult(Mapping);
         }
 
-        public Task<SsoChannelMapDto> LinkAsync(string uid, string channelId, string externalUserId, CancellationToken ct = default)
+        public Task<ExternalIdentityDto> LinkAsync(string uid, string channelId, string externalUserId,
+            string? operatorName = null, CancellationToken ct = default)
         {
             LinkCalls++;
             LastLinkedUid = uid;
             LastLinkedChannelId = channelId;
             LastLinkedExternalUserId = externalUserId;
-            Mapping = new SsoChannelMapDto(uid, channelId, externalUserId);
+            Mapping = new ExternalIdentityDto(uid, channelId, externalUserId, DateTime.UtcNow);
             return Task.FromResult(Mapping);
         }
+
+        public Task UnlinkAsync(string uid, string channelId, string externalUserId,
+            string? operatorName = null, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ExternalIdentityDto>> GetByAccountAsync(string uid, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ExternalIdentityDto>>(Array.Empty<ExternalIdentityDto>());
+    }
+
+    internal sealed class FakeFreezeStateProvider(params string[] frozenUIds) : IFreezeStateProvider
+    {
+        private readonly HashSet<string> _frozen = new(frozenUIds, StringComparer.Ordinal);
+
+        public Task<bool> IsFrozenAsync(string uid, int? scope = null, CancellationToken ct = default)
+            => Task.FromResult(_frozen.Contains(uid));
+
+        public Task<IReadOnlyList<AuthAccountFreezeEntity>> GetActiveAsync(string uid, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<AuthAccountFreezeEntity>>(Array.Empty<AuthAccountFreezeEntity>());
+
+        public void Invalidate(string uid) => _frozen.Remove(uid);
     }
 
     internal sealed class FakeAuthAccountService : IAuthAccountService

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 179a2d66be2d54656a4267815f0a457562b4216013f99e99074008c099bc49a6]
 // 模型: AuthLoginAttemptEntity (TKWF.Ext.AuthCenter.AuthLoginAttemptEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -30,7 +30,7 @@ public partial record AuthLoginAttemptEntityDto : IDomainDto<AuthLoginAttemptEnt
     public long Id { get; init; }
     /// <summary> 登录标识（手机号/openid/用户名）。 </summary>
     public required string UserIdentity { get; init; }
-    /// <summary> 认证方式：sms/wechat/password/redeem。 </summary>
+    /// <summary> 认证方式：sms/federated/password/redeem（T5 2026-10-09——federated 替代 wechat）。 </summary>
     public required string AuthType { get; init; }
     /// <summary> 是否成功。 </summary>
     public bool IsSuccess { get; init; }

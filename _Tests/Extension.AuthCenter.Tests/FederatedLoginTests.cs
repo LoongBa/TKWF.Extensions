@@ -47,8 +47,6 @@ public class FederatedLoginTests
         var account = new AuthAccountEntity
         {
             UId = "u-fed-full",
-            Phone = "13800138001",
-            AuthLevel = (int)AuthLevel.Federated,
             IsEnabled = true,
             TokenVersion = 0
         };
@@ -64,7 +62,7 @@ public class FederatedLoginTests
 
         Assert.True(user.IsAuthenticated);
         Assert.Equal("u-fed-full", user.UserInfo!.UserIdString);
-        Assert.Equal("13800138001", user.UserInfo.UserName);              // 工厂：Phone ?? UId
+        Assert.Equal("u-fed-full", user.UserInfo.UserName);              // V0.11.0：账号无 Phone 列 → 工厂回退 UId
         Assert.Equal(EnumLoginFrom.PcWeb, user.UserInfo.LoginFrom);
         // 角色映射生效（合成 TokenValidationResult 路径——mapper 捕获 sub/AuthType/ChannelType 断言）
         Assert.Equal(new[] { "role-a", "role-b" }, user.UserInfo.Roles);
@@ -111,8 +109,6 @@ public class FederatedLoginTests
         var account = new AuthAccountEntity
         {
             UId = "u-fed-disabled",
-            Phone = "13800138002",
-            AuthLevel = (int)AuthLevel.Federated,
             IsEnabled = false,
             TokenVersion = 0
         };
@@ -144,13 +140,11 @@ public class FederatedLoginTests
         var account = new AuthAccountEntity
         {
             UId = "u-fed-frozen",
-            Phone = "13800138003",
-            AuthLevel = (int)AuthLevel.Federated,
             IsEnabled = true,
-            IsFrozen = true,        // 永久冻结（FreezeEnd=null）
             TokenVersion = 0
         };
         await user.Use<AuthAccountEntityDataService>().CreateAsync(account, CancellationToken.None);
+        await user.Use<IFreezeService>().FreezeAsync("u-fed-frozen", "manual", null, null, ct: CancellationToken.None);
 
         var identity = new FederatedIdentity("u-fed-frozen", "ch-wechat", "openid-frozen", "wechat_event", 2);
         var issued = await user.GetService<ISealedTicketService<FederatedIdentity>>()
@@ -182,7 +176,7 @@ public class FederatedLoginTests
             => Task.FromResult(new FederatedTestUserInfo("guest", "Guest"));
 
         protected override FederatedTestUserInfo CreateUserInfoFromAccount(AuthAccountEntity account, IReadOnlyList<string> roles)
-            => new(account.UId, account.Phone ?? account.UId) { Roles = roles.ToList() };
+            => new(account.UId, account.UId) { Roles = roles.ToList() };
 
         protected override FederatedTestUserInfo CreateUserInfoFromToken(TokenValidationResult token, IReadOnlyList<string> roles)
             => new(token.UserId, token.UserId) { Roles = roles.ToList() };

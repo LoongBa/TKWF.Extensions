@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 2656d1d8a8b49edb4e763feb448cc67f85d8a756c3cf948ff621e0ae31a0c7f6]
 // 模型: AuthTokenBlacklistEntity (TKWF.Ext.AuthCenter.AuthTokenBlacklistEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,8 @@ partial class AuthTokenBlacklistEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>精确匹配：UXAuthTokenBlacklistJti（Unique 索引，必填参数）</summary>
-        public static Expression<Func<AuthTokenBlacklistEntity, bool>> ByUXAuthTokenBlacklistJti(string jti)
+        /// <summary>精确匹配：TKWFIXAuthTokenBlacklistJti（Unique 索引，必填参数）</summary>
+        public static Expression<Func<AuthTokenBlacklistEntity, bool>> ByTKWFIXAuthTokenBlacklistJti(string jti)
             => x => x.Jti == jti;
 
         /// <summary>恒真表达式（无筛选条件时的 Identity 值）</summary>
@@ -63,9 +63,9 @@ partial class AuthTokenBlacklistEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<AuthTokenBlacklistEntity>
     {
 
-        /// <summary>精确匹配：UXAuthTokenBlacklistJti（Unique 索引，必填参数）</summary>
-        public PredicateBuilder ByUXAuthTokenBlacklistJti(string jti)
-            => (PredicateBuilder)Update(Conditions.ByUXAuthTokenBlacklistJti(jti));
+        /// <summary>精确匹配：TKWFIXAuthTokenBlacklistJti（Unique 索引，必填参数）</summary>
+        public PredicateBuilder ByTKWFIXAuthTokenBlacklistJti(string jti)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXAuthTokenBlacklistJti(jti));
         // V4.9: 工厂方法（AOT 兼容，替代 Activator.CreateInstance）
         protected override PredicateBuilderBase<AuthTokenBlacklistEntity> CreateBranch() => new PredicateBuilder();
 }

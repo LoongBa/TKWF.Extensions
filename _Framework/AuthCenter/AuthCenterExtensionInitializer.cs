@@ -108,14 +108,11 @@ namespace TKWF.Ext.AuthCenter;
         // V0.2.0：账号查询契约（对外只读查询——装配实例 / 内部复用；委托 DataService 红线合规）
         services.AddConstructibleService<IAuthAccountQueryService, AuthAccountQueryService>();
 
-        // V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：SSO 消费面契约——实现类复用既有（AuthAccountQueryService /
-        // PlatformAccountMapService 补实现 ISsoAccountQueryService / ISsoChannelMapService，返回不可变 DTO）；
-        // 注册 AddConstructibleService（门面标准形态，SSO 经 User.Use<接口>() 帧内解析）
+        // V0.6.0（SSO 立项，ADR-SSO Oracle P1-2）：SSO 账号快照契约——实现类复用既有 AuthAccountQueryService
+        // （补实现 ISsoAccountQueryService，返回不可变 DTO）；注册 AddConstructibleService（门面标准形态）
+        // V0.11.0（方案 §4.10 T4）：ISsoChannelMapService / ISsoAccountLinkService 两旧契约已退役删除——
+        // 联邦身份映射统一经 IExternalIdentityService（见本方法末段注册）。
         services.AddConstructibleService<ISsoAccountQueryService, AuthAccountQueryService>();
-        services.AddConstructibleService<ISsoChannelMapService, PlatformAccountMapService>();
-
-        // V0.6.0（SSO.WeChat 评审 P1-1）：联盟锚点写契约——AuthAccountQueryService 补实现 ISsoAccountLinkService
-        services.AddConstructibleService<ISsoAccountLinkService, AuthAccountQueryService>();
 
         // V0.2.0：账号写契约（DMP 渐进替换影子账号 upsert——ADR-Authentication-账号写契约；委托 DataService 红线合规）
         services.AddConstructibleService<IAuthAccountService, AuthAccountService>();
@@ -157,6 +154,20 @@ namespace TKWF.Ext.AuthCenter;
         // V0.9.0（B.10/B.11）：找回密码多通道门面——SMS（SmsScenes.Reset 现成）/ Email（IEmailSender 可空降级）/
         // 扫码（OAuthTicket 前置，编排归装配层）；UId-keyed 不实现 IAccountPasswordManager 第二实现
         services.AddConstructibleService<IPasswordResetService, PasswordResetService>();
+
+        // V0.11.0（方案 §4.7 D4 / §4.6 D3）：认证关系模型门面——认证因素（凭据绑定/解绑/验证/重置 + 派生值）/
+        // 多原因冻结（AuthAccountFreeze 行集合）。
+        services.AddConstructibleService<IAuthFactorService, AuthFactorService>();
+        services.AddConstructibleService<IFreezeService, FreezeService>();
+
+        // V0.11.0（方案 §4.10 D6）：外部身份统一契约——实现归 PlatformAccountMapService（全仓唯一实现方），
+        // 四方法全部委托 IAuthFactorService（因素行 = 绑定关系唯一权威）；旧两契约 ISsoChannelMapService /
+        // ISsoAccountLinkService 已随 T4 契约合并退役删除（单实现，无过渡双实现）。
+        services.AddConstructibleService<IExternalIdentityService, PlatformAccountMapService>();
+
+        // V0.11.0（方案 §4.6 D3）：冻结状态读取提供者——帧内（请求级）快照缓存；活跃判据单点仍在 IFreezeService，
+        // 写路径（Freeze/ReleaseFreeze/ReleaseAllFreezes）变更后经 Invalidate 主动失效同帧快照。
+        services.AddConstructibleService<IFreezeStateProvider, FreezeStateProvider>();
     }
 
     /// <summary>

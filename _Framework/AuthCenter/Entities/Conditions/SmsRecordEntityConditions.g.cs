@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 6d227d9fe802e9dd6f0d5d2fc5be736112d6fd8922192d6aea25b83c1eb22844]
 // 模型: SmsRecordEntity (TKWF.Ext.AuthCenter.SmsRecordEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,8 @@ partial class SmsRecordEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>组合条件：IXSmsRecordIpTime（AND 连接，单值必填/范围可选）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> ByIXSmsRecordIpTime(string ipAddress, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
+        /// <summary>组合条件：TKWFIXSmsRecordIpTime（AND 连接，单值必填/范围可选）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> ByTKWFIXSmsRecordIpTime(string ipAddress, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
         {
             return x => x.IpAddress == ipAddress &&
             (!beginCreateTime.HasValue || x.CreateTime >= beginCreateTime.Value) &&
@@ -43,14 +43,14 @@ partial class SmsRecordEntity
             var val = ipAddress!;
             return x => x.IpAddress != null && x.IpAddress.Contains(val);
         }
-        /// <summary>多值模糊搜索：IXSmsRecordIpTime（按 IpAddress Or-链）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> LikeIXSmsRecordIpTimeKeywords(string[]? keywords = null)
+        /// <summary>多值模糊搜索：TKWFIXSmsRecordIpTime（按 IpAddress Or-链）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> LikeTKWFIXSmsRecordIpTimeKeywords(string[]? keywords = null)
         {
             if (keywords == null || keywords.Length == 0) return None;
             return ConditionsHelper.BuildMultiOrLike<SmsRecordEntity>(x => x.IpAddress, keywords) ?? None;
         }
-        /// <summary>跨属性精确匹配：IXSmsRecordIpTime（至少一个字符串属性等于 value）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> EqualIXSmsRecordIpTime(string value)
+        /// <summary>跨属性精确匹配：TKWFIXSmsRecordIpTime（至少一个字符串属性等于 value）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> EqualTKWFIXSmsRecordIpTime(string value)
         {
             return x => x.IpAddress == value;
         }
@@ -60,8 +60,8 @@ partial class SmsRecordEntity
             return x => (!begin.HasValue || x.CreateTime >= begin.Value)
                      && (!end.HasValue || x.CreateTime <= end.Value);
         }
-        /// <summary>组合条件：IXSmsRecordPhoneSceneTime（AND 连接，单值必填/范围可选）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> ByIXSmsRecordPhoneSceneTime(string phone, string scene, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
+        /// <summary>组合条件：TKWFIXSmsRecordPhoneSceneTime（AND 连接，单值必填/范围可选）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> ByTKWFIXSmsRecordPhoneSceneTime(string phone, string scene, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
         {
             return x => x.Phone == phone &&
             x.Scene == scene &&
@@ -83,22 +83,22 @@ partial class SmsRecordEntity
             var val = scene!;
             return x => x.Scene.Contains(val);
         }
-        /// <summary>多值模糊搜索：IXSmsRecordPhoneSceneTime（按 Phone Or-链）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> LikeIXSmsRecordPhoneSceneTimeKeywords(string[]? keywords = null)
+        /// <summary>多值模糊搜索：TKWFIXSmsRecordPhoneSceneTime（按 Phone Or-链）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> LikeTKWFIXSmsRecordPhoneSceneTimeKeywords(string[]? keywords = null)
         {
             if (keywords == null || keywords.Length == 0) return None;
             return ConditionsHelper.BuildMultiOrLike<SmsRecordEntity>(x => x.Phone, keywords) ?? None;
         }
-        /// <summary>跨属性模糊搜索：IXSmsRecordPhoneSceneTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> LikeIXSmsRecordPhoneSceneTime(string? keyword = null)
+        /// <summary>跨属性模糊搜索：TKWFIXSmsRecordPhoneSceneTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> LikeTKWFIXSmsRecordPhoneSceneTime(string? keyword = null)
         {
             if (string.IsNullOrEmpty(keyword)) return None;
             var kw = keyword!;
             return x => x.Phone.Contains(kw) ||
                 x.Scene.Contains(kw);
         }
-        /// <summary>跨属性精确匹配：IXSmsRecordPhoneSceneTime（至少一个字符串属性等于 value）</summary>
-        public static Expression<Func<SmsRecordEntity, bool>> EqualIXSmsRecordPhoneSceneTime(string value)
+        /// <summary>跨属性精确匹配：TKWFIXSmsRecordPhoneSceneTime（至少一个字符串属性等于 value）</summary>
+        public static Expression<Func<SmsRecordEntity, bool>> EqualTKWFIXSmsRecordPhoneSceneTime(string value)
         {
             return x => x.Phone == value ||
                 x.Scene == value;
@@ -134,29 +134,29 @@ partial class SmsRecordEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<SmsRecordEntity>
     {
 
-        /// <summary>组合条件：IXSmsRecordIpTime（AND 连接，单值必填/范围可选）</summary>
-        public PredicateBuilder ByIXSmsRecordIpTime(string ipAddress, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
-            => (PredicateBuilder)Update(Conditions.ByIXSmsRecordIpTime(ipAddress, beginCreateTime, endCreateTime));
+        /// <summary>组合条件：TKWFIXSmsRecordIpTime（AND 连接，单值必填/范围可选）</summary>
+        public PredicateBuilder ByTKWFIXSmsRecordIpTime(string ipAddress, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXSmsRecordIpTime(ipAddress, beginCreateTime, endCreateTime));
 
         /// <summary>模糊搜索：IpAddress（单个关键字）</summary>
         public PredicateBuilder LikeIpAddress(string? ipAddress = null)
             => (PredicateBuilder)Update(Conditions.LikeIpAddress(ipAddress));
 
-        /// <summary>多值模糊搜索：IXSmsRecordIpTime（按关键词 Or-链）</summary>
-        public PredicateBuilder LikeIXSmsRecordIpTimeKeywords(string[]? keywords = null)
-            => (PredicateBuilder)Update(Conditions.LikeIXSmsRecordIpTimeKeywords(keywords));
+        /// <summary>多值模糊搜索：TKWFIXSmsRecordIpTime（按关键词 Or-链）</summary>
+        public PredicateBuilder LikeTKWFIXSmsRecordIpTimeKeywords(string[]? keywords = null)
+            => (PredicateBuilder)Update(Conditions.LikeTKWFIXSmsRecordIpTimeKeywords(keywords));
 
-        /// <summary>跨属性精确匹配：IXSmsRecordIpTime（至少一个字符串属性等于 value）</summary>
-        public PredicateBuilder EqualIXSmsRecordIpTime(string value)
-            => (PredicateBuilder)Update(Conditions.EqualIXSmsRecordIpTime(value));
+        /// <summary>跨属性精确匹配：TKWFIXSmsRecordIpTime（至少一个字符串属性等于 value）</summary>
+        public PredicateBuilder EqualTKWFIXSmsRecordIpTime(string value)
+            => (PredicateBuilder)Update(Conditions.EqualTKWFIXSmsRecordIpTime(value));
 
         /// <summary>时间范围：CreateTime（begin/end 可选）</summary>
         public PredicateBuilder ByCreateTimeRange(DateTime? begin = null, DateTime? end = null)
             => (PredicateBuilder)Update(Conditions.ByCreateTimeRange(begin, end));
 
-        /// <summary>组合条件：IXSmsRecordPhoneSceneTime（AND 连接，单值必填/范围可选）</summary>
-        public PredicateBuilder ByIXSmsRecordPhoneSceneTime(string phone, string scene, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
-            => (PredicateBuilder)Update(Conditions.ByIXSmsRecordPhoneSceneTime(phone, scene, beginCreateTime, endCreateTime));
+        /// <summary>组合条件：TKWFIXSmsRecordPhoneSceneTime（AND 连接，单值必填/范围可选）</summary>
+        public PredicateBuilder ByTKWFIXSmsRecordPhoneSceneTime(string phone, string scene, DateTime? beginCreateTime = null, DateTime? endCreateTime = null)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXSmsRecordPhoneSceneTime(phone, scene, beginCreateTime, endCreateTime));
 
         /// <summary>模糊搜索：Phone（单个关键字）</summary>
         public PredicateBuilder LikePhone(string? phone = null)
@@ -166,17 +166,17 @@ partial class SmsRecordEntity
         public PredicateBuilder LikeScene(string? scene = null)
             => (PredicateBuilder)Update(Conditions.LikeScene(scene));
 
-        /// <summary>多值模糊搜索：IXSmsRecordPhoneSceneTime（按关键词 Or-链）</summary>
-        public PredicateBuilder LikeIXSmsRecordPhoneSceneTimeKeywords(string[]? keywords = null)
-            => (PredicateBuilder)Update(Conditions.LikeIXSmsRecordPhoneSceneTimeKeywords(keywords));
+        /// <summary>多值模糊搜索：TKWFIXSmsRecordPhoneSceneTime（按关键词 Or-链）</summary>
+        public PredicateBuilder LikeTKWFIXSmsRecordPhoneSceneTimeKeywords(string[]? keywords = null)
+            => (PredicateBuilder)Update(Conditions.LikeTKWFIXSmsRecordPhoneSceneTimeKeywords(keywords));
 
-        /// <summary>跨属性模糊搜索：IXSmsRecordPhoneSceneTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
-        public PredicateBuilder LikeIXSmsRecordPhoneSceneTime(string? keyword = null)
-            => (PredicateBuilder)Update(Conditions.LikeIXSmsRecordPhoneSceneTime(keyword));
+        /// <summary>跨属性模糊搜索：TKWFIXSmsRecordPhoneSceneTime（单个关键字在多个字符串属性中 OR 匹配）</summary>
+        public PredicateBuilder LikeTKWFIXSmsRecordPhoneSceneTime(string? keyword = null)
+            => (PredicateBuilder)Update(Conditions.LikeTKWFIXSmsRecordPhoneSceneTime(keyword));
 
-        /// <summary>跨属性精确匹配：IXSmsRecordPhoneSceneTime（至少一个字符串属性等于 value）</summary>
-        public PredicateBuilder EqualIXSmsRecordPhoneSceneTime(string value)
-            => (PredicateBuilder)Update(Conditions.EqualIXSmsRecordPhoneSceneTime(value));
+        /// <summary>跨属性精确匹配：TKWFIXSmsRecordPhoneSceneTime（至少一个字符串属性等于 value）</summary>
+        public PredicateBuilder EqualTKWFIXSmsRecordPhoneSceneTime(string value)
+            => (PredicateBuilder)Update(Conditions.EqualTKWFIXSmsRecordPhoneSceneTime(value));
         // V4.9: 工厂方法（AOT 兼容，替代 Activator.CreateInstance）
         protected override PredicateBuilderBase<SmsRecordEntity> CreateBranch() => new PredicateBuilder();
 }

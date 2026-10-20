@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 9e94d88c5d57c26b047f76b91ba49e7cc72d7d1da1937c6b1a6de21a3d74a2d2]
 // 模型: PasswordResetCodeEntity (TKWF.Ext.AuthCenter.PasswordResetCodeEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;

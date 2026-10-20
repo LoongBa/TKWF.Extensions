@@ -1,14 +1,14 @@
 namespace TKWF.Ext.SecurityLog
 {
     /// <summary>
-    /// 安全日志事件字符串常量——收敛 9 事件类型 / 2 结果 / 2 事件分类字面量，
+    /// 安全日志事件字符串常量——收敛 11 事件类型 / 2 结果 / 2 事件分类字面量，
     /// 供采集过滤器（<c>SecurityLogFilterAttribute&lt;TUserInfo&gt;</c>）、聚合查询（<c>GetTopFailedByUserAsync</c>/
-    /// <c>GetTopFailedByIpAsync</c> 的 <c>Result=="Failed"</c> 过滤）、扩展直写（AuthCenter 冻结/解冻——
-    /// ADR-AuthCenter-密码策略与口令协议 决策 7）与实体注释引用，避免魔法字符串散落。
+    /// <c>GetTopFailedByIpAsync</c> 的 <c>Result=="Failed"</c> 过滤）、扩展直写（AuthCenter 冻结/解冻/因素绑定/解绑——
+    /// ADR-AuthCenter-密码策略与口令协议 决策 7、ADR-AuthCenter-认证因素模型与冻结解绑）与实体注释引用，避免魔法字符串散落。
     /// </summary>
     public static class SecurityLogEventTypes
     {
-        // ── 事件类型（9）──
+        // ── 事件类型（11）──
 
         /// <summary>登录（LoginByPasswordAsync / LoginByContextAsync）。</summary>
         public const string Login = "Login";
@@ -37,6 +37,13 @@ namespace TKWF.Ext.SecurityLog
 
         /// <summary>账号解冻（同上——AuthCenter 解冻门面直写）。</summary>
         public const string Unfreeze = "Unfreeze";
+
+        /// <summary>认证因素绑定（V0.11.0——AuthCenter <c>AuthFactorService</c> 直写 <c>ISecurityLogStore</c>；
+        /// 领域事实源为 <c>AuthFactorEvent</c>，本条为安全审计副本）。</summary>
+        public const string Bind = "Bind";
+
+        /// <summary>认证因素解绑（同上——解绑六步之末直写审计副本）。</summary>
+        public const string Unbind = "Unbind";
 
         // ── 结果（2）──
 

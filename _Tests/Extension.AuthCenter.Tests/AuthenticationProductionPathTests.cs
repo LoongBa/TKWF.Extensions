@@ -73,7 +73,7 @@ public class AuthenticationProductionPathTests
         var tokenService = user.Use<ITokenService>();
 
         // 种子账号经 NoAop 直建 DataService（IEntityDAC 从 DI 解析，红线合规）
-        var account = new AuthAccountEntity { UId = "u-1001", Phone = "13800138000", AuthLevel = 1, TokenVersion = 0 };
+        var account = new AuthAccountEntity { UId = "u-1001", TokenVersion = 0 };
         await user.Use<AuthAccountEntityDataService>().CreateAsync(account, CancellationToken.None);
 
         var issued = await tokenService.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), CancellationToken.None);
@@ -101,7 +101,7 @@ public class AuthenticationProductionPathTests
         DomainUser<TestUserInfo>.BindScope(sp);
         var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
 
-        var account = new AuthAccountEntity { UId = "u-1001", Phone = "13800138000", AuthLevel = 1, TokenVersion = 0 };
+        var account = new AuthAccountEntity { UId = "u-1001", TokenVersion = 0 };
         await user.Use<AuthAccountEntityDataService>().CreateAsync(account, CancellationToken.None);
 
         var ticketService = user.Use<IOAuthTicketService>();
@@ -176,7 +176,7 @@ public class AuthenticationProductionPathTests
         // 建账号落库
         var account = await user.Use<IAuthAccountQueryService>().GetByUIdAsync(result.UserId!, CancellationToken.None);
         Assert.NotNull(account);
-        Assert.Equal("13800138000", account!.Phone);
+        Assert.Equal("13800138000", await user.Use<IAuthFactorService>().GetPrimaryPhoneAsync(result.UserId!, CancellationToken.None));
     }
 
     /// <summary>SMS 登录门面：验证码错误 → ProviderAuthenticateResult.Success=false（FailReason 透传）。</summary>

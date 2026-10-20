@@ -86,7 +86,7 @@ internal sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginSe
             return new LoginResult(false, null, null, result.FailReason);
         }
 
-        // 取持久化账号字段（AuthLevel——签发使用；缺失视为编排异常）
+        // 取持久化账号（签发需账号锚点；AuthLevel 由 AuthFactor 派生——V0.11.0 T9）
         var account = await AccountQueryService.GetByUIdAsync(result.UserId, ct);
         if (account is null)
         {
@@ -94,8 +94,9 @@ internal sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginSe
             return new LoginResult(false, null, null, "ACCOUNT_NOT_FOUND");
         }
 
+        var authLevel = await User.Use<IAuthFactorService>().GetAuthLevelAsync(account.UId, ct);
         var token = await TokenService.IssueTokenAsync(new TokenIssueRequest(
-            account.UId, AuthTypes.Password, account.AuthLevel), ct);
+            account.UId, AuthTypes.Password, authLevel), ct);
         _logger.LogDebug("密码登录成功——UserId={UserId}", account.UId);
         return new LoginResult(true, account.UId, token, null);
     }

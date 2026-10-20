@@ -12,7 +12,7 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// AuthCenterExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册形态（V4.10.53 领域自治根治三态）。
 /// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态：</para>
 /// <list type="bullet">
-/// <item>20 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
+/// <item>22 门面（接口 : IDomainService）→ <c>AddConstructibleService</c>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外（无 CurrentAopUser）直接 DI 解析接口必抛领域架构守卫；</item>
 /// <item><see cref="IAuthenticationProvider"/> 双实现 → V4.10.55（ADR92）<c>TryAddEnumerableConstructible</c>
 ///     （集合版守卫工厂——工厂委托形态 + 帧内 CurrentAopUser 供给；帧外枚举抛守卫）。</item>
@@ -26,10 +26,12 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// </summary>
 public class AuthCenterInitializerTests
 {
-    /// <summary>20 个 AddConstructibleService 门面（接口 → 实现）——覆盖 Initializer ConfigureServices 全部门面注册。
+    /// <summary>22 个 AddConstructibleService 门面（接口 → 实现）——覆盖 Initializer ConfigureServices 全部门面注册。
     /// V0.10.0 补齐：+IFederatedLoginOrchestrator / +IExternalTicketLoginService（P1-1 审核闭环）；
-    /// 顺带补全既有缺漏：+ISsoAccountQueryService / +ISsoChannelMapService / +ISsoAccountLinkService /
-    /// +IAuthGrantQueryService / +IAuthGrantCommandService / +IPasswordLoginService / +IPasswordResetService。</summary>
+    /// 顺带补全既有缺漏：+ISsoAccountQueryService / +IAuthGrantQueryService / +IAuthGrantCommandService /
+    /// +IPasswordLoginService / +IPasswordResetService。
+    /// V0.11.0（T4 契约合并）：−ISsoChannelMapService / −ISsoAccountLinkService（并入 IExternalIdentityService）；
+    /// 新增 +IExternalIdentityService / +IAuthFactorService / +IFreezeService / +IFreezeStateProvider。</summary>
     private static readonly (System.Type Interface, System.Type Impl)[] Facades =
     [
         (typeof(ITokenService), typeof(TokenService)),
@@ -43,10 +45,8 @@ public class AuthCenterInitializerTests
         (typeof(IAuthAccountService), typeof(AuthAccountService)),
         (typeof(ISmsLoginService), typeof(SmsLoginService)),
         (typeof(IExternalIdpLoginService), typeof(ExternalIdpLoginService)),
-        // V0.6.0 SSO 消费面契约（实现类复用 AuthAccountQueryService / PlatformAccountMapService）
+        // V0.6.0 SSO 消费面契约（T4：ISsoChannelMapService/ISsoAccountLinkService 已并入 IExternalIdentityService）
         (typeof(ISsoAccountQueryService), typeof(AuthAccountQueryService)),
-        (typeof(ISsoChannelMapService), typeof(PlatformAccountMapService)),
-        (typeof(ISsoAccountLinkService), typeof(AuthAccountQueryService)),
         // V0.8.0 应用授权双门面
         (typeof(IAuthGrantQueryService), typeof(AuthGrantQueryService)),
         (typeof(IAuthGrantCommandService), typeof(AuthGrantCommandService)),
@@ -55,7 +55,12 @@ public class AuthCenterInitializerTests
         (typeof(IPasswordResetService), typeof(PasswordResetService)),
         // V0.10.0 外部 IdP 票据 SPA 兑现（P2-2 共享编排 + 票据门面）
         (typeof(IFederatedLoginOrchestrator), typeof(FederatedLoginOrchestrator)),
-        (typeof(IExternalTicketLoginService), typeof(ExternalTicketLoginService))
+        (typeof(IExternalTicketLoginService), typeof(ExternalTicketLoginService)),
+        // V0.11.0（Iteration 1）：因素/冻结门面 + 外部身份统一契约（T4 合并落点，实现类复用 PlatformAccountMapService）
+        (typeof(IAuthFactorService), typeof(AuthFactorService)),
+        (typeof(IFreezeService), typeof(FreezeService)),
+        (typeof(IFreezeStateProvider), typeof(FreezeStateProvider)),
+        (typeof(IExternalIdentityService), typeof(PlatformAccountMapService))
     ];
 
     [Fact]
@@ -70,7 +75,7 @@ public class AuthCenterInitializerTests
         Assert.Equal("AuthCenter", attr!.Name);
     }
 
-    /// <summary>V4.10.53：10 门面接口注册为可构造守卫工厂（ImplementationFactory，非实现映射）+ Scoped。</summary>
+    /// <summary>V4.10.53：全部门面接口注册为可构造守卫工厂（ImplementationFactory，非实现映射）+ Scoped。</summary>
     [Fact]
     public void ConfigureServices_Registers_FacadeInterfaces_GuardFactory()
     {
@@ -87,7 +92,7 @@ public class AuthCenterInitializerTests
         }
     }
 
-    /// <summary>V4.10.53：12 门面实现类注册为 throw-factory——禁止直接 DI 解析（必须经 User.Use&lt;接口&gt;()）。</summary>
+    /// <summary>V4.10.53：全部门面实现类注册为 throw-factory——禁止直接 DI 解析（必须经 User.Use&lt;接口&gt;()）。</summary>
     [Fact]
     public void ConfigureServices_Registers_Implementations_ThrowFactory()
     {

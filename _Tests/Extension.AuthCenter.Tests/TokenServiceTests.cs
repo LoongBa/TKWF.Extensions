@@ -24,7 +24,7 @@ public class TokenServiceTests
     private static (TokenService Service, StubDomainUser Stub) CreateService(AuthCenterOptions options)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        var stub = AuthenticationTestHost.CreateStub(fsql); // 全部 8 实体 DAC——Use<DataService>() NoAop 直建源
+        var stub = AuthenticationTestHost.CreateStub(fsql, register: AuthenticationTestHost.AddAuthRelationSupport); // 全部 15 实体 DAC + 因素/冻结读取链（V0.11.0：刷新区重算认证强度 + 冻结判定）
         var service = new TokenService(
             stub, new DevKeyCache<TokenService.RsaKeySet>(), // E4 密钥管理抽象（V0.7.0）：dev 分支密钥缓存（单测内单实例自洽）
             Options.Create(options),
@@ -32,12 +32,10 @@ public class TokenServiceTests
         return (service, stub);
     }
 
-    private static AuthAccountEntity CreateAccount(string? phone = "13800138000", int authLevel = 1)
+    private static AuthAccountEntity CreateAccount()
         => new()
         {
             UId = AccountIdGenerator.NewUId(),
-            Phone = phone,
-            AuthLevel = authLevel,
             TokenVersion = 0
         };
 

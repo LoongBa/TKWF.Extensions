@@ -28,11 +28,9 @@ public class AuthAccountServiceTests
         var stub = AuthenticationTestHost.CreateStub(fsql);
         var service = new AuthAccountService(
             stub,
-            Options.Create(new SecurityLoggingOptions()),           // SecurityLog Options（冻结事件门控）
             Options.Create(new DomainOptions()),                    // DomainOptions.Auth.Pbkdf2Iterations=600000（SecurePassword 单一来源）
             Options.Create(AuthenticationTestHost.CreateOptions()), // AuthCenterOptions（PasswordPolicy/LoginProtection）
-            new FakeCredentialProtector(),       // ICredentialProtector（AES-256-GCM）
-            NullLogger<AuthAccountService>.Instance);
+            new FakeCredentialProtector());       // ICredentialProtector（AES-256-GCM）
         return (service, stub.Use<AuthAccountEntityDataService>());
     }
 

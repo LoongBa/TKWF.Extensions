@@ -26,7 +26,7 @@ namespace TKWF.Ext.Federation;
 /// <c>[TKWFExtensionDependency(ISsoAccountQueryService)]</c> 保留（SsoProfileService 仍消费 AuthCenter.Abstractions 契约）。</para>
 /// </summary>
 [TKWFExtension("Federation")]
-    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.AuthCenter.ISsoAccountQueryService), MinVersion = "0.1.0")]
+    [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.AuthCenter.ISsoAccountQueryService), MinVersion = "0.2.0-preview.0")]
     public class FederationExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {

@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
 /// T5（2026-10-09 三层边界）：外部 IdP 桥接消费门面 <see cref="ExternalIdpLoginService"/> 测试——
-/// 桥接认证（<see cref="IExternalIdpAuthenticator"/> 契约）→ 映射（<see cref="ISsoChannelMapService"/>）→
+/// 桥接认证（<see cref="IExternalIdpAuthenticator"/> 契约）→ 映射（<see cref="IExternalIdentityService"/>）→
 /// 建号/复用（<see cref="IAuthAccountService"/>/<see cref="IAuthAccountQueryService"/>）→ 签 token1
 /// （authType=<c>federated</c> + <c>channel_type</c>）。
 /// <para>分层逻辑单测：StubDomainUser 直构门面（经基类 User 取上下文）+ Fake 依赖注册进桩 ServiceProvider
@@ -20,13 +21,13 @@ public class ExternalIdpLoginServiceTests
     private const string ChannelType = "wechat_oauth";
     private const string ChannelId = "fake-mp";
 
-    private static (ExternalIdpLoginService Service, FakeExternalIdpAuthenticator Auth, FakeSsoChannelMapService Map,
+    private static (ExternalIdpLoginService Service, FakeExternalIdpAuthenticator Auth, FakeExternalIdentityService Map,
         FakeAuthAccountService AccountSvc, FakeAuthAccountQueryService AccountQuery, FakeExternalTokenService Token)
         CreateService(Action<IServiceCollection, StubDomainUser>? register = null)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var auth = new FakeExternalIdpAuthenticator();
-        var map = new FakeSsoChannelMapService();
+        var map = new FakeExternalIdentityService();
         var accountSvc = new FakeAuthAccountService();
         var accountQuery = new FakeAuthAccountQueryService(accountSvc.CreatedAccounts);   // P2-3 审核收敛：共享建号台账
         var token = new FakeExternalTokenService();
@@ -34,14 +35,15 @@ public class ExternalIdpLoginServiceTests
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
         {
             services.AddSingleton<IExternalIdpAuthenticator>(auth);
-            services.AddSingleton<ISsoChannelMapService>(map);
+            services.AddSingleton<IExternalIdentityService>(map);
             services.AddSingleton<IAuthAccountService>(accountSvc);
             services.AddSingleton<IAuthAccountQueryService>(accountQuery);
             services.AddSingleton<ITokenService>(token);
             // V0.10.0（P2-2 共享编排）：ExternalIdpLoginService 仅做桥接认证 + 构建 identity → 委托 orchestrator；
             // 编排行为（建号/映射/复用/签发断言）由真实 FederatedLoginOrchestrator 承接（内部 Use<T>() 懒加载上方 Fake）
             services.AddSingleton<IFederatedLoginOrchestrator>(
-                new FederatedLoginOrchestrator(user, NullLogger<FederatedLoginOrchestrator>.Instance));
+                new FederatedLoginOrchestrator(user, NullLogger<FederatedLoginOrchestrator>.Instance, Options.Create(new AuthCenterOptions())));
+            AuthenticationTestHost.AddAuthRelationSupport(services, user);
             register?.Invoke(services, user);
         });
 
@@ -63,8 +65,6 @@ public class ExternalIdpLoginServiceTests
         accountQuery.Account = new AuthAccountEntity
         {
             UId = "u-external-1",
-            Phone = null,
-            AuthLevel = (int)AuthLevel.Federated,
             IsEnabled = true,
             TokenVersion = 0
         };
@@ -121,7 +121,7 @@ public class ExternalIdpLoginServiceTests
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, _) =>
         {
             var accountSvc = new FakeAuthAccountService();
-            services.AddSingleton<ISsoChannelMapService>(new FakeSsoChannelMapService());
+            services.AddSingleton<IExternalIdentityService>(new FakeExternalIdentityService());
             services.AddSingleton<IAuthAccountService>(accountSvc);
             services.AddSingleton<IAuthAccountQueryService>(new FakeAuthAccountQueryService(accountSvc.CreatedAccounts));
             services.AddSingleton<ITokenService>(new FakeExternalTokenService());
@@ -137,11 +137,10 @@ public class ExternalIdpLoginServiceTests
     public async Task Login_MappedAccount_Reuses_NoCreate()
     {
         var (service, _, map, accountSvc, accountQuery, token) = CreateService();
-        map.Mapping = new SsoChannelMapDto("u-mapped-1", ChannelId, "openid123");
+        map.Mapping = new ExternalIdentityDto("u-mapped-1", ChannelId, "openid123", DateTime.UtcNow);
         accountQuery.Account = new AuthAccountEntity
         {
             UId = "u-mapped-1",
-            AuthLevel = (int)AuthLevel.Federated,
             IsEnabled = true,
             TokenVersion = 0
         };
@@ -164,7 +163,6 @@ public class ExternalIdpLoginServiceTests
         accountQuery.Account = new AuthAccountEntity
         {
             UId = "u-created-1",
-            AuthLevel = (int)AuthLevel.Federated,
             IsEnabled = true,
             TokenVersion = 0
         };
@@ -184,7 +182,7 @@ public class ExternalIdpLoginServiceTests
     public async Task Login_ParametersPassThroughToBridge()
     {
         var (service, auth, _, accountSvc, accountQuery, _) = CreateService();
-        accountQuery.Account = new AuthAccountEntity { UId = "u-p-1", AuthLevel = 2, IsEnabled = true };
+        accountQuery.Account = new AuthAccountEntity { UId = "u-p-1", IsEnabled = true };
 
         var parameters = new Dictionary<string, string?>
         {
@@ -237,26 +235,34 @@ public class ExternalIdpLoginServiceTests
     }
 
     /// <summary>Fake SSO 渠道映射——可配置 Mapping（命中复用）/ Link 捕获。</summary>
-    internal sealed class FakeSsoChannelMapService : ISsoChannelMapService
+    internal sealed class FakeExternalIdentityService : IExternalIdentityService
     {
-        public SsoChannelMapDto? Mapping { get; set; }
+        public ExternalIdentityDto? Mapping { get; set; }
         public int LinkCalls { get; private set; }
         public string? LastLinkedUid { get; private set; }
         public string? LastLinkedChannelId { get; private set; }
         public string? LastLinkedExternalUserId { get; private set; }
 
-        public Task<SsoChannelMapDto?> GetByChannelAsync(string channelId, string externalUserId, CancellationToken ct = default)
+        public Task<ExternalIdentityDto?> GetByExternalIdAsync(string channelId, string externalUserId, CancellationToken ct = default)
             => Task.FromResult(Mapping);
 
-        public Task<SsoChannelMapDto> LinkAsync(string uid, string channelId, string externalUserId, CancellationToken ct = default)
+        public Task<ExternalIdentityDto> LinkAsync(string uid, string channelId, string externalUserId,
+            string? operatorName = null, CancellationToken ct = default)
         {
             LinkCalls++;
             LastLinkedUid = uid;
             LastLinkedChannelId = channelId;
             LastLinkedExternalUserId = externalUserId;
-            Mapping = new SsoChannelMapDto(uid, channelId, externalUserId);
+            Mapping = new ExternalIdentityDto(uid, channelId, externalUserId, DateTime.UtcNow);
             return Task.FromResult(Mapping);
         }
+
+        public Task UnlinkAsync(string uid, string channelId, string externalUserId,
+            string? operatorName = null, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ExternalIdentityDto>> GetByAccountAsync(string uid, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ExternalIdentityDto>>(Array.Empty<ExternalIdentityDto>());
     }
 
     /// <summary>Fake 账号写门面——CreateAsync 捕获（建号断言）+ 建号台账（P2-3 审核收敛：GetByUIdAsync 回读联动

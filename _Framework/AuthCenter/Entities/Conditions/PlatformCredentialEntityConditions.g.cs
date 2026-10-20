@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: a52509e79c06d7786e23923d2de41ea0f3991a3d1aaba891606a2f98a5dbda3c]
 // 模型: PlatformCredentialEntity (TKWF.Ext.AuthCenter.PlatformCredentialEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,8 @@ partial class PlatformCredentialEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>精确匹配：UXPlatformCredential（Unique 索引，必填参数）</summary>
-        public static Expression<Func<PlatformCredentialEntity, bool>> ByUXPlatformCredential(string platform, string appType, string appId)
+        /// <summary>精确匹配：TKWFIXPlatformCredential（Unique 索引，必填参数）</summary>
+        public static Expression<Func<PlatformCredentialEntity, bool>> ByTKWFIXPlatformCredential(string platform, string appType, string appId)
             => x => x.Platform == platform && x.AppType == appType && x.AppId == appId;
 
         /// <summary>恒真表达式（无筛选条件时的 Identity 值）</summary>
@@ -63,9 +63,9 @@ partial class PlatformCredentialEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<PlatformCredentialEntity>
     {
 
-        /// <summary>精确匹配：UXPlatformCredential（Unique 索引，必填参数）</summary>
-        public PredicateBuilder ByUXPlatformCredential(string platform, string appType, string appId)
-            => (PredicateBuilder)Update(Conditions.ByUXPlatformCredential(platform, appType, appId));
+        /// <summary>精确匹配：TKWFIXPlatformCredential（Unique 索引，必填参数）</summary>
+        public PredicateBuilder ByTKWFIXPlatformCredential(string platform, string appType, string appId)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXPlatformCredential(platform, appType, appId));
         // V4.9: 工厂方法（AOT 兼容，替代 Activator.CreateInstance）
         protected override PredicateBuilderBase<PlatformCredentialEntity> CreateBranch() => new PredicateBuilder();
 }

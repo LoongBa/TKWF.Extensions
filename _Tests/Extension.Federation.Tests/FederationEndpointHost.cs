@@ -48,7 +48,7 @@ internal static class FederationEndpointHost
     public static FakeToken2Service Token2 { get; } = new();
     public static FakeSsoSubAppBridge Bridge { get; } = new();
     public static FakeChannelRegistry Registry { get; } = new();
-    public static FakeSsoChannelMapService ChannelMap { get; } = new();
+    public static FakeExternalIdentityService ChannelMap { get; } = new();
     public static FakeEventReplyHandler EventHandler1 { get; } = new("handler-1");
     public static FakeEventReplyHandler EventHandler2 { get; } = new("handler-2");
     public static FakeEventOrchestrator Orchestrator { get; } = new();
@@ -101,9 +101,10 @@ internal static class FederationEndpointHost
             // IToken2Service：契约在 TrustCenter.Abstractions（经 Federation 传递），测试项目未引 TrustCenter
             // 主包 → 无既有注册，AddScoped 直接注册 Fake（GetGuest.Use<T>() → GetRequiredService 解析）
             svc.AddScoped<IToken2Service>(_ => Token2);
-            // ISsoChannelMapService：契约在 AuthCenter.Abstractions（uid 只读查询——事件编排 F7 消费），
-            // 测试项目未引 AuthCenter 主包 → AddScoped 直接注册 Fake（GetByChannelAsync 断言 / LinkAsync 不调）
-            svc.AddScoped<ISsoChannelMapService>(_ => ChannelMap);
+            // IExternalIdentityService：契约在 AuthCenter.Abstractions（uid 只读查询——事件编排 F7 消费；V0.11.0 T4 由
+            // ISsoChannelMapService 收口），测试项目未引 AuthCenter 主包 → AddScoped 直接注册 Fake
+            // （GetByExternalIdAsync 断言 / LinkAsync 不调）
+            svc.AddScoped<IExternalIdentityService>(_ => ChannelMap);
             // IEventReplyHandler 集合（事件编排 first-non-null-wins F8——真实 EventOrchestrator ctor 注入；
             // 测试注册 2 个 Fake handler 供 first-non-null-wins / uid 富化断言）
             svc.AddScoped<IEventReplyHandler>(_ => EventHandler1);
@@ -363,31 +364,39 @@ internal static class FederationEndpointHost
         }
     }
 
-    /// <summary>Fake SSO 渠道身份映射（AuthCenter.Abstractions 契约——事件编排 uid 只读查询 F7）：
-    /// GetByChannelAsync 记录调用 + 返回可配置 Map；LinkAsync 计数（uid 只读断言——LinkAsync 不被调）。</summary>
-    internal sealed class FakeSsoChannelMapService : ISsoChannelMapService
+    /// <summary>Fake 外部身份统一契约（AuthCenter.Abstractions——事件编排 uid 只读查询 F7）：
+    /// GetByExternalIdAsync 记录调用 + 返回可配置 Map；LinkAsync 计数（uid 只读断言——LinkAsync 不被调）。</summary>
+    internal sealed class FakeExternalIdentityService : IExternalIdentityService
     {
-        public SsoChannelMapDto? Map { get; set; }
-        public int GetByChannelInvoked { get; private set; }
+        public ExternalIdentityDto? Map { get; set; }
+        public int GetInvoked { get; private set; }
         public int LinkInvoked { get; private set; }
         public string? LastChannelId { get; private set; }
         public string? LastExternalUserId { get; private set; }
 
-        public void Reset() { Map = null; GetByChannelInvoked = 0; LinkInvoked = 0; LastChannelId = null; LastExternalUserId = null; }
+        public void Reset() { Map = null; GetInvoked = 0; LinkInvoked = 0; LastChannelId = null; LastExternalUserId = null; }
 
-        public Task<SsoChannelMapDto?> GetByChannelAsync(string channelId, string externalUserId, CancellationToken ct = default)
+        public Task<ExternalIdentityDto?> GetByExternalIdAsync(string channelId, string externalUserId, CancellationToken ct = default)
         {
-            GetByChannelInvoked++;
+            GetInvoked++;
             LastChannelId = channelId;
             LastExternalUserId = externalUserId;
             return Task.FromResult(Map);
         }
 
-        public Task<SsoChannelMapDto> LinkAsync(string uid, string channelId, string externalUserId, CancellationToken ct = default)
+        public Task<ExternalIdentityDto> LinkAsync(string uid, string channelId, string externalUserId,
+            string? operatorName = null, CancellationToken ct = default)
         {
             LinkInvoked++;
-            return Task.FromResult(Map ?? new SsoChannelMapDto(uid, channelId, externalUserId));
+            return Task.FromResult(Map ?? new ExternalIdentityDto(uid, channelId, externalUserId, DateTime.UtcNow));
         }
+
+        public Task UnlinkAsync(string uid, string channelId, string externalUserId,
+            string? operatorName = null, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ExternalIdentityDto>> GetByAccountAsync(string uid, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ExternalIdentityDto>>(Array.Empty<ExternalIdentityDto>());
     }
 
     /// <summary>Fake 事件回复处理器（IEventReplyHandler——事件编排 first-non-null-wins F8）：
@@ -417,7 +426,7 @@ internal static class FederationEndpointHost
     }
 
     /// <summary>Fake 事件编排门面（IEventOrchestrator——复刻真实 EventOrchestrator 行为，无守卫依赖）：
-    /// 调通道 HandleEventAsync（平台化回复，默认 null）→ uid 只读查询富化（GetByChannelAsync 断言/LinkAsync 不调）→
+    /// 调通道 HandleEventAsync（平台化回复，默认 null）→ uid 只读查询富化（GetByExternalIdAsync 断言/LinkAsync 不调）→
     /// handler first-non-null-wins（按 ChannelType 匹配）。</summary>
     internal sealed class FakeEventOrchestrator : IEventOrchestrator
     {
@@ -436,12 +445,12 @@ internal static class FederationEndpointHost
             if (platformReply is not null)
                 return Task.FromResult(platformReply);
 
-            // ② uid 只读查询富化（评审 F7——GetByChannelAsync 只读不建号，LinkAsync 不被调）
+            // ② uid 只读查询富化（评审 F7——GetByExternalIdAsync 只读不建号，LinkAsync 不被调）
             if (context.Parameters is Dictionary<string, string?> dict
                 && context.Parameters.TryGetValue("external_user_id", out var externalUserId)
                 && !string.IsNullOrEmpty(externalUserId))
             {
-                var map = ChannelMap.GetByChannelAsync(channelId, externalUserId, ct).GetAwaiter().GetResult();
+                var map = ChannelMap.GetByExternalIdAsync(channelId, externalUserId, ct).GetAwaiter().GetResult();
                 if (map is not null)
                     dict["uid"] = map.UId;
             }

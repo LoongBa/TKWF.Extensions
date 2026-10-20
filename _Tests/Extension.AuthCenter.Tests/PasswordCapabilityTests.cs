@@ -49,22 +49,42 @@ public class PasswordCapabilityTests
         return new FakeCredentialProtector().Protect(System.Text.Encoding.UTF8.GetBytes(assembled));
     }
 
-    /// <summary>直构 AuthAccountService（SecurePassword 协议依赖全套：SecurityLog/Domain/AuthCenter Options + ICredentialProtector + ILogger）。</summary>
+    /// <summary>直构 AuthAccountService（SecurePassword 协议依赖：Domain/AuthCenter Options + ICredentialProtector）。</summary>
     private static AuthAccountService CreateAuthAccountService(StubDomainUser stub)
         => new(stub,
-            Options.Create(new SecurityLoggingOptions()),
             Options.Create(new DomainOptions()),                          // DomainOptions.Auth.Pbkdf2Iterations=600000
             Options.Create(AuthenticationTestHost.CreateOptions()),       // AuthCenterOptions（PasswordPolicy/LoginProtection）
-            CreateProtector(),
-            NullLogger<AuthAccountService>.Instance);
+            CreateProtector());
+
+    /// <summary>种子账号 + Sms 因子（V0.11.0 T7：手机号迁 AuthFactor，账号不再落 Phone 列）。</summary>
+    private static async Task<AuthAccountEntity> SeedAccountAsync(StubDomainUser stub, string uid, string phone)
+    {
+        var account = new AuthAccountEntity { UId = uid };
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+        await stub.Use<IAuthFactorService>().BindAsync(uid, AuthFactorTypes.Sms, phone);
+        return account;
+    }
+
+    /// <summary>直种受保护密码 blob（V0.11.0 T5：SecretHash 落 Password 因子行——不经 SetPasswordAsync，TokenVersion 不动）。</summary>
+    private static Task SeedPasswordFactorAsync(StubDomainUser stub, string uid, string password, string storeSalt)
+        => stub.Use<AuthFactorEntityDataService>().EntityCreateAsync(new AuthFactorEntity
+        {
+            UId = uid,
+            FactorType = (int)AuthFactorTypes.Password,
+            Identifier = uid,
+            SecretHash = AssembleProtectedClientHash(ClientHash(password, Convert.FromHexString(storeSalt)), storeSalt),
+        });
+
+    private static Task<AuthFactorEntity?> GetPasswordFactorAsync(StubDomainUser stub, string uid)
+        => stub.Use<AuthFactorEntityDataService>().EntityGetAsync(
+            f => f.UId == uid && f.FactorType == (int)AuthFactorTypes.Password);
 
     /// <summary>种子账号（经生产路径 SetPasswordAsync 落 SecurePassword blob——clientHash 只存不算）。</summary>
     /// <returns>账号 + 存储盐（测试须用同盐算 clientHash 提交验证——SecurePassword 协议等价 GetSaltAsync 下发）。</returns>
     private static async Task<(AuthAccountEntity Account, string StoreSalt)> SeedAccountWithPasswordAsync(
         StubDomainUser stub, string uid, string password, string phone)
     {
-        var account = new AuthAccountEntity { UId = uid, Phone = phone, AuthLevel = (int)AuthLevel.Phone };
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+        var account = await SeedAccountAsync(stub, uid, phone);
 
         var write = CreateAuthAccountService(stub);
         var storeSalt = NewSalt();
@@ -79,12 +99,7 @@ public class PasswordCapabilityTests
     {
         var stub = CreateStub(out _);
         var storeSalt = NewSalt();
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
-        {
-            UId = "u-pp-1",
-            Phone = "13800000001",
-            AuthLevel = (int)AuthLevel.Phone,
-        });
+        await SeedAccountAsync(stub, "u-pp-1", "13800000001");
         var write = CreateAuthAccountService(stub);
         // 同盐：先算 clientHash 存库（SecurePassword 只存不算）——测试内先生成盐，用同盐算 clientHash 存 + 验证
         await write.SetPasswordAsync("u-pp-1", ClientHash("Secret123!", Convert.FromHexString(storeSalt)), storeSalt);
@@ -117,8 +132,7 @@ public class PasswordCapabilityTests
     public async Task PasswordProvider_NoPasswordSet_FailsClosed()
     {
         var stub = CreateStub(out _);
-        var account = new AuthAccountEntity { UId = "u-pp-3", Phone = "13800000003", AuthLevel = (int)AuthLevel.Phone };
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+        await SeedAccountAsync(stub, "u-pp-3", "13800000003");
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
 
         var salt = NewSalt();
@@ -156,8 +170,7 @@ public class PasswordCapabilityTests
     public async Task SetPassword_HashStored_AndTokenVersionIncremented()
     {
         var stub = CreateStub(out _);
-        var account = new AuthAccountEntity { UId = "u-sp-1", Phone = "13800000101", AuthLevel = (int)AuthLevel.Phone, TokenVersion = 0 };
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+        await SeedAccountAsync(stub, "u-sp-1", "13800000101");
         var write = CreateAuthAccountService(stub);
 
         var salt = NewSalt();
@@ -166,10 +179,11 @@ public class PasswordCapabilityTests
         Assert.Equal(1, affected);
         var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-1");
         Assert.NotNull(reloaded);
-        Assert.False(string.IsNullOrEmpty(reloaded!.PasswordHash));   // protected blob（AES-GCM 密文——非明文可读）
-        Assert.NotEqual("NewSecret456!", reloaded.PasswordHash);       // 服务端零明文——存的是加密组装格式
-        Assert.NotEqual(ClientHash("NewSecret456!", Convert.FromHexString(salt)), reloaded.PasswordHash); // 亦非 clientHash 明文
-        Assert.Equal(1, reloaded.TokenVersion);                        // TokenVersion++（旧 refresh 失效）
+        var factor = await GetPasswordFactorAsync(stub, "u-sp-1");
+        Assert.False(string.IsNullOrEmpty(factor!.SecretHash));   // protected blob（AES-GCM 密文——非明文可读）
+        Assert.NotEqual("NewSecret456!", factor.SecretHash);       // 服务端零明文——存的是加密组装格式
+        Assert.NotEqual(ClientHash("NewSecret456!", Convert.FromHexString(salt)), factor.SecretHash); // 亦非 clientHash 明文
+        Assert.Equal(1, reloaded!.TokenVersion);                        // TokenVersion++（旧 refresh 失效）
     }
 
     [Fact]
@@ -178,14 +192,8 @@ public class PasswordCapabilityTests
         var stub = CreateStub(out _);
         var storeSalt = NewSalt();
         // 直种组装格式 blob（不经 SetPasswordAsync——TokenVersion 保持 0，隔离验旧失败"不改写"断言）
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
-        {
-            UId = "u-sp-2",
-            Phone = "13800000102",
-            AuthLevel = (int)AuthLevel.Phone,
-            PasswordHash = AssembleProtectedClientHash(ClientHash("OldSecret123!", Convert.FromHexString(storeSalt)), storeSalt),
-            TokenVersion = 0,
-        });
+        await SeedAccountAsync(stub, "u-sp-2", "13800000102");
+        await SeedPasswordFactorAsync(stub, "u-sp-2", "OldSecret123!", storeSalt);
         var write = CreateAuthAccountService(stub);
 
         var wrongOldSalt = NewSalt();
@@ -205,14 +213,8 @@ public class PasswordCapabilityTests
         var stub = CreateStub(out _);
         var storeSalt = NewSalt();
         // 直种组装格式 blob（不经 SetPasswordAsync——TokenVersion 保持 0；改密成功后 0→1 精确断言，与验旧失败用例同源）
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
-        {
-            UId = "u-sp-3",
-            Phone = "13800000103",
-            AuthLevel = (int)AuthLevel.Phone,
-            PasswordHash = AssembleProtectedClientHash(ClientHash("OldSecret123!", Convert.FromHexString(storeSalt)), storeSalt),
-            TokenVersion = 0,
-        });
+        await SeedAccountAsync(stub, "u-sp-3", "13800000103");
+        await SeedPasswordFactorAsync(stub, "u-sp-3", "OldSecret123!", storeSalt);
         var write = CreateAuthAccountService(stub);
 
         var newSalt = NewSalt();
@@ -236,8 +238,7 @@ public class PasswordCapabilityTests
     public async Task SetPassword_HistoryReuseRejected()
     {
         var stub = CreateStub(out _);
-        var account = new AuthAccountEntity { UId = "u-pol-1", Phone = "13800000601", AuthLevel = (int)AuthLevel.Phone };
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+        await SeedAccountAsync(stub, "u-pol-1", "13800000601");
         var write = CreateAuthAccountService(stub);
 
         var salt1 = NewSalt();
@@ -258,12 +259,10 @@ public class PasswordCapabilityTests
     {
         var stub = CreateStub(out _);
         var (_, storeSalt) = await SeedAccountWithPasswordAsync(stub, "u-frz-1", "Secret123!", "13800000701");
-        var write = CreateAuthAccountService(stub);
 
         // 冻结（永久——无到期）
-        await write.FreezeAsync("u-frz-1", null, "admin-op");
-        var frozen = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-frz-1");
-        Assert.True(frozen!.IsFrozen);
+        await stub.Use<IFreezeService>().FreezeAsync("u-frz-1", "manual", null, null);
+        Assert.True(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-1"));
 
         // 冻结拦截新签发（Provider 认证路径——ACCOUNT_FROZEN 先于 hash 比对；用存储盐算 clientHash 保证语义真实）
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
@@ -273,9 +272,8 @@ public class PasswordCapabilityTests
         Assert.Equal("ACCOUNT_FROZEN", blocked.FailReason);
 
         // 解冻 → 恢复（同盐验证——正密码可登录）
-        await write.UnfreezeAsync("u-frz-1", "admin-op");
-        var unfrozen = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-frz-1");
-        Assert.False(unfrozen!.IsFrozen);
+        await stub.Use<IFreezeService>().ReleaseAllFreezesAsync("u-frz-1", "admin-op");
+        Assert.False(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-1"));
         var restored = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
             Identifier: "13800000701", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt));
         Assert.True(restored.Success);
@@ -286,15 +284,12 @@ public class PasswordCapabilityTests
     {
         var stub = CreateStub(out _);
         var (_, storeSalt) = await SeedAccountWithPasswordAsync(stub, "u-frz-2", "Secret123!", "13800000702");
-        var write = CreateAuthAccountService(stub);
 
-        // 冻结 + 已过期到期时间 → IsFrozenEffective 立即 false（自动失效）
+        // 冻结 + 已过期到期时间 → 活跃判定立即 false（到期自动失效）
         // ⚠️ 用 -30h 而非 -1min：SQLite 内存库 DateTime 按本地时区存取（FreeSql SQLite 无时区列），
         //    UTC 值落库/回读会整体偏移 ±14h 内——-30h 余量保证任何时区下回读仍为过去（到期判定稳）。
-        await write.FreezeAsync("u-frz-2", DateTime.UtcNow.AddHours(-30), "admin-op");
-        var expired = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-frz-2");
-        Assert.True(expired!.IsFrozen);            // 列仍 true
-        Assert.False(expired.IsFrozenEffective);   // 但到期自动视为已解冻
+        await stub.Use<IFreezeService>().FreezeAsync("u-frz-2", "manual", DateTime.UtcNow.AddHours(-30), null);
+        Assert.False(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-2"));
 
         // 到期后放行（用存储盐——正密码可登录）
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
@@ -399,7 +394,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountService>(CreateAuthAccountService(user));
             services.AddSingleton<ISmsVerificationService>(new FakeSmsVerificationService(verifyResult: true));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-sms-reset", Phone = "13800000501", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-sms-reset", "13800000501");
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var newSalt = NewSalt();
@@ -407,8 +402,9 @@ public class PasswordCapabilityTests
             ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt);
 
         var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sms-reset");
-        Assert.False(string.IsNullOrEmpty(reloaded!.PasswordHash));   // protected blob 落库
-        Assert.Equal(1, reloaded.TokenVersion);                       // TokenVersion++
+        var factor = await GetPasswordFactorAsync(stub, "u-sms-reset");
+        Assert.False(string.IsNullOrEmpty(factor!.SecretHash));   // protected blob 落库（Password 因子行）
+        Assert.Equal(1, reloaded!.TokenVersion);                       // TokenVersion++
     }
 
     /// <summary>P1-NEW-1：SMS 找回完成——验证码校验失败 → 抛 SMS_CODE_MISMATCH，不改写。</summary>
@@ -421,7 +417,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountService>(CreateAuthAccountService(user));
             services.AddSingleton<ISmsVerificationService>(new FakeSmsVerificationService(verifyResult: false));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-sms-reset2", Phone = "13800000502", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-sms-reset2", "13800000502");
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var newSalt = NewSalt();
@@ -430,8 +426,8 @@ public class PasswordCapabilityTests
             ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt));
         Assert.Equal("SMS_CODE_MISMATCH", ex.Message);
         var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sms-reset2");
-        Assert.Null(reloaded!.PasswordHash);   // 未改写
-        Assert.Equal(0, reloaded.TokenVersion);
+        Assert.Null(await GetPasswordFactorAsync(stub, "u-sms-reset2"));   // 未改写
+        Assert.Equal(0, reloaded!.TokenVersion);
     }
 
     /// <summary>P0-NEW-1 安全回归哨兵：重置码生成须加密安全路径（RandomNumberGenerator——弃 new Random 可预测种子）。</summary>
@@ -453,7 +449,7 @@ public class PasswordCapabilityTests
     public async Task EmailReset_NoEmailSender_ReturnsNotConfigured()
     {
         var stub = CreateStub(out _);
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-1", Phone = "13800000401", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-res-1", "13800000401");
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var result = await service.InitiateEmailResetAsync("u-res-1");
@@ -470,7 +466,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-2", Phone = "13800000402", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-res-2", "13800000402");
         // 无 UserProfile（未绑定邮箱）
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
@@ -490,7 +486,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-tpl", Phone = "13800000403", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-res-tpl", "13800000403");
         await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-tpl", Email = "tpl@test.dev" });
 
         var options = new AuthCenterOptions();
@@ -527,11 +523,8 @@ public class PasswordCapabilityTests
             services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
-        {
-            UId = "u-res-frz", Phone = "13800000404", AuthLevel = (int)AuthLevel.Phone,
-            IsFrozen = true, FreezeEnd = null,   // 永久冻结
-        });
+        await SeedAccountAsync(stub, "u-res-frz", "13800000404");
+        await stub.Use<IFreezeService>().FreezeAsync("u-res-frz", "manual", null, null);   // 永久冻结
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
@@ -548,11 +541,8 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
             services.AddSingleton<IAuthAccountService>(CreateAuthAccountService(user));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity
-        {
-            UId = "u-res-frz2", Phone = "13800000405", AuthLevel = (int)AuthLevel.Phone,
-            IsFrozen = true, FreezeEnd = DateTime.UtcNow.AddHours(1),   // 临时冻结
-        });
+        await SeedAccountAsync(stub, "u-res-frz2", "13800000405");
+        await stub.Use<IFreezeService>().FreezeAsync("u-res-frz2", "manual", DateTime.UtcNow.AddHours(1), null);   // 临时冻结
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var newSalt = NewSalt();
@@ -570,7 +560,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<TKWF.Ext.Emailing.IEmailSender>(new FakeEmailSender());
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-res-rl", Phone = "13800000406", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-res-rl", "13800000406");
         await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-rl", Email = "rl@test.dev" });
 
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
@@ -590,7 +580,7 @@ public class PasswordCapabilityTests
     public async Task UserProfile_CreateOrUpdate_UpsertByIdentity()
     {
         var stub = CreateStub(out _);
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(new AuthAccountEntity { UId = "u-up-1", Phone = "13800000301", AuthLevel = (int)AuthLevel.Phone });
+        await SeedAccountAsync(stub, "u-up-1", "13800000301");
         var ds = stub.Use<UserProfileEntityDataService>();
 
         // 首次创建
@@ -609,7 +599,19 @@ public class PasswordCapabilityTests
     private static StubDomainUser CreateStub(out IFreeSql fsql, Action<IServiceCollection, StubDomainUser>? register = null)
     {
         fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
-        return AuthenticationTestHost.CreateStub(fsql, register: register);
+        return AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
+        {
+            services.AddSingleton<IAuthFactorService>(new AuthFactorService(
+                user, Options.Create(new SecurityLoggingOptions()), NullLogger<AuthFactorService>.Instance));
+            services.AddSingleton<IFreezeService>(new FreezeService(user, Options.Create(new SecurityLoggingOptions()), NullLogger<FreezeService>.Instance));
+            services.AddSingleton<IFreezeStateProvider>(new FreezeStateProvider(user));
+            services.AddSingleton<IAuthAccountService>(new AuthAccountService(
+                user,
+                Options.Create(new DomainOptions()),
+                Options.Create(AuthenticationTestHost.CreateOptions()),
+                CreateProtector()));
+            register?.Invoke(services, user);
+        });
     }
 
     private sealed class FakeEmailSender : TKWF.Ext.Emailing.IEmailSender

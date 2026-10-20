@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 38461edb2dda5a93395a3b767ac6abf65ee3117000ef4abcff8f2b6c2231df72]
 // 模型: AuthRefreshTokenEntity (TKWF.Ext.AuthCenter.AuthRefreshTokenEntity)
-// 生成时间: 2026-10-07 16:11:19
+// 生成时间: 2026-10-20 14:08:35
 // </auto-generated>
 #nullable enable
 using System;
@@ -28,8 +28,12 @@ partial class AuthRefreshTokenEntity
     /// </summary>
     public static class Conditions
     {
-        /// <summary>组合条件：IXAuthRefreshTokenUserVersion（AND 连接，单值必填/范围可选）</summary>
-        public static Expression<Func<AuthRefreshTokenEntity, bool>> ByIXAuthRefreshTokenUserVersion(int tokenVersion, string userId)
+        /// <summary>精确匹配：TKWFIXAuthRefreshTokenTokenHash（Unique 索引，必填参数）</summary>
+        public static Expression<Func<AuthRefreshTokenEntity, bool>> ByTKWFIXAuthRefreshTokenTokenHash(string tokenHash)
+            => x => x.TokenHash == tokenHash;
+
+        /// <summary>组合条件：TKWFIXAuthRefreshTokenUserVersion（AND 连接，单值必填/范围可选）</summary>
+        public static Expression<Func<AuthRefreshTokenEntity, bool>> ByTKWFIXAuthRefreshTokenUserVersion(int tokenVersion, string userId)
         {
             return x => x.TokenVersion == tokenVersion &&
             x.UserId == userId;
@@ -42,21 +46,17 @@ partial class AuthRefreshTokenEntity
             var val = userId!;
             return x => x.UserId.Contains(val);
         }
-        /// <summary>多值模糊搜索：IXAuthRefreshTokenUserVersion（按 UserId Or-链）</summary>
-        public static Expression<Func<AuthRefreshTokenEntity, bool>> LikeIXAuthRefreshTokenUserVersionKeywords(string[]? keywords = null)
+        /// <summary>多值模糊搜索：TKWFIXAuthRefreshTokenUserVersion（按 UserId Or-链）</summary>
+        public static Expression<Func<AuthRefreshTokenEntity, bool>> LikeTKWFIXAuthRefreshTokenUserVersionKeywords(string[]? keywords = null)
         {
             if (keywords == null || keywords.Length == 0) return None;
             return ConditionsHelper.BuildMultiOrLike<AuthRefreshTokenEntity>(x => x.UserId, keywords) ?? None;
         }
-        /// <summary>跨属性精确匹配：IXAuthRefreshTokenUserVersion（至少一个字符串属性等于 value）</summary>
-        public static Expression<Func<AuthRefreshTokenEntity, bool>> EqualIXAuthRefreshTokenUserVersion(string value)
+        /// <summary>跨属性精确匹配：TKWFIXAuthRefreshTokenUserVersion（至少一个字符串属性等于 value）</summary>
+        public static Expression<Func<AuthRefreshTokenEntity, bool>> EqualTKWFIXAuthRefreshTokenUserVersion(string value)
         {
             return x => x.UserId == value;
         }
-        /// <summary>精确匹配：UXAuthRefreshTokenTokenHash（Unique 索引，必填参数）</summary>
-        public static Expression<Func<AuthRefreshTokenEntity, bool>> ByUXAuthRefreshTokenTokenHash(string tokenHash)
-            => x => x.TokenHash == tokenHash;
-
         /// <summary>恒真表达式（无筛选条件时的 Identity 值）</summary>
         public static Expression<Func<AuthRefreshTokenEntity, bool>> None => x => true;
 
@@ -88,25 +88,25 @@ partial class AuthRefreshTokenEntity
     public sealed class PredicateBuilder : PredicateBuilderBase<AuthRefreshTokenEntity>
     {
 
-        /// <summary>组合条件：IXAuthRefreshTokenUserVersion（AND 连接，单值必填/范围可选）</summary>
-        public PredicateBuilder ByIXAuthRefreshTokenUserVersion(int tokenVersion, string userId)
-            => (PredicateBuilder)Update(Conditions.ByIXAuthRefreshTokenUserVersion(tokenVersion, userId));
+        /// <summary>精确匹配：TKWFIXAuthRefreshTokenTokenHash（Unique 索引，必填参数）</summary>
+        public PredicateBuilder ByTKWFIXAuthRefreshTokenTokenHash(string tokenHash)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXAuthRefreshTokenTokenHash(tokenHash));
+
+        /// <summary>组合条件：TKWFIXAuthRefreshTokenUserVersion（AND 连接，单值必填/范围可选）</summary>
+        public PredicateBuilder ByTKWFIXAuthRefreshTokenUserVersion(int tokenVersion, string userId)
+            => (PredicateBuilder)Update(Conditions.ByTKWFIXAuthRefreshTokenUserVersion(tokenVersion, userId));
 
         /// <summary>模糊搜索：UserId（单个关键字）</summary>
         public PredicateBuilder LikeUserId(string? userId = null)
             => (PredicateBuilder)Update(Conditions.LikeUserId(userId));
 
-        /// <summary>多值模糊搜索：IXAuthRefreshTokenUserVersion（按关键词 Or-链）</summary>
-        public PredicateBuilder LikeIXAuthRefreshTokenUserVersionKeywords(string[]? keywords = null)
-            => (PredicateBuilder)Update(Conditions.LikeIXAuthRefreshTokenUserVersionKeywords(keywords));
+        /// <summary>多值模糊搜索：TKWFIXAuthRefreshTokenUserVersion（按关键词 Or-链）</summary>
+        public PredicateBuilder LikeTKWFIXAuthRefreshTokenUserVersionKeywords(string[]? keywords = null)
+            => (PredicateBuilder)Update(Conditions.LikeTKWFIXAuthRefreshTokenUserVersionKeywords(keywords));
 
-        /// <summary>跨属性精确匹配：IXAuthRefreshTokenUserVersion（至少一个字符串属性等于 value）</summary>
-        public PredicateBuilder EqualIXAuthRefreshTokenUserVersion(string value)
-            => (PredicateBuilder)Update(Conditions.EqualIXAuthRefreshTokenUserVersion(value));
-
-        /// <summary>精确匹配：UXAuthRefreshTokenTokenHash（Unique 索引，必填参数）</summary>
-        public PredicateBuilder ByUXAuthRefreshTokenTokenHash(string tokenHash)
-            => (PredicateBuilder)Update(Conditions.ByUXAuthRefreshTokenTokenHash(tokenHash));
+        /// <summary>跨属性精确匹配：TKWFIXAuthRefreshTokenUserVersion（至少一个字符串属性等于 value）</summary>
+        public PredicateBuilder EqualTKWFIXAuthRefreshTokenUserVersion(string value)
+            => (PredicateBuilder)Update(Conditions.EqualTKWFIXAuthRefreshTokenUserVersion(value));
         // V4.9: 工厂方法（AOT 兼容，替代 Activator.CreateInstance）
         protected override PredicateBuilderBase<AuthRefreshTokenEntity> CreateBranch() => new PredicateBuilder();
 }

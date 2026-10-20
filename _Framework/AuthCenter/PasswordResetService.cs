@@ -45,6 +45,10 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
     private PasswordResetCodeEntityDataService? _codeDataService;
     private PasswordResetCodeEntityDataService CodeDataService => _codeDataService ??= User.Use<PasswordResetCodeEntityDataService>();
 
+    // V0.11.0（方案 §6.4/T3）：冻结判定经 IFreezeStateProvider（多原因冻结行集合）。
+    private IFreezeStateProvider? _freezeState;
+    private IFreezeStateProvider FreezeState => _freezeState ??= User.Use<IFreezeStateProvider>();
+
     public PasswordResetService(
         IDomainUser user,
         IServiceProvider serviceProvider,
@@ -67,9 +71,10 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
             throw new AuthenticationException("PASSWORD_RESET_RATE_LIMITED");
 
         var account = await ResolveAccountAsync(identifier, ct);
-        EnsureNotFrozen(account);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed）
+        await EnsureNotFrozenAsync(account, ct);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed）
 
-        var phone = account.Phone
+        // V0.11.0（方案 §6.5/T7）：投递手机号取自 Sms 因素（账号不再落 Phone 列）。
+        var phone = await User.Use<IAuthFactorService>().GetPrimaryPhoneAsync(account.UId, ct)
             ?? throw new AuthenticationException("PHONE_NOT_BOUND");
         await Sms.SendCodeAsync(phone, SmsScenes.Reset, ct);   // 自带投递（B.11）——SmsScenes.Reset 现成通道
         _logger.LogDebug("找回密码发起（SMS）——identifier={Identifier}", MaskIdentifier(identifier));
@@ -90,7 +95,7 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
         // v0.9.1 裁定⑤：Email 发起路径独立频控（key 规范 pwd:reset-email:{uid}）——重发间隔窗口 Options 可配
         // （默认对齐 SMS 60s）+ 小时/日上限兜底（对齐 SmsHourly/Daily 语义）；触发任一窗口即阻断。
         var account = await ResolveAccountAsync(identifier, ct);
-        EnsureNotFrozen(account);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed）
+        await EnsureNotFrozenAsync(account, ct);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed）
 
         var uid = account.UId;
         var resendSeconds = Math.Max(_authOptions.Value.PasswordPolicy.ResetEmailResendIntervalSeconds, 1);
@@ -139,7 +144,7 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
     public async Task CompleteResetWithCodeAsync(string identifier, string resetCode, string newClientHash, string newSalt, CancellationToken ct = default)
     {
         var account = await ResolveAccountAsync(identifier, ct);
-        EnsureNotFrozen(account);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed，完成路径同拦）
+        await EnsureNotFrozenAsync(account, ct);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed，完成路径同拦）
         var uid = account.UId;
         var record = await CodeDataService.GetLastUnconsumedAsync(uid, "email", ct)
                      ?? throw new AuthenticationException("RESET_CODE_NOT_FOUND");
@@ -162,7 +167,7 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
     {
         // 门面内编排（P1-NEW-1 修订）：SMS 通道统一完成——校验验证码（单次消费）→ 设新密码，表现层零编排
         var account = await ResolveAccountAsync(identifier, ct);
-        EnsureNotFrozen(account);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed，完成路径同拦）
+        await EnsureNotFrozenAsync(account, ct);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed，完成路径同拦）
         var uid = account.UId;
         var verified = await Sms.VerifyCodeAsync(phone, code, SmsScenes.Reset, ct);
         if (!verified) throw new AuthenticationException("SMS_CODE_MISMATCH");
@@ -177,7 +182,7 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
         // v0.9.1 裁定④：冻结与找回互斥——完成路径同拦（扫码前置已证明，但冻结中禁止自助找回）
         var account = await AccountQuery.GetByUIdAsync(uid, ct)
                       ?? throw new AuthenticationException("ACCOUNT_NOT_FOUND");
-        EnsureNotFrozen(account);
+        await EnsureNotFrozenAsync(account, ct);
 
         // 扫码前置已证明（装配层经 OAuthTicket 链路完成身份持有证明）——直接设密
         await AccountWrite.SetPasswordAsync(uid, newClientHash, newSalt, ct);   // SecurePassword 零明文 + TokenVersion++ + 历史（①）
@@ -195,10 +200,11 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
         return account;
     }
 
-    /// <summary>v0.9.1 裁定④ 冻结与找回互斥（fail-closed）：冻结中账号禁止自助找回——两步流程：工作人员解冻后自助找回。</summary>
-    private static void EnsureNotFrozen(AuthAccountEntity account)
+    /// <summary>v0.9.1 裁定④ 冻结与找回互斥（fail-closed）：冻结中账号禁止自助找回——两步流程：工作人员解冻后自助找回。
+    /// V0.11.0（方案 §6.4/T3）：判定改经 <see cref="IFreezeStateProvider"/>（多原因冻结行集合）。</summary>
+    private async Task EnsureNotFrozenAsync(AuthAccountEntity account, CancellationToken ct)
     {
-        if (account.IsFrozenEffective)
+        if (await FreezeState.IsFrozenAsync(account.UId, ct: ct))
             throw new AuthenticationException("ACCOUNT_FROZEN");
     }
 

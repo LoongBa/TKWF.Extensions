@@ -11,6 +11,7 @@ using TKW.Framework.Core.Hosting;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.AuthCenter.DTOs;
 using TKWF.Ext.SecurityLog;
 
 namespace TKWF.Ext.AuthCenter;
@@ -36,7 +37,8 @@ public interface IAuthAccountService : IDomainService
     /// <summary>设置密码（V0.9.0 ADR-密码策略与口令协议 决策 1——SecurePassword 协议：客户端算 clientHash+salt，
     /// 服务端<b>只存不算</b>（对齐 IdentityPasswordManager 组装格式 <c>{iterations}.{b64salt}.{b64hash}</c>，经
     /// <c>ICredentialProtector</c> AES-GCM 加密落库——DB 泄露不可解密，服务端零明文）；TokenVersion++ +
-    /// 密码历史追加 + MustChangePassword 清；影响行数 0 = UId 不存在。
+    /// 密码历史追加 + 口令因素写入（V0.11.0 T5：MustChange 由调用方经 <c>WritePasswordAsync</c> 传入）；
+    /// 影响行数 0 = UId 不存在。
     /// <paramref name="newClientHash"/> 为 hex(PBKDF2(newPassword, salt, iterations, 32bytes))——客户端算；
     /// <paramref name="salt"/> 为 hex(salt 32bytes)。</summary>
     Task<int> SetPasswordAsync(string uid, string newClientHash, string salt, CancellationToken ct = default);
@@ -45,14 +47,6 @@ public interface IAuthAccountService : IDomainService
     /// <c>FixedTimeEquals</c> 比对 <paramref name="oldClientHash"/>（持有旧 clientHash 才能产生匹配值，等价 HMAC 绑定安全）；
     /// 成功设新（同 <see cref="SetPasswordAsync"/> 语义）+ TokenVersion++；验旧失败抛 <c>PASSWORD_MISMATCH</c>。</summary>
     Task ChangePasswordAsync(string uid, string oldClientHash, string oldSalt, string newClientHash, string newSalt, CancellationToken ct = default);
-
-    /// <summary>冻结账号（V0.9.0 ADR-密码策略与口令协议 决策 3/6/7——临时安全处置）：<c>IsFrozen=true</c> + 可选
-    /// <c>FreezeEnd</c>（null=永久冻结直至显式解冻）→ 认证路径拦截新签发；SecurityLog 直写 <c>Freeze</c> 事件
-    /// （<c>UserName</c> 填被冻结账号，<paramref name="operatorName"/> 进 <c>Detail</c>；Options 门控后跳过写入）。</summary>
-    Task FreezeAsync(string uid, DateTime? freezeEnd, string operatorName, CancellationToken ct = default);
-
-    /// <summary>解冻账号（同上）：清 <c>IsFrozen=false</c> + <c>FreezeEnd=null</c> → 认证路径恢复；SecurityLog 直写 <c>Unfreeze</c> 事件。</summary>
-    Task UnfreezeAsync(string uid, string operatorName, CancellationToken ct = default);
 }
 
 /// <summary>账号管理服务实现——委托 AuthAccountEntityDataService（红线合规）。
@@ -64,30 +58,26 @@ public interface IAuthAccountService : IDomainService
 [DiContractIgnore]
 internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountService
 {
-    private readonly IOptions<SecurityLoggingOptions> _securityLogOptions;
     private readonly IOptions<DomainOptions> _domainOptions;
     private readonly IOptions<AuthCenterOptions> _authOptions;
     private readonly ICredentialProtector _credentialProtector;
-    private readonly ILogger<AuthAccountService> _logger;
     private AuthAccountEntityDataService? _dataService;
     private AuthAccountEntityDataService DataService => _dataService ??= User.Use<AuthAccountEntityDataService>();
     private PasswordHistoryEntityDataService? _historyDataService;
     private PasswordHistoryEntityDataService HistoryDataService => _historyDataService ??= User.Use<PasswordHistoryEntityDataService>();
+    private IAuthFactorService? _factors;
+    private IAuthFactorService Factors => _factors ??= User.Use<IAuthFactorService>();
 
     public AuthAccountService(
         IDomainUser user,
-        IOptions<SecurityLoggingOptions> securityLogOptions,
         IOptions<DomainOptions> domainOptions,
         IOptions<AuthCenterOptions> authOptions,
-        ICredentialProtector credentialProtector,
-        ILogger<AuthAccountService> logger)
+        ICredentialProtector credentialProtector)
         : base(user)
     {
-        _securityLogOptions = securityLogOptions ?? throw new ArgumentNullException(nameof(securityLogOptions));
         _domainOptions = domainOptions ?? throw new ArgumentNullException(nameof(domainOptions));
         _authOptions = authOptions ?? throw new ArgumentNullException(nameof(authOptions));
         _credentialProtector = credentialProtector ?? throw new ArgumentNullException(nameof(credentialProtector));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public Task<AuthAccountEntity?> GetByUIdAsync(string uid, CancellationToken ct = default)
@@ -101,6 +91,28 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
 
     /// <inheritdoc cref="IAuthAccountService.SetPasswordAsync"/>
     public async Task<int> SetPasswordAsync(string uid, string newClientHash, string salt, CancellationToken ct = default)
+        => await WritePasswordAsync(uid, newClientHash, salt, mustChange: false, ct);
+
+    /// <inheritdoc cref="IAuthAccountService.ChangePasswordAsync"/>
+    public async Task ChangePasswordAsync(string uid, string oldClientHash, string oldSalt, string newClientHash, string newSalt, CancellationToken ct = default)
+    {
+        var passwordFactor = await FindPasswordFactorAsync(uid, ct)
+            ?? throw new AuthenticationException("PASSWORD_NOT_SET");
+        if (string.IsNullOrEmpty(passwordFactor.SecretHash))
+            throw new AuthenticationException("PASSWORD_NOT_SET");
+
+        // ① 验旧零明文：解保护存储 → 解析组装格式 → FixedTimeEquals 比对 oldClientHash（持有旧 clientHash 才能匹配——等价 HMAC 绑定安全）
+        var storedHash = ParseClientHash(DecodeStoredBlob(passwordFactor.SecretHash));
+        if (!CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(oldClientHash), storedHash))
+            throw new AuthenticationException("PASSWORD_MISMATCH");
+
+        await WritePasswordAsync(uid, newClientHash, newSalt, mustChange: false, ct);   // 复用单入口（策略校验 + 历史 + TokenVersion++）
+    }
+
+    /// <summary>密码写入单入口——SecurePassword 组装 + 策略校验 + 因素落库 + 历史 + TokenVersion++。
+    /// 返回 1 = 已写入；0 = UId 不存在（契约：影响行数 0 = UId 不存在）。</summary>
+    private async Task<int> WritePasswordAsync(string uid, string newClientHash, string salt, bool mustChange, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(newClientHash) || string.IsNullOrEmpty(salt))
             throw new ArgumentException("PASSWORD_CREDENTIALS_REQUIRED", nameof(newClientHash));
@@ -108,7 +120,7 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         var account = await DataService.GetByUIdAsync(uid, ct);
         if (account is null) return 0;
 
-        // ① SecurePassword 组装（客户端算的 clientHash+salt → 自描述格式 → AES-GCM 加密落库——服务端零明文，DB 泄露不可解密）
+        // ① SecurePassword 组装（客户端算的 clientHash+salt → 自描述格式 → AES-GCM 加密——服务端零明文，DB 泄露不可解密）
         var iterations = _domainOptions.Value.Auth.Pbkdf2Iterations;   // 单一来源（600000），不硬编码
         var clientHashBytes = Convert.FromHexString(newClientHash);
         if (clientHashBytes.Length != 32) throw new ArgumentException("PASSWORD_HASH_LENGTH_INVALID", nameof(newClientHash));
@@ -119,38 +131,30 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         // ⑥ 密码策略单入口强制校验（fail-closed——复杂度/历史防重用；轮换判定查历史表）
         EnforcePasswordPolicy(account, assembled, ct);
 
-        // 落库 + TokenVersion++（CAS）+ 历史追加 + MustChangePassword 清
-        var affected = await DataService.SetPasswordHashAsync(uid, protectedBlob, ct);
-        if (affected > 0)
+        // 因素落库（V0.11.0 T5：密码归属 AuthFactor(Password)——标识恒为 UId；写后 TokenVersion++ 使旧 refresh 失效）
+        var existing = await FindPasswordFactorAsync(uid, ct);
+        if (existing is null)
+            await Factors.BindAsync(uid, AuthFactorTypes.Password, uid, protectedBlob, mustChange, AuthFactorSources.Manual, ct);
+        else
+            await Factors.ResetAsync(uid, existing.Id, protectedBlob, mustChange, ct);
+
+        await HistoryDataService.CreateAsync(new PasswordHistoryEntity
         {
-            await HistoryDataService.CreateAsync(new PasswordHistoryEntity
-            {
-                UId = uid,
-                ClientHash = assembled,   // 防重用比对源（明文组装格式——服务端不接触密码明文）
-                CreateTime = DateTime.UtcNow,
-            }, ct);
-            await TrimHistoryAsync(uid, ct);
-            if (account.MustChangePassword)   // 初始密码强制改密：改密落地后清标记
-                await DataService.ClearMustChangePasswordAsync(uid, ct);
-        }
-        return affected;
+            UId = uid,
+            ClientHash = assembled,   // 防重用比对源（明文组装格式——服务端不接触密码明文）
+            CreateTime = DateTime.UtcNow,
+        }, ct);
+        await TrimHistoryAsync(uid, ct);
+        await DataService.IncrementTokenVersionAsync(uid, ct);
+        return 1;
     }
 
-    /// <inheritdoc cref="IAuthAccountService.ChangePasswordAsync"/>
-    public async Task ChangePasswordAsync(string uid, string oldClientHash, string oldSalt, string newClientHash, string newSalt, CancellationToken ct = default)
+    /// <summary>取账号的 Password 因素（标识恒为 UId——一账号一密码）。</summary>
+    private async Task<AuthFactorEntityDto?> FindPasswordFactorAsync(string uid, CancellationToken ct)
     {
-        var account = await DataService.GetByUIdAsync(uid, ct);
-        if (account is null) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
-        if (string.IsNullOrEmpty(account.PasswordHash)) throw new AuthenticationException("PASSWORD_NOT_SET");
-
-        // ① 验旧零明文：解保护存储 → 解析组装格式 → FixedTimeEquals 比对 oldClientHash（持有旧 clientHash 才能匹配——等价 HMAC 绑定安全）
-        var storedAssembled = DecodeStoredBlob(account.PasswordHash);
-        var storedHash = ParseClientHash(storedAssembled);
-        if (!CryptographicOperations.FixedTimeEquals(
-                Convert.FromHexString(oldClientHash), storedHash))
-            throw new AuthenticationException("PASSWORD_MISMATCH");
-
-        await SetPasswordAsync(uid, newClientHash, newSalt, ct);   // 复用单入口（策略校验 + 历史 + TokenVersion++）
+        foreach (var factor in await Factors.ListByUIdAsync(uid, ct))
+            if (factor.FactorType == (int)AuthFactorTypes.Password) return factor;
+        return null;
     }
 
     /// <summary>解保护存储 blob → 组装格式字符串（AES-GCM 解密；密钥变更/非法 blob → 密码错误语义）。</summary>
@@ -204,64 +208,5 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         var all = await HistoryDataService.GetRecentAsync(uid, 100, ct);
         foreach (var hist in all.Skip(keep))
             await HistoryDataService.AdminDeleteAsync(hist.Id, ct);
-    }
-
-    /// <inheritdoc cref="IAuthAccountService.FreezeAsync"/>
-    public async Task FreezeAsync(string uid, DateTime? freezeEnd, string operatorName, CancellationToken ct = default)
-    {
-        var account = await DataService.GetByUIdAsync(uid, ct);
-        if (account is null) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
-        if (account.IsFrozen && (freezeEnd is null || account.FreezeEnd == freezeEnd))
-            return; // 幂等：已冻结且到期不变
-
-        account.IsFrozen = true;
-        account.FreezeEnd = freezeEnd;
-        await DataService.UpdateAsync(account, ct);
-        await WriteSecurityLogAsync(SecurityLogEventTypes.Freeze, uid, operatorName, $"冻结（到期={freezeEnd?.ToString("O") ?? "永久"}）", ct);
-    }
-
-    /// <inheritdoc cref="IAuthAccountService.UnfreezeAsync"/>
-    public async Task UnfreezeAsync(string uid, string operatorName, CancellationToken ct = default)
-    {
-        var account = await DataService.GetByUIdAsync(uid, ct);
-        if (account is null) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
-        if (!account.IsFrozen) return; // 幂等：未冻结
-
-        account.IsFrozen = false;
-        account.FreezeEnd = null;
-        await DataService.UpdateAsync(account, ct);
-        await WriteSecurityLogAsync(SecurityLogEventTypes.Unfreeze, uid, operatorName, "解冻", ct);
-    }
-
-    /// <summary>
-    /// SecurityLog 直写（V0.9.0 ADR-密码策略与口令协议 决策 6/7）：绕过过滤器内 EventTypes 门控，须自读
-    /// <see cref="SecurityLoggingOptions"/>——<c>Enabled=false</c> 或 <c>EventTypes</c> 非空且不含目标事件类型时跳过写入。
-    /// 写失败（Store 异常静默或未启用 SecurityLog）catch + Warning 降级——冻结/解冻业务不阻断。
-    /// </summary>
-    private async Task WriteSecurityLogAsync(string eventType, string accountUid, string operatorName, string detail, CancellationToken ct)
-    {
-        var options = _securityLogOptions.Value;
-        if (!options.Enabled) return;
-        if (options.EventTypes.Count > 0 && !options.EventTypes.Contains(eventType)) return;
-
-        try
-        {
-            // User.Use<ISecurityLogStore>()——帧内解析守卫工厂；SecurityLog 未启用 → 解析抛守卫，catch 降级
-            var store = User.Use<ISecurityLogStore>();
-            await store.SaveAsync(new SecurityLogEntry(
-                EventType: eventType,
-                EventCategory: SecurityLogEventTypes.CategoryAuthentication,
-                UserName: accountUid,            // ⚠️ UserName 填被冻结账号（非操作者）——ADR 决策 7
-                UserId: null,
-                IpAddress: null,
-                UserAgent: null,
-                Result: SecurityLogEventTypes.ResultSuccess,
-                Detail: $"操作者={operatorName}；{detail}",
-                CorrelationId: null), ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "冻结事件 SecurityLog 直写失败——降级不阻断（EventType={EventType}, UId={UId}）", eventType, accountUid);
-        }
     }
 }

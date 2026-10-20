@@ -17,12 +17,13 @@ namespace TKWF.Ext.AuthCenter;
 /// </list>
 /// <para>编排（P1-1 fallback——<see cref="FederatedIdentity.UId"/> 不保证非空，事件链子类签发先例
 /// <c>SsoSubAppBridge</c> 签 <c>string.Empty</c>）：UId 非空 → <see cref="IAuthAccountQueryService.GetByUIdAsync"/>
-/// 直读复用（免二次映射）；未命中或 UId 空 → <see cref="ISsoChannelMapService.GetByChannelAsync"/>
-/// (ChannelId, ExternalUserId) 映射复用；无 → 建号（AuthLevel.Federated，Phone 可空）+
-/// <see cref="ISsoChannelMapService.LinkAsync"/>（UX 冲突 catch 重查幂等）→ 回读账号
+/// 直读复用（免二次映射）；未命中或 UId 空 → <see cref="IExternalIdentityService.GetByExternalIdAsync"/>
+/// (ChannelId, ExternalUserId) 映射复用；无 → 建号（V0.11.0 T6：<c>FederatedProvisioning.AutoProvision</c> 门控，
+/// 停写 Phone/AuthLevel）+
+/// <see cref="IExternalIdentityService.LinkAsync"/>（因素唯一约束冲突 catch 回滚重查幂等）→ 回读账号
 /// （IsEnabled/IsFrozen 守卫）→ <see cref="ITokenService.IssueTokenAsync"/>（authType=<c>federated</c> +
 /// <c>channel_type</c>=identity.ChannelType——null 不写 claim，P2-3）。</para>
-/// <para>fail-hard：<see cref="ISsoChannelMapService"/>/<see cref="IAuthAccountService"/>/<see cref="ITokenService"/>
+/// <para>fail-hard：<see cref="IExternalIdentityService"/>/<see cref="IAuthAccountService"/>/<see cref="ITokenService"/>
 /// 均为 AddConstructibleService 守卫工厂门面——<c>User.Use&lt;T&gt;()</c> 帧内懒加载（DI004 铁律），未装配抛守卫。</para>
 /// </summary>
 public interface IFederatedLoginOrchestrator : IDomainService

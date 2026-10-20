@@ -37,7 +37,7 @@ public class RedLineComplianceTests
         var partialFiles = Directory.GetFiles(root, "*.cs")
             .Where(f => !f.EndsWith(".g.cs", StringComparison.Ordinal))
             .ToList();
-        Assert.Equal(12, partialFiles.Count); // 12 实体 DataService 分部（V0.9.0 增 UserProfile + PasswordResetCode——凭据/档案分离 + 找回链路；ADR-密码策略 增 PasswordHistory——历史防重用）
+        Assert.Equal(15, partialFiles.Count); // 15 实体 DataService 分部（V0.9.0 增 UserProfile + PasswordResetCode——凭据/档案分离 + 找回链路；ADR-密码策略 增 PasswordHistory——历史防重用；V0.11.0 增 AuthFactor + AuthFactorEvent + AuthAccountFreeze——认证关系模型）
 
         foreach (var file in partialFiles)
         {

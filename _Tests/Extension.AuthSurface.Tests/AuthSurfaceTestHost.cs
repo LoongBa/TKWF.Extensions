@@ -71,7 +71,7 @@ INNER JOIN ""TKWF_AuthAccount"" ac ON rc.""RedeemedByUId"" = ac.""UId""");
         fsql.Ado.ExecuteNonQuery(
             @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserApps"" AS
 SELECT g.""Id"", g.""UserId"", g.""AppId"", a.""AppName"", g.""Scopes"", g.""ValidUntil"", g.""Source"", g.""Status"", g.""CreateTime"",
-       ac.""UId"", ac.""AuthLevel""
+       ac.""UId""
 FROM ""TKWF_AuthGrant"" g
 INNER JOIN ""TKWF_AuthAccount"" ac ON g.""UserId"" = ac.""UId""
 LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");
@@ -111,13 +111,11 @@ LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");
         return services.BuildServiceProvider();
     }
 
-    /// <summary>创建测试 AuthAccount（跨扩展——TKWF_AuthAccount 表 V0.9.0 凭据列，FreeSql 直插）。</summary>
-    public static async Task SeedAccountAsync(IFreeSql fsql, string uid, string? phone = null, int authLevel = 1)
+    /// <summary>创建测试 AuthAccount（跨扩展——TKWF_AuthAccount 表，FreeSql 直插；V0.11.0 起无凭据/认证强度列）。</summary>
+    public static async Task SeedAccountAsync(IFreeSql fsql, string uid)
         => await fsql.Insert(new AuthAccountEntity
         {
             UId = uid,
-            Phone = phone,
-            AuthLevel = authLevel,
             TokenVersion = 0,
             IsEnabled = true,
             CreateTime = DateTime.UtcNow,

@@ -294,13 +294,13 @@ public sealed class FederationWebExtensionTests
         Assert.Equal(0, FederationEndpointHost.EventHandler2.Invoked);           // first-non-null-wins 短路
     }
 
-    /// <summary>uid 只读查询（评审 F7）：编排经 ISsoChannelMapService.GetByChannelAsync 查 uid（不建号——
+    /// <summary>uid 只读查询（评审 F7）：编排经 IExternalIdentityService.GetByExternalIdAsync 查 uid（不建号——
     /// LinkAsync 不被调）→ 富化 Parameters["uid"] 供 handler 签票据。</summary>
     [Fact]
     public async Task Event_UidReadOnlyLookup_EnrichedIntoHandlerContext()
     {
         FederationEndpointHost.Reset();
-        FederationEndpointHost.ChannelMap.Map = new SsoChannelMapDto("u-100", "wechat-mp", "ext-100");
+        FederationEndpointHost.ChannelMap.Map = new ExternalIdentityDto("u-100", "wechat-mp", "ext-100", DateTime.UtcNow);
         FederationEndpointHost.EventHandler1.Result = new EventReplyResult("<xml><Content><![CDATA[login-link]]></Content></xml>", "text/xml");
         var client = FederationEndpointHost.Server.CreateClient();
 
@@ -309,8 +309,8 @@ public sealed class FederationWebExtensionTests
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
-        // uid 只读查询（GetByChannelAsync 被调、LinkAsync 不被调）
-        Assert.Equal(1, FederationEndpointHost.ChannelMap.GetByChannelInvoked);
+        // uid 只读查询（GetByExternalIdAsync 被调、LinkAsync 不被调）
+        Assert.Equal(1, FederationEndpointHost.ChannelMap.GetInvoked);
         Assert.Equal("wechat-mp", FederationEndpointHost.ChannelMap.LastChannelId);
         Assert.Equal("ext-100", FederationEndpointHost.ChannelMap.LastExternalUserId);  // 验签富化的 external_user_id
         Assert.Equal(0, FederationEndpointHost.ChannelMap.LinkInvoked);                 // 只读不建号

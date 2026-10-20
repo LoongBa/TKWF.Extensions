@@ -65,7 +65,7 @@ public class SsoProductionPathTests : TestHostBase
         // 种子账号经 NoAop 直建 DataService（认证内核实体）
         var account = new AuthAccountEntity
         {
-            UId = "u-100", Phone = "13800138000", AuthLevel = 2,
+            UId = "u-100",
         };
         await user.Use<AuthAccountEntityDataService>().CreateAsync(account, CancellationToken.None);
 

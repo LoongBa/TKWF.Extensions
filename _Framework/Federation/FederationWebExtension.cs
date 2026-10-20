@@ -238,7 +238,7 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             if (!result.Success)
                 return Results.BadRequest(new ErrorResponse(result.FailReason ?? "AUTHENTICATION_FAILED", null));
 
-            // 已验签外部身份（供编排 uid 只读查询——评审 F7：GetByChannelAsync 只读不建号）
+            // 已验签外部身份（供编排 uid 只读查询——评审 F7：GetByExternalIdAsync 只读不建号）
             parameters["external_user_id"] = result.ExternalUserId ?? "";
 
             // 事件编排（uid 只读查询 + 平台化回复 + handler first-non-null-wins）→ 微信 XML 被动回复（text/xml）

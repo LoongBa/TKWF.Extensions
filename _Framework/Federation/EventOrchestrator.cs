@@ -14,8 +14,8 @@ namespace TKWF.Ext.Federation;
 
 /// <summary>
 /// 事件编排门面实现（外部身份联邦 E3）。内部组合：<see cref="ISsoChannelFactory"/> 经基类 <c>User.Use</c> 懒加载
-/// （DI004 零豁免——领域服务间调用经 User.Use，不 ctor 注入）；uid 查询经 <see cref="ISsoChannelMapService"/>
-/// （AuthCenter.Abstractions 契约——只读消费，不加方法）。
+/// （DI004 零豁免——领域服务间调用经 User.Use，不 ctor 注入）；uid 查询经 <see cref="IExternalIdentityService"/>
+/// （AuthCenter.Abstractions 契约——V0.11.0 T4 由 ISsoChannelMapService 收口，只读消费不加方法）。
 /// <para>契约 <see cref="IEventOrchestrator"/> 已迁 Abstractions 契约包（V0.1.0 ④ 裁定——namespace 保持
 /// <c>TKWF.Ext.Federation</c> 跨程序集同 namespace），本实现类继续在 Federation 主包实现该契约。</para>
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
     private readonly IReadOnlyList<IEventReplyHandler> _handlers;
     private readonly ILogger<EventOrchestrator> _logger;
     private ISsoChannelFactory? _factory;
-    private ISsoChannelMapService? _channelMap;
+    private IExternalIdentityService? _channelMap;
 
     /// <summary>构造（IDomainUser 经守卫工厂帧内供给；IEventReplyHandler 集合 ctor 注入——ADR92 集合版守卫工厂）。</summary>
     public EventOrchestrator(
@@ -53,12 +53,12 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
                 return null;
             }
 
-            // uid 只读查询（评审 F7——GetByChannelAsync 只读不建号，不调 LinkAsync）→ 富化 Parameters["uid"] 供 handler 签票据
+            // uid 只读查询（评审 F7——GetByExternalIdAsync 只读不建号，不调 LinkAsync）→ 富化 Parameters["uid"] 供 handler 签票据
             if (context.Parameters != null
                 && context.Parameters.TryGetValue("external_user_id", out var externalUserId)
                 && !string.IsNullOrEmpty(externalUserId))
             {
-                var map = await ChannelMap.GetByChannelAsync(channelId, externalUserId, ct);
+                var map = await ChannelMap.GetByExternalIdAsync(channelId, externalUserId, ct);
                 if (map is not null && context.Parameters is Dictionary<string, string?> dict)
                 {
                     dict["uid"] = map.UId;
@@ -116,5 +116,5 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
     }
 
     private ISsoChannelFactory Factory => _factory ??= User.Use<ISsoChannelFactory>();
-    private ISsoChannelMapService ChannelMap => _channelMap ??= User.Use<ISsoChannelMapService>();
+    private IExternalIdentityService ChannelMap => _channelMap ??= User.Use<IExternalIdentityService>();
 }

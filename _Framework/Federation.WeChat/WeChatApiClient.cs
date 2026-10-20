@@ -136,6 +136,30 @@ public sealed class WeChatApiClient
     }
 
     /// <summary>
+    /// 拉取关注状态（<c>cgi-bin/user/info</c>——subscribe 字段；I2 §3.5 关注状态反查 IFollowChannelQuery 实现源）。
+    /// <para>用户未关注（subscribe=0）→ 返回 IsFollowing=false；关注（1）→ true；API 失败（errcode）→ null
+    /// （调用方自行处置——对账路径不打 try/catch 兜底，方案 §3.5）。</para>
+    /// </summary>
+    public async Task<WeChatFollowStateInfo?> GetFollowStateAsync(string accessToken, string openid, CancellationToken ct = default)
+    {
+        var url = $"{ApiBase}/cgi-bin/user/info?access_token={Uri.EscapeDataString(accessToken)}&openid={Uri.EscapeDataString(openid)}";
+        using var resp = await _httpClient.GetAsync(url, ct);
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)
+        {
+            _logger.LogWarning("微信 cgi-bin/user/info 拉取失败：{Json}（关注状态反查降级 null）", json);
+            return null;
+        }
+        var subscribed = root.TryGetProperty("subscribe", out var sub) && sub.GetInt32() == 1;
+        DateTime? subscribeTime = null;
+        if (subscribed && root.TryGetProperty("subscribe_time", out var subTime))
+            subscribeTime = DateTimeOffset.FromUnixTimeSeconds(subTime.GetInt64()).UtcDateTime;
+        return new WeChatFollowStateInfo(subscribed, subscribeTime);
+    }
+
+    /// <summary>
     /// 创建/全量覆盖自定义菜单（<c>cgi-bin/menu/create</c> POST——方案 §3.2.1，自实现不引 Senparc）。
     /// <para><paramref name="menuJson"/> 为<b>完整按钮结构 raw JSON 透传</b>（编辑器自由形态——click/view/
     /// miniprogram/media_id/article_id/view_limited 等类型参数各异）；仅验证<b>合法 JSON 对象 + button 非空数组</b>，

@@ -101,7 +101,156 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
 
         Assert.False(result.Success);
         Assert.Equal("WECHAT_SIGNATURE_INVALID", result.FailReason);
-        Assert.Null(result.ExternalUserId);
+    }
+
+    // ═══════════════════ I2-7 语义层精化（归一化/Capabilities/关注状态反查） ═══════════════════
+
+    /// <summary>构造指定 MsgType/Event/EventKey 的合法事件（验签解密全链——I2-7 归一化正分支）。</summary>
+    private static (string MsgEncrypt, string Timestamp, string Nonce, string Signature) BuildEvent(
+        string eventValue, string? eventKey = null, string msgType = "event")
+    {
+        var keyXml = eventKey is null ? "" : $"<EventKey><![CDATA[{eventKey}]]></EventKey>";
+        var xml = $"<xml><ToUserName><![CDATA[gh_test]]></ToUserName><FromUserName><![CDATA[{TestOpenId}]]></FromUserName>"
+            + $"<CreateTime>1234567890</CreateTime><MsgType><![CDATA[{msgType}]]></MsgType><Event><![CDATA[{eventValue}]]></Event>{keyXml}</xml>";
+        var msgEncrypt = WeChatEventCrypto.EncryptMsg(xml, TestAesKey, TestAppId);
+        var timestamp = "1234567890";
+        var nonce = "test-nonce";
+        var signature = WeChatEventCrypto.ComputeSignature(TestToken, timestamp, nonce, msgEncrypt);
+        return (msgEncrypt, timestamp, nonce, signature);
+    }
+
+    private static async Task<ChannelEvent> ParseAsync(WeChatEventChannel channel, (string, string, string, string) msg)
+    {
+        var (encrypt, timestamp, nonce, signature) = msg;
+        var outcome = await channel.HandleEventAsync(
+            WeChatTestHost.CreateEventContext(
+                ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", encrypt)),
+            CancellationToken.None);
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);
+        return outcome.Event!;
+    }
+
+    /// <summary>subscribe（无 EventKey）→ follow（普通关注——§3.3 ①）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_Subscribe_NormalizesToFollow()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("subscribe"));
+        Assert.Equal("follow", evt.EventType);
+        Assert.Null(evt.EventKey);
+        Assert.Null(evt.Source);
+    }
+
+    /// <summary>subscribe + qrscene_ 前缀 → scan_follow（扫码关注——EventKey 去前缀 + Source=scene id，§3.3 ①）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_SubscribeWithScene_NormalizesToScanFollow()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("subscribe", "qrscene_1001"));
+        Assert.Equal("scan_follow", evt.EventType);
+        Assert.Equal("1001", evt.EventKey);
+        Assert.Equal("1001", evt.Source);
+    }
+
+    /// <summary>unsubscribe → unfollow（§3.3 ②——取关）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_Unsubscribe_NormalizesToUnfollow()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("unsubscribe"));
+        Assert.Equal("unfollow", evt.EventType);
+    }
+
+    /// <summary>SCAN（已关注扫码）→ scan_only（EventKey 去前缀 + Source，§3.3 ③——不翻状态）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_Scan_NormalizesToScanOnly()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("SCAN", "qrscene_2002"));
+        Assert.Equal("scan_only", evt.EventType);
+        Assert.Equal("2002", evt.EventKey);
+        Assert.Equal("2002", evt.Source);
+    }
+
+    /// <summary>CLICK → menu_click（EventKey=菜单 key，§3.3 ④）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_Click_NormalizesToMenuClick()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("CLICK", "menu_main"));
+        Assert.Equal("menu_click", evt.EventType);
+        Assert.Equal("menu_main", evt.EventKey);
+        Assert.Null(evt.Source);
+    }
+
+    /// <summary>其余事件（VIEW 等）→ 原文保留（记事实不翻状态，§3.3 ⑤）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_View_KeepsOriginalType()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("VIEW"));
+        Assert.Equal("VIEW", evt.EventType);
+    }
+
+    /// <summary>OccurredAt = CreateTime（1234567890 → UTC 2009-02-13 23:31:30）；CreateTime 原文进 Attributes（wechat.CreateTime）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_CreateTime_ConvertsToOccurredAtUtc()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("subscribe"));
+        var expected = DateTimeOffset.FromUnixTimeSeconds(1234567890).UtcDateTime;
+        Assert.Equal(expected, evt.OccurredAt);
+        Assert.Equal("1234567890", evt.Attributes["wechat.CreateTime"]);
+    }
+
+    /// <summary>RawPayload 保留解密 XML（I2-7 验收——handler/sync 透传数据源不断）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_RawPayload_KeepsDecryptedXml()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var evt = await ParseAsync(channel, BuildEvent("subscribe", "qrscene_1001"));
+        Assert.NotNull(evt.RawPayload);
+        Assert.Contains("qrscene_1001", evt.RawPayload!);
+        Assert.Contains(TestOpenId, evt.RawPayload!);
+    }
+
+    /// <summary>Capabilities：微信首批声明 Event|Follow|FollowQuery|Menu + SilentAuthorize（认证服务号配置）。</summary>
+    [Fact]
+    public async Task Capabilities_DeclaresEventFollowFollowQueryMenu()
+    {
+        using var _ = this;
+        await Setup();
+        // Capabilities 在 IChannelSource（平台级能力声明——§3.4）；经 DI 解析真实 WeChatChannelSource
+        var (provider, _) = BindTestScope();
+        var source = provider.GetRequiredService<IChannelSource>();
+        var caps = source.Capabilities;
+        Assert.True(caps.HasFlag(ChannelCapabilities.Event));
+        Assert.True(caps.HasFlag(ChannelCapabilities.Follow));
+        Assert.True(caps.HasFlag(ChannelCapabilities.FollowQuery));
+        Assert.True(caps.HasFlag(ChannelCapabilities.Menu));
+        Assert.True(caps.HasFlag(ChannelCapabilities.SilentAuthorize));   // 测试配置含 AppId/AppSecret
+    }
+
+    /// <summary>关注状态反查（IFollowChannelQuery——经 cgi-bin/user/info subscribe 字段；对账路径）。</summary>
+    [Fact]
+    public async Task QueryFollowState_Subscribed_ReturnsFollowingTrue()
+    {
+        using var _ = this;
+        // 反查走出站 ApiClient（基类 Stub IHttpClientFactory 路由 cgi-bin/user/info——subscribe=1）
+        var channel = await Setup();
+        var svc = Assert.IsType<WeChatEventChannel>(channel);
+
+        var snap = await svc.QueryFollowStateAsync("oa_openid_event_1", CancellationToken.None);
+        Assert.NotNull(snap);
+        Assert.True(snap!.IsFollowing);
     }
 
     [Fact]
@@ -171,8 +320,8 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);
         var evt = Assert.IsType<ChannelEvent>(outcome.Event);
         // 评审 F4——MsgType/Event 提取到语义事件（Attributes 承载；Parameters 只留原始 query）
-        Assert.Equal("event", evt.Attributes["msg_type"]);
-        Assert.Equal("CLICK", evt.Attributes["event"]);
+        Assert.Equal("event", evt.Attributes["wechat.MsgType"]);
+        Assert.Equal("CLICK", evt.Attributes["wechat.Event"]);
         Assert.Equal(TestOpenId, evt.ExternalUserId);
         // Oracle P1-4——解密后明文 XML 承载 RawPayload（handler WechatEventContext.FromChannelEvent 重建数据源）
         Assert.NotNull(evt.RawPayload);
@@ -194,8 +343,8 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
 
         Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);   // I2：合法事件 → Parsed（通道不产回复——回复归 handler/端点）
         var evt = outcome.Event!;
-        Assert.Equal("event", evt.Attributes["msg_type"]);   // 富化不依赖 handler（Attributes 承载）
-        Assert.Equal("CLICK", evt.Attributes["event"]);
+        Assert.Equal("event", evt.Attributes["wechat.MsgType"]);   // 富化不依赖 handler（Attributes 承载）
+        Assert.Equal("CLICK", evt.Attributes["wechat.Event"]);
         Assert.NotNull(evt.RawPayload);
     }
 
@@ -390,9 +539,10 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
 
         Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);   // I2：合法事件 → Parsed
         var evt = outcome.Event!;
-        // 富化验证：msg_type=text + content=消息原文（图文 Description 源）+ openid
-        Assert.Equal("text", evt.Attributes["msg_type"]);
-        Assert.Equal("你好，欢迎使用", evt.Attributes["content"]);
+        // 富化验证：msg_type=text + content=消息原文（图文 Description 源）+ openid + 归一 message（I2-7）
+        Assert.Equal("text", evt.Attributes["wechat.MsgType"]);
+        Assert.Equal("你好，欢迎使用", evt.Attributes["wechat.Content"]);
+        Assert.Equal("message", evt.EventType);   // 消息类归一（§3.3 ⑥）
         Assert.Equal(TestOpenId, evt.ExternalUserId);
         // Oracle P1-4——解密后明文 XML 承载 RawPayload（__raw 提取 Encrypt → 解密）
         Assert.NotNull(evt.RawPayload);

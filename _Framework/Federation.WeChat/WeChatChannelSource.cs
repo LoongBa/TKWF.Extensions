@@ -28,6 +28,23 @@ public sealed class WeChatChannelSource : IChannelSource
     /// <inheritdoc />
     public string PlatformType => "wechat";
 
+    /// <summary>能力声明（I2 §3.4——微信首批：事件 + 关注事件 + 状态反查 + 菜单出站；SilentAuthorize 视认证服务号）。
+    /// <para>判据（§3.4）：能力不足 → 编排层直接跳过（不报错不降级）；本平台声明 Event|Follow|FollowQuery|
+    /// Menu 恒成立（事件推送解析 + 关注事件产生 + cgi-bin/user/info 反查 + 菜单 API 已实现——WeChatEventChannel/
+    /// WeChatApiClient）；SilentAuthorize 按配置（未认证服务号 → 不声明，免登入口自然降级——§6 微信免登闭环）。</para></summary>
+    public ChannelCapabilities Capabilities
+    {
+        get
+        {
+            var caps = ChannelCapabilities.Event | ChannelCapabilities.Follow
+                | ChannelCapabilities.FollowQuery | ChannelCapabilities.Menu;
+            var any = _options.Value.Channels;
+            if (any.Any(c => !string.IsNullOrEmpty(c.AppId) && !string.IsNullOrEmpty(c.AppSecret)))
+                caps |= ChannelCapabilities.SilentAuthorize;
+            return caps;
+        }
+    }
+
     /// <inheritdoc />
     public IReadOnlyList<ChannelConfig> GetChannels()
         => _options.Value.Channels

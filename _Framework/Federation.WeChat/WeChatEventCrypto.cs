@@ -273,6 +273,52 @@ internal static class WeChatEventCrypto
                 string.IsNullOrWhiteSpace(eventValue) ? null : eventValue.Trim());
     }
 
+    /// <summary>提取事件键（EventKey——扫码 scene/菜单 key）；缺失 → null。</summary>
+    public static string? ExtractEventKey(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml)) return null;
+        try
+        {
+            var value = XDocument.Parse(xml).Root?.Element("EventKey")?.Value;
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>提取协议秒级时间戳（CreateTime——Unix 秒）；缺失/非法 → null（I2-7：OccurredAt UTC 换算数据源）。</summary>
+    public static long? ExtractCreateTime(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml)) return null;
+        try
+        {
+            var value = XDocument.Parse(xml).Root?.Element("CreateTime")?.Value;
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            return long.TryParse(value.Trim(), out var ts) ? ts : null;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>提取消息类事件 MsgId（消息类有、事件类无）；缺失 → null。</summary>
+    public static string? ExtractMsgId(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml)) return null;
+        try
+        {
+            var value = XDocument.Parse(xml).Root?.Element("MsgId")?.Value;
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// 测试辅助：AES-256-CBC 加密（构造合法 msg_encrypt 正向样本）——与 <see cref="DecryptMsg"/> 严格对称。
     /// <para>明文布局同官方加密侧：<c>[16B 随机][4B 网络序消息长度][XML][receiveid]</c> + PKCS7。</para>

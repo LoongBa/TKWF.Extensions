@@ -134,6 +134,10 @@ internal static class WeChatTestHost
             {
                 json = "{\"errcode\":0,\"errmsg\":\"ok\"}";
             }
+            else if (path.EndsWith("/cgi-bin/user/info", StringComparison.Ordinal))
+            {
+                json = $"{{\"subscribe\":1,\"openid\":\"{_openId}\",\"subscribe_time\":1730000000}}";
+            }
             else
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));

@@ -34,23 +34,27 @@ namespace TKWF.Federation.WeChat;
 /// （Oracle P2-3——与正常路径 null 区分，编排器短路空回复不触发 handler 双桶；200 空回复兜底由端点层保证）。</para>
 /// </summary>
 [DiContractIgnore]
-public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
+public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel, IFollowChannelQuery
 {
     private readonly ChannelConfig? _channel;
+    private readonly WeChatApiClient? _weChatApi;
     private readonly ILogger<WeChatEventChannel> _logger;
 
     /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入，POCO 非域服务）；
     /// <paramref name="channel"/> 为 null = 集合模板实例（工厂类型索引源，不直接认证——v0.3.0 多通道）。
     /// 凭证（Token/EncodingAESKey——事件验签信任根）在 <c>AuthenticateAsync</c>/<c>HandleEventAsync</c>
     /// 从 cfg.Extra 使用。<paramref name="logger"/> = 结构化日志（工厂 ActivatorUtilities 从 DI 自动解析，
-    /// 无需调用点改动）。</summary>
+    /// 无需调用点改动）。<paramref name="weChatApi"/> = 出站 ApiClient（关注状态反查 IFollowChannelQuery 用——
+    /// typed client DI 注入；模板实例可空）。</summary>
     public WeChatEventChannel(
         IDomainUser user,
         ChannelConfig? channel = null,
+        WeChatApiClient? weChatApi = null,
         ILogger<WeChatEventChannel>? logger = null)
         : base(user)
     {
         _channel = channel;
+        _weChatApi = weChatApi;
         // 模板实例（集合类型索引源——ctor channel=null）可能直构不经 DI——logger 缺失时 NullLogger 容错（不抛）
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatEventChannel>.Instance;
     }
@@ -60,6 +64,21 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
 
     /// <inheritdoc />
     public string ChannelId => _channel?.ChannelId ?? "";
+
+    /// <summary>关注状态反查（I2 §3.5——经 cgi-bin/user/info；对账路径，不在事件路径调用）。</summary>
+    /// <param name="externalUserId">openid。</param>
+    /// <returns>关注状态快照；API 失败/未装配 ApiClient → null（调用方自行处置）。</returns>
+    public async Task<FollowStateSnapshot?> QueryFollowStateAsync(string externalUserId, CancellationToken ct = default)
+    {
+        if (_channel is null || _weChatApi is null || string.IsNullOrWhiteSpace(externalUserId)) return null;
+        var appId = _channel.AppId;
+        if (string.IsNullOrEmpty(appId)) return null;
+
+        var accessToken = await _weChatApi.GetAccessTokenAsync(appId, "mp", ct);
+        var state = await _weChatApi.GetFollowStateAsync(accessToken, externalUserId, ct);
+        if (state is null) return null;
+        return new FollowStateSnapshot(state.IsFollowing, state.SubscribeTime, null);
+    }
 
     /// <inheritdoc />
     public Task<SsoChannelAuthResult> AuthenticateAsync(SsoChannelAuthContext context, CancellationToken ct = default)
@@ -317,6 +336,9 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
             var toUserName = WeChatEventCrypto.ExtractToUserName(xml);
             var (msgType, eventValue) = WeChatEventCrypto.ExtractMsgTypeAndEvent(xml);
             var msgContent = WeChatEventCrypto.ExtractContent(xml);
+            var eventKey = WeChatEventCrypto.ExtractEventKey(xml);
+            var createTime = WeChatEventCrypto.ExtractCreateTime(xml);
+            var msgId = WeChatEventCrypto.ExtractMsgId(xml);
 
             // 解密成功但 openid 不可得——按方案 §5.3「解析不出 openid → NotApplicable」处理
             if (string.IsNullOrWhiteSpace(openId))
@@ -325,22 +347,33 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
                 return Task.FromResult(ChannelEventOutcome.NotApplicable);
             }
 
-            // I2 语义层：解析为平台无关 ChannelEvent（EventType = event 值优先（关注/取关/菜单…），否则 msg_type
-            // （文本/图片…消息类）；EventKey/UnionId/Source/OccurredAt 精化赋值归 I2-7 微信完整解析波）
+            // I2-7 语义层精化：EventType 归一（平台厂商语义 → 关注域契约值）+ Attributes 键 wechat. 前缀
+            // （oracle6 C6——跨平台键冲突消除）+ OccurredAt（CreateTime 秒级 → UTC）+ EventKey/Source/MessageId 赋值
+            var (normalizedType, normalizedKey, source) = NormalizeWechatEvent(msgType, eventValue, eventKey);
+            var occurredAt = createTime.HasValue
+                ? DateTimeOffset.FromUnixTimeSeconds(createTime.Value).UtcDateTime
+                : DateTime.UtcNow;
+
             var evt = new ChannelEvent
             {
                 ChannelId = _channel.ChannelId,
                 ChannelType = "wechat_event",
                 ExternalUserId = openId,
-                EventType = string.IsNullOrEmpty(eventValue) ? (msgType ?? "unknown") : eventValue!,
+                EventType = normalizedType,
+                EventKey = normalizedKey,
+                Source = source,
+                MessageId = msgId,
+                OccurredAt = occurredAt,
+                ReceivedAt = DateTime.UtcNow,
                 RawPayload = xml,   // 解密后明文 XML——handler/sync 透传数据源（FromChannelEvent 重建）
                 Attributes = new Dictionary<string, string?>
                 {
-                    ["msg_type"] = msgType,
-                    ["event"] = eventValue,
-                    ["to_user_name"] = toUserName,
-                    ["from_user_name"] = openId,
-                    ["content"] = msgContent,
+                    ["wechat.MsgType"] = msgType,
+                    ["wechat.Event"] = eventValue,
+                    ["wechat.ToUserName"] = toUserName,
+                    ["wechat.FromUserName"] = openId,
+                    ["wechat.Content"] = msgContent,
+                    ["wechat.CreateTime"] = createTime?.ToString(),
                 },
             };
 
@@ -355,5 +388,50 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
             _logger.LogWarning("微信事件解密失败：msg_encrypt AES 解密/XML 解析异常 ChannelId={ChannelId}", _channel.ChannelId);
             return Task.FromResult(ChannelEventOutcome.Rejected);
         }
+    }
+
+    /// <summary>
+    /// 微信事件类型归一（I2 §3.3 语义层——平台厂商语义 → 关注域契约值）。
+    /// <para>映射（§4.1 EventType 枚举语义）：</para>
+    /// <para>① <c>subscribe</c>（无 EventKey）→ <c>follow</c>——普通关注；带 <c>qrscene_</c> 前缀 EventKey → <c>scan_follow</c>
+    /// （扫码关注——EventKey 去前缀存 EventKey，Source=scene id）；</para>
+    /// <para>② <c>unsubscribe</c> → <c>unfollow</c>；③ <c>SCAN</c>（已关注用户扫码）→ <c>scan_only</c>
+    /// （EventKey 去前缀，Source=scene id）；④ <c>CLICK</c> → <c>menu_click</c>（EventKey=菜单 key）；</para>
+    /// <para>⑤ 其余事件值（VIEW/LOCATION/TEMPLATESENDJOBFINISH 等）→ 事件值原文（关注域不翻状态——记事实）；</para>
+    /// <para>⑥ 消息类（MsgType != event）→ <c>message</c>（MsgId 承载，EventKey 不适用）。</para>
+    /// <para>返回 (归一 EventType, 归一 EventKey, Source)。</para>
+    /// </summary>
+    private static (string Type, string? Key, string? Source) NormalizeWechatEvent(string? msgType, string? eventValue, string? eventKey)
+    {
+        // 消息类（text/image/voice...）——非事件
+        if (!string.Equals(msgType, "event", StringComparison.OrdinalIgnoreCase))
+            return ("message", null, null);
+
+        switch (eventValue)
+        {
+            case "subscribe":
+                // 无 EventKey（普通关注）→ follow；带 qrscene_ 前缀 → scan_follow（扫码关注）
+                return string.IsNullOrEmpty(eventKey)
+                    ? ("follow", null, null)
+                    : NormalizeSceneKey(eventKey, follow: true);
+            case "unsubscribe":
+                return ("unfollow", null, null);
+            case "SCAN":
+                return NormalizeSceneKey(eventKey, follow: false);
+            case "CLICK":
+                return ("menu_click", eventKey, null);
+            default:
+                // 其余事件（VIEW/LOCATION/TEMPLATESENDJOBFINISH...）——原文保留（记事实不翻状态）
+                return (eventValue ?? "unknown", eventKey, null);
+        }
+    }
+
+    /// <summary>扫码事件（subscribe+qrscene_/SCAN）——EventKey 去 <c>qrscene_</c> 前缀 + Source=scene id（R5 统计维度）。</summary>
+    private static (string Type, string? Key, string? Source) NormalizeSceneKey(string? eventKey, bool follow)
+    {
+        var scene = eventKey;
+        if (scene is not null && scene.StartsWith("qrscene_", StringComparison.Ordinal))
+            scene = scene["qrscene_".Length..];
+        return (follow ? "scan_follow" : "scan_only", scene, scene);
     }
 }

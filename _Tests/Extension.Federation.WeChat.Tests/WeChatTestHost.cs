@@ -64,9 +64,34 @@ internal static class WeChatTestHost
     public static SsoChannelAuthContext CreateContext(params (string Key, string? Value)[] parameters)
         => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
 
-    /// <summary>构造 SsoChannelEventContext（事件链 E3——HandleEventAsync 用例；Dictionary 实例原地富化跨调用方可见）。</summary>
-    public static SsoChannelEventContext CreateEventContext(params (string Key, string? Value)[] parameters)
+    /// <summary>构造入站报文上下文（I2 传输层——<see cref="ChannelEventDispatch"/> 前身；通道直测
+    /// <c>HandleEventAsync</c>/<c>VerifyUrlAsync</c> 用例；Dictionary 实例原地富化跨调用方可见）。</summary>
+    public static ChannelInboundContext CreateEventContext(params (string Key, string? Value)[] parameters)
         => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
+
+    /// <summary>构造语义事件派发（I2 语义层——<see cref="IEventReplyHandler.HandleAsync"/> 用例：
+    /// 微信参数包 → 语义 <see cref="ChannelEvent"/>（RawPayload 由 <c>__decrypted_xml</c> 键承载——handler
+    /// <see cref="WechatEventContext.FromChannelEvent"/> 重建数据源）。</summary>
+    public static ChannelEventDispatch CreateEventDispatch(params (string Key, string? Value)[] parameters)
+    {
+        var dict = new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value)));
+        dict.TryGetValue("channel_id", out var channelId);
+        dict.TryGetValue("from_user_name", out var fromUserName);
+        dict.TryGetValue("external_user_id", out var externalUserId);
+        dict.TryGetValue("event", out var eventValue);
+        dict.TryGetValue("__decrypted_xml", out var rawXml);
+        var evt = new ChannelEvent
+        {
+            ChannelId = channelId ?? "",
+            ChannelType = "wechat_event",
+            ExternalUserId = externalUserId ?? fromUserName ?? "",
+            EventType = eventValue ?? "unknown",
+            RawPayload = rawXml,
+            Attributes = dict,
+        };
+        dict.TryGetValue("uid", out var uid);
+        return new ChannelEventDispatch(evt, uid);
+    }
 
     /// <summary>Stub HttpMessageHandler 实现（路由微信 API 路径）。</summary>
     private sealed class StubWeChatHandler : HttpMessageHandler

@@ -41,7 +41,7 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
     }
 
     /// <inheritdoc />
-    public async Task<EventReplyResult?> OrchestrateAsync(string channelId, string channelType, SsoChannelEventContext context, CancellationToken ct = default)
+    public async Task<EventReplyResult?> OrchestrateAsync(string channelId, string channelType, ChannelInboundContext context, CancellationToken ct = default)
     {
         try
         {
@@ -52,33 +52,46 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
                 return null;
             }
 
-            // uid 只读查询（评审 F7——GetByExternalIdAsync 只读不建号，不调 LinkAsync）→ 富化 Parameters["uid"] 供 handler 签票据
-            if (context.Parameters != null
-                && context.Parameters.TryGetValue("external_user_id", out var externalUserId)
-                && !string.IsNullOrEmpty(externalUserId))
+            // I2 语义层（方案 §5.1 时序）：通道解析 → outcome 三态分派
+            var outcome = await channel.HandleEventAsync(context, ct);
+            if (outcome.State == ChannelEventOutcomeState.Rejected)
             {
-                var map = await ChannelMap.GetByExternalIdAsync(channelId, externalUserId, ct);
-                if (map is not null && context.Parameters is Dictionary<string, string?> dict)
+                // 信任根失败/解密失败——编排短路（不记录、不回复、不回退 handler；装配层 200 空回复兜底）
+                _logger.LogWarning("事件编排拒绝（信任根）：ChannelId={ChannelId} ChannelType={ChannelType}",
+                    channelId, channelType);
+                return null;
+            }
+            if (outcome.State == ChannelEventOutcomeState.NotApplicable || outcome.Event is null)
+            {
+                // 非事件通道/无事件语义——跳过（无 handler 迭代：dispatch 不存在）
+                _logger.LogDebug("事件编排跳过（非事件）：ChannelId={ChannelId} ChannelType={ChannelType}",
+                    channelId, channelType);
+                return null;
+            }
+            var evt = outcome.Event;
+
+            // uid 只读查询（评审 F7——GetByExternalIdAsync 只读不建号，不调 LinkAsync）→ dispatch 承载供 handler 决策
+            string? uid = null;
+            if (!string.IsNullOrEmpty(evt.ExternalUserId))
+            {
+                var map = await ChannelMap.GetByExternalIdAsync(channelId, evt.ExternalUserId, ct);
+                if (map is not null)
                 {
-                    dict["uid"] = map.UId;
-                    _logger.LogInformation("事件编排 uid 命中：ChannelId={ChannelId} OpenId={OpenId} UId={UId}",
-                        channelId, externalUserId, map.UId);
+                    uid = map.UId;
+                    _logger.LogInformation("事件编排 uid 命中：ChannelId={ChannelId} ExternalUserId={ExternalUserId} UId={UId}",
+                        channelId, evt.ExternalUserId, map.UId);
                 }
                 else
                 {
-                    _logger.LogWarning("事件编排 uid 未命中（openid 未绑定 → handler 不触发 → 空回复）：ChannelId={ChannelId} OpenId={OpenId}",
-                        channelId, externalUserId);
+                    _logger.LogWarning("事件编排 uid 未命中（未绑定 → handler 仍可回复，UId=null）：ChannelId={ChannelId} ExternalUserId={ExternalUserId}",
+                        channelId, evt.ExternalUserId);
                 }
             }
             else
             {
-                _logger.LogWarning("事件编排缺 external_user_id（验签后未富化/参数缺失）：ChannelId={ChannelId}", channelId);
+                _logger.LogWarning("事件编排缺 ExternalUserId：ChannelId={ChannelId}", channelId);
             }
-
-            // 平台化回复（微信 XML 等——平台库通道实现；null = 无平台回复，走 handler 委托）
-            var platformReply = await channel.HandleEventAsync(context, ct);
-            if (platformReply is not null)
-                return platformReply;
+            var dispatch = new ChannelEventDispatch(evt, uid);
 
             // handler 委托（W3 双桶解析——2026-10-16 两级模型）：
             //   桶 1：通道特定绑定（实现 IChannelSpecificEventReplyHandler 且 ChannelId 精确匹配——first-non-null-wins）
@@ -89,7 +102,7 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
                 if (handler is IChannelSpecificEventReplyHandler specific
                     && string.Equals(specific.ChannelId, channelId, StringComparison.Ordinal))
                 {
-                    var reply = await handler.HandleAsync(context, ct);
+                    var reply = await handler.HandleAsync(dispatch, ct);
                     if (reply is not null)
                         return reply;
                 }
@@ -98,7 +111,7 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
             {
                 if (string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
                 {
-                    var reply = await handler.HandleAsync(context, ct);
+                    var reply = await handler.HandleAsync(dispatch, ct);
                     if (reply is not null)
                         return reply;
                 }

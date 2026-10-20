@@ -68,23 +68,25 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     public virtual string ChannelType => "wechat_event";
 
     /// <inheritdoc />
-    public async Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
+    public async Task<EventReplyResult?> HandleAsync(ChannelEventDispatch dispatch, CancellationToken ct = default)
     {
-        if (context?.Parameters is not { } parameters)
+        if (dispatch?.Event is null)
             return null;
 
-        // ① 解析：Parameters（msg_type/event/...）+ __decrypted_xml（EventKey/经纬度/PicUrl/MediaId 等未富化字段——
-        //   Oracle P1-4；__decrypted_xml 缺失容错不抛）
-        var wechat = WechatEventContext.Parse(parameters);
+        // ① 语义事件 → 微信上下文一次性重建（I2 §8.2 C3——RawPayload 承载解密 XML 复用 Parse 复原全部字段；
+        //   RawPayload 缺失（非 XML 通道）→ null（fail-closed，不猜字段）
+        var wechat = WechatEventContext.FromChannelEvent(dispatch.Event, dispatch.UId);
+        if (wechat is null)
+            return null;
 
-        // 通道配置反查（channel_id → ChannelConfig——ReadNewsTemplate/Channel.Extra 数据源，入口一次查询；
+        // ② 通道配置反查（channel_id → ChannelConfig——ReadNewsTemplate/Channel.Extra 数据源，入口一次查询；
         //   查不到 → Channel=null，模板读取自然 null——不拦截业务 handler，对齐"无法构造有效回复则 null"语义）
         wechat = wechat with { Channel = await ResolveChannelAsync(wechat.ChannelId, ct) };
 
-        // ② 二级分发（MsgType/Event → 强类型虚方法；未覆盖分支 → OnDefaultAsync）
+        // ③ 二级分发（MsgType/Event → 强类型虚方法；未覆盖分支 → OnDefaultAsync）
         var payload = await DispatchAsync(wechat, ct);
 
-        // ③ 协议门控：NoReplyEvents（unsubscribe/MASSSENDJOBFINISH/TEMPLATESENDJOBFINISH）强制 null
+        // ④ 协议门控：NoReplyEvents（unsubscribe/MASSSENDJOBFINISH/TEMPLATESENDJOBFINISH）强制 null
         //   ——虚方法已执行（业务副作用可做，如记录取关），回复被吞（Oracle P2-3 对齐）
         if (IsNoReplyEvent(wechat))
         {
@@ -92,7 +94,7 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
             return null;
         }
 
-        // ④ 业务载荷 → 微信 XML 信封（text / news 图文；空载荷 → null 不占 first-non-null-wins 槽）
+        // ⑤ 业务载荷 → 微信 XML 信封（text / news 图文；空载荷 → null 不占 first-non-null-wins 槽）
         return payload is null ? null : BuildReplyResult(wechat, payload);
     }
 

@@ -169,9 +169,9 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
     /// <para>信任根一票否决：漏验 msg_signature/signature = 可伪造任意 openid = 体系崩溃（对齐
     /// <see cref="AuthenticateAsync"/> 同款纵深防御——本方法可被直连调用，验签信任根须自持）。</para>
     /// </summary>
-    /// <param name="context">事件上下文——query 透传参数（msg_signature/signature/timestamp/nonce/echostr）。</param>
+    /// <param name="context">入站报文上下文——query 透传参数（msg_signature/signature/timestamp/nonce/echostr）。</param>
     /// <returns>回显明文 echostr（text/plain）；失败 null。</returns>
-    public Task<string?> VerifyUrlAsync(SsoChannelEventContext context, CancellationToken ct = default)
+    public Task<string?> VerifyUrlAsync(ChannelInboundContext context, CancellationToken ct = default)
     {
         if (_channel is null)
             return Task.FromResult<string?>(null);
@@ -243,30 +243,28 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
         }
     }
 
-    /// <inheritdoc />
-    public Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
+/// <inheritdoc />
+    public Task<ChannelEventOutcome> HandleEventAsync(ChannelInboundContext context, CancellationToken ct = default)
     {
-        // 与 AuthenticateAsync 同款守卫（模板实例/禁用/配置缺失/参数缺失/验签失败/解密失败 → null——
-        // 错误语义由装配层 AuthenticateAsync 先行映射（WebExtension 验签成功后才会调本方法）；null 仅表示无平台回复）。
+        // 与 AuthenticateAsync 同款守卫（模板实例/禁用/配置缺失/参数缺失/验签失败/解密失败 → Rejected/NotApplicable——
+        // 错误语义由装配层 AuthenticateAsync 先行映射（WebExtension 验签成功后才会调本方法）。
         // ⚠️ 重复验签+解密链（Oracle P2-2 记录——性能非安全，保留设计）：WebExtension 端点已先验签成功，
         // 本方法仍自验——因本方法是通道契约方法，可被直连调用（不经装配层），验签信任根须自持（纵深防御）；
         // 不可用"external_user_id 已存在即跳过验签"优化（存在直调伪造 openid 绕过信任根的漏洞）。
-        // Phase 2 契约微调选项（记录，不阻断）：AuthenticateAsync 返回解密 XML 供 HandleEventAsync 复用，需契约微调。
         if (_channel is null)
-            return Task.FromResult<EventReplyResult?>(null);
+            return Task.FromResult(ChannelEventOutcome.NotApplicable);   // 模板实例（集合类型索引源）不解析
         if (!_channel.IsEnabled)
-            return Task.FromResult<EventReplyResult?>(null);
+            return Task.FromResult(ChannelEventOutcome.NotApplicable);
 
         _channel.Extra.TryGetValue("Token", out var token);
         _channel.Extra.TryGetValue("EncodingAESKey", out var encodingAesKey);
         if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(encodingAesKey))
-            return Task.FromResult<EventReplyResult?>(null);
+            return Task.FromResult(ChannelEventOutcome.Rejected);         // 信任根配置缺失——绝不解析
 
         if (context.Parameters == null)
-            return Task.FromResult<EventReplyResult?>(null);
+            return Task.FromResult(ChannelEventOutcome.Rejected);
 
         // 微信官方 URL 参数名 = msg_signature；装配层亦可能透传 "signature"（兼容两种命名）
-        // 预声明 + 独立 TryGetValue（out var 置于复合 || 条件中编译器不保证已赋值——CS0165 保守判定）
         string? signature = null;
         string? timestamp = null;
         string? nonce = null;
@@ -304,12 +302,12 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
 
             if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)
                 || string.IsNullOrEmpty(nonce) || string.IsNullOrEmpty(msgEncrypt))
-                return Task.FromResult<EventReplyResult?>(null);
+                return Task.FromResult(ChannelEventOutcome.Rejected);     // 参数缺失——无法验签
         }
 
         // 信任根一票否决：验签失败 → 拒绝（绝不解密伪造密文）
         if (!WeChatEventCrypto.VerifySignature(token!, timestamp!, nonce!, msgEncrypt!, signature!))
-            return Task.FromResult<EventReplyResult?>(null);
+            return Task.FromResult(ChannelEventOutcome.Rejected);
 
         try
         {
@@ -320,36 +318,42 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel
             var (msgType, eventValue) = WeChatEventCrypto.ExtractMsgTypeAndEvent(xml);
             var msgContent = WeChatEventCrypto.ExtractContent(xml);
 
-            // 富化共享参数字典（评审 F4——MsgType/Event 进 Parameters，供编排/handler 消费；装配层构造
-            // Dictionary 实例经 record 传入——原地富化跨调用方可见）
-            if (context.Parameters is Dictionary<string, string?> dict)
+            // 解密成功但 openid 不可得——按方案 §5.3「解析不出 openid → NotApplicable」处理
+            if (string.IsNullOrWhiteSpace(openId))
             {
-                dict["external_user_id"] = openId;
-                dict["msg_type"] = msgType ?? "";
-                dict["event"] = eventValue ?? "";
-                dict["to_user_name"] = toUserName;
-                dict["from_user_name"] = openId;
-                if (msgContent is not null)
-                    dict["content"] = msgContent;
-                // Oracle P1-4：解密后明文 XML 入 Parameters——平台基类 WechatEventMessage.Parse 数据源
-                // （EventKey/经纬度/PicUrl/MediaId 等未富化字段从 __decrypted_xml XDocument 提取——通道不新增 Extract）
-                dict["__decrypted_xml"] = xml;
+                _logger.LogWarning("微信事件入站缺 openid：ChannelId={ChannelId}", _channel.ChannelId);
+                return Task.FromResult(ChannelEventOutcome.NotApplicable);
             }
+
+            // I2 语义层：解析为平台无关 ChannelEvent（EventType = event 值优先（关注/取关/菜单…），否则 msg_type
+            // （文本/图片…消息类）；EventKey/UnionId/Source/OccurredAt 精化赋值归 I2-7 微信完整解析波）
+            var evt = new ChannelEvent
+            {
+                ChannelId = _channel.ChannelId,
+                ChannelType = "wechat_event",
+                ExternalUserId = openId,
+                EventType = string.IsNullOrEmpty(eventValue) ? (msgType ?? "unknown") : eventValue!,
+                RawPayload = xml,   // 解密后明文 XML——handler/sync 透传数据源（FromChannelEvent 重建）
+                Attributes = new Dictionary<string, string?>
+                {
+                    ["msg_type"] = msgType,
+                    ["event"] = eventValue,
+                    ["to_user_name"] = toUserName,
+                    ["from_user_name"] = openId,
+                    ["content"] = msgContent,
+                },
+            };
 
             _logger.LogInformation("微信事件入站：ChannelId={ChannelId} MsgType={MsgType} Event={Event} OpenId={OpenId} Content={Content}",
                 _channel.ChannelId, msgType ?? "", eventValue ?? "", openId, msgContent ?? "");
 
-            // 正常路径：验签解密成功 + 富化完成 → 返回 null（"无平台回复"——编排器 EventOrchestrator 接收后
-            // 转 handler 双桶迭代：W3 绑定桶优先 → ChannelType 桶回退。方案 §3.4——G4 W3 绑定桶对微信可达 /
-            // G5 迭代权统一编排器 / G6 XML 信封上移平台基类（通道回归"验签+解密+取身份+富化"，对齐 WeCom/DingTalk））
-            return Task.FromResult<EventReplyResult?>(null);
+            return Task.FromResult(ChannelEventOutcome.Parsed(evt));
         }
         catch (Exception) when (ct.IsCancellationRequested is false)
         {
-            // 解密失败/格式非法——空哨兵（Oracle P2-3）：返回非 null 空回复（与正常路径 null 区分——
-            // 编排器短路，不触发 handler 双桶；200 空回复兜底由端点层保证，微信 5 秒超时规避）
+            // 解密失败/格式非法——信任根失败（Rejected——编排短路，200 空回复兜底由端点层保证，微信 5 秒超时规避）
             _logger.LogWarning("微信事件解密失败：msg_encrypt AES 解密/XML 解析异常 ChannelId={ChannelId}", _channel.ChannelId);
-            return Task.FromResult<EventReplyResult?>(new EventReplyResult("", "text/xml"));
+            return Task.FromResult(ChannelEventOutcome.Rejected);
         }
     }
 }

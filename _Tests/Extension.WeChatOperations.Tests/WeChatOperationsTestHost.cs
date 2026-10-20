@@ -357,9 +357,28 @@ internal static class WeChatOperationsTestSupport
         List<string>? menuCreateBodies = null)
         => new StubWeChatHandler(menuJson, menuCreateBodies);
 
-    /// <summary>构造 SsoChannelEventContext（handler 用例——Parameters 键值包）。</summary>
-    public static TKWF.Ext.Federation.SsoChannelEventContext CreateEventContext(params (string Key, string? Value)[] parameters)
-        => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
+    /// <summary>构造语义事件派发（I2 语义层——handler 用例：微信参数包 → 语义 <see cref="ChannelEvent"/>；
+    /// RawPayload 由 <c>__decrypted_xml</c> 键承载——handler <c>WechatEventContext.FromChannelEvent</c> 重建数据源）。</summary>
+    public static TKWF.Ext.Federation.ChannelEventDispatch CreateEventContext(params (string Key, string? Value)[] parameters)
+    {
+        var dict = new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value)));
+        dict.TryGetValue("channel_id", out var channelId);
+        dict.TryGetValue("from_user_name", out var fromUserName);
+        dict.TryGetValue("external_user_id", out var externalUserId);
+        dict.TryGetValue("event", out var eventValue);
+        dict.TryGetValue("__decrypted_xml", out var rawXml);
+        var evt = new TKWF.Ext.Federation.ChannelEvent
+        {
+            ChannelId = channelId ?? "",
+            ChannelType = "wechat_event",
+            ExternalUserId = externalUserId ?? fromUserName ?? "",
+            EventType = eventValue ?? "unknown",
+            RawPayload = rawXml,
+            Attributes = dict,
+        };
+        dict.TryGetValue("uid", out var uid);
+        return new TKWF.Ext.Federation.ChannelEventDispatch(evt, uid);
+    }
 
     /// <summary>构造微信内层消息 XML（CDATA 包裹——__decrypted_xml 数据源形态）。</summary>
     public static string WxXml(params (string Name, string Value)[] fields)

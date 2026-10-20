@@ -30,15 +30,6 @@ public sealed record SsoChannelAuthorizeContext(string RedirectUri, string? Stat
 public sealed record SsoChannelAuthorizeResult(string Url, string? State, string? PkceVerifier, string? PkceChallenge);
 
 /// <summary>
-/// 事件推送上下文（外部身份联邦 E3——平台事件入站；键值模型对齐 <see cref="SsoChannelAuthContext"/>）。
-/// <para>参数约定：<c>__raw</c> = 原始 body；query 参数（msg_signature/signature/timestamp/nonce/echostr——
-/// 微信验签参数在 URL query，装配层透传）；<c>channel_id</c>；平台库通道验签解密后富化
-/// <c>external_user_id</c>（openid）/ <c>msg_type</c> / <c>event</c>；编排层 uid 只读查询后富化 <c>uid</c>
-/// （评审 F7——<c>GetByExternalIdAsync</c> 只读不建号，不调 LinkAsync）。</para>
-/// </summary>
-public sealed record SsoChannelEventContext(IReadOnlyDictionary<string, string?> Parameters);
-
-/// <summary>
 /// 事件平台化回复（外部身份联邦 E3 评审 F5）——<c>Content</c> = 响应体（微信 XML 被动回复 text/xml）；
 /// 空 <c>Content</c> + "text/xml" = 200 空回复（微信 5 秒超时约束兜底——异步客服消息机制归 Phase 2/消费方）。
 /// <para><b>V0.1.1 图文扩展（非破坏）</b>：<see cref="NewsArticles"/> 可空——平台库通道（WeChatEventChannel）
@@ -92,15 +83,17 @@ public interface ISsoChannel : IDomainService
     Task<SsoChannelAuthorizeResult?> BuildAuthorizeUrlAsync(SsoChannelAuthorizeContext context, CancellationToken ct = default) => Task.FromResult<SsoChannelAuthorizeResult?>(null);
 
     /// <summary>
-    /// 处理平台事件推送并返回平台化回复（外部身份联邦 E3——ADR-Federation-外部身份联邦与密封票据适配 E3）。
-    /// <para><b>DIM 默认 null = 非事件通道零强制</b>（对齐 <see cref="BuildAuthorizeUrlAsync"/> DIM 模式——既有/未来平台库零改动）；
-    /// 事件通道（如 <c>wechat_event</c>）实现：验签（信任根一票否决）+ AES 解密 → 提取 openid/MsgType/Event
-    /// 富化 <see cref="SsoChannelEventContext.Parameters"/> → 微信 XML 被动回复（text/xml）/ 空 Content 200 兜底
-    /// （微信 5 秒超时约束——异步客服消息归 Phase 2/消费方）。</para>
-    /// <para>返回 null = 无平台回复（编排层委托 <c>IEventReplyHandler</c> first-non-null-wins——Federation 主包契约）。</para>
+    /// 处理平台事件推送并返回解析结果（I2 语义层——平台库通道验签解密后把原始报文解析为
+    /// <see cref="ChannelEvent"/>；编排层经 <c>OrchestrateAsync</c> 消费：记录关注状态 / 派发 handler / 触发域事件）。
+    /// <para><b>DIM 默认 <see cref="ChannelEventOutcome.NotApplicable"/> = 非事件通道零强制</b>（对齐
+    /// <see cref="BuildAuthorizeUrlAsync"/> DIM 模式——既有/未来平台库零改动）；事件通道（如 <c>wechat_event</c>）实现：
+    /// 验签（信任根一票否决——失败返回 <see cref="ChannelEventOutcome.Rejected"/>）+ AES 解密 → 提取
+    /// ExternalUserId/MsgType/Event → <see cref="ChannelEventOutcome.Parsed"/>（微信 5 秒超时约束——回复信封归 handler 层）。</para>
+    /// <para>返回 <see cref="ChannelEventOutcome.NotApplicable"/> = 非事件（编排跳过）；<see cref="ChannelEventOutcome.Rejected"/>
+    /// = 信任根失败（编排短路：不记录、不回复、不回退 handler）。</para>
     /// </summary>
-    Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
-        => Task.FromResult<EventReplyResult?>(null);
+    Task<ChannelEventOutcome> HandleEventAsync(ChannelInboundContext context, CancellationToken ct = default)
+        => Task.FromResult(ChannelEventOutcome.NotApplicable);
 
     /// <summary>
     /// URL 验证握手（微信后台服务器配置验证契约——GET 请求；装配层 HandleEvent 分派）。
@@ -110,6 +103,6 @@ public interface ISsoChannel : IDomainService
     /// <para>返回：验签+解密成功 → 回显明文 echostr；任何失败（参数缺失/验签失败/解密失败/不支持）→ null
     /// （装配层映射 400——微信后台统一显示"token 验证失败"，不区分具体原因）。</para>
     /// </summary>
-    Task<string?> VerifyUrlAsync(SsoChannelEventContext context, CancellationToken ct = default)
+    Task<string?> VerifyUrlAsync(ChannelInboundContext context, CancellationToken ct = default)
         => Task.FromResult<string?>(null);
 }

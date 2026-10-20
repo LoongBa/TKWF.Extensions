@@ -216,9 +216,9 @@ public class WechatProbeEventReplyHandlerTests : WeChatChannelTestHost
             logs is null ? null : new CapturingLogger(logs));
 
     /// <summary>全部演练分支场景（含门控——开关关时全 null / 开关开时门控由基类吞噬）。</summary>
-    private static IReadOnlyList<(string? Expected, SsoChannelEventContext Context)> AllBranchScenarios()
+    private static IReadOnlyList<(string? Expected, ChannelEventDispatch Context)> AllBranchScenarios()
     {
-        var scenarios = new List<(string?, SsoChannelEventContext)>();
+        var scenarios = new List<(string?, ChannelEventDispatch)>();
         foreach (var (expected, ctx) in NonGatedScenarios())
             scenarios.Add((expected, ctx));
         scenarios.Add((null, Ctx("event", "unsubscribe", WxXml(("MsgType", "event"), ("Event", "unsubscribe")))));
@@ -228,7 +228,7 @@ public class WechatProbeEventReplyHandlerTests : WeChatChannelTestHost
     }
 
     /// <summary>非门控分支场景（开关开 → 各返回可区分 PROBE 文案；Expected = 应包含的区分串）。</summary>
-    private static IReadOnlyList<(string Expected, SsoChannelEventContext Context)> NonGatedScenarios() =>
+    private static IReadOnlyList<(string Expected, ChannelEventDispatch Context)> NonGatedScenarios() =>
     [
         (
             "PROBE:branch=subscribe key=qrscene_123456",
@@ -291,13 +291,13 @@ public class WechatProbeEventReplyHandlerTests : WeChatChannelTestHost
     ];
 
     /// <summary>构造事件上下文（msg_type/event/__decrypted_xml/content——参数化，无 channel_id——纯分发直构路径）。</summary>
-    private static SsoChannelEventContext Ctx(string msgType, string? eventName, string? xml = null, string? content = null)
+    private static ChannelEventDispatch Ctx(string msgType, string? eventName, string? xml = null, string? content = null)
     {
         var list = new List<(string, string?)> { ("msg_type", msgType) };
         if (eventName is not null) list.Add(("event", eventName));
         if (content is not null) list.Add(("content", content));
         if (xml is not null) list.Add(("__decrypted_xml", xml));
-        return WeChatTestHost.CreateEventContext(list.ToArray());
+        return WeChatTestHost.CreateEventDispatch(list.ToArray());
     }
 
     private static string WxXml(params (string Name, string Value)[] fields)

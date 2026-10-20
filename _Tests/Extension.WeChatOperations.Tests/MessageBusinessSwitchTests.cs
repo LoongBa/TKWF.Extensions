@@ -124,7 +124,7 @@ public class MessageBusinessSwitchTests : WeChatOperationsTestHost
         => user.Use<WeChatOperationsReplyHandler>();
 
     /// <summary>构造事件上下文参数包（对齐 WeChatOperationsReplyHandlerTests）。</summary>
-    private static TKWF.Ext.Federation.SsoChannelEventContext Ctx(params (string Key, string? Value)[] parameters)
+    private static TKWF.Ext.Federation.ChannelEventDispatch Ctx(params (string Key, string? Value)[] parameters)
         => WeChatOperationsTestSupport.CreateEventContext(parameters);
 
     /// <summary>种子回复规则（ReplyRuleEntityDataService 生产路径直写——欢迎语/关键词规则数据源）。</summary>

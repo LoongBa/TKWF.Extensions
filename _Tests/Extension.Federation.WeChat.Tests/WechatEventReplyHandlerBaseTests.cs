@@ -46,7 +46,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "subscribe"),
                 ("from_user_name", "openid-1"),
@@ -73,7 +73,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "scan"),
                 ("from_user_name", "openid-1"),
@@ -96,7 +96,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "location"),
                 ("from_user_name", "openid-1"),
@@ -121,7 +121,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "CLICK"),
                 ("from_user_name", "openid-1"),
@@ -143,7 +143,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "view"),
                 ("__decrypted_xml", WxXml(
@@ -164,7 +164,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "view_miniprogram"),
                 ("__decrypted_xml", WxXml(
@@ -187,7 +187,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "MASSSENDJOBFINISH"),
                 ("from_user_name", "openid-1"),
@@ -215,7 +215,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "text"),
                 ("content", "你好，欢迎使用"),
                 ("from_user_name", "openid-1")),
@@ -235,7 +235,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "image"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "image"), ("MediaId", "MEDIA_IMG_1"), ("PicUrl", "http://img.example.com/1.png")))),
@@ -256,7 +256,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "voice"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "voice"), ("MediaId", "MEDIA_VOICE_1"), ("Format", "amr")))),
@@ -277,7 +277,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "video"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "video"), ("MediaId", "MEDIA_VIDEO_1"), ("ThumbMediaId", "THUMB_1")))),
@@ -298,7 +298,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "shortvideo"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "shortvideo"), ("MediaId", "MEDIA_SHORT_1"), ("ThumbMediaId", "THUMB_2")))),
@@ -319,7 +319,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "location"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "location"), ("Latitude", "23.12"), ("Longitude", "113.24"),
@@ -343,7 +343,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "link"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "link"), ("Title", "活动链接"), ("Description", "点击查看"),
@@ -369,14 +369,15 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = null;                                        // 兜底返回 null——证明默认不回复
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(("msg_type", "transfer"), ("from_user_name", "openid-1")),
+            WeChatTestHost.CreateEventDispatch(("msg_type", "transfer"), ("from_user_name", "openid-1")),
             CancellationToken.None);
 
         Assert.Equal("default", handler.Invoked);
         Assert.Null(reply);
     }
 
-    /// <summary>缺 msg_type → OnDefaultAsync → null（Parse 容错——未富化字段 null）。</summary>
+    /// <summary>缺失 msg_type 且无 RawPayload → fail-closed 短路（I2 语义层——无法判断事件/消息形态 → 不重建、
+    /// handler 直接返回 null；对比 <see cref="Dispatch_UnknownEvent_OnDefaultAsync_ReturnsNull"/>（有形态 → OnDefaultAsync）。</summary>
     [Fact]
     public async Task Dispatch_MissingMsgType_OnDefaultAsync_ReturnsNull()
     {
@@ -386,10 +387,11 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = null;
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(("from_user_name", "openid-1")),
+            WeChatTestHost.CreateEventDispatch(("from_user_name", "openid-1")),
             CancellationToken.None);
 
-        Assert.Equal("default", handler.Invoked);
+        // fail-closed：缺 msg_type 且无 RawPayload → FromChannelEvent 返回 null → handler 未进入二级分发
+        Assert.Null(handler.Invoked);
         Assert.Null(reply);
     }
 
@@ -403,7 +405,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = null;
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "WATCH"), ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "WATCH")))),
             CancellationToken.None);
 
@@ -420,7 +422,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "CLICK"), ("channel_id", "unknown-channel"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "CLICK"), ("EventKey", "KEY_1")))),
             CancellationToken.None);
@@ -442,7 +444,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();                 // Payload 默认非 null——证明"有载荷仍被吞"
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "unsubscribe"), ("from_user_name", "openid-1"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "unsubscribe")))),
             CancellationToken.None);
@@ -462,7 +464,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "MASSSENDJOBFINISH"),
                 ("__decrypted_xml", WxXml(
                     ("MsgType", "event"), ("Event", "MASSSENDJOBFINISH"), ("Status", "sendsuccess")))),
@@ -483,7 +485,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "TEMPLATESENDJOBFINISH"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "TEMPLATESENDJOBFINISH")))),
             CancellationToken.None);
@@ -502,7 +504,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "Unsubscribe"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "Unsubscribe")))),
             CancellationToken.None);
@@ -527,7 +529,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         ]);
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("from_user_name", "openid-1"), ("to_user_name", "gh_test"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
@@ -557,7 +559,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = null;
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
             CancellationToken.None);
@@ -575,7 +577,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = new WechatReplyPayload();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
             CancellationToken.None);
@@ -593,7 +595,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = new WechatReplyPayload(Content: "欢迎关注！");
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("from_user_name", "openid-1"), ("to_user_name", "gh_test"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
@@ -619,7 +621,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
             News: [new EventReplyNewsArticle("图文标题", "图文描述", "https://example.com/n")]);
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
             CancellationToken.None);
@@ -650,7 +652,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
             RawXml: rawXml);
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("from_user_name", "openid-1"), ("to_user_name", "gh_test"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
@@ -673,7 +675,7 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = new WechatReplyPayload(Content: "欢迎关注！", RawXml: "   ");
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"), ("event", "subscribe"),
                 ("from_user_name", "openid-1"), ("to_user_name", "gh_test"),
                 ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "subscribe")))),
@@ -816,12 +818,12 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         var handler = user.Use<DispatchProbeHandler>();
 
         var reply = await handler.HandleAsync(
-            new SsoChannelEventContext(null!), CancellationToken.None);
+            null!, CancellationToken.None);   // null dispatch → handler 短路 null
 
         Assert.Null(reply);
     }
 
-    /// <summary>HandleAsync(空参数包) → 未覆盖分支 OnDefaultAsync（载荷 null → 不回复）。</summary>
+    /// <summary>HandleAsync(无参数 dispatch) → fail-closed 短路（I2——空 Attributes 且无 RawPayload → FromChannelEvent null → 不回复）。</summary>
     [Fact]
     public async Task HandleAsync_EmptyParameters_OnDefault_ReturnsNull()
     {
@@ -831,9 +833,9 @@ public class WechatEventReplyHandlerBaseTests : WeChatChannelTestHost
         handler.Payload = null;
 
         var reply = await handler.HandleAsync(
-            new SsoChannelEventContext(new Dictionary<string, string?>()), CancellationToken.None);
+            WeChatTestHost.CreateEventDispatch(), CancellationToken.None);   // 空 dispatch（Attributes 无 msg_type → FromChannelEvent fail-closed null → handler null）
 
-        Assert.Equal("default", handler.Invoked);
+        Assert.Null(handler.Invoked);   // fail-closed：未进入二级分发
         Assert.Null(reply);
     }
 

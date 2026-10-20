@@ -49,16 +49,17 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <summary>
     /// 模板方法：子类业务载荷 → 签密封票据（高内聚）→ 图文链接回复（<see cref="IEventReplyHandler.HandleAsync"/>）。
     /// <para>返回 null = 不处理（first-non-null-wins 语义——编排取首个非 null）。</para>
-    /// <para>数据流（W2 方案 B——机制归基类、决策归子类）：入口按 <c>context.Parameters["channel_id"]</c> 反查
+    /// <para>数据流（W2 方案 B——机制归基类、决策归子类）：入口经 <c>dispatch.Event.ChannelId</c> 反查
     /// <see cref="ChannelConfig"/>（一次查询）→ 组装 <see cref="ReplyContext"/> 传子类 <see cref="BuildReplyAsync"/>
-    /// （子类零 registry 查询，可读 <c>Channel.Extra</c> 配置）→ 签密封票据 → 图文链接拼装。</para>
+    /// （子类零 registry 查询，可读 <c>Channel.Extra</c> 配置）→ 签密封票据 → 图文链接拼装。
+    /// （I2 语义层——handler 输入由 <see cref="SsoChannelEventContext"/> 改为 <see cref="ChannelEventDispatch"/>：
+    /// channelId 从语义事件取，不再翻 Parameters 魔法键。）</para>
     /// </summary>
-    public async Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
+    public async Task<EventReplyResult?> HandleAsync(ChannelEventDispatch dispatch, CancellationToken ct = default)
     {
-        // 反查通道配置（channel_id → ChannelConfig——入口一次查询，供子类 ReplyContext + 平台段 URL 共用；
+        // 反查通道配置（dispatch.Event.ChannelId → ChannelConfig——入口一次查询，供子类 ReplyContext + 平台段 URL 共用；
         // 查不到 → 不回复，对齐"无法构造有效图文链接则不拦截业务 handler"语义）
-        var parameters = context.Parameters;
-        var channelId = parameters.TryGetValue("channel_id", out var cid) ? cid : null;
+        var channelId = dispatch?.Event?.ChannelId;
         if (string.IsNullOrWhiteSpace(channelId))
             return null;
         var channelCfg = await User.Use<IChannelRegistry>().GetByAliasOrIdAsync(channelId, ct);
@@ -66,7 +67,7 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
             return null;
 
         // 子类业务规则（收 ReplyContext——决策输入齐备）
-        var payload = await BuildReplyAsync(new ReplyContext(context, channelCfg), ct);
+        var payload = await BuildReplyAsync(new ReplyContext(dispatch, channelCfg), ct);
         if (payload is null)
             return null;
 
@@ -99,9 +100,14 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     protected abstract Task<EventReplyPayload?> BuildReplyAsync(ReplyContext context, CancellationToken ct);
 
     /// <summary>事件回复决策上下文（W2 方案 B——基类备好决策输入传子类）：
-    /// <see cref="Context"/> 原始事件参数 + <see cref="Channel"/> 已解析的通道配置
-    /// （含 <see cref="ChannelConfig.PlatformType"/> / <see cref="ChannelConfig.Extra"/>——模板/通道级配置读取）。</summary>
-    protected sealed record ReplyContext(SsoChannelEventContext Context, ChannelConfig Channel);
+    /// <see cref="Dispatch"/> 语义事件 + 已解析 UId + <see cref="Channel"/> 已解析的通道配置
+    /// （含 <see cref="ChannelConfig.PlatformType"/> / <see cref="ChannelConfig.Extra"/>——模板/通道级配置读取）。
+    /// <see cref="ChannelEventDispatch.Event"/> 承载语义事件（<c>ChannelId/ExternalUserId/EventType/...</c>）。</summary>
+    protected sealed record ReplyContext(ChannelEventDispatch Dispatch, ChannelConfig Channel)
+    {
+        /// <summary>语义事件（便捷属性——ChannelId/ExternalUserId/EventType/RawPayload/Attributes 等一等字段）。</summary>
+        public ChannelEvent Event => Dispatch.Event;
+    }
 
     /// <summary>构造测试端点 URL（{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——与 FederationWebExtension
     /// 端点路径一致；BaseUrl 空 → 相对路径（以 / 开头，默认指向本服务同源——微信可点击）。</summary>

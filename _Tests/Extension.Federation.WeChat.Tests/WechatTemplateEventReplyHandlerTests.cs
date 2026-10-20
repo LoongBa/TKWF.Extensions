@@ -141,7 +141,7 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         var handler = user.Use<WechatTemplateEventReplyHandler>();
 
         var reply = await handler.HandleAsync(
-            WeChatTestHost.CreateEventContext(
+            WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "event"),
                 ("event", "unsubscribe"),
                 ("from_user_name", "openid-100"),
@@ -195,8 +195,8 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
 
     /// <summary>构造模板驱动事件上下文（unknown_event 类型——路由至 OnDefaultAsync 兜底入口，
     /// 含 uid/openid/channel_id——占位符替换数据源 + registry 反查键）。</summary>
-    private static SsoChannelEventContext TemplateEvent(string channelId, string? uid = "u-1", string? openId = "openid-1")
-        => WeChatTestHost.CreateEventContext(
+    private static ChannelEventDispatch TemplateEvent(string channelId, string? uid = "u-1", string? openId = "openid-1")
+        => WeChatTestHost.CreateEventDispatch(
             ("msg_type", "event"),
             ("event", "unknown_event"),
             ("from_user_name", openId),

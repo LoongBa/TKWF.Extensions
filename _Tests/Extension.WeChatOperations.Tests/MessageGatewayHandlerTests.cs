@@ -126,8 +126,8 @@ public class MessageGatewayHandlerTests : WeChatOperationsTestHost
     private WeChatOperationsReplyHandler handler(DomainUser<TestUserInfo> user)
         => user.Use<WeChatOperationsReplyHandler>();
 
-    /// <summary>构造事件上下文参数包（SsoChannelEventContext——handler 入参形态，平台基类 Parse 富化）。</summary>
-    private static SsoChannelEventContext Ctx(params (string Key, string? Value)[] parameters)
+    /// <summary>构造事件上下文参数包（ChannelEventDispatch——handler 入参形态，平台基类 Parse 富化）。</summary>
+    private static ChannelEventDispatch Ctx(params (string Key, string? Value)[] parameters)
         => WeChatOperationsTestSupport.CreateEventContext(parameters);
 
     /// <summary>种子既有回复规则（ReplyRuleEntityDataService 生产路径直写）。</summary>

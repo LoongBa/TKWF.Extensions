@@ -75,7 +75,7 @@ public sealed record WechatEventContext(
     /// <see cref="WeChatEventCrypto"/> 形态）。</para>
     /// <para><b>容错</b>：<c>__decrypted_xml</c> 缺失 → 未富化字段全 null（不抛——兼容未解密场景）。</para>
     /// </summary>
-    /// <param name="parameters">事件上下文参数包（<see cref="SsoChannelEventContext.Parameters"/>——装配层
+    /// <param name="parameters">事件参数包（<see cref="ChannelInboundContext.Parameters"/>——装配层/编排层
     /// 构造 Dictionary 实例经 record 传入，通道/编排层原地富化）。</param>
     internal static WechatEventContext Parse(IReadOnlyDictionary<string, string?> parameters)
     {
@@ -179,6 +179,63 @@ public sealed record WechatEventContext(
             MsgId: msgId,
             CreateTime: createTime,
             RawXml: xml);
+    }
+
+    /// <summary>
+    /// 从语义事件重建微信上下文（I2 语义层 §8.2 C3——<see cref="ChannelEventDispatch"/> → handler 一次性重建，
+    /// 14 个 <c>OnXxxAsync</c> 签名与实现零改动）。
+    /// <para>机制（双数据源）：① <c>evt.RawPayload</c>（解密后明文 XML——通道已承载）复用 <see cref="Parse"/> 复原全部微信字段
+    /// （EventKey/经纬度/PicUrl/MediaId/群发统计等——XDocument 提取）；② RawPayload 缺失（测试/降级场景）→
+    /// 用语义层一等字段（<c>ExternalUserId</c>/<c>EventType</c>/<c>Attributes["msg_type"]</c> 等）组装基础上下文，
+    /// 未富化字段 null（不猜字段）。语义层字段防御性覆盖——防 RawPayload 缺节时 XML 提取值为 null。</para>
+    /// <para><b>fail-closed 边界</b>：RawPayload 缺失 <b>且</b> Attributes 无 <c>msg_type</c>（无法区分事件/消息形态）→
+    /// 返回 null（编排跳过 handler，不猜字段——方案 §8.2 第 3 条）。</para>
+    /// </summary>
+    /// <param name="evt">语义事件（<c>ChannelEventDispatch.Event</c>）。</param>
+    /// <param name="uid">编排层已解析 UId（<c>ChannelEventDispatch.UId</c>）。</param>
+    internal static WechatEventContext? FromChannelEvent(ChannelEvent evt, string? uid)
+    {
+        ArgumentNullException.ThrowIfNull(evt);
+
+        var msgType = evt.Attributes is not null && evt.Attributes.TryGetValue("msg_type", out var mt) ? mt : null;
+        var hasRawPayload = !string.IsNullOrWhiteSpace(evt.RawPayload);
+
+        if (!hasRawPayload && string.IsNullOrWhiteSpace(msgType))
+            return null;   // RawPayload 缺失且无 msg_type——无法判断事件/消息形态（fail-closed）
+
+        var parameters = new Dictionary<string, string?>
+        {
+            ["channel_id"] = evt.ChannelId,
+            ["external_user_id"] = evt.ExternalUserId,
+            ["msg_type"] = msgType ?? "event",
+            ["event"] = evt.EventType,
+            ["from_user_name"] = evt.ExternalUserId,
+            ["uid"] = uid,
+        };
+        // RawPayload 缺席时用 Attributes 兜底（msg_type/event 已在上面一等字段；content/from_user_name/to_user_name 从 Attributes 补）
+        if (evt.Attributes is not null)
+        {
+            foreach (var (key, value) in evt.Attributes)
+            {
+                if (key is not ("channel_id" or "external_user_id" or "msg_type" or "event" or "from_user_name") && value is not null)
+                    parameters[key] = value;
+            }
+        }
+        if (hasRawPayload)
+            parameters["__decrypted_xml"] = evt.RawPayload;
+
+        var ctx = Parse(parameters);
+        // 语义层一等字段防御性覆盖（RawPayload 缺节容错——XML 提取值为 null 时用语义层值）
+        return ctx with
+        {
+            ChannelId = evt.ChannelId,
+            OpenId = evt.ExternalUserId,
+            FromUserName = evt.ExternalUserId,
+            Event = evt.EventType,
+            UId = uid,
+            RawXml = evt.RawPayload,
+            Channel = null,   // 基类 HandleAsync 内部反查 registry 后 with 富化
+        };
     }
 
     private static string? GetValue(IReadOnlyDictionary<string, string?> parameters, string key)

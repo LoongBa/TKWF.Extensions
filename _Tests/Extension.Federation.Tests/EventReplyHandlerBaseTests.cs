@@ -38,6 +38,24 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
     private readonly FakeChannelRegistry _registry = new();
     private FederationEventReplyOptions _eventReplyOptions = new();
 
+    /// <summary>构造语义事件派发（I2——<see cref="IEventReplyHandler.HandleAsync"/> 入参：参数包 → ChannelEvent；external_user_id 未绑定时 uid=null）。</summary>
+    private static ChannelEventDispatch Ctx(params (string Key, string? Value)[] parameters)
+    {
+        var dict = new System.Collections.Generic.Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var (k, v) in parameters) dict[k] = v;
+        return new ChannelEventDispatch(
+            new ChannelEvent
+            {
+                ChannelId = dict.TryGetValue("channel_id", out var cid) ? cid : "",
+                ChannelType = "probe_event",
+                ExternalUserId = dict.TryGetValue("external_user_id", out var ext) ? ext ?? "" : "",
+                EventType = "probe",
+                RawPayload = null,
+                Attributes = dict,
+            },
+            dict.TryGetValue("uid", out var uid) ? uid : null);
+    }
+
     protected override TestUserInfo CreateUser() => new("event-reply-tester", "事件回复基类测试用户");
 
     protected override void ConfigureHost(IServiceCollection services)
@@ -81,13 +99,8 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var (_, user) = BindTestScope();
         var handler = user.Use<ProbeEventReplyHandler>();
 
-        var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?>
-            {
-                ["external_user_id"] = "openid-1",
-                ["uid"] = "u-1",
-                ["channel_id"] = "probe-channel",                  // 基类入口预查 cfg 必需
-            }),
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1"), ("uid", "u-1"), ("channel_id", "probe-channel")),   // channel_id 基类入口预查 cfg 必需
             CancellationToken.None);
 
         // 签密封票据被调用（FederatedIdentity 载荷反序列化 + ExpectedClaimant 透传）
@@ -114,12 +127,8 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var (_, user) = BindTestScope();
         var handler = user.Use<ProbeEventReplyHandler>();
 
-        var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?>
-            {
-                ["skip"] = "true",
-                ["channel_id"] = "probe-channel",                  // 基类入口预查 cfg 必需
-            }),
+        var reply = await handler.HandleAsync(
+            Ctx(("skip", "true"), ("channel_id", "probe-channel")),   // channel_id 基类入口预查 cfg 必需
             CancellationToken.None);
 
         Assert.Null(reply);
@@ -136,13 +145,8 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var handler = user.Use<ProbeEventReplyHandler>();
 
         // FakeChannelRegistry 为 probe-channel 配置 Extra["probe_flag"]="1"——子类 Probe 读取并回填 title 后缀
-        var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?>
-            {
-                ["external_user_id"] = "openid-1",
-                ["uid"] = "u-1",
-                ["channel_id"] = "probe-channel",
-            }),
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1"), ("uid", "u-1"), ("channel_id", "probe-channel")),
             CancellationToken.None);
 
         Assert.NotNull(reply);
@@ -160,8 +164,8 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var (_, user) = BindTestScope();
         var handler = user.Use<ProbeEventReplyHandler>();
 
-        var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?> { ["external_user_id"] = "openid-1" }),   // 无 channel_id
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1")),   // 无 channel_id
             CancellationToken.None);
 
         Assert.Null(reply);
@@ -178,8 +182,8 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         var (_, user) = BindTestScope();
         // ProbeEventReplyHandler（channel_id=unknown-channel——registry 无映射）验证反查失败语义
         var handler = user.Use<ProbeEventReplyHandler>();
-        var reply = await handler.HandleAsync(new SsoChannelEventContext(
-            new Dictionary<string, string?> { ["external_user_id"] = "openid-1", ["channel_id"] = "unknown-channel" }),
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1"), ("channel_id", "unknown-channel")),
             CancellationToken.None);
 
         Assert.Null(reply);
@@ -202,7 +206,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         protected override Task<EventReplyPayload?> BuildReplyAsync(
             ReplyContext context, CancellationToken ct)
         {
-            if (context.Context.Parameters.TryGetValue("skip", out _))
+            if (context.Event.Attributes.TryGetValue("skip", out _))
                 return Task.FromResult<EventReplyPayload?>(null);
             var extraSuffix = context.Channel.Extra.TryGetValue("probe_flag", out var flag) && flag == "1"
                 ? "[extra]"

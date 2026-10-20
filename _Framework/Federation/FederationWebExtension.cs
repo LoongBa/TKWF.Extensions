@@ -227,7 +227,7 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             // 走事件验签（要求 msg_encrypt）会被参数检查拦截（WECHAT_EVENT_PARAMS_MISSING）。
             if (parameters.TryGetValue("echostr", out var echo) && !string.IsNullOrEmpty(echo))
             {
-                var echoPlain = await channel.VerifyUrlAsync(new SsoChannelEventContext(parameters), ct);
+                var echoPlain = await channel.VerifyUrlAsync(new ChannelInboundContext(parameters), ct);
                 return echoPlain is null
                     ? Results.BadRequest(new ErrorResponse("WECHAT_URL_VERIFY_FAILED", null))
                     : Results.Text(echoPlain, contentType: "text/plain");
@@ -243,7 +243,7 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
             // 事件编排（uid 只读查询 + 平台化回复 + handler first-non-null-wins）→ 微信 XML 被动回复（text/xml）
             var reply = await GetGuest(ctx).Use<IEventOrchestrator>()
-                .OrchestrateAsync(cfg.ChannelId, $"{cfg.PlatformType}_event", new SsoChannelEventContext(parameters), ct);
+                .OrchestrateAsync(cfg.ChannelId, $"{cfg.PlatformType}_event", new ChannelInboundContext(parameters), ct);
 
             // 平台化回复（微信 XML text/xml）/ 空回复 200 兜底（微信 5 秒超时——异步客服消息归 Phase 2/消费方）
             return reply is null

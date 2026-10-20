@@ -226,13 +226,14 @@ public sealed class FederationWebExtensionTests
     // ═══════════════════ 事件链（外部身份联邦 E3——query 透传 + XML 回复 + handler + uid 只读） ═══════════════════
 
     /// <summary>event 端点 query 透传（现有缺陷修复——微信验签参数在 URL query）+ 微信 XML 回复：
-    /// POST event 端点带 query（msg_signature/timestamp/nonce）→ 验签成功 → 编排 → Fake 通道平台化回复 →
-    /// 200 + ContentType text/xml；query 参数在 Fake 事件上下文 Parameters。</summary>
+    /// POST event 端点带 query（msg_signature/timestamp/nonce）→ 验签成功 → 编排 → handler 回复 →
+    /// 200 + ContentType text/xml；query 参数在 Fake 入站上下文 Parameters。</summary>
     [Fact]
     public async Task Event_QueryParamsPassed_XmlReply()
     {
         FederationEndpointHost.Reset();
-        FederationEndpointHost.Channel.EventReply =
+        // I2 语义层：Fake 通道产 Parsed(subscribe) → 编排走 handler——回复由 handler 产出（通道不再自回 XML）
+        FederationEndpointHost.EventHandler1.Result =
             new EventReplyResult("<xml><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[ok]]></Content></xml>", "text/xml");
         var client = FederationEndpointHost.Server.CreateClient();
 
@@ -314,9 +315,9 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("ext-100", FederationEndpointHost.ChannelMap.LastExternalUserId);  // 验签富化的 external_user_id
         Assert.Equal(0, FederationEndpointHost.ChannelMap.LinkInvoked);                 // 只读不建号
 
-        // uid 富化进 handler 上下文（供 handler 签 ISealedTicketService<FederatedIdentity> 票据）
-        Assert.NotNull(FederationEndpointHost.EventHandler1.LastContext);
-        Assert.Equal("u-100", FederationEndpointHost.EventHandler1.LastContext!.Parameters["uid"]);
+        // uid 富化进 handler 派发（供 handler 签 ISealedTicketService<FederatedIdentity> 票据）
+        Assert.NotNull(FederationEndpointHost.EventHandler1.LastDispatch);
+        Assert.Equal("u-100", FederationEndpointHost.EventHandler1.LastDispatch!.UId);
     }
 
     // ═══════════════════ 子应用消费方委托端点冒烟（ISsoSubAppBridge——2026-10-11） ═══════════════════

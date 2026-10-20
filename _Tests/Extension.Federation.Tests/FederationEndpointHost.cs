@@ -246,8 +246,18 @@ internal static class FederationEndpointHost
         public string ChannelId { get; }
         public SsoChannelAuthResult Result { get; set; } = new(true, "ext-100", null, 2);
         public EventReplyResult? EventReply { get; set; }
+        // I2：HandleEventAsync 默认产 Parsed(subscribe)——等价旧「通道返回 null → 编排走 handler」；
+        // 非事件通道语义用例显式设 NotApplicable/Rejected
+        public ChannelEventOutcome Outcome { get; set; } = ChannelEventOutcome.Parsed(new ChannelEvent
+        {
+            ChannelId = "wechat-mp",
+            ChannelType = "wechat_event",
+            ExternalUserId = "ext-100",
+            EventType = "subscribe",
+            Attributes = new System.Collections.Generic.Dictionary<string, string?> { ["msg_type"] = "event", ["event"] = "subscribe" },
+        });
         public SsoChannelAuthContext? LastContext { get; private set; }
-        public SsoChannelEventContext? LastEventContext { get; private set; }
+        public ChannelInboundContext? LastEventContext { get; private set; }
         public bool Authenticated { get; private set; }
         public bool UrlVerified { get; private set; }
         public string? UrlVerifyEcho { get; set; }
@@ -265,13 +275,15 @@ internal static class FederationEndpointHost
             return Task.FromResult(Result);
         }
 
-        public Task<EventReplyResult?> HandleEventAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        public Task<ChannelEventOutcome> HandleEventAsync(ChannelInboundContext context, CancellationToken ct = default)
         {
             LastEventContext = context;
-            return Task.FromResult(EventReply);
+            // I2 语义层：Fake 通道默认产 NotApplicable（非事件通道语义——编排跳过 handler）；
+            // 断言事件语义的用例经 FakeSsoChannel.Outcome 配置
+            return Task.FromResult(Outcome);
         }
 
-        public Task<string?> VerifyUrlAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        public Task<string?> VerifyUrlAsync(ChannelInboundContext context, CancellationToken ct = default)
         {
             UrlVerified = true;
             LastEventContext = context;
@@ -411,16 +423,16 @@ internal static class FederationEndpointHost
         public string? BindChannelId { get; set; }                       // W3：null = 类型桶共用；非 null = 精确绑定
         public EventReplyResult? Result { get; set; }
         public int Invoked { get; private set; }
-        public SsoChannelEventContext? LastContext { get; private set; }
+        public ChannelEventDispatch? LastDispatch { get; private set; }
 
-        public void Reset() { Result = null; Invoked = 0; LastContext = null; BindChannelId = null; ChannelType = "wechat_event"; }
+        public void Reset() { Result = null; Invoked = 0; LastDispatch = null; BindChannelId = null; ChannelType = "wechat_event"; }
 
         string IChannelSpecificEventReplyHandler.ChannelId => BindChannelId ?? string.Empty;
 
-        public Task<EventReplyResult?> HandleAsync(SsoChannelEventContext context, CancellationToken ct = default)
+        public Task<EventReplyResult?> HandleAsync(ChannelEventDispatch dispatch, CancellationToken ct = default)
         {
             Invoked++;
-            LastContext = context;
+            LastDispatch = dispatch;
             return Task.FromResult(Result);
         }
     }
@@ -431,29 +443,31 @@ internal static class FederationEndpointHost
     internal sealed class FakeEventOrchestrator : IEventOrchestrator
     {
         public int Invoked { get; private set; }
-        public SsoChannelEventContext? LastContext { get; private set; }
+        public ChannelInboundContext? LastInbound { get; private set; }
 
-        public void Reset() { Invoked = 0; LastContext = null; }
+        public void Reset() { Invoked = 0; LastInbound = null; }
 
-        public Task<EventReplyResult?> OrchestrateAsync(string channelId, string channelType, SsoChannelEventContext context, CancellationToken ct = default)
+        public Task<EventReplyResult?> OrchestrateAsync(string channelId, string channelType, ChannelInboundContext context, CancellationToken ct = default)
         {
             Invoked++;
-            LastContext = context;
+            LastInbound = context;
 
-            // ① 通道平台化回复（FakeSsoChannel.HandleEventAsync——记录 LastEventContext + 返回可配置 EventReply）
-            var platformReply = Channel.HandleEventAsync(context, ct).GetAwaiter().GetResult();
-            if (platformReply is not null)
-                return Task.FromResult(platformReply);
+            // ① 通道解析（FakeSsoChannel.HandleEventAsync——记录 LastEventContext + 返回可配置 Outcome）
+            var outcome = Channel.HandleEventAsync(context, ct).GetAwaiter().GetResult();
+            if (outcome.State == ChannelEventOutcomeState.Rejected)
+                return Task.FromResult<EventReplyResult?>(null);
+            if (outcome.State == ChannelEventOutcomeState.NotApplicable || outcome.Event is null)
+                return Task.FromResult<EventReplyResult?>(null);
+            var evt = outcome.Event;
 
-            // ② uid 只读查询富化（评审 F7——GetByExternalIdAsync 只读不建号，LinkAsync 不被调）
-            if (context.Parameters is Dictionary<string, string?> dict
-                && context.Parameters.TryGetValue("external_user_id", out var externalUserId)
-                && !string.IsNullOrEmpty(externalUserId))
+            // ② uid 只读查询（评审 F7——GetByExternalIdAsync 只读不建号，LinkAsync 不被调）
+            string? uid = null;
+            if (!string.IsNullOrEmpty(evt.ExternalUserId))
             {
-                var map = ChannelMap.GetByExternalIdAsync(channelId, externalUserId, ct).GetAwaiter().GetResult();
-                if (map is not null)
-                    dict["uid"] = map.UId;
+                var map = ChannelMap.GetByExternalIdAsync(channelId, evt.ExternalUserId, ct).GetAwaiter().GetResult();
+                uid = map?.UId;
             }
+            var dispatch = new ChannelEventDispatch(evt, uid);
 
             // ③ handler 委托（W3 双桶解析——同步真实 EventOrchestrator 语义）：
             //    桶 1：通道特定绑定（IChannelSpecificEventReplyHandler 且 ChannelId 精确匹配——first-non-null-wins）
@@ -464,7 +478,7 @@ internal static class FederationEndpointHost
                     && !string.IsNullOrEmpty(specific.ChannelId)
                     && string.Equals(specific.ChannelId, channelId, StringComparison.Ordinal))
                 {
-                    var reply = handler.HandleAsync(context, ct).GetAwaiter().GetResult();
+                    var reply = handler.HandleAsync(dispatch, ct).GetAwaiter().GetResult();
                     if (reply is not null)
                         return Task.FromResult(reply);
                 }
@@ -473,7 +487,7 @@ internal static class FederationEndpointHost
             {
                 if (!string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
                     continue;
-                var reply = handler.HandleAsync(context, ct).GetAwaiter().GetResult();
+                var reply = handler.HandleAsync(dispatch, ct).GetAwaiter().GetResult();
                 if (reply is not null)
                     return Task.FromResult(reply);
             }

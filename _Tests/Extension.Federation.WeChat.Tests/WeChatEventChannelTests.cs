@@ -154,9 +154,8 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
 
     // ═══════════════════ 事件链（外部身份联邦 E3——HandleEventAsync） ═══════════════════
 
-    /// <summary>HandleEventAsync 合法事件：验签解密 → MsgType/Event 提取到 Parameters（评审 F4）+ __decrypted_xml
-    /// 富化（平台基类 Parse 数据源——Oracle P1-4）→ 返回 null（无平台回复——编排器转 handler 双桶迭代，
-    /// 2026-10-17 方案 §3.4：通道不再自迭代/自封装 XML 信封）。</summary>
+    /// <summary>HandleEventAsync 合法事件：验签解密 → 解析为语义 ChannelEvent（I2——MsgType/Event 提取到
+    /// evt.EventType + Attributes，RawPayload 承载解密 XML——handler 重建数据源）。</summary>
     [Fact]
     public async Task HandleEventAsync_ValidEvent_ExtractsMsgTypeEvent_ReturnsNull()
     {
@@ -166,22 +165,22 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         var context = WeChatTestHost.CreateEventContext(
             ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", msgEncrypt));
 
-        var reply = await channel.HandleEventAsync(context, CancellationToken.None);
+        var outcome = await channel.HandleEventAsync(context, CancellationToken.None);
 
-        // 通道不再产出平台化回复（返回 null——编排器转 handler；200 空回复兜底在端点层）
-        Assert.Null(reply);
-
-        // 评审 F4——MsgType/Event 提取到 Parameters（共享字典原地富化）
-        Assert.Equal("event", context.Parameters["msg_type"]);
-        Assert.Equal("CLICK", context.Parameters["event"]);
-        Assert.Equal(TestOpenId, context.Parameters["external_user_id"]);
-        // Oracle P1-4——解密后明文 XML 富化（平台基类 WechatEventContext.Parse 数据源）
-        Assert.NotNull(context.Parameters["__decrypted_xml"]);
-        Assert.Contains(TestOpenId, context.Parameters["__decrypted_xml"]!);
+        // I2 语义层：合法事件 → Parsed（不再返回 null——通道产语义事件，编排消费）
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);
+        var evt = Assert.IsType<ChannelEvent>(outcome.Event);
+        // 评审 F4——MsgType/Event 提取到语义事件（Attributes 承载；Parameters 只留原始 query）
+        Assert.Equal("event", evt.Attributes["msg_type"]);
+        Assert.Equal("CLICK", evt.Attributes["event"]);
+        Assert.Equal(TestOpenId, evt.ExternalUserId);
+        // Oracle P1-4——解密后明文 XML 承载 RawPayload（handler WechatEventContext.FromChannelEvent 重建数据源）
+        Assert.NotNull(evt.RawPayload);
+        Assert.Contains(TestOpenId, evt.RawPayload!);
     }
 
-    /// <summary>HandleEventAsync 正常路径返回 null（无平台回复——编排器转 handler 双桶，200 空回复兜底在端点层）；
-    /// Parameters 仍富化（MsgType/Event/__decrypted_xml 提取不依赖 handler——微信 5 秒超时约束语义保持）。</summary>
+    /// <summary>HandleEventAsync 正常路径产 Parsed（I2 语义层——通道产语义事件，编排器消费后转 handler；
+    /// 微信 5 秒超时约束语义保持：回复归端点 200 空回复兜底）。</summary>
     [Fact]
     public async Task HandleEventAsync_ValidEvent_ReturnsNull_NoPlatformReply()
     {
@@ -191,15 +190,16 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         var context = WeChatTestHost.CreateEventContext(
             ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", msgEncrypt));
 
-        var reply = await channel.HandleEventAsync(context, CancellationToken.None);
+        var outcome = await channel.HandleEventAsync(context, CancellationToken.None);
 
-        Assert.Null(reply);   // 通道恒返回 null（平台化回复归 handler——编排器 first-non-null-wins）
-        Assert.Equal("event", context.Parameters["msg_type"]);   // 富化不依赖 handler
-        Assert.Equal("CLICK", context.Parameters["event"]);
-        Assert.NotNull(context.Parameters["__decrypted_xml"]);
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);   // I2：合法事件 → Parsed（通道不产回复——回复归 handler/端点）
+        var evt = outcome.Event!;
+        Assert.Equal("event", evt.Attributes["msg_type"]);   // 富化不依赖 handler（Attributes 承载）
+        Assert.Equal("CLICK", evt.Attributes["event"]);
+        Assert.NotNull(evt.RawPayload);
     }
 
-    /// <summary>HandleEventAsync 验签失败（篡改签名——信任根一票否决）→ null（错误语义由装配层 AuthenticateAsync 先行映射 4xx）。</summary>
+    /// <summary>HandleEventAsync 验签失败（篡改签名——信任根一票否决）→ Rejected（编排短路：不记录、不回复、不回退 handler）。</summary>
     [Fact]
     public async Task HandleEventAsync_TamperedSignature_ReturnsNull()
     {
@@ -208,15 +208,15 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent();
         var tampered = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
 
-        var reply = await channel.HandleEventAsync(
+        var outcome = await channel.HandleEventAsync(
             WeChatTestHost.CreateEventContext(
                 ("msg_signature", tampered), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", msgEncrypt)),
             CancellationToken.None);
 
-        Assert.Null(reply);   // 验签失败 → null（绝不解密伪造密文）
+        Assert.Equal(ChannelEventOutcomeState.Rejected, outcome.State);   // 验签失败 → Rejected（绝不解密伪造密文——信任根一票否决）
     }
 
-    /// <summary>HandleEventAsync 模板实例（channel=null）→ null（不可认证语义对齐——工厂帧内构造真实实例）。</summary>
+    /// <summary>HandleEventAsync 模板实例（channel=null）→ NotApplicable（不可认证语义对齐——工厂帧内构造真实实例）。</summary>
     [Fact]
     public async Task HandleEventAsync_TemplateInstance_ReturnsNull()
     {
@@ -224,10 +224,10 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         // 模板实例 = 集合类型索引源（不直接认证）——直构（StubDomainUser；ctor 已精简为
         // (IDomainUser, ChannelConfig?, ILogger?)——2026-10-17 方案 §3.4 删 handler 集合参数）
         var channel = new WeChatEventChannel(new StubDomainUser());
-        var reply = await channel.HandleEventAsync(
+        var outcome = await channel.HandleEventAsync(
             WeChatTestHost.CreateEventContext(("msg_signature", "x"), ("timestamp", "1"), ("nonce", "n"), ("msg_encrypt", "c")),
             CancellationToken.None);
-        Assert.Null(reply);
+        Assert.Equal(ChannelEventOutcomeState.NotApplicable, outcome.State);
     }
 
     // ═══════════════════ URL 验证握手（微信后台服务器配置验证契约——VerifyUrlAsync） ═══════════════════
@@ -376,7 +376,7 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
     }
 
     /// <summary>安全模式 POST 推送 HandleEventAsync：msg_encrypt 从 body XML &lt;Encrypt&gt;（__raw）提取 →
-    /// 验签解密 → MsgType/Content/__decrypted_xml 富化 → 返回 null（无平台回复——编排器转 handler）。</summary>
+    /// 验签解密 → 解析为语义 ChannelEvent（MsgType/Content/Attributes 承载）。</summary>
     [Fact]
     public async Task HandleEventAsync_PushEncryptInBodyXml_ExtractsContent_ReturnsNull()
     {
@@ -386,16 +386,17 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         var context = WeChatTestHost.CreateEventContext(
             ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody));
 
-        var reply = await channel.HandleEventAsync(context, CancellationToken.None);
+        var outcome = await channel.HandleEventAsync(context, CancellationToken.None);
 
-        Assert.Null(reply);   // 通道不产出平台化回复（编排器转 handler；200 空回复兜底在端点层）
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);   // I2：合法事件 → Parsed
+        var evt = outcome.Event!;
         // 富化验证：msg_type=text + content=消息原文（图文 Description 源）+ openid
-        Assert.Equal("text", context.Parameters["msg_type"]);
-        Assert.Equal("你好，欢迎使用", context.Parameters["content"]);
-        Assert.Equal(TestOpenId, context.Parameters["external_user_id"]);
-        // Oracle P1-4——解密后明文 XML 富化（__raw 提取 Encrypt → 解密 → __decrypted_xml）
-        Assert.NotNull(context.Parameters["__decrypted_xml"]);
-        Assert.Contains("你好，欢迎使用", context.Parameters["__decrypted_xml"]!);
+        Assert.Equal("text", evt.Attributes["msg_type"]);
+        Assert.Equal("你好，欢迎使用", evt.Attributes["content"]);
+        Assert.Equal(TestOpenId, evt.ExternalUserId);
+        // Oracle P1-4——解密后明文 XML 承载 RawPayload（__raw 提取 Encrypt → 解密）
+        Assert.NotNull(evt.RawPayload);
+        Assert.Contains("你好，欢迎使用", evt.RawPayload!);
     }
 
     /// <summary>安全模式 POST 推送验签失败（篡改签名）→ null（信任根一票否决——从 __raw 提取的 Encrypt 参与验签）。</summary>

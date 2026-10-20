@@ -18,4 +18,10 @@ public interface IChannelSource
 
     /// <summary>把平台配置 Channels 投影为统一配置列表（静态层——每次调用重新读 Options，反映配置热更新）。</summary>
     IReadOnlyList<ChannelConfig> GetChannels();
+
+    /// <summary>
+    /// 通道能力声明（I2 方案 §3.4 Q5）——<b>DIM 默认 <see cref="ChannelCapabilities.None"/> = 刻意 fail-closed</b>：
+    /// 新增平台库忘记声明 → 事件/关注域/免登静默跳过（而非「试着调一下看报不报错」）。既有 8 平台库零改动即可编译。
+    /// </summary>
+    ChannelCapabilities Capabilities => ChannelCapabilities.None;
 }

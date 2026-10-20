@@ -223,6 +223,7 @@ internal static class AuthCenterEndpointHost
     internal sealed class FakeTokenService : ITokenService
     {
         public bool RefreshInvoked { get; private set; }
+        public string? LastRefreshToken { get; private set; }
         public string? RevokedJti { get; private set; }
 
         public Task<TokenIssueResult> IssueTokenAsync(TokenIssueRequest request, CancellationToken ct = default)
@@ -234,6 +235,7 @@ internal static class AuthCenterEndpointHost
         public Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default)
         {
             RefreshInvoked = true;
+            LastRefreshToken = refreshToken;
             return Task.FromResult(new TokenRefreshResult("at-2", "rt-2", 7200));
         }
 
@@ -264,6 +266,7 @@ internal static class AuthCenterEndpointHost
     internal sealed class FakeTicketService : IOAuthTicketService
     {
         public bool ExchangeInvoked { get; private set; }
+        public OAuthTicketExchangeRequest? LastRequest { get; private set; }
 
         public Task<string> IssueAsync(OAuthTicketIssueRequest request, CancellationToken ct = default)
             => Task.FromResult("t-1");
@@ -271,6 +274,7 @@ internal static class AuthCenterEndpointHost
         public Task<OAuthTicketExchangeResult> ExchangeAsync(OAuthTicketExchangeRequest request, CancellationToken ct = default)
         {
             ExchangeInvoked = true;
+            LastRequest = request;
             return Task.FromResult(new OAuthTicketExchangeResult("at-3", "rt-3", 7200));
         }
 

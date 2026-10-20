@@ -190,6 +190,40 @@ public sealed class AuthCenterWebExtensionTests
     }
 
     [Fact]
+    public async Task Refresh_SnakeCaseRefreshToken_Binds()
+    {
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        using var content = new StringContent(
+            """{"refresh_token":"rt-2"}""",
+            System.Text.Encoding.UTF8, "application/json");
+        var resp = await client.PostAsync($"{DefaultPrefix}/refresh", content);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("rt-2", AuthCenterEndpointHost.Token.LastRefreshToken);
+    }
+
+    [Fact]
+    public async Task TokenResponse_SerializesDocumentedSnakeCaseKeys()
+    {
+        // 文档契约响应 = {access_token, refresh_token, token_type, expires_in}（V0.6.0 起即如此约定，
+        // 实现此前仅 camelCase）——V0.10.1 双发：snake_case 键 + camelCase 键并存，两类消费方零破坏
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/refresh", new RefreshRequest("rt-1"));
+        var raw = await resp.Content.ReadAsStringAsync();
+
+        Assert.Contains("\"access_token\":\"at-2\"", raw);
+        Assert.Contains("\"accessToken\":\"at-2\"", raw);
+        Assert.Contains("\"refresh_token\":\"rt-2\"", raw);
+        Assert.Contains("\"refreshToken\":\"rt-2\"", raw);
+        Assert.Contains("\"token_type\":\"Bearer\"", raw);
+        Assert.Contains("\"tokenType\":\"Bearer\"", raw);
+        Assert.Contains("\"expires_in\":7200", raw);
+        Assert.Contains("\"expiresIn\":7200", raw);
+    }
+
+    [Fact]
     public async Task Logout_WithBearer_204()
     {
         // 已认证端点：共享宿主已注册 FakeTokenVerifier（Bearer 验签 → RestoreUser 替换已认证帧 +
@@ -216,6 +250,23 @@ public sealed class AuthCenterWebExtensionTests
         Assert.NotNull(body);
         Assert.Equal("at-3", body!.AccessToken);
         Assert.True(AuthCenterEndpointHost.Ticket.ExchangeInvoked);
+    }
+
+    [Fact]
+    public async Task TicketExchange_SnakeCaseCodeVerifierAppId_Binds()
+    {
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        using var content = new StringContent(
+            """{"ticket":"t-3","code_verifier":"pkce-3","app_id":"app-3","state":"st-3"}""",
+            System.Text.Encoding.UTF8, "application/json");
+        var resp = await client.PostAsync($"{DefaultPrefix}/ticket/exchange", content);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.NotNull(AuthCenterEndpointHost.Ticket.LastRequest);
+        Assert.Equal("pkce-3", AuthCenterEndpointHost.Ticket.LastRequest!.CodeVerifier);
+        Assert.Equal("app-3", AuthCenterEndpointHost.Ticket.LastRequest.AppId);
+        Assert.Equal("st-3", AuthCenterEndpointHost.Ticket.LastRequest.State);
     }
 
     // ═══════════════════ V0.8.0 认证 API 补全（3 端点冒烟——共享宿主模式 A） ═══════════════════

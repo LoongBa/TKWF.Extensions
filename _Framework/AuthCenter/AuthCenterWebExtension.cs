@@ -257,12 +257,12 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
 
     private static async Task<IResult> HandleRefresh(HttpContext ctx, [FromBody] RefreshRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.RefreshToken))
+        if (string.IsNullOrWhiteSpace(req.EffectiveRefreshToken))
             return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "refresh_token 必填"));
 
         try
         {
-            var result = await GetGuest(ctx).Use<ITokenService>().RefreshTokenAsync(req.RefreshToken, ct);
+            var result = await GetGuest(ctx).Use<ITokenService>().RefreshTokenAsync(req.EffectiveRefreshToken, ct);
             return Results.Ok(ToTokenResponse(result));
         }
         catch (AuthenticationException ex)
@@ -285,13 +285,13 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
 
     private static async Task<IResult> HandleTicketExchange(HttpContext ctx, [FromBody] TicketExchangeRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Ticket) || string.IsNullOrWhiteSpace(req.AppId))
+        if (string.IsNullOrWhiteSpace(req.Ticket) || string.IsNullOrWhiteSpace(req.EffectiveAppId))
             return Results.BadRequest(new ErrorResponse("INVALID_ARGUMENT", "ticket/app_id 必填"));
 
         try
         {
             var result = await GetGuest(ctx).Use<IOAuthTicketService>().ExchangeAsync(
-                new OAuthTicketExchangeRequest(req.Ticket, req.CodeVerifier, req.AppId, req.State), ct);
+                new OAuthTicketExchangeRequest(req.Ticket, req.EffectiveCodeVerifier, req.EffectiveAppId, req.State), ct);
             return Results.Ok(ToTokenResponse(result));
         }
         catch (AuthenticationException ex)
@@ -412,12 +412,31 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
 
 // ─────────────────────────── 请求/响应 DTO（Web 层语义，V0.6.0 T4） ───────────────────────────
 
-/// <summary>令牌响应（标准形态——access_token/refresh_token/token_type/expires_in）。</summary>
+/// <summary>令牌响应（标准形态——access_token/refresh_token/token_type/expires_in）。
+/// ⚠️ V0.10.1 双发收口：文档契约键（snake_case）自 V0.6.0 起即如此约定、实现此前仅 camelCase——现补 4 个
+/// snake_case 别名属性双键并存，两类消费方零破坏；同传同名冲突不存在（响应只读）。</summary>
 /// <param name="AccessToken">JWT access token（RS256）。</param>
 /// <param name="RefreshToken">Refresh token（rotation——SHA256 落库）。</param>
 /// <param name="TokenType">固定 <c>Bearer</c>。</param>
 /// <param name="ExpiresIn">access token 有效期（秒）。</param>
-public sealed record TokenResponse(string AccessToken, string RefreshToken, string TokenType, int ExpiresIn);
+public sealed record TokenResponse(string AccessToken, string RefreshToken, string TokenType, int ExpiresIn)
+{
+    /// <summary>文档契约键 <c>access_token</c>（V0.6.0 起使用指南即如此约定）。</summary>
+    [JsonPropertyName("access_token")]
+    public string AccessTokenAlias => AccessToken;
+
+    /// <summary>文档契约键 <c>refresh_token</c>。</summary>
+    [JsonPropertyName("refresh_token")]
+    public string RefreshTokenAlias => RefreshToken;
+
+    /// <summary>文档契约键 <c>token_type</c>。</summary>
+    [JsonPropertyName("token_type")]
+    public string TokenTypeAlias => TokenType;
+
+    /// <summary>文档契约键 <c>expires_in</c>。</summary>
+    [JsonPropertyName("expires_in")]
+    public int ExpiresInAlias => ExpiresIn;
+}
 
 /// <summary>统一错误响应（错误码 + 可选消息）。</summary>
 public sealed record ErrorResponse(string Code, string? Message);
@@ -431,8 +450,19 @@ public sealed record SmsLoginRequest(string Phone, string Code);
 /// ClientHash/Salt 为客户端算的 PBKDF2 产物，服务端零明文）。</summary>
 public sealed record PasswordLoginRequest(string Identifier, string ClientHash, string Salt);
 
-/// <summary>刷新请求。</summary>
-public sealed record RefreshRequest(string RefreshToken);
+/// <summary>刷新请求（V0.10.1 双收：文档契约 body = <c>{refresh_token}</c>；camelCase <c>refreshToken</c> 亦接受，
+/// 同传时 camelCase 优先——默认 Web JSON 绑定大小写不敏感但不做下划线归一，别名键保证文档契约可用）。</summary>
+public sealed record RefreshRequest(string RefreshToken)
+{
+    /// <summary>文档契约键 <c>refresh_token</c>。</summary>
+    [JsonPropertyName("refresh_token")]
+    public string? RefreshTokenSnakeCase { get; init; }
+
+    /// <summary>生效 refresh token（<c>refreshToken</c> 优先，其次 <c>refresh_token</c>）。</summary>
+    [JsonIgnore]
+    public string EffectiveRefreshToken
+        => !string.IsNullOrWhiteSpace(RefreshToken) ? RefreshToken : RefreshTokenSnakeCase ?? string.Empty;
+}
 
 /// <summary>外部 IdP 票据 SPA 兑现请求（V0.10.0——POST {prefix}/login/ticket；channel_id 可选——多通道消歧，
 /// 正常由票载荷 ChannelId 签入，提供时须一致否则 TICKET_INVALID）。</summary>
@@ -452,8 +482,29 @@ public sealed record ExternalTicketLoginRequest(string Ticket, string? ChannelId
         => !string.IsNullOrWhiteSpace(ChannelId) ? ChannelId : ChannelIdSnakeCase;
 }
 
-/// <summary>票据换令牌请求（PKCE code_verifier 可选——IssueAsync 时若生成则 Exchange 必传）。</summary>
-public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, string AppId, string? State);
+/// <summary>票据换令牌请求（PKCE code_verifier 可选——IssueAsync 时若生成则 Exchange 必传；V0.10.1 双收：
+/// 文档契约 body = <c>{ticket, code_verifier, app_id, state}</c>；camelCase <c>codeVerifier</c>/<c>appId</c> 亦接受，
+/// 同传时 camelCase 优先——别名键保证文档契约可用）。</summary>
+public sealed record TicketExchangeRequest(string Ticket, string? CodeVerifier, string AppId, string? State)
+{
+    /// <summary>文档契约键 <c>code_verifier</c>。</summary>
+    [JsonPropertyName("code_verifier")]
+    public string? CodeVerifierSnakeCase { get; init; }
+
+    /// <summary>文档契约键 <c>app_id</c>。</summary>
+    [JsonPropertyName("app_id")]
+    public string? AppIdSnakeCase { get; init; }
+
+    /// <summary>生效 code_verifier（<c>codeVerifier</c> 优先，其次 <c>code_verifier</c>）。</summary>
+    [JsonIgnore]
+    public string? EffectiveCodeVerifier
+        => !string.IsNullOrWhiteSpace(CodeVerifier) ? CodeVerifier : CodeVerifierSnakeCase;
+
+    /// <summary>生效 app id（<c>appId</c> 优先，其次 <c>app_id</c>）。</summary>
+    [JsonIgnore]
+    public string EffectiveAppId
+        => !string.IsNullOrWhiteSpace(AppId) ? AppId : AppIdSnakeCase ?? string.Empty;
+}
 
 // ─────────────────────────── V0.8.0 认证 API 补全（Web DTO） ───────────────────────────
 

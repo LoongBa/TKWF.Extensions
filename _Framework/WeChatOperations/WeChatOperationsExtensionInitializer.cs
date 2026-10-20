@@ -46,6 +46,10 @@ namespace TKWF.Ext.WeChatOperations;
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.FeatureManagement.IFeatureManager), MinVersion = "0.4.0")]
 // 2026-10-18 ④ 裁定：通道编排契约迁 Federation.Abstractions 独立契约包（版本线独立——V0.1.0 起步，
 //   MinVersion 对齐契约包版本而非 Federation 主包；namespace 保持 TKWF.Ext.Federation 跨程序集同）
+// ⚠️ I2-10：方案 §8.2 目标 MinVersion 0.2.0（Federation.Abstractions 0.2.0——关注域契约收口 + 通道契约破坏性演进）；
+//   当前保留 0.1.0——DEP002 门控按引用程序集 MinVer 实际版本校验（最近 tag v0.1.0 → 0.1.1-preview），
+//   0.2.0 tag 未创建前设 0.2.0 会拦截编译门；Federation.Abstractions/v0.2.0 tag 创建（I2 发布，AGENTS §5 用户同意）
+//   后同步提升（程序集版本 ≥ 0.2.0 时门控自然通过）
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelRegistry), MinVersion = "0.1.0")]
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IEventReplyHandler), MinVersion = "0.1.0")]
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelSource), MinVersion = "0.1.0")]

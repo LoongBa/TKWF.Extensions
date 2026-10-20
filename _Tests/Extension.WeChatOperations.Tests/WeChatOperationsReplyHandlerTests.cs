@@ -15,15 +15,15 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 
 /// <summary>
 /// <see cref="WeChatOperationsReplyHandler"/> 测试——覆盖全消息类型回复配置（设计文档 §3.3.3/§六）：
-/// subscribe 欢迎语（规则素材回复 + SubscriptionStat 计数）/ unsubscribe 取关计数（回复被协议门控吞）/
+/// subscribe 欢迎语（规则素材回复）/ unsubscribe（回复被协议门控吞）/ 
 /// text 关键词（完全匹配→包含匹配→Default 兜底→template 兜底→Options 默认文案）/ click 映射（TriggerKey=EventKey）/
 /// image/voice/video/shortvideo/location/link 对应 SceneType 规则 / scan 场景规则 / view null /
 /// channel 过滤（A channel 规则不影响 B channel）/ template 兜底（Channel.Extra["news_reply"]——handler 内部组合）/
 /// 素材渲染（Kind=Text→文本 / Kind=News→图文）/ 交互日志记录（best-effort）。
 /// <para>生产路径宿主（<see cref="WeChatOperationsTestHost"/> + <c>BindScope()</c>）——
 /// handler 经 <c>user.Use&lt;WeChatOperationsReplyHandler&gt;()</c> NoAop 直建（public sealed 类，
-/// ctor 可选 IOptions/ILogger）；内部 DataService 经基类 <c>User.Use&lt;具体类&gt;()</c> 懒加载、
-/// 统计经 <c>User.Use&lt;ISubscriptionStatService&gt;()</c> AOP 帧内调用——真实生产路径。</para>
+/// ctor 可选 IOptions/ILogger）；内部 DataService 经基类 <c>User.Use&lt;具体类&gt;()</c> 懒加载——
+/// I2-10 起订阅/取关统计写路径移除（归编排层 IFollowStateService.RecordAsync，方案 §8.2 C3），handler 只留交互日志。</para>
 /// </summary>
 public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
 {
@@ -33,12 +33,12 @@ public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
 
     // ═══════════════════ subscribe（欢迎语 + 统计） ═══════════════════
 
-    /// <summary>subscribe → 欢迎语规则（ReplyText）回复 + SubscriptionStat 计数 +1。</summary>
+    /// <summary>subscribe → 欢迎语规则（ReplyText）回复 + 交互日志（I2-10 起统计写归编排层，handler 不写）。</summary>
     [Fact]
-    public async Task Subscribe_WithWelcomeRule_RepliesText_AndCountsStat()
+    public async Task Subscribe_WithWelcomeRule_RepliesText()
     {
         using var _ = this;
-        var (provider, user) = BindScope();
+        var (_, user) = BindScope();
         await SeedRuleAsync(user, ChA, WeChatReplySceneTypes.Subscribe, replyText: "欢迎关注本公众号！");
 
         var reply = await handler(user).HandleAsync(Ctx(("msg_type", "event"), ("event", "subscribe"),
@@ -47,13 +47,6 @@ public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
         Assert.NotNull(reply);
         Assert.Contains("<MsgType><![CDATA[text]]></MsgType>", reply!.Content);
         Assert.Contains("欢迎关注本公众号！", reply.Content);
-
-        // 订阅统计 +1（副作用——即使回复也可计数）
-        var stat = await StatAsync(provider, ChA);
-        Assert.NotNull(stat);
-        Assert.Equal(1, stat!.SubscribeCount);
-        Assert.Equal(0, stat.UnsubscribeCount);
-        Assert.Equal(1, stat.NetCount);
     }
 
     /// <summary>subscribe 无规则 → template 兜底（Channel.Extra["news_reply"]——handler 内部组合，不依赖编排器）。</summary>
@@ -134,25 +127,19 @@ public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
         Assert.True(log!.DurationMs is >= 0, $"DurationMs 应为非负（null 或负值即字段未记录/语义错误）：{log.DurationMs}");
     }
 
-    // ═══════════════════ unsubscribe（取关计数——回复被协议门控吞） ═══════════════════
+    // ═══════════════════ unsubscribe（回复被协议门控吞——I2-10 起统计写归编排层） ═══════════════════
 
-    /// <summary>unsubscribe → 取关计数 +1 + HandleAsync null（基类协议门控——回复被吞，副作用可做）。</summary>
+    /// <summary>unsubscribe → HandleAsync null（基类协议门控——回复被吞，handler 无本地统计副作用）。</summary>
     [Fact]
-    public async Task Unsubscribe_CountsStat_ReplyNull()
+    public async Task Unsubscribe_ReplyNull_ProtocolGated()
     {
         using var _ = this;
-        var (provider, user) = BindScope();
+        var (_, user) = BindScope();
 
         var reply = await handler(user).HandleAsync(Ctx(("msg_type", "event"), ("event", "unsubscribe"),
             ("from_user_name", OpenId), ("channel_id", ChA)), CancellationToken.None);
 
         Assert.Null(reply);   // 协议门控——回复被吞
-
-        var stat = await StatAsync(provider, ChA);
-        Assert.NotNull(stat);
-        Assert.Equal(0, stat!.SubscribeCount);
-        Assert.Equal(1, stat.UnsubscribeCount);
-        Assert.Equal(-1, stat.NetCount);
     }
 
     // ═══════════════════ text 关键词（完全→包含→Default→template→Options） ═══════════════════
@@ -456,12 +443,4 @@ public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
         return created.Id;
     }
 
-    /// <summary>查询当日订阅统计（DB 直查）。</summary>
-    private static async Task<SubscriptionStatEntity?> StatAsync(ServiceProvider provider, string channelId)
-    {
-        var fsql = provider.GetRequiredService<IFreeSql>();
-        return await fsql.Select<SubscriptionStatEntity>()
-            .Where(s => s.ChannelId == channelId)
-            .FirstAsync(TestContext.Current.CancellationToken);
-    }
 }

@@ -6,43 +6,35 @@ using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Federation;
 using TKWF.Ext.Permissions.Abstractions;
-using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
-/// 订阅统计门面（subscribe/unsubscribe 事件驱动——按 ChannelId 按日按来源 upsert 计数；设计文档 §3.3.1/§3.3.2）。
-/// <para>唯一约束 (ChannelId, StatDate, Source)——每日每 channel 每来源一行（<b>汇总行 Source=null</b> + 各来源行，
-/// V0.3.0 来源/场景维度 <see cref="WeChatSubscriptionSources"/>）；<see cref="RecordAsync"/> 按此键每日
-/// 原子累加（查 → 更新或创建；唯一索引兜底并发 TOCTOU——败者重查转更新）。</para>
-/// <para>消费方：<c>User.Use&lt;ISubscriptionStatService&gt;()</c>（AddConstructibleService 守卫工厂，帧内解析；
-/// 事件 handler <c>WeChatOperationsReplyHandler</c> 帧内调用）。</para>
+/// 订阅统计门面（I2-10 派生改造——写路径归编排层 <see cref="TKWF.Ext.Federation.IFollowStateService.RecordAsync"/>，
+/// 本门面只读委托关注域日统计 <see cref="TKWF.Ext.Federation.IFollowStateService.GetDailyStatsAsync"/>；
+/// 方案 §8.2 C9：统计口径与事件日志一致，删本地实体与双写）。
+/// <para>消费方：<c>User.Use&lt;ISubscriptionStatService&gt;()</c>（AddConstructibleService 守卫工厂，帧内解析）。</para>
 /// </summary>
 public interface ISubscriptionStatService : IDomainService
 {
-    /// <summary>
-    /// 记录订阅/取关计数（<paramref name="eventType"/>：1=subscribe / 2=unsubscribe）——每日 upsert：
-    /// 按 (ChannelId, StatDate=UtcNow.Date, Source) 查 → 命中更新（对应列 +1 + NetCount 重算）/ 未命中创建。
-    /// <paramref name="source"/> 可空 = 汇总行（不细分来源——存量调用零适配）；来源值见 <see cref="WeChatSubscriptionSources"/>。
-    /// <para><c>ExposeRest=false</c>：事件驱动内部写入（handler 帧内调用），不生成 REST 端点——对外只读（趋势/汇总）。</para>
-    /// </summary>
-    [ApiExpose(ExposeRest = false)]
-    Task RecordAsync(string channelId, int eventType, string? source = null, CancellationToken ct = default);
-
-    /// <summary>按日趋势（[from, to] 闭区间——ChannelId + StatDate 过滤；<paramref name="source"/> 可空 = 仅汇总行；
-    /// 非空 = 仅该来源行；StatDate 升序）。
-    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats?from=&amp;to=&amp;source=</c>。</para></summary>
+    /// <summary>按日趋势（[from, to] 闭区间——委托 <see cref="TKWF.Ext.Federation.IFollowStateService.GetDailyStatsAsync"/>
+    /// 日粒度分桶，返回 <see cref="SubscriptionStatPointDto"/>（Date/NewFollows/Unsubscribes/NetGrowth/Source——与
+    /// <c>FollowDailyStatDto</c> 同形但不外露契约包类型，避免主包 API 签名穿透 Federation.Abstractions）；
+    /// <paramref name="source"/> 可空 = 全来源合计 / 非空 = 仅该来源（对齐关注域 Source 维度）。
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats?from=&amp;to=&amp;source=</c>；
+    /// I2-10 响应体形状变化（entity 9 字段 → DTO 5 字段，字段名亦异）——SG3 客户端重生成。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/subscription-stats", RestMethod = "GET")]
-    Task<IReadOnlyList<SubscriptionStatEntity>> GetTrendAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default);
+    Task<IReadOnlyList<SubscriptionStatPointDto>> GetTrendAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default);
 
     /// <summary>
     /// 区间汇总统计（DMP-Lite 5.7 §2"统计数据"四指标卡）——[from, to] 闭区间按日聚合：
     /// 区间新增关注/区间取消关注/净增关注（<b>R7 负值按 0 计</b>——真实负值经
     /// <see cref="SubscriptionStatSummaryDto.NetCountRaw"/> 暴露 + <see cref="SubscriptionStatSummaryDto.IsNetNegative"/> 标记）/
     /// 累计增长率（以区间起始日累计净增为基数估算；期初累计 ≤ 0 不可判定——<see cref="SubscriptionStatSummaryDto.GrowthRate"/> 为 null）。
-    /// <paramref name="source"/> 可空 = 仅汇总行；非空 = 仅该来源行（对齐 <see cref="GetTrendAsync"/> 过滤语义）。
+    /// <paramref name="source"/> 可空 = 全来源合计 / 非空 = 仅该来源（对齐 <see cref="GetTrendAsync"/> 过滤语义）。
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats/summary?from=&amp;to=&amp;source=</c>。</para>
     /// </summary>
     [RequirePermission("WeChatOperations.Query")]
@@ -51,13 +43,30 @@ public interface ISubscriptionStatService : IDomainService
 }
 
 /// <summary>
+/// 订阅统计趋势点 DTO（I2-10 派生——<see cref="ISubscriptionStatService.GetTrendAsync"/> 返回元素；
+/// 与 <see cref="TKWF.Ext.Federation.FollowDailyStatDto"/> 同形（Date/NewFollows/Unsubscribes/NetGrowth/Source），
+/// <b>不直接外露契约包类型</b>——主包 API 签名不穿透 Federation.Abstractions（方案 §8.2 C9）。
+/// </summary>
+/// <param name="Date">统计日期（UTC 自然日——关注域按 <c>OccurredAt.Date</c> 分桶）。</param>
+/// <param name="NewFollows">当日新增关注数（follow / scan_follow 事件计数）。</param>
+/// <param name="Unsubscribes">当日取关数（unfollow 事件计数）。</param>
+/// <param name="NetGrowth">当日净增（= NewFollows - Unsubscribes，可为负）。</param>
+/// <param name="Source">来源/场景（null = 全来源合计；非空 = 该来源维度——对齐关注域 Source 列）。</param>
+public sealed record SubscriptionStatPointDto(
+    DateTime Date,
+    int NewFollows,
+    int Unsubscribes,
+    int NetGrowth,
+    string? Source);
+
+/// <summary>
 /// 订阅统计区间汇总（DMP-Lite 5.7 §2"统计数据"四指标卡——区间新增关注/区间取消关注/净增关注/累计增长率）。
 /// <para><b>口径（R7）</b>：净增关注为负按 0 计（真实负值经 <see cref="NetCountRaw"/> 暴露 + <see cref="IsNetNegative"/>
 /// 标记，前端可脚注口径）；累计增长率以区间起始日累计净增为基数估算（期初累计 ≤ 0 时不可判定——
 /// <see cref="GrowthRate"/> 为 null + <see cref="GrowthRateUndeterminable"/>，UI 显示 "—"）。</para>
 /// </summary>
-/// <param name="TotalSubscribe">区间新增关注合计（闭区间 [from, to] 内 SubscribeCount 之和）。</param>
-/// <param name="TotalUnsubscribe">区间取消关注合计（闭区间 [from, to] 内 UnsubscribeCount 之和）。</param>
+/// <param name="TotalSubscribe">区间新增关注合计（闭区间 [from, to] 内 NewFollows 之和）。</param>
+/// <param name="TotalUnsubscribe">区间取消关注合计（闭区间 [from, to] 内 Unsubscribes 之和）。</param>
 /// <param name="NetCount">区间净增关注（显示口径——R7 负值按 0 计；真实值见 <see cref="NetCountRaw"/>）。</param>
 /// <param name="NetCountRaw">区间净增关注原始值（= TotalSubscribe - TotalUnsubscribe，可为负——前端可脚注口径）。</param>
 /// <param name="IsNetNegative">区间净增是否为负（true = 原始净增 &lt; 0，<see cref="NetCount"/> 已钳制为 0）。</param>
@@ -83,76 +92,23 @@ public record SubscriptionStatSummaryDto(
 [GenerateController]
 public sealed class SubscriptionStatService : DomainServiceBase, ISubscriptionStatService
 {
-    private SubscriptionStatEntityDataService? _ds;
-    private SubscriptionStatEntityDataService Ds => _ds ??= User.Use<SubscriptionStatEntityDataService>();
+    private IFollowStateService? _followStats;
+    private IFollowStateService FollowStats => _followStats ??= User.Use<IFollowStateService>();
 
     public SubscriptionStatService(IDomainUser user) : base(user)
     {
     }
 
     /// <inheritdoc />
-    public async Task RecordAsync(string channelId, int eventType, string? source = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SubscriptionStatPointDto>> GetTrendAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(channelId)) return;
-        if (eventType is not (1 or 2)) throw new ArgumentException("eventType 无效（1=subscribe / 2=unsubscribe）", nameof(eventType));
-
-        var statDate = DateTime.UtcNow.Date;
-        var nextDay = statDate.AddDays(1);
-        // ⚠️ DateTime 等值比较在 FreeSql SQLite 下有 Kind/格式往返不一致风险（写入 Utc 午夜 vs 查询参数转本地/不同序列化
-        //    ——upsert 查不到刚创建行撞唯一约束）；改用半开区间 [statDate, nextDay) 查当日行（范围语义无等值精度问题）
-        // ⚠️ Source 可空（汇总行）——FreeSql null == null 语义：显式 IS NULL 分支（对齐 MessageGatewayService 先例）
-        var existing = await Ds.EntityGetAsync(s => s.ChannelId == channelId && s.StatDate >= statDate && s.StatDate < nextDay
-            && (source == null ? s.Source == null : s.Source == source), ct);
-        if (existing is not null)
-        {
-            // 命中 → 原子更新（+1 + NetCount 重算）
-            if (eventType == 1) existing.SubscribeCount++;
-            else existing.UnsubscribeCount++;
-            existing.NetCount = existing.SubscribeCount - existing.UnsubscribeCount;
-            existing.UpdateTime = DateTime.UtcNow;
-            await Ds.EntityUpdateAsync(existing, ct);
-            return;
-        }
-
-        // 未命中 → 创建（并发唯一索引 UX 兜底——败者重查转更新）
-        try
-        {
-            var entity = new SubscriptionStatEntity
-            {
-                ChannelId = channelId,
-                StatDate = statDate,
-                Source = source,
-                SubscribeCount = eventType == 1 ? 1 : 0,
-                UnsubscribeCount = eventType == 2 ? 1 : 0,
-                NetCount = eventType == 1 ? 1 : -1,
-                CreateTime = DateTime.UtcNow,
-                UpdateTime = DateTime.UtcNow,
-            };
-            await Ds.EntityCreateAsync(entity, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // 唯一冲突（并发双建）——败者重查转更新（对齐 AuthGrantCommandService 幂等 upsert 先例；
-            //   半开区间范围查询——对齐 DateTime 等值往返一致性规避；Source 入键——显式 IS NULL 分支）
-            var fresh = await Ds.EntityGetAsync(s => s.ChannelId == channelId && s.StatDate >= statDate && s.StatDate < nextDay
-                && (source == null ? s.Source == null : s.Source == source), ct);
-            if (fresh is null) throw;   // 非冲突异常——原样抛
-            if (eventType == 1) fresh.SubscribeCount++;
-            else fresh.UnsubscribeCount++;
-            fresh.NetCount = fresh.SubscribeCount - fresh.UnsubscribeCount;
-            fresh.UpdateTime = DateTime.UtcNow;
-            await Ds.EntityUpdateAsync(fresh, ct);
-        }
+        // I2-10 派生：委托关注域日统计（GetDailyStatsAsync——统计口径与事件日志一致，零本地实体读）；
+        //   闭区间 [from.Date, to.Date] → 半开 [from.Date, to.Date+1)（对齐 GetDailyStatsAsync 区间语义）
+        var daily = await FollowStats.GetDailyStatsAsync(channelId, from.Date, to.Date.AddDays(1), source, ct);
+        return daily
+            .Select(p => new SubscriptionStatPointDto(p.Date, p.NewFollows, p.Unsubscribes, p.NetGrowth, p.Source))
+            .ToList();
     }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<SubscriptionStatEntity>> GetTrendAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default)
-        => await Ds.EntitySelectAsync(
-            s => s.ChannelId == channelId && s.StatDate >= from.Date && s.StatDate <= to.Date
-                && (source == null ? s.Source == null : s.Source == source),
-            0, 1000,
-            q => q.OrderBy(s => s.StatDate),
-            ct);
 
     /// <inheritdoc />
     public async Task<SubscriptionStatSummaryDto> GetSummaryAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default)
@@ -163,32 +119,20 @@ public sealed class SubscriptionStatService : DomainServiceBase, ISubscriptionSt
         // 闭区间含首尾天数；反序输入（from > to）守卫 ≥ 1（日均除零防护）
         var dayCount = Math.Max(1, (endDate - startDate).Days + 1);
 
-        // 区间行（[from.Date, to.Date] 闭区间 = 半开 [startDate, to.Date+1 天)——对齐 RecordAsync 半开区间先例：
-        //   FreeSql SQLite 内联 DateTime 无 Z 后缀 vs 存储带 Z（System.Data.SQLite）——闭区间上界 <= 在末日本身
-        //   会字典序错位致最后一日本地漏计（GetTrendAsync 宽区间测试掩盖、此处区间精确聚合必须规避）；
-        //   Source 可空显式 IS NULL 分支）
-        var rows = await Ds.EntitySelectAsync(
-            s => s.ChannelId == channelId && s.StatDate >= startDate && s.StatDate < endExclusive
-                && (source == null ? s.Source == null : s.Source == source),
-            0, 1000,
-            q => q.OrderBy(s => s.StatDate),
-            ct);
+        // I2-10 派生：单次委托区间聚合（下界取 2000-01-01——期初累计净增基数；日粒度分桶内存可控，
+        //   期初行（Date < startDate）与区间行（[startDate, endExclusive)）内存切分——口径不变）
+        var daily = await FollowStats.GetDailyStatsAsync(channelId, PriorStartDate, endExclusive, source, ct);
+        var window = daily.Where(p => p.Date >= startDate && p.Date < endExclusive).ToList();
+        var prior = daily.Where(p => p.Date < startDate).ToList();
 
-        var totalSubscribe = rows.Sum(s => s.SubscribeCount);
-        var totalUnsubscribe = rows.Sum(s => s.UnsubscribeCount);
+        var totalSubscribe = window.Sum(p => p.NewFollows);
+        var totalUnsubscribe = window.Sum(p => p.Unsubscribes);
         var netCountRaw = totalSubscribe - totalUnsubscribe;
         var isNetNegative = netCountRaw < 0;
         var netCount = isNetNegative ? 0 : netCountRaw;   // R7：净增为负按 0 计（显示口径；真实负值经 NetCountRaw/IsNetNegative 暴露）
 
-        // 期初累计净增（StatDate < from.Date——累计增长率基数；同 source/IS NULL 过滤）
-        // ⚠️ 期初天数无上界（开区间）——limit 放宽至 100_000（对齐 AuditLogging 内存聚合先例），防长运行期基线截断致增长率失真
-        var priorRows = await Ds.EntitySelectAsync(
-            s => s.ChannelId == channelId && s.StatDate < startDate
-                && (source == null ? s.Source == null : s.Source == source),
-            0, 100_000, null, ct);
-        var priorNet = priorRows.Sum(s => s.NetCount);
-
         // 累计增长率 = 区间净增 ÷ 期初累计净增（R7 口径——以区间起始日累计为基数估算）；期初累计 ≤ 0 → 不可判定（除零/负基数无意义）
+        var priorNet = prior.Sum(p => p.NetGrowth);
         var growthRateUndeterminable = priorNet <= 0;
         double? growthRate = growthRateUndeterminable ? null : Math.Round((double)netCountRaw / priorNet, 4);
 
@@ -204,4 +148,7 @@ public sealed class SubscriptionStatService : DomainServiceBase, ISubscriptionSt
             GrowthRate: growthRate,
             GrowthRateUndeterminable: growthRateUndeterminable);
     }
+
+    /// <summary>期初累计基线下界（2000-01-01 UTC——微信公众平台 2012 年才开放，安全下界；避免 DateTime.MinValue 跨年翻译风险）。</summary>
+    private static readonly DateTime PriorStartDate = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 }

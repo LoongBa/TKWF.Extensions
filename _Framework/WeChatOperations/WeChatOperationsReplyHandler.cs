@@ -17,18 +17,19 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 微信公众号运营事件回复 handler（继承平台库 <see cref="TKWF.Federation.WeChat.WechatEventReplyHandlerBase"/>
-/// 二级分发——全消息类型回复配置 + 订阅统计 + 交互日志；设计文档 §3.3.3 Oracle P0 选项 A：<b>内部组合 template 兜底</b>——
+/// 二级分发——全消息类型回复配置 + 交互日志；设计文档 §3.3.3 Oracle P0 选项 A：<b>内部组合 template 兜底</b>——
 /// DB 规则未命中时直接读 <c>Channel.Extra["news_reply"]</c> 模板返回，不依赖编排器迭代顺序，消费方无需额外注册
 /// <see cref="TKWF.Federation.WeChat.WechatTemplateEventReplyHandler"/>）。
 /// <para>渲染三层：规则层（DB 按 (ChannelId, SceneType) 过滤）→ 素材层（DB 内容库）→ 渲染层
 /// （<c>BuildTextReply</c>/<c>BuildNewsReply</c> 信封闭包——本 handler 内部组合）。</para>
 /// <para>分发映射（全消息类型）：Subscribe（欢迎语）/ Text（Keyword 完全→包含→Default 兜底）/ Click（TriggerKey=EventKey）/
 /// Image/Voice/Video/ShortVideo/Location/Link（对应 SceneType）/ Scan（场景规则）/ View/ViewMiniProgram（null 微信直跳）/
-/// Unsubscribe（记取关统计——回复被协议门控吞掉）。</para>
+/// Unsubscribe（回复被协议门控吞掉）。</para>
 /// <para>每次回复记 <see cref="InteractionLogEntity"/>（ChannelId/OpenId/MsgType/Content/TriggerType/ReplyContent/
 /// ReplyMaterialId/耗时 <c>DurationMs</c>（V0.3.0）/匹配过程追踪 <c>MatchTraceJson</c>（V0.3.1——逐行推演"为什么命中/未命中"，
-/// 供 DMP-Lite 5.6 §4 日志详情"匹配过程"灰框）——运维排查）——best-effort（try/catch 不阻塞回复）；订阅/取关记
-/// <see cref="SubscriptionStatEntity"/>（每日 upsert——经 <see cref="ISubscriptionStatService"/> 帧内调用）。</para>
+/// 供 DMP-Lite 5.6 §4 日志详情"匹配过程"灰框）——运维排查）——best-effort（try/catch 不阻塞回复）；<b>I2-10：订阅/取关
+/// 统计写路径移除</b>——关注状态记录归编排层 <see cref="TKWF.Ext.Federation.IFollowStateService.RecordAsync"/>（方案 §5.1
+/// 第 6 步记录在后），handler 只保留交互日志（业务审计），订阅统计读取经 <see cref="ISubscriptionStatService"/> 委托关注域。</para>
 /// <para>注册（本扩展 Initializer）：<c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler,
 /// WeChatOperationsReplyHandler&gt;()</c>——ADR92 集合版守卫工厂（帧内供给 IDomainUser；ctor 仅
 /// IDomainUser + ILogger + IOptions，零 DataService 构造注入——DI004）。</para>
@@ -148,9 +149,6 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         // 消息业务总开关（DMP-Lite 5.8——关闭后本地回复停发，统一维护提示；网关已先行不受控）
         if (!await IsMessageBusinessEnabledAsync(ct)) return await MaintenanceReply(ctx, ct);
 
-        // 订阅 +1（副作用——即使无回复也计数；回复可被消费）
-        await RecordStatAsync(ctx, 1, ct);
-
         // Subscribe 规则 → 渲染；无规则 → TryReplyBySceneAsync 已含 template 兜底（Oracle P0 选项 A 内部组合）
         return await TryReplyBySceneAsync(ctx, WeChatReplySceneTypes.Subscribe, triggerKey: null, triggerType: 1, ct);
     }
@@ -158,8 +156,7 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
     /// <inheritdoc />
     protected override async Task<WechatReplyPayload?> OnUnsubscribeAsync(WechatEventContext ctx, CancellationToken ct)
     {
-        // 取关 +1（回复被协议门控吞掉——副作用可做；设计文档 §3.3.3）
-        await RecordStatAsync(ctx, 2, ct);
+        // 取关无本地回复——回复被协议门控吞掉（副作用统计归编排层 IFollowStateService.RecordAsync，handler 不写）
         return null;
     }
 
@@ -494,21 +491,6 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         catch (JsonException)
         {
             return null;
-        }
-    }
-
-    /// <summary>记录订阅统计（subscribe=1 / unsubscribe=2——经门面 ISubscriptionStatService 帧内调用，best-effort）。</summary>
-    private async Task RecordStatAsync(WechatEventContext ctx, int eventType, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(ctx.ChannelId)) return;
-        try
-        {
-            await User.Use<ISubscriptionStatService>().RecordAsync(ctx.ChannelId, eventType, ct: ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger?.LogWarning(ex, "订阅统计记录失败（best-effort——不阻塞回复）：ChannelId={ChannelId} Event={Event}",
-                ctx.ChannelId, eventType == 1 ? "subscribe" : "unsubscribe");
         }
     }
 

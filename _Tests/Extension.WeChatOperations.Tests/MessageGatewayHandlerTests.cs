@@ -18,7 +18,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <see cref="WeChatOperationsTestHost"/> + <c>user.Use&lt;WeChatOperationsReplyHandler&gt;()</c> NoAop 直建
 /// （handler 内部经 <c>User.Use&lt;IMessageGatewayService&gt;()</c> AOP 帧内调用 RouteAsync）。
 /// <para>覆盖：<b>默认关零回归</b>（GatewayEnabled=false——RouteAsync 首行短路不参与，既有 handler 行为零变化）/
-/// 网关开 + 幂等跳过（同事件两次——第二次不触发交互日志/订阅统计）/ <b>LOCATION 事件挂载</b>（P2-2——
+/// 网关开 + 幂等跳过（同事件两次——第二次不触发交互日志）/ <b>LOCATION 事件挂载</b>（P2-2——
 /// OnLocationEventAsync 挂载后 LOCATION 事件可转发）。</para>
 /// </summary>
 public class MessageGatewayHandlerTests : WeChatOperationsTestHost
@@ -56,8 +56,9 @@ public class MessageGatewayHandlerTests : WeChatOperationsTestHost
 
     // ═══════════════════ 网关开 + 幂等跳过 ═══════════════════
 
-    /// <summary>网关开（GatewayEnabled=true）+ 同事件两次——第一次正常处理（欢迎语回复 + 订阅统计 +1 + 交互日志），
-    /// 第二次幂等跳过（gate.Result=null 直接 return——不触发交互日志/订阅统计，防微信重试重复计数）。</summary>
+    /// <summary>网关开（GatewayEnabled=true）+ 同事件两次——第一次正常处理（欢迎语回复 + 交互日志），
+    /// 第二次幂等跳过（gate.Result=null 直接 return——不触发交互日志，防微信重试重复计数；
+    /// I2-10 起订阅统计写路径移除——幂等防重复计数语义由交互日志断言承载）。</summary>
     [Fact]
     public async Task GatewayOn_IdempotentSkip_NoDoubleStatsOrLogs()
     {
@@ -77,11 +78,7 @@ public class MessageGatewayHandlerTests : WeChatOperationsTestHost
         var second = await handler(user).HandleAsync(ctx, CancellationToken.None);
         Assert.Null(second);   // 幂等跳过——网关接管（gate.Result=null），handler 直接 return
 
-        // 订阅统计仅 +1（重复回调不计数——最前短路 RecordStat 不执行）
-        var stat = await StatAsync(provider, ChA);
-        Assert.Equal(1, stat!.SubscribeCount);
-        Assert.Equal(0, stat.UnsubscribeCount);
-        // 交互日志仅 1 条（重复回调不写日志）
+        // 交互日志仅 1 条（重复回调不写日志——幂等防重复计数）
         var logCount = await provider.GetRequiredService<IFreeSql>().Select<InteractionLogEntity>()
             .Where(l => l.ChannelId == ChA).CountAsync(TestContext.Current.CancellationToken);
         Assert.Equal(1, logCount);
@@ -188,14 +185,5 @@ public class MessageGatewayHandlerTests : WeChatOperationsTestHost
             UpdateTime = DateTime.UtcNow,
         }, TestContext.Current.CancellationToken);
         return created.Id;
-    }
-
-    /// <summary>查询 channel 订阅统计（DB 直查）。</summary>
-    private static async Task<SubscriptionStatEntity?> StatAsync(ServiceProvider provider, string channelId)
-    {
-        var fsql = provider.GetRequiredService<IFreeSql>();
-        return await fsql.Select<SubscriptionStatEntity>()
-            .Where(s => s.ChannelId == channelId)
-            .FirstAsync(TestContext.Current.CancellationToken);
     }
 }

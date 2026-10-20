@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
+using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -8,9 +9,9 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <summary>
 /// <see cref="ISubscriptionStatService.GetSummaryAsync"/>（区间汇总统计——DMP-Lite 5.7 §2"统计数据"四指标卡）测试：
 /// 区间新增关注/区间取消关注/净增关注（R7 负值按 0 计）/累计增长率（以区间起始日累计净增为基数估算）。
-/// <para>生产路径：<c>user.Use&lt;ISubscriptionStatService&gt;()</c> AOP（AddConstructibleService 守卫工厂）；
-/// 种子数据经 <c>SubscriptionStatEntityDataService.EntityCreateAsync</c> 生产路径直写（对齐
-/// <see cref="WeChatOperationsReplyHandlerTests"/> 种子先例）。</para>
+/// <para>I2-10 派生改造：实现委托 <see cref="IFollowStateService.GetDailyStatsAsync"/> 单次区间聚合——
+/// 期初基线（起始日前全部日点）与区间窗口内存切分，口径不变；种子数据经
+/// <c>FollowEventEntityDataService.EntityCreateAsync</c> 生产路径直写（事件日志 = 统计口径真相源）。</para>
 /// </summary>
 public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
 {
@@ -25,9 +26,9 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         var service = user.Use<ISubscriptionStatService>();
 
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 10), subscribe: 5, unsubscribe: 1);
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 11), subscribe: 3, unsubscribe: 2);
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 12), subscribe: 4, unsubscribe: 0);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 10), follow: 5, unfollow: 1);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 11), follow: 3, unfollow: 2);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 12), follow: 4, unfollow: 0);
 
         var summary = await service.GetSummaryAsync(
             "ch-stat", Utc(2026, 10, 10), Utc(2026, 10, 12),
@@ -57,8 +58,8 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         var service = user.Use<ISubscriptionStatService>();
 
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 1), subscribe: 10, unsubscribe: 0);   // 期初基线 净 +10
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 10), subscribe: 1, unsubscribe: 5);   // 区间净 -4
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 1), follow: 10, unfollow: 0);   // 期初基线 净 +10
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 10), follow: 1, unfollow: 5);   // 区间净 -4
 
         var summary = await service.GetSummaryAsync(
             "ch-stat", Utc(2026, 10, 10), Utc(2026, 10, 10),
@@ -72,7 +73,7 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
     }
 
     /// <summary>
-    /// 累计增长率 = 区间净增 ÷ 期初累计净增（期初 = <c>StatDate &lt; from.Date</c> 全量，含起始日前一天；
+    /// 累计增长率 = 区间净增 ÷ 期初累计净增（期初 = <c>Date &lt; from.Date</c> 全量日点，含起始日前一天；
     /// 边界验证——from 当日行不并入期初）：期初 10-01 净 +10 + 10-09 净 +2 = 12，区间 10-10 净 +5 → 5 ÷ 12 = 0.4167。
     /// </summary>
     [Fact]
@@ -82,9 +83,9 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         var service = user.Use<ISubscriptionStatService>();
 
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 1), subscribe: 10, unsubscribe: 0);   // 期初 净 +10
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 9), subscribe: 5, unsubscribe: 3);    // 起始日前一天 净 +2（边界——并入期初）
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 10), subscribe: 6, unsubscribe: 1);   // 区间 净 +5
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 1), follow: 10, unfollow: 0);   // 期初 净 +10
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 9), follow: 5, unfollow: 3);    // 起始日前一天 净 +2（边界——并入期初）
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 10), follow: 6, unfollow: 1);   // 区间 净 +5
 
         var summary = await service.GetSummaryAsync(
             "ch-stat", Utc(2026, 10, 10), Utc(2026, 10, 10),
@@ -107,7 +108,7 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
         var service = user.Use<ISubscriptionStatService>();
 
         // ① 无期初基线
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 10), subscribe: 3, unsubscribe: 0);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 10), follow: 3, unfollow: 0);
         var noPrior = await service.GetSummaryAsync(
             "ch-stat", Utc(2026, 10, 10), Utc(2026, 10, 10),
             ct: TestContext.Current.CancellationToken);
@@ -115,7 +116,7 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
         Assert.True(noPrior.GrowthRateUndeterminable);
 
         // ② 期初累计恰好为 0（净增相抵——正负基数均无意义）
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 1), subscribe: 2, unsubscribe: 2);    // 期初 净 0
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 1), follow: 2, unfollow: 2);    // 期初 净 0
         var zeroPrior = await service.GetSummaryAsync(
             "ch-stat", Utc(2026, 10, 10), Utc(2026, 10, 10),
             ct: TestContext.Current.CancellationToken);
@@ -125,33 +126,33 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
     }
 
     /// <summary>
-    /// 来源过滤（V0.3.0 来源维度）——<c>source=null</c> 仅汇总行（不含来源行）；指定来源仅该来源行；
-    /// 跨 channel 不泄漏。
+    /// 来源过滤（I2-10 派生后语义）——<c>source=null</c> 全来源合计（含来源行与空来源行）；
+    /// 指定来源仅该来源行；跨 channel 不泄漏。
     /// </summary>
     [Fact]
-    public async Task GetSummaryAsync_SourceFilter_SummaryVsSpecificSource()
+    public async Task GetSummaryAsync_SourceFilter_AllSourcesVsSpecificSource()
     {
         using var _ = this;
         var (_, user) = BindScope();
         var service = user.Use<ISubscriptionStatService>();
 
-        // 汇总行（Source=null）
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 10), subscribe: 5, unsubscribe: 1);
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 11), subscribe: 3, unsubscribe: 1);
+        // 空来源行
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 10), follow: 5, unfollow: 1);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 11), follow: 3, unfollow: 1);
         // search 来源行
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 10), subscribe: 2, unsubscribe: 0, source: WeChatSubscriptionSources.Search);
-        await SeedStatAsync(user, "ch-stat", Utc(2026, 10, 11), subscribe: 1, unsubscribe: 1, source: WeChatSubscriptionSources.Search);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 10), follow: 2, unfollow: 0, source: WeChatSubscriptionSources.Search);
+        await SeedFollowEventsAsync(user, "ch-stat", Utc(2026, 10, 11), follow: 1, unfollow: 1, source: WeChatSubscriptionSources.Search);
         // 其他 channel（跨 channel 隔离）
-        await SeedStatAsync(user, "ch-other", Utc(2026, 10, 10), subscribe: 100, unsubscribe: 0);
+        await SeedFollowEventsAsync(user, "ch-other", Utc(2026, 10, 10), follow: 100, unfollow: 0);
 
         var from = Utc(2026, 10, 10);
         var to = Utc(2026, 10, 11);
 
-        // 汇总行查询（source=null——仅汇总，不含来源行）
+        // 全来源合计（source=null——含空来源与 search 来源两维）
         var summary = await service.GetSummaryAsync("ch-stat", from, to, source: null, ct: TestContext.Current.CancellationToken);
-        Assert.Equal(8, summary.TotalSubscribe);   // 5 + 3（仅汇总行）
-        Assert.Equal(2, summary.TotalUnsubscribe); // 1 + 1
-        Assert.Equal(6, summary.NetCount);
+        Assert.Equal(11, summary.TotalSubscribe);   // 5 + 3 + 2 + 1（全来源）
+        Assert.Equal(3, summary.TotalUnsubscribe);  // 1 + 1 + 0 + 1
+        Assert.Equal(8, summary.NetCount);
 
         // search 来源查询（非空——仅该来源行）
         var search = await service.GetSummaryAsync("ch-stat", from, to, source: WeChatSubscriptionSources.Search, ct: TestContext.Current.CancellationToken);
@@ -174,21 +175,29 @@ public class SubscriptionStatSummaryTests : WeChatOperationsTestHost
     private static DateTime Utc(int year, int month, int day)
         => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
 
-    /// <summary>种子订阅统计行（SubscriptionStatEntityDataService 生产路径直写——对齐 ReplyHandlerTests 种子先例）。</summary>
-    private static async Task SeedStatAsync(DomainUser<TestUserInfo> user, string channelId, DateTime statDate,
-        int subscribe, int unsubscribe, string? source = null)
+    /// <summary>种子关注事件（FollowEventEntityDataService 生产路径直写——事件日志 = 统计口径真相源；
+    /// DedupeKey 逐行唯一 + OccurredAt 分钟错开防同日并列歧义）。</summary>
+    private static async Task SeedFollowEventsAsync(DomainUser<TestUserInfo> user, string channelId, DateTime date,
+        int follow, int unfollow, string? source = null)
     {
-        var ds = user.Use<SubscriptionStatEntityDataService>();
-        await ds.EntityCreateAsync(new SubscriptionStatEntity
+        var ds = user.Use<TKWF.Ext.Federation.FollowEventEntityDataService>();
+        var seq = 0;
+        for (var i = 0; i < follow; i++)
+            await ds.EntityCreateAsync(NewFollowEvent(channelId, date, seq++, "follow", source), TestContext.Current.CancellationToken);
+        for (var i = 0; i < unfollow; i++)
+            await ds.EntityCreateAsync(NewFollowEvent(channelId, date, seq++, "unfollow", source), TestContext.Current.CancellationToken);
+    }
+
+    private static TKWF.Ext.Federation.FollowEventEntity NewFollowEvent(string channelId, DateTime date, int seq, string eventType, string? source)
+        => new()
         {
             ChannelId = channelId,
-            StatDate = statDate.Date,
+            ExternalUserId = "seed-openid",
+            EventType = eventType,
             Source = source,
-            SubscribeCount = subscribe,
-            UnsubscribeCount = unsubscribe,
-            NetCount = subscribe - unsubscribe,
-            CreateTime = DateTime.UtcNow,
-            UpdateTime = DateTime.UtcNow,
-        }, TestContext.Current.CancellationToken);
-    }
+            OccurredAt = date.Date.AddMinutes(seq),
+            ReceivedAt = date.Date.AddMinutes(seq),
+            DedupeKey = $"seed-{channelId}-{date:yyyyMMdd}-{seq}-{eventType}-{source ?? "-"}",
+            CreatedAt = DateTime.UtcNow,
+        };
 }

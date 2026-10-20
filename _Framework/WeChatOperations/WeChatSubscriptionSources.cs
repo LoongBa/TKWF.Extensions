@@ -3,8 +3,9 @@ namespace TKWF.Ext.WeChatOperations;
 /// <summary>
 /// 订阅统计来源/场景常量（V0.3.0——来源/场景维度，DMP-Lite 5.7"来源/场景筛选：搜索/扫码/名片/分享卡片/小程序/三种取关场景"；
 /// 对齐 <see cref="WeChatReplySceneTypes"/> 风格——public static class const 字符串）。
-/// <para>值语义：<see cref="ISubscriptionStatService.RecordAsync"/> 的 <c>source</c> 参数入 upsert 键
-/// （<see cref="SubscriptionStatEntity.Source"/> 列——唯一约束 (ChannelId, StatDate, Source)）；空 = 汇总行（不细分来源）。</para>
+/// <para>值语义（I2-10 派生改造后）：关注域 <see cref="TKWF.Ext.Federation.IFollowStateService"/> 记录事件时
+/// 经 <c>ChannelEvent.Source</c> 落 <c>FollowEventEntity.Source</c> 列；<see cref="ISubscriptionStatService"/>
+/// 趋势/汇总查询的 <c>source</c> 参数按此值过滤（空 = 全来源合计；非空 = 仅该来源维度）。</para>
 /// </summary>
 public static class WeChatSubscriptionSources
 {

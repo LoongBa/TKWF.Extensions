@@ -96,13 +96,13 @@ public class WeChatOperationsTestHost : IDisposable
             .Build();
     }
 
-    /// <summary>实体表结构同步（全部 8 + 4 新网关实体——扩展数据底座）。</summary>
+    /// <summary>实体表结构同步（全部 7 运营 + 4 新网关实体——扩展数据底座；I2-10 删 SubscriptionStatEntity
+    /// （12→11），补关注域两实体（Federation 主包——订阅统计委托数据源）。</summary>
     protected void SyncStructure(IFreeSql fsql)
     {
         fsql.CodeFirst.SyncStructure<ReplyRuleEntity>();
         fsql.CodeFirst.SyncStructure<MaterialEntity>();
         fsql.CodeFirst.SyncStructure<WeChatChannelConfigEntity>();
-        fsql.CodeFirst.SyncStructure<SubscriptionStatEntity>();
         fsql.CodeFirst.SyncStructure<MenuSnapshotEntity>();
         fsql.CodeFirst.SyncStructure<MenuVersionEntity>();
         fsql.CodeFirst.SyncStructure<MenuPublishLogEntity>();
@@ -114,6 +114,9 @@ public class WeChatOperationsTestHost : IDisposable
         fsql.CodeFirst.SyncStructure<WeChatMessageIdempotencyEntity>();
         // V0.4.0 ③ FeatureManagement 消费面——FeatureValue 表（消息业务总开关 DB 存值；IsEnabledAsync 查库路径）
         fsql.CodeFirst.SyncStructure<TKWF.Ext.FeatureManagement.FeatureValueEntity>();
+        // I2-10 关注域（Federation 主包——订阅统计委托 IFollowStateService 数据源：FollowEvent/FollowState 两表）
+        fsql.CodeFirst.SyncStructure<TKWF.Ext.Federation.FollowEventEntity>();
+        fsql.CodeFirst.SyncStructure<TKWF.Ext.Federation.FollowStateEntity>();
     }
 
     /// <summary>额外服务/基础设施注册（AddLogging + IFreeSql + UnitOfWorkManager 已在 BindScope 注册——见上）。</summary>
@@ -164,6 +167,9 @@ public class WeChatOperationsTestHost : IDisposable
         // 免登入口门面（I2-8——本宿主聚焦运营回复/统计，免登签票断言归 Federation.Tests：
         // Fake 返回 null = LoginEntry.Enabled=false 等价——模板 {ticket} → 空串替换，其余文本照常渲染）
         services.AddScoped<ILoginEntryService>(_ => new NullLoginEntryService());
+        // I2-10 关注域门面（真实生产路径——订阅统计委托 IFollowStateService.GetDailyStatsAsync；
+        //     FollowStateService 为 Federation 主包 internal——InternalsVisibleTo 授权本测试程序集）
+        services.AddConstructibleService<IFollowStateService, TKWF.Ext.Federation.FollowStateService>();
 
         // ④ Stub IHttpClientFactory——微信 API 桩（AddHttpClient 的 DefaultHttpClientFactory 被覆盖）
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(Handler));
@@ -180,7 +186,6 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddSingleton<IEntityDAC<ReplyRuleEntity>>(sp => new FreeSqlEntityDAC<ReplyRuleEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<MaterialEntity>>(sp => new FreeSqlEntityDAC<MaterialEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<WeChatChannelConfigEntity>>(sp => new FreeSqlEntityDAC<WeChatChannelConfigEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
-        services.AddSingleton<IEntityDAC<SubscriptionStatEntity>>(sp => new FreeSqlEntityDAC<SubscriptionStatEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<MenuSnapshotEntity>>(sp => new FreeSqlEntityDAC<MenuSnapshotEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<MenuVersionEntity>>(sp => new FreeSqlEntityDAC<MenuVersionEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<MenuPublishLogEntity>>(sp => new FreeSqlEntityDAC<MenuPublishLogEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
@@ -192,13 +197,15 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddSingleton<IEntityDAC<WeChatMessageIdempotencyEntity>>(sp => new FreeSqlEntityDAC<WeChatMessageIdempotencyEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         // V0.4.0 ③ FeatureManagement 消费面——FeatureValue 实体 IEntityDAC（消息业务总开关 DB 存值路径）
         services.AddSingleton<IEntityDAC<TKWF.Ext.FeatureManagement.FeatureValueEntity>>(sp => new FreeSqlEntityDAC<TKWF.Ext.FeatureManagement.FeatureValueEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        // I2-10 关注域两实体 IEntityDAC（同 UoW 单连接——订阅统计委托数据源）
+        services.AddSingleton<IEntityDAC<TKWF.Ext.Federation.FollowEventEntity>>(sp => new FreeSqlEntityDAC<TKWF.Ext.Federation.FollowEventEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddSingleton<IEntityDAC<TKWF.Ext.Federation.FollowStateEntity>>(sp => new FreeSqlEntityDAC<TKWF.Ext.Federation.FollowStateEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
 
         // ⑦ DataService 可构造注册（测试镜像生产 ADR61 可构造工厂，非 throw-factory——接线型 GetRequiredService 需要；
         //    单例对齐 IEntityDAC（⑥）——同 UoW 同连接数据可见）
         services.AddSingleton<ReplyRuleEntityDataService>();
         services.AddSingleton<MaterialEntityDataService>();
         services.AddSingleton<WeChatChannelConfigEntityDataService>();
-        services.AddSingleton<SubscriptionStatEntityDataService>();
         services.AddSingleton<MenuSnapshotEntityDataService>();
         services.AddSingleton<MenuVersionEntityDataService>();
         services.AddSingleton<MenuPublishLogEntityDataService>();
@@ -210,6 +217,9 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddSingleton<WeChatMessageIdempotencyEntityDataService>();
         // V0.4.0 ③ FeatureManagement 消费面——FeatureValue DataService（消息业务总开关 DB 存值路径）
         services.AddSingleton<TKWF.Ext.FeatureManagement.FeatureValueEntityDataService>();
+        // I2-10 关注域两 DataService（Federation 主包——FollowStateService 组合生产路径）
+        services.AddSingleton<TKWF.Ext.Federation.FollowEventEntityDataService>();
+        services.AddSingleton<TKWF.Ext.Federation.FollowStateEntityDataService>();
 
         // ⑧ ITransactionManager（MenuService 写路径事务包裹——Noop Begin/Commit 空操作，
         //    DataService 逐操作经 UnitOfWorkManager 持久化）

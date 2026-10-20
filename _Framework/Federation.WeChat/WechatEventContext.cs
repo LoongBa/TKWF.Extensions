@@ -186,8 +186,14 @@ public sealed record WechatEventContext(
     /// 14 个 <c>OnXxxAsync</c> 签名与实现零改动）。
     /// <para>机制（双数据源）：① <c>evt.RawPayload</c>（解密后明文 XML——通道已承载）复用 <see cref="Parse"/> 复原全部微信字段
     /// （EventKey/经纬度/PicUrl/MediaId/群发统计等——XDocument 提取）；② RawPayload 缺失（测试/降级场景）→
-    /// 用语义层一等字段（<c>ExternalUserId</c>/<c>EventType</c>/<c>Attributes["msg_type"]</c> 等）组装基础上下文，
+    /// 用语义层一等字段（<c>ExternalUserId</c>/<c>EventType</c>/<c>Attributes</c>）组装基础上下文，
     /// 未富化字段 null（不猜字段）。语义层字段防御性覆盖——防 RawPayload 缺节时 XML 提取值为 null。</para>
+    /// <para><b>字段映射（oracle6 C6 前缀键）</b>：<c>Attributes</c> 键为 <c>{platform}.{Name}</c> 前缀（<c>wechat.MsgType</c>/
+    /// <c>wechat.Event</c>/<c>wechat.ToUserName</c>/<c>wechat.Content</c>——方案 §3.3 键清单）——<see cref="Parse"/> 读裸键，
+    /// 此处映射回 <c>msg_type</c>/<c>event</c>/<c>to_user_name</c>/<c>content</c>（兼容无前缀旧键——测试/存量）。</para>
+    /// <para><b><c>Event</c> 取平台原始事件值</b>（<c>wechat.Event</c> 优先）——二级分发 <c>OnXxxAsync</c> 按
+    /// <c>subscribe/unsubscribe/CLICK/SCAN</c> 等<b>原始值</b>匹配（方案 §8.2「MsgType/Event 映射不变」红线——
+    /// <c>evt.EventType</c> 为归一契约值（<c>follow/unfollow</c>…），仅作 Attributes 缺失时降级兜底，不覆盖原始值）。</para>
     /// <para><b>fail-closed 边界</b>：RawPayload 缺失 <b>且</b> Attributes 无 <c>msg_type</c>（无法区分事件/消息形态）→
     /// 返回 null（编排跳过 handler，不猜字段——方案 §8.2 第 3 条）。</para>
     /// </summary>
@@ -197,41 +203,60 @@ public sealed record WechatEventContext(
     {
         ArgumentNullException.ThrowIfNull(evt);
 
-        var msgType = evt.Attributes is not null && evt.Attributes.TryGetValue("msg_type", out var mt) ? mt : null;
+        var attrs = evt.Attributes;
+        var msgType = attrs is not null
+            ? (attrs.TryGetValue("wechat.MsgType", out var wechatMsgType) && wechatMsgType is not null
+                ? wechatMsgType
+                : attrs.TryGetValue("msg_type", out var legacyMsgType) ? legacyMsgType : null)
+            : null;
         var hasRawPayload = !string.IsNullOrWhiteSpace(evt.RawPayload);
 
         if (!hasRawPayload && string.IsNullOrWhiteSpace(msgType))
             return null;   // RawPayload 缺失且无 msg_type——无法判断事件/消息形态（fail-closed）
+
+        // 平台原始事件值（wechat.Event 优先——二级分发按原始值匹配；evt.EventType 为归一契约值，仅降级兜底）
+        var rawEvent = attrs is not null
+            ? (attrs.TryGetValue("wechat.Event", out var wechatEvent) && wechatEvent is not null
+                ? wechatEvent
+                : attrs.TryGetValue("event", out var legacyEvent) ? legacyEvent : null)
+            : null;
 
         var parameters = new Dictionary<string, string?>
         {
             ["channel_id"] = evt.ChannelId,
             ["external_user_id"] = evt.ExternalUserId,
             ["msg_type"] = msgType ?? "event",
-            ["event"] = evt.EventType,
+            ["event"] = rawEvent ?? evt.EventType,
             ["from_user_name"] = evt.ExternalUserId,
             ["uid"] = uid,
         };
-        // RawPayload 缺席时用 Attributes 兜底（msg_type/event 已在上面一等字段；content/from_user_name/to_user_name 从 Attributes 补）
-        if (evt.Attributes is not null)
+        if (attrs is not null)
         {
-            foreach (var (key, value) in evt.Attributes)
+            // 其余键透传（Parse 忽略未知键——未来字段扩展零改动；已显式承载的一等键不重复）
+            foreach (var (key, value) in attrs)
             {
                 if (key is not ("channel_id" or "external_user_id" or "msg_type" or "event" or "from_user_name") && value is not null)
                     parameters[key] = value;
             }
+            // 前缀键 → Parse 裸键映射（wechat.ToUserName/wechat.Content——RawPayload 缺失时降级数据源；
+            //    RawPayload 在场时富化字段仍以 Attributes 为准，XML 仅补未富化字段）
+            if (attrs.TryGetValue("wechat.ToUserName", out var toUserName) && toUserName is not null)
+                parameters["to_user_name"] = toUserName;
+            if (attrs.TryGetValue("wechat.Content", out var content) && content is not null)
+                parameters["content"] = content;
         }
         if (hasRawPayload)
             parameters["__decrypted_xml"] = evt.RawPayload;
 
         var ctx = Parse(parameters);
-        // 语义层一等字段防御性覆盖（RawPayload 缺节容错——XML 提取值为 null 时用语义层值）
+        // 语义层一等字段防御性覆盖（RawPayload 缺节容错——XML 提取值为 null 时用语义层值；
+        //    EventKey 含归一场景值——方案 §8.2 覆盖项；Event 保持 Parse 值（原始平台值）不动）
         return ctx with
         {
             ChannelId = evt.ChannelId,
             OpenId = evt.ExternalUserId,
             FromUserName = evt.ExternalUserId,
-            Event = evt.EventType,
+            EventKey = evt.EventKey ?? ctx.EventKey,
             UId = uid,
             RawXml = evt.RawPayload,
             Channel = null,   // 基类 HandleAsync 内部反查 registry 后 with 富化

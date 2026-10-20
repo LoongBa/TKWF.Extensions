@@ -102,6 +102,10 @@ namespace TKWF.Ext.Federation;
         // Federation 只提供契约 + 编排；平台库不注册 handler 防过度设计——空集合自然跳过）
         services.AddConstructibleService<IEventOrchestrator, EventOrchestrator>();
 
+        // 关注域门面（I2 渠道关注关系域 §3.6——事件事实追加写 + 状态聚合根更新；幂等 + 排序守卫；
+        // 编排层经 User.Use<IFollowStateService>() 帧内解析——I2-3 接入事件链记录在后）
+        services.AddConstructibleService<IFollowStateService, FollowStateService>();
+
         // 事件回复领域 Options（TestTicketEndpointBaseUrl/RoutePrefix——EventReplyHandlerBase 签密封票据
         // 图文链接拼接用；测试端点是 Federation 主包编排面能力，此处 AddOptions 兜底默认值——守卫工厂
         // ActivatorUtilities 解析 IOptions 需可解析，对齐上方 AuthCenter 先例）。

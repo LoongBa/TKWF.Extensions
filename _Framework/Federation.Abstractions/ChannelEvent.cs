@@ -18,6 +18,8 @@ namespace TKWF.Ext.Federation;
 /// <param name="Source">来源场景（扫码来源/渠道标识——供统计维度）。</param>
 /// <param name="MessageId">消息类事件的 MsgId（事件类为 null）。</param>
 /// <param name="OccurredAt">渠道时间戳（UTC 换算）。</param>
+/// <param name="ReceivedAt">服务端接收时间（UTC）——排序守卫同秒次判据（I2 §4.3 oracle6 C4：
+/// 两段比较 <c>OccurredAt</c> 相等时以 <c>ReceivedAt</c> 决先后）；未显式设置时取构造时刻 UtcNow。</param>
 /// <param name="RawPayload">解密后的原始报文（微信 XML 等——诊断/SyncProxy 透传）。</param>
 /// <param name="Attributes">协议补充字段（只读 + 键名强制 <c>{platform}.{Name}</c> 前缀——见方案 §3.3 键清单）。</param>
 public sealed record ChannelEvent
@@ -31,6 +33,7 @@ public sealed record ChannelEvent
     public string? Source { get; init; }                       // 来源场景（扫码来源/渠道标识——供统计维度）
     public string? MessageId { get; init; }                    // 消息类事件的 MsgId（事件类为 null）
     public DateTime OccurredAt { get; init; }                  // 渠道时间戳 → UTC
+    public DateTime ReceivedAt { get; init; } = DateTime.UtcNow;  // 服务端接收时间（排序守卫同秒次判据）
     public string? RawPayload { get; init; }                   // 解密后的原始报文（微信 XML 等——诊断/SyncProxy 透传）
     public IReadOnlyDictionary<string, string?> Attributes { get; init; } = Empty;
 

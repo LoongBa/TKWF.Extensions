@@ -19,12 +19,14 @@ internal static class FederationTestHost
 {
     /// <summary>连接层实体（SsoChannelRegistryEntity）+ 认证内核实体（SsoProfileService 跨扩展消费）。
     /// <para>V0.11.0（Iteration 1）：+AuthFactorEntity/AuthFactorEventEntity/AuthAccountFreezeEntity——认证关系模型
-    /// 三新实体（ISsoAccountQueryService.GetByUIdAsync 经 GetAuthLevelAsync 走 AuthFactorEntityDataService——因素行 = AuthLevel 唯一权威）。</para></summary>
+    /// 三新实体（ISsoAccountQueryService.GetByUIdAsync 经 GetAuthLevelAsync 走 AuthFactorEntityDataService——因素行 = AuthLevel 唯一权威）。</para>
+    /// <para>I2（渠道关注关系域）：+FollowEventEntity/FollowStateEntity——关注域事实与状态（FollowStateServiceTests 宿主）。</para></summary>
     private static readonly Type[] EntityTypes =
     [
         typeof(SsoChannelRegistryEntity),
         typeof(AuthAccountEntity), typeof(PlatformAccountMapEntity), typeof(UserProfileEntity),
-        typeof(AuthFactorEntity), typeof(AuthFactorEventEntity), typeof(AuthAccountFreezeEntity)
+        typeof(AuthFactorEntity), typeof(AuthFactorEventEntity), typeof(AuthAccountFreezeEntity),
+        typeof(FollowEventEntity), typeof(FollowStateEntity)
     ];
 
     /// <summary>注册全部实体真实 FreeSqlEntityDAC（IEntityDAC&lt;T&gt; singleton）。</summary>

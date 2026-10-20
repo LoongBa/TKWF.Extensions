@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Events;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.AuthCenter;
 
@@ -26,6 +27,7 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
     private readonly ILogger<EventOrchestrator> _logger;
     private ISsoChannelFactory? _factory;
     private IExternalIdentityService? _channelMap;
+    private IFollowStateService? _followState;
 
     /// <summary>构造（IDomainUser 经守卫工厂帧内供给；IEventReplyHandler 集合 ctor 注入——ADR92 集合版守卫工厂）。</summary>
     public EventOrchestrator(
@@ -97,27 +99,54 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
             //   桶 1：通道特定绑定（实现 IChannelSpecificEventReplyHandler 且 ChannelId 精确匹配——first-non-null-wins）
             //   桶 2：ChannelType 匹配（现状语义——默认共用；绑定桶全 null 时回退）
             //   绑定桶优先（精确覆盖）——消费方为特定 channelId 定制 handler，其余通道走类型桶默认。
+            EventReplyResult? reply = null;
             foreach (var handler in _handlers)
             {
                 if (handler is IChannelSpecificEventReplyHandler specific
                     && string.Equals(specific.ChannelId, channelId, StringComparison.Ordinal))
                 {
-                    var reply = await handler.HandleAsync(dispatch, ct);
-                    if (reply is not null)
-                        return reply;
+                    var candidate = await handler.HandleAsync(dispatch, ct);
+                    if (candidate is not null)
+                    {
+                        reply = candidate;
+                        break;
+                    }
                 }
             }
-            foreach (var handler in _handlers)
+            if (reply is null)
             {
-                if (string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
+                foreach (var handler in _handlers)
                 {
-                    var reply = await handler.HandleAsync(dispatch, ct);
-                    if (reply is not null)
-                        return reply;
+                    if (string.Equals(handler.ChannelType, channelType, StringComparison.Ordinal))
+                    {
+                        var candidate = await handler.HandleAsync(dispatch, ct);
+                        if (candidate is not null)
+                        {
+                            reply = candidate;
+                            break;
+                        }
+                    }
                 }
             }
 
-            return null;
+            // R3 记录在后（§5.2）：handler 业务写已成功执行，记录冲突只影响自身与提交阶段，
+            // 回复内容已生成——并发重投的 DedupeKey 冲突不再让 handler 的写先中毒。
+            // 记录失败（DB 故障）→ 吞异常 + 日志，回复照常（微信重投补齐）。
+            try
+            {
+                var recordResult = await FollowState.RecordAsync(evt, ct);
+                if (recordResult.StateChanged)
+                {
+                    await PublishFollowChangedAsync(evt, uid, recordResult.State?.IsFollowing);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "关注状态记录失败（不影响回复——微信重投补齐）：ChannelId={ChannelId} ExternalUserId={ExternalUserId}",
+                    channelId, evt.ExternalUserId);
+            }
+
+            return reply;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -129,4 +158,26 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
 
     private ISsoChannelFactory Factory => _factory ??= User.Use<ISsoChannelFactory>();
     private IExternalIdentityService ChannelMap => _channelMap ??= User.Use<IExternalIdentityService>();
+    private IFollowStateService FollowState => _followState ??= User.Use<IFollowStateService>();
+
+    /// <summary>发布关注变化域事件（§3.7——仅 StateChanged==true；UId 未绑定 null 照常发；AOP 帧内收集提交后派发）。</summary>
+    private async Task PublishFollowChangedAsync(ChannelEvent evt, string? uid, bool? isFollowing)
+    {
+        var bus = User.GetService<ILocalEventBus>();
+        await bus.PublishAsync(new FollowChangedEvent(
+            ChannelId: evt.ChannelId,
+            ChannelType: evt.ChannelType,
+            ExternalUserId: evt.ExternalUserId,
+            UnionId: evt.UnionId,
+            UId: uid,
+            IsFollowing: isFollowing ?? IsFollow(evt.EventType),
+            EventType: evt.EventType,
+            EventKey: evt.EventKey,
+            Source: evt.Source,
+            OccurredAt: evt.OccurredAt));
+    }
+
+    /// <summary>关注域事件类型（follow / scan_follow = 关注；unfollow = 取关——与 FollowStateService 判据同型）。</summary>
+    private static bool IsFollow(string eventType)
+        => eventType is "follow" or "scan_follow";
 }

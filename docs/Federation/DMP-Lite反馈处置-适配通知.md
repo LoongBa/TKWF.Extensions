@@ -17,6 +17,7 @@
 | 1 | **重新同步部署根 refs**（`F:\TKWF_FRAMEWORK_PATH\build\refs\` 或消费项目 bin） | 拿到修复后 `TKWF.Ext.FeatureManagement.dll`（**06:50 同步的是修复前版本**——`TryAddScoped<FeatureManagementApiService>()` 普通 DI 注册 ctor 注入 IDomainUser，Development ValidateOnBuild 必崩） |
 | 2 | **重启 Development** | 崩溃解除 → FreeSql SyncStructure 自动补建 5 张缺表（`TKWF_FollowEvent`/`TKWF_FollowState`/`TKWF_WeChatSubscriptionStat`/`TKWF_JobRecord`/`TKWF_AuthFactor`）→ P0-2 死锁解除 → 编排器 42P01 / JobWorker 刷屏（P0-3）自动消失 |
 | 3 | **清消费项目 bin/obj** | 防旧 DLL 残留（`dotnet build-server shutdown` 优雅关闭编译服务器后重 build） |
+| 4 | **复测微信事件链路** | 订阅 / 取消关注 / 菜单点击各推一条，确认 `TKWF_FollowEvent`（含 `EventType=follow`）/ `TKWF_FollowState` 落库 + 被动回复可达（P0-3 解除验证；无 handler 分支 200 空回复属正常） |
 
 > **因果链**（P0-2/P0-3 判定）：P0-1 挡死 Development → 建表（仅 Development 注册的 SyncStructure）无法执行 → 缺表 → 微信编排异常无回复。**P0-1 修复 = 唯一解锁动作**，P0-2/P0-3 无需单独处理。
 
@@ -42,8 +43,8 @@
 ## 四、P1-2 免登 TTL：默认值对齐（新行为）
 
 - `TKWF:Federation:LoginEntry:TicketTtlSeconds` **默认 300→120**（原默认 300 > TrustCenter `SealedTicketExpirationSeconds` 默认 120——I2 文档「须 ≤ 密封票据 TTL」表述与默认值自相矛盾，现对齐消除直觉冲突）
-- 校验语义不变：启动期 `TicketTtlSeconds ≤ MaxTicketTtlSeconds`（默认 120），超限 fail-fast
-- **显式配置了 `TicketTtlSeconds`/`MaxTicketTtlSeconds` 的消费方零影响**（显式值优先于默认值）
+- 校验语义不变：启动期 `TicketTtlSeconds ≤ MaxTicketTtlSeconds`（默认也变 120），超限 fail-fast
+- **⚠️ 自查点（潜在启动崩溃）**：若项目组此前**显式配置**过 `TicketTtlSeconds`（如 300）但**未显式配置** `MaxTicketTtlSeconds`——则 `MaxTicketTtlSeconds` 随默认值变 120，重启时启动校验 `300 > 120` **fail-fast 崩**（非 bug，是安全上限收紧语义）。处置：同步显式配置 `MaxTicketTtlSeconds`（如 300）或把 TTL 调至 ≤ 120；**未显式配置 TTL 的消费方零影响**（显式值优先于默认值）。
 
 ## 五、P1-3 冒烟/联调指引（§11.1 摘要）
 

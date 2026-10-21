@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -126,7 +127,9 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
     public async Task<IReadOnlyList<FollowStateDto>> GetByExternalUserIdAsync(string externalUserId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(externalUserId)) return [];
-        var list = await States.EntitySelectAsync(s => s.ExternalUserId == externalUserId, ct: ct);
+        // P1（DMP-Lite 反馈）：EntitySelectAsync 默认 limit=100 静默截断——分批循环全量取（跨渠道反查语义）
+        var list = await SelectAllAsync(
+            (s, l, c) => States.EntitySelectAsync(x => x.ExternalUserId == externalUserId, s, l, ct: c), ct: ct);
         return list.Select(ToDto).ToList();
     }
 
@@ -134,11 +137,13 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
     public async Task<IReadOnlyList<FollowDailyStatDto>> GetDailyStatsAsync(
         string channelId, DateTime fromUtc, DateTime toUtc, string? source = null, CancellationToken ct = default)
     {
-        // 事件事实区间查询 → 内存按日分桶（日期段通常窗口有限——量级可控；SQL 日期分桶留框架能力迭代）
-        var events = await Events.EntitySelectAsync(e =>
-            e.ChannelId == channelId
-            && e.OccurredAt >= fromUtc && e.OccurredAt < toUtc
-            && (source == null || e.Source == source), ct: ct);
+        // P1（DMP-Lite 反馈）：EntitySelectAsync 默认 limit=100 静默截断——日增关注过百统计偏低；
+        // 分批循环全量取事件事实区间查询 → 内存按日分桶（日期段通常窗口有限——量级可控；SQL 日期分桶留框架能力迭代）
+        var events = await SelectAllAsync(
+            (s, l, c) => Events.EntitySelectAsync(
+                e => e.ChannelId == channelId
+                     && e.OccurredAt >= fromUtc && e.OccurredAt < toUtc
+                     && (source == null || e.Source == source), s, l, ct: c), ct: ct);
 
         return events
             .GroupBy(e => e.OccurredAt.Date)
@@ -156,7 +161,10 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
     public async Task<int> RebuildAsync(string channelId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(channelId)) return 0;
-        var events = await Events.EntitySelectAsync(e => e.ChannelId == channelId, ct: ct);
+        // P1（DMP-Lite 反馈）：EntitySelectAsync 默认 limit=100 静默截断——重建只重放前 100 事件状态漂移残留；
+        // 分批循环全量取（对账场景大表安全——单批内存有界）
+        var events = await SelectAllAsync(
+            (s, l, c) => Events.EntitySelectAsync(e => e.ChannelId == channelId, s, l, ct: c), ct: ct);
         // 按用户分组 → OccuredAt 排序 → 重放状态（事件行已是事实，按 ReceivedAt 同秒次判据稳定）
         var groups = events
             .GroupBy(e => e.ExternalUserId)
@@ -199,6 +207,23 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
     }
 
     // ── 私有辅助 ──
+
+    /// <summary>分批循环全量取（P1 修复——EntitySelectAsync 默认 limit=100 静默截断，全量语义方法必须显式分批循环；
+    /// 单批内存有界（batchSize 默认 500），对齐 PurgeEventsAsync 批次语义）。</summary>
+    private static async Task<List<T>> SelectAllAsync<T>(
+        Func<int, int, CancellationToken, Task<List<T>>> pageSelector, int batchSize = 500, CancellationToken ct = default)
+    {
+        var all = new List<T>();
+        var skip = 0;
+        while (true)
+        {
+            var batch = await pageSelector(skip, batchSize, ct);
+            all.AddRange(batch);
+            if (batch.Count < batchSize) break;
+            skip += batchSize;
+        }
+        return all;
+    }
 
     /// <summary>关注域事件（翻状态的语义）——follow / scan_follow（含扫码关注）；unfollow 独立处理。</summary>
     private static bool IsFollowTransition(string eventType)

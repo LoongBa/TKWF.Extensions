@@ -381,6 +381,82 @@ public sealed class FollowStateServiceTests : TestHostBase
         Assert.Equal("qr_s1", filtered[0].Source);
     }
 
+    /// <summary>日增关注 >100（P1 修复——EntitySelectAsync 默认 limit=100 静默截断）：分批循环全量取，
+    /// 统计不再偏低（原缺陷：只统计前 100 条）。</summary>
+    [Fact]
+    public async Task GetDailyStats_Over100Follows_SameDay_NotTruncated()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var day = new DateTime(2026, 10, 22, 8, 0, 0, DateTimeKind.Unspecified);
+        var svc = user.Use<IFollowStateService>();
+
+        // 同一天 150 条关注（超过默认 limit=100——触发原截断缺陷）+ 10 条取关
+        for (var i = 0; i < 150; i++)
+            await svc.RecordAsync(Follow($"openid-bulk-{i}", day.AddSeconds(i)), CancellationToken.None);
+        for (var i = 0; i < 10; i++)
+            await svc.RecordAsync(Unfollow($"openid-unf-{i}", day.AddMinutes(1).AddSeconds(i)), CancellationToken.None);
+
+        var from = day.Date;
+        var to = day.Date.AddDays(1);
+        var stats = await svc.GetDailyStatsAsync("mp-1", from, to, null, CancellationToken.None);
+
+        Assert.Single(stats);
+        Assert.Equal(150, stats[0].NewFollows);       // 原缺陷：截断为 100
+        Assert.Equal(10, stats[0].Unsubscribes);
+        Assert.Equal(140, stats[0].NetGrowth);
+    }
+
+    /// <summary>Rebuild >100 事件（P1 修复）：分批循环全量重放——第 101+ 个用户的状态行也被重建/修正
+    /// （原缺陷：只重放前 100 事件，后续用户状态漂移残留）。</summary>
+    [Fact]
+    public async Task Rebuild_Over100Events_AllStatesRepaired()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var day = new DateTime(2026, 10, 22, 8, 0, 0, DateTimeKind.Unspecified);
+        var svc = user.Use<IFollowStateService>();
+
+        // 120 个用户各 1 条关注（事件行 120 > 默认 limit=100）
+        for (var i = 0; i < 120; i++)
+            await svc.RecordAsync(Follow($"openid-rb-{i}", day.AddSeconds(i)), CancellationToken.None);
+
+        // 篡改第 101~120 个用户状态（漂移模拟——旧缺陷下这些事件未被 Rebuild 读取到）
+        for (var i = 100; i < 120; i++)
+        {
+            var st = await user.Use<FollowStateEntityDataService>()
+                .EntityGetAsync(s => s.ExternalUserId == $"openid-rb-{i}", CancellationToken.None);
+            st!.IsFollowing = false;
+            await user.Use<FollowStateEntityDataService>().EntityUpdateAsync(st, CancellationToken.None);
+        }
+
+        var corrected = await svc.RebuildAsync("mp-1", CancellationToken.None);
+        Assert.Equal(20, corrected);   // 101~120 共 20 个被修正（原缺陷：这些不在前 100 事件内未被重放）
+
+        // 抽样验证 120 号用户状态已修复为关注
+        var last = await user.Use<FollowStateEntityDataService>()
+            .EntityGetAsync(s => s.ExternalUserId == "openid-rb-119", CancellationToken.None);
+        Assert.NotNull(last);
+        Assert.True(last!.IsFollowing);
+    }
+
+    /// <summary>GetByExternalUserIdAsync >100 状态行（P1 修复）：跨渠道反查全量返回（原缺陷：截断为 100）。</summary>
+    [Fact]
+    public async Task GetByExternalUserId_Over100States_NotTruncated()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var day = new DateTime(2026, 10, 22, 8, 0, 0, DateTimeKind.Unspecified);
+        var svc = user.Use<IFollowStateService>();
+
+        // 同一 openid 在 130 个渠道关注（状态行 130 > 默认 limit=100）
+        for (var i = 0; i < 130; i++)
+            await svc.RecordAsync(Follow("openid-xchannel", day, channelId: $"mp-{i}"), CancellationToken.None);
+
+        var across = await svc.GetByExternalUserIdAsync("openid-xchannel", CancellationToken.None);
+        Assert.Equal(130, across.Count);   // 原缺陷：截断为 100
+    }
+
     // ── 7. 重建（RebuildAsync——对账用，事件流重放修复状态）──
 
     /// <summary>状态行缺失/错误 → 按事件时间线重放修复（Events 排序 OccurredAt→ReceivedAt）。</summary>

@@ -103,7 +103,9 @@ jobs:
               # 反斜杠转义（csproj ProjectReference 用 Windows 路径 _Framework\{Ext}\）
               esc=$(echo "$ext" | sed 's#^_Framework/##; s#/$##' | sed 's/\./\\./g')
               # 该扩展自身测试项目 + 引用它的测试项目（grep ProjectReference）
-              for csproj in $(grep -rlE "_Framework\\\\$esc\\\\" _Tests --include='*.csproj' 2>/dev/null || true); do
+              # ⚠️ 排除模板脚手架（Federation.Template*——{Namespace}/{Platform} 占位符复制源，故意不可编译、不在 slnx；
+              #   2026-10-21 实测：Federation 主包变更被 grep 匹配到 Template.Tests 的 ProjectReference → 列表测试必失败）
+              for csproj in $(grep -rlE "_Framework\\\\$esc\\\\" _Tests --include='*.csproj' 2>/dev/null | grep -vE "Federation\.Template" || true); do
                 TARGETS="$TARGETS $csproj"
               done
             done

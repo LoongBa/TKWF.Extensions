@@ -57,14 +57,14 @@ public sealed class FederationLoginEntryOptions
     /// <summary>SPA 落地页路由（默认 <c>/login/ticket</c>——前端路由，非 AuthCenter API 端点）。</summary>
     public string TicketPath { get; set; } = "/login/ticket";
 
-    /// <summary>票据 TTL 秒（默认 300——必须 ≤ AuthCenter 密封票据 TTL，方案 §6.4）。</summary>
+    /// <summary>票据 TTL 秒（默认 300——独立设置，启动期校验 ≤ <see cref="MaxTicketTtlSeconds"/>）。</summary>
     public int TicketTtlSeconds { get; set; } = 300;
 
     /// <summary>
     /// 票据 TTL 安全上限（默认 300 秒——启动期校验 <see cref="TicketTtlSeconds"/> ≤ 本值，超限 fail-fast）。
-    /// <para>方案 §6.4「TicketTtlSeconds ≤ AuthCenter 密封票据 TTL，启动期校验」的本地声明：Federation 只引
-    /// AuthCenter.Abstractions（无 TrustCenter Options 可见性），跨包配置无法自动比对——消费方须令本值与
-    /// <c>TKWF:TrustCenter:SealedTicketExpirationSeconds</c>（默认 120）对齐或更小。</para>
+    /// <para>免登票据 TTL 为<b>独立设置</b>：<c>ISealedTicketService&lt;FederatedIdentity&gt;.IssueAsync(identity, ttl, ...)</c>
+    /// 对显式正 TTL 直接使用（无上限），<c>TKWF:TrustCenter:SealedTicketExpirationSeconds</c>（默认 120）仅是
+    /// <c>ttl ≤ 0</c> 时的兜底下限——两者无强制大小关系。消费方如需与 TrustCenter 默认一致可自行调低，非强制。</para>
     /// </summary>
     public int MaxTicketTtlSeconds { get; set; } = 300;
 

@@ -323,10 +323,10 @@ public sealed class EventOrchestratorI2Tests : TestHostBase
         public Task<IReadOnlyList<ExternalIdentityDto>> GetByAccountAsync(string uid, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<ExternalIdentityDto>>([]);
 
-        public Task<ExternalIdentityDto?> LinkAsync(string channelId, string externalUserId, string uid, string? extra = null, CancellationToken ct = default)
-            => Task.FromResult<ExternalIdentityDto?>(new ExternalIdentityDto(uid, channelId, externalUserId, DateTime.UtcNow));
+        public Task<ExternalIdentityDto> LinkAsync(string uid, string channelId, string externalUserId, string? operatorName = null, CancellationToken ct = default)
+            => Task.FromResult(new ExternalIdentityDto(uid, channelId, externalUserId, DateTime.UtcNow));
 
-        public Task UnlinkAsync(string channelId, string externalUserId, string uid, string? extra = null, CancellationToken ct = default)
+        public Task UnlinkAsync(string uid, string channelId, string externalUserId, string? operatorName = null, CancellationToken ct = default)
             => Task.CompletedTask;
     }
 

@@ -104,8 +104,11 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
         // V4.10.53（接线型）：IFeatureChecker 主框架契约（非 IDomainService）——保持 TryAddScoped 普通 DI
         //（框架 FeatureFilterAttribute 经 context.ServiceProvider.GetService<IFeatureChecker>() 解析；ctor IServiceProvider + C1 延迟解析 Manager）
         services.TryAddScoped<IFeatureChecker, FeatureChecker<TUserInfo>>();
-        // 管理 API 服务（[GenerateController]——写路径委托 Manager：缓存失效 + Global 唯一性，C3 裁定）
-        services.TryAddScoped<FeatureManagementApiService>();
+        // 管理 API 服务（[GenerateController]——写路径委托 Manager：缓存失效 + Global 唯一性，C3 裁定）：
+        // 不手动注册（对齐 IdentityAuthService 先例 V0.3.0）——SG#2 在消费方 DomainHost 构建时自动注册
+        // MetaType.Service 为守卫工厂形态（User.Use<T>() AOP 解析，IDomainUser 帧内供给）。
+        // ⚠️ 曾用 TryAddScoped<FeatureManagementApiService>() 普通 DI 注册——IDomainUser 永不注册 DI（D01），
+        //    Development ValidateOnBuild 校验构造时抛异常（DMP-Lite 2026-10-21 上报）；删除后消费方由 SG#2 接管。
     }
 
     /// <summary>接入框架 [RequireFeature] 过滤器（不自建——V4.9.50 ADR19 P4 基座）。</summary>

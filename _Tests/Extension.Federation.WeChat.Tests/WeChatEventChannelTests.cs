@@ -566,4 +566,132 @@ public class WeChatEventChannelTests : WeChatChannelTestHost
         Assert.False(result.Success);
         Assert.Equal("WECHAT_SIGNATURE_INVALID", result.FailReason);
     }
+
+    // ═══════════════════ POST 消息推送（明文模式 P1-1——body 即明文 XML，signature 3 参） ═══════════════════
+
+    /// <summary>构造合法明文模式 POST 推送样本：body = 明文 XML（无 &lt;Encrypt&gt; 节点），
+    /// query 带 signature（3 参 SHA1——不含消息体）+ timestamp/nonce；__raw = body 明文 XML。</summary>
+    private static (string Timestamp, string Nonce, string Signature, string RawBody) BuildValidPlainTextPush(string openId = TestOpenId)
+    {
+        // 明文 XML（FromUserName=openid + 文本 Content）——无 Encrypt 封装
+        var rawBody = $"<xml><ToUserName><![CDATA[gh_test]]></ToUserName><FromUserName><![CDATA[{openId}]]></FromUserName>"
+            + "<CreateTime>1714333445</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[明文模式你好]]></Content><MsgId>9988776655443322</MsgId></xml>";
+        var timestamp = "1714333445";
+        var nonce = "7d1630f1";
+        var signature = WeChatEventCrypto.ComputeSignature3(TestToken, timestamp, nonce);
+        return (timestamp, nonce, signature, rawBody);
+    }
+
+    /// <summary>明文模式 POST 推送 AuthenticateAsync：无 msg_encrypt（body 即明文 XML）→ 3 参验签通过 →
+    /// 直接解析 openid（P1-1——此前明文 POST 被误拒 WECHAT_EVENT_PARAMS_MISSING）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PlainTextMode_VerifiesSignature3_ReturnsOpenId()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (timestamp, nonce, signature, rawBody) = BuildValidPlainTextPush();
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody)),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(TestOpenId, result.ExternalUserId);
+        Assert.Null(result.FailReason);
+        Assert.Equal(2, result.AuthLevel);
+    }
+
+    /// <summary>明文模式 POST 推送 AuthenticateAsync：兼容 msg_signature 键承载 3 参签名值（装配层透传命名）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PlainTextMode_MsgSignatureKey_Accepts()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (timestamp, nonce, signature, rawBody) = BuildValidPlainTextPush();
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody)),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(TestOpenId, result.ExternalUserId);
+    }
+
+    /// <summary>明文模式 POST 推送 HandleEventAsync：3 参验签 + body 明文 XML → 解析为语义 ChannelEvent
+    /// （MsgType/Content/RawPayload=明文 XML——handler 数据链可用，P1-1）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_PlainTextMode_ParsesChannelEvent()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (timestamp, nonce, signature, rawBody) = BuildValidPlainTextPush();
+        var context = WeChatTestHost.CreateEventContext(
+            ("signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody));
+
+        var outcome = await channel.HandleEventAsync(context, CancellationToken.None);
+
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);
+        var evt = outcome.Event!;
+        Assert.Equal("text", evt.Attributes["wechat.MsgType"]);
+        Assert.Equal("明文模式你好", evt.Attributes["wechat.Content"]);
+        Assert.Equal("message", evt.EventType);          // 消息类归一
+        Assert.Equal(TestOpenId, evt.ExternalUserId);
+        Assert.NotNull(evt.RawPayload);
+        Assert.Contains("明文模式你好", evt.RawPayload!);
+    }
+
+    /// <summary>明文模式 POST 推送熵改签名 → 拒（WECHAT_SIGNATURE_INVALID——信任根一票否决，
+    /// 明文消息体不参与签名，验签为唯一伪造防线）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PlainTextMode_TamperedSignature_Rejected()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (timestamp, nonce, signature, rawBody) = BuildValidPlainTextPush();
+        var tampered = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("signature", tampered), ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody)),
+            CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("WECHAT_SIGNATURE_INVALID", result.FailReason);
+    }
+
+    /// <summary>明文模式 POST 推送缺 __raw（无明文 body）→ 拒（WECHAT_EVENT_PARAMS_MISSING——无法验签/解析）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PlainTextMode_MissingRawBody_Rejected()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (timestamp, nonce, signature, _) = BuildValidPlainTextPush();
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("signature", signature), ("timestamp", timestamp), ("nonce", nonce)),
+            CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("WECHAT_EVENT_PARAMS_MISSING", result.FailReason);
+    }
+
+    /// <summary>明文模式 POST 推送缺 signature → 拒（WECHAT_EVENT_PARAMS_MISSING）。</summary>
+    [Fact]
+    public async Task AuthenticateAsync_PlainTextMode_MissingSignature_Rejected()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (timestamp, nonce, _, rawBody) = BuildValidPlainTextPush();
+
+        var result = await channel.AuthenticateAsync(
+            WeChatTestHost.CreateContext(
+                ("timestamp", timestamp), ("nonce", nonce), ("__raw", rawBody)),
+            CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("WECHAT_EVENT_PARAMS_MISSING", result.FailReason);
+    }
 }

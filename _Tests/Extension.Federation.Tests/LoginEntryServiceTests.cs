@@ -107,7 +107,7 @@ public sealed class LoginEntryServiceTests : TestHostBase
             {
                 o.Enabled = true;
                 o.ChannelBaseUrls["mp-1"] = "https://sso.example.com";
-                o.TicketTtlSeconds = 300;
+                o.TicketTtlSeconds = 120;
             });
         });
         _ticket.IssueResult = "ticket-ttl";
@@ -200,7 +200,7 @@ public sealed class LoginEntryServiceTests : TestHostBase
             () => provider.GetRequiredService<IOptions<FederationLoginEntryOptions>>().Value);
     }
 
-    /// <summary>默认配置（300 ≤ 300）通过校验。</summary>
+    /// <summary>默认配置（120 ≤ 120）通过校验（P1-2——默认值对齐 TrustCenter SealedTicketExpirationSeconds 120）。</summary>
     [Fact]
     public void LoginEntryOptions_DefaultTtl_PassesValidation()
     {
@@ -208,8 +208,8 @@ public sealed class LoginEntryServiceTests : TestHostBase
         var (provider, _) = BindTestScope();
 
         var options = provider.GetRequiredService<IOptions<FederationLoginEntryOptions>>().Value;
-        Assert.Equal(300, options.TicketTtlSeconds);
-        Assert.Equal(300, options.MaxTicketTtlSeconds);
+        Assert.Equal(120, options.TicketTtlSeconds);
+        Assert.Equal(120, options.MaxTicketTtlSeconds);
         Assert.False(options.Enabled);
     }
 

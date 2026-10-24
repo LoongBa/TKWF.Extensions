@@ -80,47 +80,50 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     /// <summary>中间件挂载——纯端点装配，无中间件。</summary>
     public void ConfigureMiddleware(IApplicationBuilder app, DomainWebOptions options) { }
 
-    /// <summary>端点映射（AfterRouting 排空）——对外连接层 <c>/{prefix}/*</c> 端点（平台集成面 6 端点 + 信任/委托面 4 端点，
-    /// 对外路由命名空间 2026-10-11——/sso → /feberation 语义化 + 二级平台段），路径/开关经
-    /// <see cref="FederationEndpointOptions"/> 可配置。</summary>
-    public void ConfigureEndpoints(IEndpointRouteBuilder endpoints, DomainWebOptions options)
+    /// <summary>协议适配端点声明（Oracle C+E 2026-10-24——ConfigureEndpoints 删除，F13）——对外连接层
+    /// <c>/{prefix}/*</c> 端点（平台集成面 6 端点 + 信任/委托面 4 端点，对外路由命名空间 2026-10-11——
+    /// /sso → /feberation 语义化 + 二级平台段），路径/开关经 <see cref="FederationEndpointOptions"/> 可配置。
+    /// 经窄接口 <see cref="IProtocolEndpointBuilder"/> 声明（路由模板为数据、可配动词/授权；前缀拼接归框架
+    /// Module 前缀模型——R2-3 无 builder 门禁保持，扩展不见 IEndpointRouteBuilder/RouteGroupBuilder）；
+    /// 端点开关读 <see cref="FederationEndpointOptions"/>（经 <see cref="IProtocolEndpointBuilder.ServiceProvider"/> 解析）。</summary>
+    public void DeclareProtocolEndpoints(IProtocolEndpointBuilder builder)
     {
-        var endpointOptions = ResolveOptions(endpoints.ServiceProvider);
-        var prefix = endpointOptions.RoutePrefix.TrimEnd('/');
+        var endpointOptions = ResolveOptions(builder.ServiceProvider);
 
         // ── 平台集成面（二级 = 平台族 PlatformType，三级 = 端点组，四级 = 通道实例；平台段 Ordinal 校验防跨平台错配） ──
         if (endpointOptions.LoginEndpointEnabled)
         {
-            endpoints.MapPost($"{prefix}/{{platformId}}/login", HandleSsoLogin).AllowAnonymous();
-            endpoints.MapPost($"{prefix}/{{platformId}}/login/{{channelId}}", HandleSsoLogin).AllowAnonymous();
+            builder.Map("/{platformId}/login", "POST").WithHandler(HandleSsoLogin);
+            builder.Map("/{platformId}/login/{channelId}", "POST").WithHandler(HandleSsoLogin);
         }
         if (endpointOptions.EventEndpointEnabled)
         {
-            endpoints.MapPost($"{prefix}/{{platformId}}/event", HandleEvent).AllowAnonymous();
-            endpoints.MapPost($"{prefix}/{{platformId}}/event/{{channelId}}", HandleEvent).AllowAnonymous();
+            builder.Map("/{platformId}/event", "POST").WithHandler(HandleEvent);
+            builder.Map("/{platformId}/event/{channelId}", "POST").WithHandler(HandleEvent);
             // 微信 URL 验证握手（GET——微信后台服务器配置验证契约：signature/msg_signature+timestamp+nonce+echostr）
-            endpoints.MapGet($"{prefix}/{{platformId}}/event", HandleEvent).AllowAnonymous();
-            endpoints.MapGet($"{prefix}/{{platformId}}/event/{{channelId}}", HandleEvent).AllowAnonymous();
+            builder.Map("/{platformId}/event", "GET").WithHandler(HandleEvent);
+            builder.Map("/{platformId}/event/{channelId}", "GET").WithHandler(HandleEvent);
         }
         if (endpointOptions.OauthCallbackEndpointEnabled)
         {
-            endpoints.MapGet($"{prefix}/{{platformId}}/oauth/callback", HandleOAuthCallback).AllowAnonymous();
-            endpoints.MapGet($"{prefix}/{{platformId}}/oauth/{{channelId}}/callback", HandleOAuthCallback).AllowAnonymous();
+            builder.Map("/{platformId}/oauth/callback", "GET").WithHandler(HandleOAuthCallback);
+            builder.Map("/{platformId}/oauth/{channelId}/callback", "GET").WithHandler(HandleOAuthCallback);
         }
 
         // ── 信任/委托面（跨平台，根级——不挂平台段） ──
         if (endpointOptions.JwksEndpointEnabled)
-            endpoints.MapGet($"{prefix}/jwks", HandleJwks).AllowAnonymous();
+            builder.Map("/jwks", "GET").WithHandler(HandleJwks);
         if (endpointOptions.AuthorizeEndpointEnabled)
-            endpoints.MapPost($"{prefix}/authorize/start", HandleAuthorizeStart).AllowAnonymous();
+            builder.Map("/authorize/start", "POST").WithHandler(HandleAuthorizeStart);
         if (endpointOptions.TrustIssueEndpointEnabled)
-            endpoints.MapPost($"{prefix}/trust/issue", HandleTrustIssue);   // 已认证端点（不经 AllowAnonymous）
+            // 已认证端点（不经 AllowAnonymous）——RequireAuthorization 追加认证要求
+            builder.Map("/trust/issue", "POST", allowAnonymous: false).RequireAuthorization().WithHandler(HandleTrustIssue);
         if (endpointOptions.IdentityClaimEndpointEnabled)
-            endpoints.MapPost($"{prefix}/identity/claim", HandleIdentityClaim).AllowAnonymous();
+            builder.Map("/identity/claim", "POST").WithHandler(HandleIdentityClaim);
 
         // 测试端点（默认关——生产禁用；联调验证 ticket 闭环用）——对齐正常端点风格：平台段 + 通道段 + ticket 段
         if (endpointOptions.TestTicketEndpointEnabled)
-            endpoints.MapGet($"{prefix}/{{platformId}}/test/{{channelId}}/{{ticket}}", HandleTestTicket).AllowAnonymous();
+            builder.Map("/{platformId}/test/{channelId}/{ticket}", "GET").WithHandler(HandleTestTicket);
     }
 
     // ─────────────────────────── 端点处理器（匿名游客帧） ───────────────────────────

@@ -86,7 +86,7 @@ internal static class FederationEndpointHost
         var app = builder.ConfigWebAppDomain<TestUserInfo, ConsumerHostInitializer, DomainWebOptions>(configure: cfg =>
         {
             cfg.UseNoEntityDAC();                               // 冒烟无数据存取（门面 Fake）
-            cfg.HttpAuth.ExcludedPathPrefixes.Add("/feberation"); // 匿名端点免认证双保险（路由命名空间 2026-10-11）
+            cfg.HttpAuth.ExcludedPathPrefixes.Add("/api/feberation"); // 匿名端点免认证双保险（F13 2026-10-24：路由前缀归框架 Module 模型 = basePath /api + feberation；trust/issue 经 handler 自检 Items 已认证帧 → 401 UNAUTHENTICATED，不经 HttpAuth 拦截）
         })
         .RegisterServices((svc, _) =>
         {

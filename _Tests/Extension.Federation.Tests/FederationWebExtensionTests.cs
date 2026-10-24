@@ -26,7 +26,9 @@ namespace TKWF.Ext.Federation.Tests;
 /// </summary>
 public sealed class FederationWebExtensionTests
 {
-    private const string DefaultPrefix = "/feberation";
+    // 端点挂载组路径 = 框架 Module 前缀模型：basePath /api + [assembly: ExtensionModule] DefaultPrefix feberation
+    // （Oracle C+E 2026-10-24——原 RoutePrefix 配置前缀归框架 Module 前缀模型）
+    private const string DefaultPrefix = "/api/feberation";
     private const string DefaultPlatformId = "wechat";
 
     // ═══════════════════ 端点冒烟（共享宿主） ═══════════════════

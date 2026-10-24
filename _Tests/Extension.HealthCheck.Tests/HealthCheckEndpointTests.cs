@@ -6,30 +6,33 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using TKW.Framework.Domain.Web.Extensions;
 using TKWF.Ext.HealthCheck;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.HealthCheck.Tests;
 
 /// <summary>
 /// HealthCheck 端点集成测试——最小 host（WebApplication + Kestrel loopback 临时端口）验证
-/// HealthCheckWebExtension.ConfigureEndpoints（v4.10.45 收敛迁移——旧 MapTkfwHealthChecks 静态方法已删除）：
-/// 聚合状态 / Detailed 组件级输出 / 探针异常静默 / 路径可配 / Enabled=false 不映射。
+/// HealthCheckWebExtension.DeclareEndpoints → 框架注册表 MapInfrastructure(EndpointKind.HealthCheck)
+/// （F13 收敛迁移 2026-10-24——ConfigureEndpoints 删除，端点映射上移框架注册表，路径/开关读 TKWF:HealthCheck 配置节）：
+/// 聚合状态 / 探针异常静默 / 路径可配（配置节）/ Enabled=false 不映射。Detailed 组件级输出随方案 A 删除。
 /// </summary>
 public class HealthCheckEndpointTests
 {
     private static async Task<WebApplication> StartHostAsync(
-        Action<HealthCheckWebExtension>? configureExtension = null,
+        Action<WebApplicationBuilder>? configureBuilder = null,
         Action<IHealthChecksBuilder>? configureChecks = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0"); // 临时端口，并行测试互不冲突
+        configureBuilder?.Invoke(builder);
         var extension = new HealthCheckWebExtension();
-        configureExtension?.Invoke(extension);
         extension.ConfigureServices(builder.Services);
         configureChecks?.Invoke(builder.Services.AddHealthChecks());
 
         var app = builder.Build();
-        extension.ConfigureEndpoints(app, new DomainWebOptions());
+        extension.DeclareEndpoints(new DefaultExtensionEndpointRegistry<TestUserInfo>(app));
         await app.StartAsync();
         return app;
     }
@@ -55,7 +58,7 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task ConfigureEndpoints_Healthy_Returns_200_And_StatusOnly()
+    public async Task DeclareEndpoints_Healthy_Returns_200_And_StatusOnly()
     {
         await using var app = await StartHostAsync(
             configureChecks: b => b.AddCheck("ok", () => HealthCheckResult.Healthy()));
@@ -64,14 +67,14 @@ public class HealthCheckEndpointTests
         var body = await GetBodyAsync(client, "/health");
 
         Assert.Contains("\"Healthy\"", body);
-        // Detailed=false（默认）：仅 status，不泄露组件细节
+        // 摘要 writer（方案 A）：仅 status，不泄露组件细节
         using var doc = JsonDocument.Parse(body);
         Assert.True(doc.RootElement.TryGetProperty("status", out _));
         Assert.False(doc.RootElement.TryGetProperty("entries", out _));
     }
 
     [Fact]
-    public async Task ConfigureEndpoints_Unhealthy_Aggregates_OverallStatus()
+    public async Task DeclareEndpoints_Unhealthy_Aggregates_OverallStatus()
     {
         await using var app = await StartHostAsync(
             configureChecks: b => b
@@ -81,11 +84,11 @@ public class HealthCheckEndpointTests
 
         // 非 Healthy → 503（探针语义）+ 响应体标注最差状态
         var body = await GetBodyAsync(client, "/health", HttpStatusCode.ServiceUnavailable);
-        Assert.Contains("\"Unhealthy\"", body); // 最差状态胜出
+        Assert.Contains("\"Unhealthy\"", body);
     }
 
     [Fact]
-    public async Task ConfigureEndpoints_Degraded_WorstWins()
+    public async Task DeclareEndpoints_Degraded_WorstWins()
     {
         await using var app = await StartHostAsync(
             configureChecks: b => b
@@ -99,27 +102,7 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task ConfigureEndpoints_Detailed_Outputs_ComponentLevelJson()
-    {
-        await using var app = await StartHostAsync(
-            configureExtension: x => x.ConfigureOptions = o => o.Detailed = true,
-            configureChecks: b => b
-                .AddCheck("db", () => HealthCheckResult.Healthy())
-                .AddCheck("redis", () => HealthCheckResult.Unhealthy("redis down")));
-        using var client = CreateClient(app);
-
-        var body = await GetBodyAsync(client, "/health", HttpStatusCode.ServiceUnavailable);
-
-        using var doc = JsonDocument.Parse(body);
-        Assert.Equal("Unhealthy", doc.RootElement.GetProperty("status").GetString());
-        var entries = doc.RootElement.GetProperty("entries");
-        Assert.Equal("Healthy", entries.GetProperty("db").GetProperty("status").GetString());
-        Assert.Equal("Unhealthy", entries.GetProperty("redis").GetProperty("status").GetString());
-        Assert.Equal("redis down", entries.GetProperty("redis").GetProperty("description").GetString());
-    }
-
-    [Fact]
-    public async Task ConfigureEndpoints_ProbeException_Returns_Unhealthy_NoThrow()
+    public async Task DeclareEndpoints_ProbeException_Returns_Unhealthy_NoThrow()
     {
         await using var app = await StartHostAsync(
             configureChecks: b => b
@@ -132,10 +115,10 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task ConfigureEndpoints_CustomPath_Is_Respected()
+    public async Task DeclareEndpoints_CustomPath_From_ConfigSection_Is_Respected()
     {
         await using var app = await StartHostAsync(
-            configureExtension: x => x.ConfigureOptions = o => o.Path = "/hc",
+            configureBuilder: b => b.Configuration["TKWF:HealthCheck:Path"] = "/hc",
             configureChecks: b => b.AddCheck("ok", () => HealthCheckResult.Healthy()));
         using var client = CreateClient(app);
 
@@ -148,10 +131,10 @@ public class HealthCheckEndpointTests
     }
 
     [Fact]
-    public async Task ConfigureEndpoints_Disabled_DoesNotMapEndpoint()
+    public async Task DeclareEndpoints_Disabled_From_ConfigSection_DoesNotMapEndpoint()
     {
         await using var app = await StartHostAsync(
-            configureExtension: x => x.ConfigureOptions = o => o.Enabled = false,
+            configureBuilder: b => b.Configuration["TKWF:HealthCheck:Enabled"] = "false",
             configureChecks: b => b.AddCheck("ok", () => HealthCheckResult.Healthy()));
         using var client = CreateClient(app);
 

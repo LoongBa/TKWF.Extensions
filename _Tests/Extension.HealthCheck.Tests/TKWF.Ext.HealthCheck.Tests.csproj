@@ -49,6 +49,10 @@
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
   <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- F13 收敛迁移（2026-10-24）：HealthCheckEndpointTests/DatabaseHealthCheckTests 经框架注册表
+         DefaultExtensionEndpointRegistry<TUserInfo> 声明端点——DLL 模式下显式引用 Domain.Web（扩展 ProjectReference 不传递 DLL） -->
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
+  <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- V0.2.0 DB 探针测试：FreeSqlEntityDAC 解析路径（UseFreeSqlEntityDAC → IEntityReadOnlyDAC<> Scoped） -->
     <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
   <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />

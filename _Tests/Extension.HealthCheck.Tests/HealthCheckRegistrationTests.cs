@@ -68,26 +68,27 @@ public class HealthCheckRegistrationTests
     }
 
     [Fact]
-    public void HealthCheckWebExtension_Configure_Overrides_ConfigSection()
+    public void HealthCheckWebExtension_ConfigureServices_Binds_ConfigSection()
     {
+        // 方案 A（2026-10-24）：编程式 ConfigureOptions 已随端点映射上移框架注册表删除——Options 绑定为配置节单一来源
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["TKWF:HealthCheck:Path"] = "/from-config",
+                ["TKWF:HealthCheck:Path"] = "/hc",
                 ["TKWF:HealthCheck:Detailed"] = "true",
                 ["TKWF:HealthCheck:AllowAnonymous"] = "false"
             })
             .Build());
-        new HealthCheckWebExtension { ConfigureOptions = o => o.Detailed = false } // configure 委托后于配置节绑定应用——代码覆盖配置
+        new HealthCheckWebExtension()
             .ConfigureServices(services);
 
         var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<IOptions<HealthCheckEndpointOptions>>().Value;
 
-        Assert.Equal("/from-config", options.Path); // 配置节绑定生效（configure 未覆盖的键）
-        Assert.False(options.Detailed);             // configure 覆盖配置节
-        Assert.False(options.AllowAnonymous);       // 配置节绑定生效
+        Assert.Equal("/hc", options.Path);
+        Assert.True(options.Detailed);
+        Assert.False(options.AllowAnonymous);
     }
 
     [Fact]

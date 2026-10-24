@@ -12,7 +12,9 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Web.Extensions;
 using TKWF.Ext.HealthCheck;
+using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.HealthCheck.Tests;
 
@@ -49,8 +51,10 @@ public class DatabaseHealthCheckTests
             new FreeSqlEntityDAC<TestProbeEntity>(new UnitOfWorkManager(fsql)));
 
         var app = builder.Build();
-        // v4.10.45 收敛迁移：旧 MapTkfwHealthChecks 静态方法已删除——端点映射收敛为 HealthCheckWebExtension.ConfigureEndpoints
-        new HealthCheckWebExtension().ConfigureEndpoints(app, new DomainWebOptions());
+        // F13 收敛迁移（2026-10-24）：ConfigureEndpoints 删除——端点声明归框架注册表
+        // MapInfrastructure(EndpointKind.HealthCheck)；测试宿主自建注册表（真实 WebApplication 取 IEndpointRouteBuilder）
+        new HealthCheckWebExtension().DeclareEndpoints(
+            new DefaultExtensionEndpointRegistry<TestUserInfo>(app));
         await app.StartAsync();
         return app;
     }
@@ -118,11 +122,12 @@ public class DatabaseHealthCheckTests
     }
 
     [Fact]
-    public async Task AddDatabaseHealthCheck_Detailed_ShowsProbeEntry()
+    public async Task AddDatabaseHealthCheck_Healthy_ProbeReflectedInSummaryStatus()
     {
+        // 方案 A（2026-10-24）：Detailed 组件级输出已随端点映射上移框架注册表删除——探针健康只体现在摘要 status（{"status":"Healthy"}）
         await using var app = await StartHostAsync(services =>
         {
-            new HealthCheckWebExtension { ConfigureOptions = o => o.Detailed = true }
+            new HealthCheckWebExtension()
                 .AddDatabaseHealthCheck<TestProbeEntity>("db")
                 .ConfigureServices(services);
         });
@@ -134,8 +139,8 @@ public class DatabaseHealthCheckTests
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         using var doc = JsonDocument.Parse(body);
-        var entries = doc.RootElement.GetProperty("entries");
-        Assert.Equal("Healthy", entries.GetProperty("db").GetProperty("status").GetString());
+        Assert.Equal("Healthy", doc.RootElement.GetProperty("status").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("entries", out _));  // 方案 A：摘要 writer 不展开组件明细
     }
 
     [Fact]

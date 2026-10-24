@@ -30,7 +30,7 @@ public partial class UserNotificationViewQueryService(IDomainUser user)
     /// <summary>取当前用户收件箱（VEntity DTO 一等公民——含 Name/Severity/DisplayName 完整字段）。
     /// ⚠️ 仅本人（userId 从 <see cref="IDomainUser"/> 解析）；name 可空——null = 查全部收件箱
     /// （对齐门面 <c>NotificationStore.GetListAsync</c> 无 name 语义，REST 面 ≥ 门面面）。</summary>
-    [ApiExpose(RestRoute = "/api/notifications/inbox", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/notifications/inbox", RestMethod = "GET")]
     public async Task<List<UserNotificationViewDto>> GetMyInboxAsync(
         int page, int pageSize, string? name = null, CancellationToken ct = default)
     {

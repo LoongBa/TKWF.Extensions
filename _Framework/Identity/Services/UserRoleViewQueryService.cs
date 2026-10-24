@@ -27,7 +27,7 @@ public partial class UserRoleViewQueryService(IDomainUser user)
 {
     /// <summary>取当前用户角色视图（VEntity DTO 一等公民——含 DisplayName/IsSystemRole 完整字段）。
     /// ⚠️ 仅本人（userId 从 <see cref="IDomainUser"/> 解析——不信任客户端传参，防水平越权）。</summary>
-    [ApiExpose(RestRoute = "/api/identity/user-roles", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/identity/user-roles", RestMethod = "GET")]
     public async Task<List<UserRoleViewDto>> GetMyRolesAsync(CancellationToken ct = default)
     {
         var userId = ResolveCurrentUserId();

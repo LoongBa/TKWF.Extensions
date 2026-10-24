@@ -51,3 +51,5 @@ Thumbs.db
 .env
 .env.local
 appsettings*.local.json
+# 本地工具状态（OpenCode 会话延续/计划）不入库
+.omo/

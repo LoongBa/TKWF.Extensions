@@ -24,7 +24,7 @@ public interface ILogQueryService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/logs/interactions?open_id=&amp;trigger_type=&amp;from=&amp;to=</c>。</para>
     /// </summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/logs/interactions", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/logs/interactions", RestMethod = "GET")]
     Task<IReadOnlyList<InteractionLogEntity>> ListInteractionsAsync(
         string channelId, string? openId = null, DateTime? from = null, DateTime? to = null,
         int? triggerType = null, CancellationToken ct = default);
@@ -32,7 +32,7 @@ public interface ILogQueryService : IDomainService
     /// <summary>菜单发布审计（ChannelId + Action=Read/Create/Delete/Test；OperateAt 降序）。
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/logs/publishes</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/logs/publishes", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/logs/publishes", RestMethod = "GET")]
     Task<IReadOnlyList<MenuPublishLogEntity>> ListPublishLogsAsync(string channelId, CancellationToken ct = default);
 }
 

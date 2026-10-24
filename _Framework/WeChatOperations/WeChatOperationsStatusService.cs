@@ -40,7 +40,7 @@ public interface IWeChatOperationsStatusService : IDomainService
     /// <returns>四卡聚合结果（<see cref="WeChatOperationsStatusDto"/>——只读、无凭证）。</returns>
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/status</c>。</para>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/status", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/status", RestMethod = "GET")]
     Task<WeChatOperationsStatusDto> GetStatusSummaryAsync(string channelId, CancellationToken ct = default);
 }
 

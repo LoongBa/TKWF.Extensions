@@ -22,13 +22,13 @@ public interface IMaterialService : IDomainService
     /// <summary>素材列表（<paramref name="kind"/> 可空 = 全部；1 Text / 2 News）。
     /// <para>REST：<c>GET /api/wechat-ops/materials?kind=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/materials", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/wechat-ops/materials", RestMethod = "GET")]
     Task<IReadOnlyList<MaterialEntity>> ListAsync(int? kind = null, CancellationToken ct = default);
 
     /// <summary>保存素材（Id=0 新建 / 已有更新）。
     /// <para>REST：<c>POST /api/wechat-ops/materials</c>（单复杂参数 MaterialEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/materials", RestMethod = "POST")]
+    [ApiExpose(RestRoute = "/wechat-ops/materials", RestMethod = "POST")]
     Task<long> SaveAsync(MaterialEntity material, CancellationToken ct = default);
 
     /// <summary>删除素材（被规则引用时抛 <see cref="InvalidOperationException"/>——先查引用）。

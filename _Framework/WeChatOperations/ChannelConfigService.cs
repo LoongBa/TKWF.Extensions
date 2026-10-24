@@ -37,14 +37,14 @@ public interface IChannelConfigService : IDomainService
 
     /// <summary>全部公众号配置列表（DTO 投影不含凭证密文）。<para>REST：<c>GET /api/wechat-ops/channels</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels", RestMethod = "GET")]
     Task<IReadOnlyList<WeChatChannelConfigDto>> ListAsync(CancellationToken ct = default);
 
     /// <summary>保存公众号配置——新（Id=0）创建 / 已有更新；<paramref name="request"/> 承载凭证明文
     /// （AppSecret/Token/EncodingAESKey 为<b>明文</b>，null = 保持库中既有密文不变）——门面加密落库。
     /// <para>REST：<c>POST /api/wechat-ops/channels</c>（单复杂参数 SaveChannelRequest → [FromBody] 防 URL 凭证泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels", RestMethod = "POST")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels", RestMethod = "POST")]
     Task<long> SaveAsync(SaveChannelRequest request, CancellationToken ct = default);
 
     /// <summary>删除公众号配置（物理删——配置删除后出站凭证经 Options 降级解析）。

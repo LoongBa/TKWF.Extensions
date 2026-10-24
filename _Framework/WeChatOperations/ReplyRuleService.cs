@@ -23,13 +23,13 @@ public interface IReplyRuleService : IDomainService
     /// <summary>规则列表（按 ChannelId 过滤；<paramref name="sceneType"/> 可空 = 全部场景；IsEnabled 降序 + SortOrder 升序）。
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/rules?scene_type=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/rules", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/rules", RestMethod = "GET")]
     Task<IReadOnlyList<ReplyRuleEntity>> ListRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default);
 
     /// <summary>保存规则（Id=0 新建 / 已有更新）——新建默认 SortOrder=同场景末尾 max+1。
     /// <para>REST：<c>POST /api/wechat-ops/channels/{channelId}/rules</c>（单复杂参数 ReplyRuleEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/api/wechat-ops/channels/{channelId}/rules", RestMethod = "POST")]
+    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/rules", RestMethod = "POST")]
     Task<long> SaveRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default);
 
     /// <summary>删除规则（物理删）。<para><c>ExposeRest=false</c>：对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>

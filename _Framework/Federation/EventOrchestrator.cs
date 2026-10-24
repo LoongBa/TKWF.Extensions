@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -29,6 +31,9 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
     private IExternalIdentityService? _channelMap;
     private IFollowStateService? _followState;
 
+    /// <summary>排他校验缓存（键 = handler 类型名集合，值 = 已校验）——同一装配集每进程仅校验一次。</summary>
+    private static readonly ConcurrentDictionary<string, bool> _exclusivityCache = new();
+
     /// <summary>构造（IDomainUser 经守卫工厂帧内供给；IEventReplyHandler 集合 ctor 注入——ADR92 集合版守卫工厂）。</summary>
     public EventOrchestrator(
         IDomainUser user,
@@ -40,6 +45,36 @@ public sealed class EventOrchestrator : DomainServiceBase, IEventOrchestrator
         _sp = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _handlers = handlers?.ToList() ?? throw new ArgumentNullException(nameof(handlers));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        ValidateExclusivity(_handlers);
+    }
+
+    /// <summary>
+    /// 排他单模型装配校验（v0.12.0——fail-fast）：同一 ChannelType 至多一个<b>业务</b> handler。
+    /// 排除：<see cref="DiagnosticEventReplyHandlerAttribute"/> 标记（探针/诊断）+ 
+    /// <see cref="IChannelSpecificEventReplyHandler"/>（W3 通道绑定桶——精确覆盖，非默认链）。
+    /// 违反 → 抛装配错误（把"多 handler 并存的行为不确定性"变为配置即错）。
+    /// </summary>
+    private static void ValidateExclusivity(IReadOnlyList<IEventReplyHandler> handlers)
+    {
+        var key = string.Join("|", handlers.Select(h => h.GetType().FullName).OrderBy(n => n, StringComparer.Ordinal));
+        _exclusivityCache.GetOrAdd(key, _ =>
+        {
+            var conflicts = handlers
+                .Where(h => h.GetType().GetCustomAttribute<DiagnosticEventReplyHandlerAttribute>() is null)
+                .Where(h => h is not IChannelSpecificEventReplyHandler)
+                .GroupBy(h => h.ChannelType, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1)
+                .ToList();
+            if (conflicts.Count > 0)
+            {
+                var detail = string.Join("; ", conflicts.Select(g =>
+                    $"{g.Key}: [{string.Join(", ", g.Select(h => h.GetType().Name))}]"));
+                throw new InvalidOperationException(
+                    $"事件回复 handler 排他性违反——每个 ChannelType 至多一个业务 handler（探针/诊断除外）：" +
+                    $"冲突：{detail}。请删除多余注册或改为继承默认 handler（WechatTemplateEventReplyHandler）。");
+            }
+            return true;
+        });
     }
 
     /// <inheritdoc />

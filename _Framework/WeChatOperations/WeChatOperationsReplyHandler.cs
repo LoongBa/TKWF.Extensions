@@ -16,15 +16,17 @@ using TKWF.Ext.Federation;
 namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
-/// 微信公众号运营事件回复 handler（继承平台库 <see cref="TKWF.Federation.WeChat.WechatEventReplyHandlerBase"/>
-/// 二级分发——全消息类型回复配置 + 交互日志；设计文档 §3.3.3 Oracle P0 选项 A：<b>内部组合 template 兜底</b>——
-/// DB 规则未命中时直接读 <c>Channel.Extra["news_reply"]</c> 模板返回，不依赖编排器迭代顺序，消费方无需额外注册
-/// <see cref="TKWF.Federation.WeChat.WechatTemplateEventReplyHandler"/>）。
+/// 微信公众号运营事件回复 handler（v0.6.0 继承 <see cref="WechatTemplateEventReplyHandler"/>——排他单模型
+/// T2 自定义业务 handler：规则驱动层叠加在模板基座之上，未覆盖分支天然走模板兜底
+/// （<see cref="WechatTemplateEventReplyHandler.OnDefaultAsync"/> 继承——原重复的
+/// <c>TemplateFallbackAsync</c>/<c>ReadNewsTemplateFromChannel</c> 删除，消除双 owner 歧义）。
+/// 全消息类型回复配置 + 交互日志；设计文档 §3.3.3 Oracle P0 选项 A：规则未命中 → 继承模板兜底
+/// （读 <c>Channel.Extra["news_reply"]</c>，含 <c>{ticket}</c> 签票）→ 再兜底 <c>Options.DefaultReplyText</c>。</para>
 /// <para>渲染三层：规则层（DB 按 (ChannelId, SceneType) 过滤）→ 素材层（DB 内容库）→ 渲染层
 /// （<c>BuildTextReply</c>/<c>BuildNewsReply</c> 信封闭包——本 handler 内部组合）。</para>
-/// <para>分发映射（全消息类型）：Subscribe（欢迎语）/ Text（Keyword 完全→包含→Default 兜底）/ Click（TriggerKey=EventKey）/
-/// Image/Voice/Video/ShortVideo/Location/Link（对应 SceneType）/ Scan（场景规则）/ View/ViewMiniProgram（null 微信直跳）/
-/// Unsubscribe（回复被协议门控吞掉）。</para>
+/// <para>分发映射（全消息类型）：Subscribe（欢迎语）/ Text（Keyword 完全→包含→Default 兜底）/
+/// Click（TriggerKey=EventKey）/ Image/Voice/Video/ShortVideo/Location/Link（对应 SceneType）/
+/// Scan（场景规则）/ View/ViewMiniProgram（null 微信直跳）/ Unsubscribe（回复被协议门控吞掉）。</para>
 /// <para>每次回复记 <see cref="InteractionLogEntity"/>（ChannelId/OpenId/MsgType/Content/TriggerType/ReplyContent/
 /// ReplyMaterialId/耗时 <c>DurationMs</c>（V0.3.0）/匹配过程追踪 <c>MatchTraceJson</c>（V0.3.1——逐行推演"为什么命中/未命中"，
 /// 供 DMP-Lite 5.6 §4 日志详情"匹配过程"灰框）——运维排查）——best-effort（try/catch 不阻塞回复）；<b>I2-10：订阅/取关
@@ -32,10 +34,10 @@ namespace TKWF.Ext.WeChatOperations;
 /// 第 6 步记录在后），handler 只保留交互日志（业务审计），订阅统计读取经 <see cref="ISubscriptionStatService"/> 委托关注域。</para>
 /// <para>注册（本扩展 Initializer）：<c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler,
 /// WeChatOperationsReplyHandler&gt;()</c>——ADR92 集合版守卫工厂（帧内供给 IDomainUser；ctor 仅
-/// IDomainUser + ILogger + IOptions，零 DataService 构造注入——DI004）。</para>
+/// IDomainUser + IOptions×3 + ILogger，零 DataService 构造注入——DI004）。</para>
 /// </summary>
 [DiContractIgnore]
-public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.WechatEventReplyHandlerBase
+public class WeChatOperationsReplyHandler : WechatTemplateEventReplyHandler
 {
     private readonly WeChatOperationsOptions _options;
     private readonly WeChatMessageGatewayOptions _gatewayOptions;
@@ -124,13 +126,15 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
 
     /// <summary>构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser；logger/options 从 DI 解析——
     /// 对齐平台基类形态，非构造注入领域服务；<see cref="WeChatMessageGatewayOptions"/> 为网关默认开关
-    /// （默认 false 零回归）——守卫工厂可解析（Initializer AddOptions 兜底））。</summary>
+    /// （默认 false 零回归）——守卫工厂可解析（Initializer AddOptions 兜底）；
+    /// <see cref="WechatEventReplyOptions"/> 经 base 传递（模板基座 uid 门控 <c>RequireUidForTicket</c> 读取）。</summary>
     public WeChatOperationsReplyHandler(
         IDomainUser user,
         IOptions<WeChatOperationsOptions>? options = null,
         IOptions<WeChatMessageGatewayOptions>? gatewayOptions = null,
+        Microsoft.Extensions.Options.IOptions<TKWF.Federation.WeChat.WechatEventReplyOptions>? wechatEventReplyOptions = null,
         ILogger? logger = null)
-        : base(user, logger)
+        : base(user, wechatEventReplyOptions, logger)
     {
         _options = options?.Value ?? new WeChatOperationsOptions();
         _gatewayOptions = gatewayOptions?.Value ?? new WeChatMessageGatewayOptions();
@@ -211,8 +215,8 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         }
         Trace(WeChatReplySceneTypes.Default, matchMode: null, null, ruleName: null, triggerKey: null, hit: false, "无 Default 规则");
 
-        // ④ 无规则 → template 兜底 → 再兜底 Options.DefaultReplyText
-        var tpl = await TemplateFallbackAsync(ctx, ct);
+        // ④ 无规则 → 继承模板兜底（OnDefaultAsync——模板基座）→ 再兜底 Options.DefaultReplyText
+        var tpl = await base.OnDefaultAsync(ctx, ct);
         if (tpl is not null)
         {
             Trace(WeChatReplySceneTypes.Keyword, matchMode: null, null, ruleName: null, triggerKey: null, hit: true, "template fallback");
@@ -391,9 +395,9 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
             return await TryRenderRuleAsync(ctx, rules[0], triggerType, ct);
         }
 
-        // 无规则 → template 兜底（hit/miss 追踪——仅旁路采集，不影响回复决策）
+        // 无规则 → 继承模板兜底（hit/miss 追踪——仅旁路采集，不影响回复决策）
         Trace(sceneType, matchMode: null, null, ruleName: null, triggerKey, hit: false, "无该场景规则");
-        var tpl = await TemplateFallbackAsync(ctx, ct);
+        var tpl = await base.OnDefaultAsync(ctx, ct);
         if (tpl is not null)
         {
             Trace(sceneType, matchMode: null, null, ruleName: null, triggerKey, hit: true, "template fallback");
@@ -441,57 +445,6 @@ public sealed class WeChatOperationsReplyHandler : TKWF.Federation.WeChat.Wechat
         var payload = new WechatReplyPayload(Content: content);
         await RecordInteractionAsync(ctx, triggerType, payload, materialId, ct);
         return payload;
-    }
-
-    /// <summary>
-    /// Template 兜底（Oracle P0 选项 A——内部组合，不依赖编排器迭代顺序）：读 <c>Channel.Extra["news_reply"]</c>
-    /// JSON（多图文优先 <c>articles</c> → 单图文兼容回退，对齐平台库 <see cref="TKWF.Federation.WeChat.NewsReplyTemplateV2"/>）
-    /// → 占位符替换 → 图文信封闭包；模板缺失/损坏/禁回复 → null（不回复——对齐平台模板 handler Oracle P0-2 语义）。
-    /// <para>I2-8：模板含 <c>{ticket}</c> 时经 <see cref="TKWF.Federation.WeChat.WechatEventReplyHandlerBase.ResolveTicketAsync"/>
-    /// 签免登票据（模板 TtlSeconds 优先）——票 URL 替换进 link/description（未启用 → 空串替换，回复结构不变）。</para>
-    /// </summary>
-    private async Task<WechatReplyPayload?> TemplateFallbackAsync(WechatEventContext ctx, CancellationToken ct)
-    {
-        var template = ReadNewsTemplateFromChannel(ctx);
-        if (template is null or { Enabled: not true }) return null;
-
-        // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内）
-        var ticketUrl = await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
-
-        var articles = template.Articles is { Count: > 0 }
-            ? template.Articles.Take(8)   // 微信图文上限 8 篇
-                .Select(a => new EventReplyNewsArticle(
-                    ReplacePlaceholders(a.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    ReplacePlaceholders(a.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    ReplacePlaceholders(a.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    a.PicUrl))
-                .ToList()
-            : new List<EventReplyNewsArticle> {
-                new(
-                    ReplacePlaceholders(template.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    ReplacePlaceholders(template.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    ReplacePlaceholders(template.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    template.PicUrl) };
-
-        var payload = new WechatReplyPayload(News: articles);
-        return payload;
-    }
-
-    /// <summary>读 Channel.Extra["news_reply"] 模板（多图文 V2——自解析；缺失/损坏 → null，对齐 Oracle P0-2）。</summary>
-    private static TKWF.Federation.WeChat.NewsReplyTemplateV2? ReadNewsTemplateFromChannel(WechatEventContext ctx)
-    {
-        var extra = ctx.Channel?.Extra;
-        if (extra is null || !extra.TryGetValue(TKWF.Federation.WeChat.WechatEventReplyHandlerBase.NewsReplyTemplateKey, out var raw)
-            || string.IsNullOrWhiteSpace(raw))
-            return null;
-        try
-        {
-            return JsonSerializer.Deserialize<TKWF.Federation.WeChat.NewsReplyTemplateV2>(raw);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     /// <summary>记录交互日志（best-effort——记录失败不阻塞回复；⚠️ 帧内执行，无帧外解析守卫问题；

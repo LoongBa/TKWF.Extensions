@@ -27,17 +27,28 @@ namespace TKWF.Federation.WeChat;
 /// <para>注册（消费方）：<c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, WechatTemplateEventReplyHandler&gt;()</c>；
 /// 与 <see cref="WechatProbeEventReplyHandler"/> <b>互斥使用</b>（Oracle P2-5——同时注册时 first-non-null-wins，
 /// 幂等语义，使用指南声明）。</para>
+/// <para><b>v0.7.0 升级为可继承 T1 业务基座（排他单模型）</b>：解除 sealed——特殊业务需求
+/// （如规则驱动 <c>WeChatOperationsReplyHandler</c>）<b>继承本类</b>而非裸基类
+/// <see cref="WechatEventReplyHandlerBase"/>——未覆盖分支天然走模板兜底（OnDefaultAsync 继承），
+/// 模板渲染/签票能力随继承复用，消除重复实现。</para>
 /// </summary>
 [DiContractIgnore]
-public sealed class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
+public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
 {
     /// <summary>
-    /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser——logger 可空容错 NullLogger，
-    /// 对齐 <see cref="WechatEventReplyHandlerBase"/> 形态）。
+    /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser——logger/options 从 DI 解析（可空
+    /// 容错，对齐 <see cref="WechatEventReplyHandlerBase"/> 形态）；<see cref="WechatEventReplyOptions"/>
+    /// 供 <see cref="RequireUidForTicket"/> 门控读取）。
     /// </summary>
-    public WechatTemplateEventReplyHandler(IDomainUser user, ILogger? logger = null) : base(user, logger)
+    public WechatTemplateEventReplyHandler(
+        IDomainUser user,
+        Microsoft.Extensions.Options.IOptions<WechatEventReplyOptions>? options = null,
+        ILogger? logger = null) : base(user, logger)
     {
+        _replyOptions = options;
     }
+
+    private readonly Microsoft.Extensions.Options.IOptions<WechatEventReplyOptions>? _replyOptions;
 
     /// <summary>
     /// 兜底分支（模板驱动）：读 <c>Channel.Extra["news_reply"]</c> 模板 → 构造图文回复载荷。
@@ -54,6 +65,11 @@ public sealed class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBas
         // 模板读取（Extra["news_reply"]——通道级图文配置；缺失/损坏 → null，Oracle P0-2）
         var template = ReadMultiNewsTemplate(ctx.Channel?.Extra);
         if (template is null or { Enabled: not true })
+            return null;
+
+        // v0.7.0 uid 绑定门（RequireUidForTicket=true 且编排层未富化 uid → 不回复——
+        // 登录卡只发给已绑定平台账号的用户，对齐主包 LandingTicketHandler 门控语义）
+        if (_replyOptions?.Value.RequireUidForTicket == true && string.IsNullOrEmpty(ctx.UId))
             return null;
 
         // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内）

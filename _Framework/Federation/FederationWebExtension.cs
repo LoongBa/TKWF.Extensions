@@ -124,6 +124,10 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         // 测试端点（默认关——生产禁用；联调验证 ticket 闭环用）——对齐正常端点风格：平台段 + 通道段 + ticket 段
         if (endpointOptions.TestTicketEndpointEnabled)
             builder.Map("/{platformId}/test/{channelId}/{ticket}", "GET").WithHandler(HandleTestTicket);
+
+        // 免登落地端点（v0.12.0 排他单模型登录闭环——默认关，消费方按需启用）——匿名兑现票据 → 免登登录 → 302
+        if (endpointOptions.LandEndpointEnabled)
+            builder.Map("/land/{ticket}", "GET").WithHandler(HandleLandTicket);
     }
 
     // ─────────────────────────── 端点处理器（匿名游客帧） ───────────────────────────
@@ -366,6 +370,40 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // 载荷解密失败等信任根问题——fail-closed 拒信任（错误码机器可读）；成功/失败/过期/已用由 null 分支覆盖
+            var reason = ex.Message ?? "TICKET_REDEEM_FAILED";
+            return Results.Json(new ErrorResponse(reason, null), statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    /// <summary>免登落地端点（GET {prefix}/land/{ticket}，匿名游客帧，默认关——v0.12.0 排他单模型登录闭环）：
+    /// 兑换密封票据（<see cref="ISealedTicketService{T}.RedeemAsync"/> 原子取回 FederatedIdentity——复用
+    /// <see cref="HandleTestTicket"/> 同款验票语义）→ 302 到 <see cref="FederationEndpointOptions.LandRedirectUrl"/>
+    /// 携带 <c>?ticket=&amp;uid=</c>（两步登录闭环——Federation 主包不引 AuthCenter 实现库门面，建会话归消费方
+    /// 落地页调自有 <c>POST /login/ticket</c>）；失败/过期/已用 → 404（契约语义对齐测试端点）。
+    /// <para>防开放重定向：<see cref="FederationEndpointOptions.LandRedirectUrl"/> 空 → 302 本服务根路径 /；
+    /// 绝对 URL 须为消费方自有域（非本服务域白名单校验归消费方装配层）。</para></summary>
+    private static async Task<IResult> HandleLandTicket(HttpContext ctx, string ticket, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ticket))
+            return Results.BadRequest(new ErrorResponse("TICKET_REQUIRED", null));
+
+        try
+        {
+            var identity = await GetGuest(ctx).Use<ISealedTicketService<TKW.Framework.Domain.FederatedIdentity>>()
+                .RedeemAsync(ticket, context: null, ct);
+            if (identity is null)
+                return Results.Json(new ErrorResponse("TICKET_NOT_FOUND", null),
+                    statusCode: StatusCodes.Status404NotFound);
+
+            var options = ctx.RequestServices.GetRequiredService<IOptions<FederationEndpointOptions>>().Value;
+            var redirectUrl = options.LandRedirectUrl;
+            var target = string.IsNullOrWhiteSpace(redirectUrl)
+                ? "/"
+                : $"{redirectUrl}?ticket={Uri.EscapeDataString(ticket)}&uid={Uri.EscapeDataString(identity.UId ?? string.Empty)}";
+            return Results.Redirect(target);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
             var reason = ex.Message ?? "TICKET_REDEEM_FAILED";
             return Results.Json(new ErrorResponse(reason, null), statusCode: StatusCodes.Status400BadRequest);
         }

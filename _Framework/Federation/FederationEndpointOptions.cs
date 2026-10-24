@@ -52,4 +52,23 @@ public class FederationEndpointOptions
     /// 供微信图文消息落地页（UserH5 未就绪前）验证 ticket 签发→消费闭环。生产必须关闭
     /// （匿名兑现端点不应暴露于公网——ticket 虽 32 字节高熵不可枚举，但属调试面）。</summary>
     public bool TestTicketEndpointEnabled { get; set; } = false;
+
+    /// <summary>
+    /// <b>免登落地端点开关（默认 false——v0.12.0 排他单模型登录闭环）</b>：
+    /// GET {prefix}/land/{ticket}——匿名兑现密封票据 → 经
+    /// <see cref="TKWF.Ext.AuthCenter.IExternalTicketLoginService"/> 免登登录
+    /// （openid 级票据实时回查 uid → 建会话）→ 302 到落地页；失败 → 4xx 机器可读错误码。
+    /// 与 <see cref="TestTicketEndpointEnabled"/> 区别：本端点建立真实会话（生产可用），
+    /// 测试端点仅显示载荷（调试面）。</summary>
+    public bool LandEndpointEnabled { get; set; } = false;
+
+    /// <summary>
+    /// <b>免登落地页重定向地址（默认 null → 302 本服务根路径 /）</b>：<c>GET /land/{ticket}</c>
+    /// 兑换票据成功后的 302 目标（消费方前端 SPA 首页，如 <c>https://admin.example.com</c>）。
+    /// 绝对 URL 须为消费方自有域（防开放重定向——非本服务域须在消费方装配层校验白名单）。
+    /// <b>两步登录闭环</b>：本端点只验证票据（RedeemAsync 原子取回，失败 404/400）→ 302 携带
+    /// <c>?ticket=&amp;uid=</c> → 消费方落地页用 ticket 调自有免登兑现接口（如
+    /// <c>POST /login/ticket</c>）完成建会话——依赖方向保持 Federation → Abstractions，
+    /// 不引 AuthCenter 实现库门面。</summary>
+    public string? LandRedirectUrl { get; set; }
 }

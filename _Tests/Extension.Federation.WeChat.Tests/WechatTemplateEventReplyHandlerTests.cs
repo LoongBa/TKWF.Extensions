@@ -195,6 +195,58 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.Contains("<ArticleCount>8</ArticleCount>", reply!.Content);
     }
 
+    /// <summary>uid 绑定门（v0.7.0 RequireUidForTicket=true）：编排层未富化 uid（openid 未绑定）→
+    /// 不回复（登录卡只发给已绑定用户——对齐主包 LandingTicketHandler 门控语义）。</summary>
+    [Fact]
+    public async Task RequireUidForTicket_True_UnboundUid_ReturnsNull()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.Configure<WechatEventReplyOptions>(o => o.RequireUidForTicket = true));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-template", uid: null, openId: "openid-unbound"),
+            CancellationToken.None);
+
+        Assert.Null(reply);
+    }
+
+    /// <summary>uid 绑定门（v0.7.0 RequireUidForTicket=true）：已富化 uid（openid 已绑定）→ 正常签票回复
+    /// （门控只拦截未绑定，不影响已绑定用户）。</summary>
+    [Fact]
+    public async Task RequireUidForTicket_True_BoundUid_RepliesNews()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.Configure<WechatEventReplyOptions>(o => o.RequireUidForTicket = true));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-template", uid: "u-bound", openId: "openid-bound"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply!.Content);
+    }
+
+    /// <summary>uid 绑定门默认关（v0.7.0 RequireUidForTicket=false 默认）：未绑定 openid → 仍签票回复
+    /// （通用模板场景任意用户可签——门控是显式开关，默认不拦截）。</summary>
+    [Fact]
+    public async Task RequireUidForTicket_False_UnboundUid_RepliesNews()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-template", uid: null, openId: "openid-unbound"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply!.Content);
+    }
+
     /// <summary>构造模板驱动事件上下文（unknown_event 类型——路由至 OnDefaultAsync 兜底入口，
     /// 含 uid/openid/channel_id——占位符替换数据源 + registry 反查键）。</summary>
     private static ChannelEventDispatch TemplateEvent(string channelId, string? uid = "u-1", string? openId = "openid-1")

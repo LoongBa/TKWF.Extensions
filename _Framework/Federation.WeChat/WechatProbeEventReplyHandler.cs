@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Federation;
 
 namespace TKWF.Federation.WeChat;
 
@@ -20,6 +21,7 @@ namespace TKWF.Federation.WeChat;
 /// （默认），开发期开 true 验证全分支。注册：<c>AddWeChatFederationChannels()</c> 内无条件注册
 /// （方案 §3.5——仅 Probe 因开关门控无条件注册；Template 归消费方显式注册）。</para>
 /// </summary>
+[DiagnosticEventReplyHandler]
 [DiContractIgnore]
 public sealed class WechatProbeEventReplyHandler : WechatEventReplyHandlerBase
 {

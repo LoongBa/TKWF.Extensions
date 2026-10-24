@@ -22,4 +22,15 @@ public class WechatEventReplyOptions
     /// （诊断验证各分支命中），门控分支由基类协议门控吞掉 + ILogger 输出。</para>
     /// </summary>
     public bool ProbeEventReplyHandlerEnabled { get; set; }
+
+    /// <summary>
+    /// 免登票据 uid 绑定门（默认 <c>false</c>——v0.7.0 排他单模型认证语义）。
+    /// <para><c>true</c>：<see cref="WechatTemplateEventReplyHandler"/> 仅在编排层已富化 uid
+    /// （openid 已绑定平台账号）时签 <c>{ticket}</c> 免登票据；未绑定（<c>ctx.UId</c> 空）→
+    /// 跳过签票（<c>{ticket}</c> 占位符替换为空串，链接不生成）——登录卡只发给已绑定用户，
+    /// 对齐主包 <c>LandingTicketHandler</c> 的 uid 门控语义（防未绑定 openid 拿到登录链接）。</para>
+    /// <para><c>false</c>（默认）：通用模板场景——任意用户触发均可签票（票据身份为 openid 级，
+    /// 兑换侧实时回查 uid）。</para>
+    /// </summary>
+    public bool RequireUidForTicket { get; set; }
 }

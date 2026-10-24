@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Web.Authentication;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -41,6 +42,9 @@ public class JwtAuthenticationMiddlewareTests
             .ConfigureServices(services =>
             {
                 extension.ConfigureServices(services);
+                // ambient 设施（Oracle5 方案 A——Web 宿主 WebAppBuilder 自动注册；此处测试宿主显式注册
+                // 验证与中间件 TokenVerificationContextWriter 写入协同）
+                services.AddTokenVerificationContext();
                 // 替换验证器：中间件行为测试用假验证器（真实验签 TokenServiceTests 已覆盖）
                 if (invalidToken)
                     services.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new ThrowingTokenVerifier()));
@@ -51,12 +55,16 @@ public class JwtAuthenticationMiddlewareTests
             {
                 // JwtAuthenticationMiddleware（Bearer JWT → 恢复委托 → Items[DomainUserKey]）——BeforeAuthentication 锚点语义
                 extension.ConfigureMiddleware(app, new TKW.Framework.Domain.Hosting.DomainWebOptions());
-                // 断言中间件：读 Items[DomainUserKey] → 响应头（验证恢复接线；UserInfo 填充经 LoginAsUserAsync 归消费方 Host 全链路）
+                // 断言中间件：读 Items[DomainUserKey] → 响应头（验证恢复接线；UserInfo 填充经 LoginAsUserAsync 归消费方 Host 全链路）；
+                // 同时读 ambient（ITokenVerificationContext）→ 响应头（Oracle5 往返断言——中间件写、管线内读）
                 app.Use((ctx, next) =>
                 {
                     var user = ctx.Items[DomainUserKey] as DomainUser<TestUserInfo>;
                     if (user != null)
                         ctx.Response.Headers["X-Auth-User"] = "restored";
+                    var ambient = ctx.RequestServices.GetService<ITokenVerificationContext>()?.Current;
+                    if (ambient != null)
+                        ctx.Response.Headers["X-Ambient-Jti"] = ambient.Jti;
                     return next(ctx);
                 });
                 app.Run(ctx => { ctx.Response.StatusCode = 200; return Task.CompletedTask; });
@@ -114,6 +122,42 @@ public class JwtAuthenticationMiddlewareTests
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.False(resp.Headers.Contains("X-Auth-User"));
+        Assert.False(resp.Headers.Contains("X-Ambient-Jti"));
+    }
+
+    [Fact]
+    public async Task BearerRequest_WritesAmbient_ReadableInPipeline()
+    {
+        // Oracle5（方案 A）集成往返：JwtAuthenticationMiddleware 验签成功后写 ambient →
+        // 断言中间件读 ITokenVerificationContext.Current 得 jti（管线内可读 = 门面 GetCurrentTokenInfoAsync 数据源就绪）
+        using var server = CreateServer();
+        var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
+
+        var resp = await client.GetAsync("/api/test");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var jti = resp.Headers.GetValues("X-Ambient-Jti").FirstOrDefault();
+        Assert.Equal("jti-test", jti);   // FakeTokenVerifier 固定 jti
+    }
+
+    [Fact]
+    public async Task Ambient_ClearedAfterRequest_NoLeakToNextRequest()
+    {
+        // G13 泄漏守卫：请求结束时 finally 置 null——下一请求（无 Bearer）管线内读 ambient 必须为 null
+        using var server = CreateServer();
+        var client = server.CreateClient();
+
+        // 请求 1：Bearer → 写 ambient（确认已写入）
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
+        var resp1 = await client.GetAsync("/api/test");
+        Assert.Equal("jti-test", resp1.Headers.GetValues("X-Ambient-Jti").FirstOrDefault());
+
+        // 请求 2：无 Bearer → ambient 不得泄漏（X-Ambient-Jti 头缺）
+        client.DefaultRequestHeaders.Remove("Authorization");
+        var resp2 = await client.GetAsync("/api/test");
+        Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+        Assert.False(resp2.Headers.Contains("X-Ambient-Jti"));
     }
 
     // ── 测试桩 ───────────────────────────────────────────────────────

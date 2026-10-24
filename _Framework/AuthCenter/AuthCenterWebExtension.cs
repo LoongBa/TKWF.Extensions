@@ -86,8 +86,8 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
     {
         var endpointOptions = ResolveOptions(registry.ServiceProvider);
 
-        if (endpointOptions.SmsSendCodeEndpointEnabled && endpointOptions.SmsVerifyEndpointEnabled)
-            registry.MapGenerated<ISmsVerificationService>();   // 两开关合并——同门面（send-code + verify 双端点）
+        if (endpointOptions.SmsSendCodeEndpointEnabled || endpointOptions.SmsVerifyEndpointEnabled)
+            registry.MapGenerated<ISmsVerificationService>();   // 两开关合并——同门面（send-code + verify 双端点；任一开即挂载，对齐 ITokenService 三开关 OR 保守语义）
         if (endpointOptions.SmsLoginEndpointEnabled)
             registry.MapGenerated<ISmsLoginService>();
         if (endpointOptions.PasswordLoginEndpointEnabled)

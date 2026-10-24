@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain.Exceptions;
+using TKW.Framework.Domain.Web.Extensions;
+using TKWF.Ext.Testing.Shared;
 using Xunit;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -593,5 +595,61 @@ public sealed class AuthCenterWebExtensionTests
         {
             AuthCenterEndpointHost.SmsLogin.Throw = null;
         }
+    }
+
+    // ═══════════════════ B3b 新增：DeclareEndpoints 门面级门控（AND→OR 修复回归锁定，2026-10-25） ═══════════════════
+
+    /// <summary>记录 MapGenerated&lt;TFacade&gt; 调用（泛型类型列表）的 Fake registry——DeclareEndpoints 门控行为单测。</summary>
+    private sealed class FakeEndpointRegistry : IExtensionEndpointRegistry
+    {
+        public FakeEndpointRegistry(IServiceProvider services) => ServiceProvider = services;
+
+        public IServiceProvider ServiceProvider { get; }
+        public List<Type> MappedFacades { get; } = new();
+
+        public void MapGenerated<TFacade>() where TFacade : class
+            => MappedFacades.Add(typeof(TFacade));
+
+        public void MapInfrastructure(EndpointKind kind) { }
+
+        public void MapHub<THub>(string path, bool requireAuthorization = true) where THub : class { }
+    }
+
+    [Fact]
+    public void DeclareEndpoints_SmsSendCodeOnVerifyOff_SmsVerificationServiceStillMapped()
+    {
+        // AND→OR 修复回归锁定（2026-10-25 复查发现）：ISmsVerificationService 双开关原用 &&——
+        // "SmsSendCode=true + SmsVerify=false" 会错误禁用 send-code（开关语义违背）。
+        // 修复为 ||（任一开即挂载，对齐 ITokenService 三开关保守语义）——本测试锁定。
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false",   // 仅关 verify，send-code 保持默认开
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        var registry = new FakeEndpointRegistry(services.BuildServiceProvider());
+
+        var ext = new AuthCenterWebExtension<TestUserInfo>();
+        ext.DeclareEndpoints(registry);
+
+        Assert.Contains(typeof(ISmsVerificationService), registry.MappedFacades);   // send-code 端点仍挂载（OR 语义）
+    }
+
+    [Fact]
+    public void DeclareEndpoints_AllSmsOff_SmsVerificationServiceNotMapped()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TKWF:AuthCenter:Web:SmsSendCodeEndpointEnabled"] = "false",
+            ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false",
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        var registry = new FakeEndpointRegistry(services.BuildServiceProvider());
+
+        var ext = new AuthCenterWebExtension<TestUserInfo>();
+        ext.DeclareEndpoints(registry);
+
+        Assert.DoesNotContain(typeof(ISmsVerificationService), registry.MappedFacades);   // 全关 → 不挂载
     }
 }

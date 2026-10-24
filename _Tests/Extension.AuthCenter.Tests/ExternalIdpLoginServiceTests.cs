@@ -4,14 +4,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
-/// T5（2026-10-09 三层边界）：外部 IdP 桥接消费门面 <see cref="ExternalIdpLoginService"/> 测试——
+/// T5（2026-10-09 三层边界）+ B3b：外部 IdP 桥接消费门面 <see cref="ExternalIdpLoginService"/> 测试——
 /// 桥接认证（<see cref="IExternalIdpAuthenticator"/> 契约）→ 映射（<see cref="IExternalIdentityService"/>）→
 /// 建号/复用（<see cref="IAuthAccountService"/>/<see cref="IAuthAccountQueryService"/>）→ 签 token1
 /// （authType=<c>federated</c> + <c>channel_type</c>）。
+/// <para>B3b：成功返回 <see cref="TokenResponse"/>（断言 AccessToken/FakeExternalTokenService.LastRequest）；
+/// 失败抛 <see cref="DomainException"/>（400，ErrorCode = 语义码如 EXTERNAL_AUTH_FAILED/EXTERNAL_CHANNEL_ID_REQUIRED）。</para>
 /// <para>分层逻辑单测：StubDomainUser 直构门面（经基类 User 取上下文）+ Fake 依赖注册进桩 ServiceProvider
 /// （<c>Use&lt;接口&gt;()</c> GetRequiredService 解析）；fail-hard 用例不注册 <see cref="IExternalIdpAuthenticator"/>
 /// → <c>Use&lt;T&gt;()</c> 抛 <see cref="InvalidOperationException"/>（Federation 未装配守卫语义）。</para>
@@ -71,43 +75,36 @@ public class ExternalIdpLoginServiceTests
 
         var result = await service.LoginAsync(ChannelType, Params());
 
-        Assert.True(result.Success);
-        Assert.Equal(accountSvc.CreatedUid, result.UserId);   // 建号 UId == 回读 UId（生产路径等价——P2-3）
-        Assert.NotNull(accountSvc.CreatedUid);
-        Assert.True(accountSvc.CreateCalled);   // 建号 + LinkAsync（无映射）
-        Assert.Equal(1, map.LinkCalls);
-        // token1 契约：authType=federated + channel_type=channelType + UserId=建号 UId
+        Assert.NotNull(result.AccessToken);            // B3b：TokenResponse 形态
         Assert.Equal(AuthTypes.Federated, token.LastRequest!.AuthType);
         Assert.Equal(ChannelType, token.LastRequest.ChannelType);
         Assert.Equal(accountSvc.CreatedUid, token.LastRequest.UserId);   // P2-1 收敛：签发 UserId == 回读实体 UId
     }
 
-    /// <summary>(a-2) 桥接认证失败 → FailReason 透传（不建号不签发）。</summary>
+    /// <summary>(a-2) 桥接认证失败 → DomainException 400（ErrorCode=FailReason，不建号不签发）。</summary>
     [Fact]
     public async Task Login_AuthFailure_ReturnsFailReason()
     {
         var (service, auth, _, accountSvc, _, token) = CreateService();
         auth.Result = new ExternalIdpAuthResult(false, null, "CHANNEL_NOT_FOUND", 0);
 
-        var result = await service.LoginAsync(ChannelType, Params());
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(ChannelType, Params()));
 
-        Assert.False(result.Success);
-        Assert.Equal("CHANNEL_NOT_FOUND", result.FailReason);
+        Assert.Equal("CHANNEL_NOT_FOUND", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
         Assert.Null(token.LastRequest);
     }
 
-    /// <summary>(a-3) 认证成功但外部用户标识缺失 → EXTERNAL_USER_ID_MISSING。</summary>
+    /// <summary>(a-3) 认证成功但外部用户标识缺失 → EXTERNAL_USER_ID_MISSING（DomainException 400）。</summary>
     [Fact]
     public async Task Login_AuthSuccessButNoExternalUserId_ReturnsMissing()
     {
         var (service, auth, _, accountSvc, _, _) = CreateService();
         auth.Result = new ExternalIdpAuthResult(true, null, null, 2);
 
-        var result = await service.LoginAsync(ChannelType, Params());
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(ChannelType, Params()));
 
-        Assert.False(result.Success);
-        Assert.Equal("EXTERNAL_USER_ID_MISSING", result.FailReason);
+        Assert.Equal("EXTERNAL_USER_ID_MISSING", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
     }
 
@@ -147,8 +144,7 @@ public class ExternalIdpLoginServiceTests
 
         var result = await service.LoginAsync(ChannelType, Params());
 
-        Assert.True(result.Success);
-        Assert.Equal("u-mapped-1", result.UserId);
+        Assert.NotNull(result.AccessToken);            // B3b：TokenResponse 形态
         Assert.False(accountSvc.CreateCalled);   // 复用不建号
         Assert.Equal(0, map.LinkCalls);          // 复用不 Link
         Assert.Equal(AuthTypes.Federated, token.LastRequest!.AuthType);
@@ -169,7 +165,7 @@ public class ExternalIdpLoginServiceTests
 
         var result = await service.LoginAsync(ChannelType, Params());
 
-        Assert.True(result.Success);
+        Assert.NotNull(result.AccessToken);            // B3b：TokenResponse 形态
         Assert.True(accountSvc.CreateCalled);
         Assert.Equal(1, map.LinkCalls);
         Assert.Equal(accountSvc.CreatedUid, map.LastLinkedUid);      // 建号 uid 进 Link
@@ -201,16 +197,16 @@ public class ExternalIdpLoginServiceTests
                 $"参数 {key} 未原样透传（期望 {value}，实际 {got}）");
     }
 
-    /// <summary>(e) 缺 channel_id → EXTERNAL_CHANNEL_ID_REQUIRED（映射键必需，fail-closed）。</summary>
+    /// <summary>(e) 缺 channel_id → EXTERNAL_CHANNEL_ID_REQUIRED（DomainException 400，映射键必需，fail-closed）。</summary>
     [Fact]
     public async Task Login_MissingChannelId_ReturnsRequired()
     {
         var (service, _, _, accountSvc, _, _) = CreateService();
 
-        var result = await service.LoginAsync(ChannelType, new Dictionary<string, string?> { ["code"] = "wx-code-2" });
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.LoginAsync(ChannelType, new Dictionary<string, string?> { ["code"] = "wx-code-2" }));
 
-        Assert.False(result.Success);
-        Assert.Equal("EXTERNAL_CHANNEL_ID_REQUIRED", result.FailReason);
+        Assert.Equal("EXTERNAL_CHANNEL_ID_REQUIRED", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
     }
 
@@ -328,9 +324,9 @@ public class ExternalIdpLoginServiceTests
             return Task.FromResult(new TokenIssueResult("at-ext", "rt-ext", 7200));
         }
         public Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default) => Task.FromResult<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?>(null);
-        public Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default) => Task.FromResult(false);
+        public Task<VerifyResponse> GetCurrentTokenInfoAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task RevokeCurrentSessionAsync(CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

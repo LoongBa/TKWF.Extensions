@@ -215,13 +215,13 @@ public class AuthCenterInitializerTests
             => throw new System.NotImplementedException();
         public System.Threading.Tasks.Task<TokenValidationResult> ValidateTokenAsync(string accessToken, System.Threading.CancellationToken ct = default)
             => throw new System.NotImplementedException();
-        public System.Threading.Tasks.Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, System.Threading.CancellationToken ct = default)
+        public System.Threading.Tasks.Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, System.Threading.CancellationToken ct = default)
             => throw new System.NotImplementedException();
         public System.Threading.Tasks.Task RevokeTokenAsync(string jti, string reason, System.Threading.CancellationToken ct = default)
             => throw new System.NotImplementedException();
-        public System.Threading.Tasks.Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(System.Threading.CancellationToken ct = default)
+        public System.Threading.Tasks.Task<VerifyResponse> GetCurrentTokenInfoAsync(System.Threading.CancellationToken ct = default)
             => throw new System.NotImplementedException();
-        public System.Threading.Tasks.Task<bool> RevokeCurrentSessionAsync(System.Threading.CancellationToken ct = default)
+        public System.Threading.Tasks.Task RevokeCurrentSessionAsync(System.Threading.CancellationToken ct = default)
             => throw new System.NotImplementedException();
     }
 }

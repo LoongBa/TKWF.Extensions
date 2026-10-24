@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Web.Extensions;
@@ -153,19 +153,26 @@ internal static class AuthCenterEndpointHost
     internal sealed class FakeSmsLoginService : ISmsLoginService
     {
         public bool Invoked { get; private set; }
-        public LoginResult Result { get; set; } =
-            new(true, "u_1", new TokenIssueResult("at-1", "rt-1", 7200), null);
+        public TokenResponse Result { get; set; } = new("at-1", "rt-1", "Bearer", 7200);
 
-        public Task<LoginResult> LoginAsync(string phone, string code, CancellationToken ct = default)
+        /// <summary>失败模拟（B3b——门面抛类型化异常，替代 LoginResult(false)）：非 null 时按其抛出。</summary>
+        public DomainException? Throw { get; set; }
+
+        public Task<TokenResponse> LoginAsync(SmsLoginRequest request, CancellationToken ct = default)
         {
             Invoked = true;
+            if (Throw is not null) throw Throw;
+            // 空参数校验模拟（保留原 handler 400 INVALID_ARGUMENT 黑盒语义——Body 绑定后门面校验）
+            if (string.IsNullOrWhiteSpace(request.Phone) || string.IsNullOrWhiteSpace(request.Code))
+                throw new DomainException("INVALID_ARGUMENT") { ErrorCode = "INVALID_ARGUMENT" };
             return Task.FromResult(Result);
         }
     }
 
     /// <summary>
     /// 外部 IdP 登录门面 Fake（T5 2026-10-09——替代 FakeWechatLoginService）：Invoked/LastChannelType/LastParameters
-    /// 捕获 + 可配置 Result（成功 TokenResponse）/ Exception（守卫异常模拟——503 EXTERNAL_IDP_NOT_CONFIGURED 冒烟）。
+    /// 捕获 + 可配置 Result（成功 TokenResponse）/ GuardExceptionMessage（守卫异常模拟——503 EXTERNAL_IDP_NOT_CONFIGURED 冒烟）/
+    /// Throw（业务失败 DomainException——400 冒烟）。
     /// </summary>
     internal sealed class FakeExternalIdpLoginService : IExternalIdpLoginService
     {
@@ -173,19 +180,25 @@ internal static class AuthCenterEndpointHost
         public string? LastChannelType { get; private set; }
         public IReadOnlyDictionary<string, string?>? LastParameters { get; private set; }
 
-        public LoginResult Result { get; set; } =
-            new(true, "u_1", new TokenIssueResult("at-1", "rt-1", 7200), null);
+        public TokenResponse Result { get; set; } = new("at-1", "rt-1", "Bearer", 7200);
 
         /// <summary>模拟 fail-hard 守卫异常（领域架构守卫前缀——端点映射 503 EXTERNAL_IDP_NOT_CONFIGURED）。</summary>
         public string? GuardExceptionMessage { get; set; }
 
-        public Task<LoginResult> LoginAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default)
+        /// <summary>业务失败模拟（B3b——DomainException 400，替代 LoginResult(false)）。</summary>
+        public DomainException? Throw { get; set; }
+
+        public Task<TokenResponse> LoginAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default)
         {
             Invoked = true;
             LastChannelType = channelType;
             LastParameters = parameters;
+            if (Throw is not null) throw Throw;
             if (GuardExceptionMessage is not null)
-                throw new InvalidOperationException(GuardExceptionMessage);
+                throw new ServiceNotConfiguredException("external-idp", GuardExceptionMessage) { ErrorCode = "EXTERNAL_IDP_NOT_CONFIGURED" };
+            // 缺 code 校验模拟（保留原 handler 400 INVALID_ARGUMENT 黑盒语义）
+            if (!parameters.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code))
+                throw new DomainException("INVALID_ARGUMENT") { ErrorCode = "INVALID_ARGUMENT" };
             return Task.FromResult(Result);
         }
     }
@@ -193,7 +206,7 @@ internal static class AuthCenterEndpointHost
     /// <summary>
     /// 票据 SPA 兑现门面 Fake（V0.10.0——POST /login/ticket）：Invoked/LastTicket/LastChannelId 捕获 +
     /// 可配置 Result（成功 TokenResponse）/ GuardExceptionMessage（守卫异常——503 TICKET_SERVICE_NOT_CONFIGURED）/
-    /// RateLimitedMessage（频控异常——429 TICKET_RATE_LIMITED）。
+    /// RateLimitedMessage（频控异常——429 TICKET_RATE_LIMITED）/ Throw（业务失败——400）。
     /// </summary>
     internal sealed class FakeExternalTicketLoginService : IExternalTicketLoginService
     {
@@ -201,21 +214,27 @@ internal static class AuthCenterEndpointHost
         public string? LastTicket { get; private set; }
         public string? LastChannelId { get; private set; }
 
-        public LoginResult Result { get; set; } =
-            new(true, "u_1", new TokenIssueResult("at-t", "rt-t", 7200), null);
+        public TokenResponse Result { get; set; } = new("at-t", "rt-t", "Bearer", 7200);
 
         public string? GuardExceptionMessage { get; set; }
         public string? RateLimitedMessage { get; set; }
 
-        public Task<LoginResult> LoginAsync(string ticket, string? channelId, string? ipAddress, CancellationToken ct = default)
+        /// <summary>业务失败模拟（B3b——DomainException 400，替代 LoginResult(false)）。</summary>
+        public DomainException? Throw { get; set; }
+
+        public Task<TokenResponse> LoginAsync(ExternalTicketLoginRequest request, CancellationToken ct = default)
         {
             Invoked = true;
-            LastTicket = ticket;
-            LastChannelId = channelId;
+            LastTicket = request.Ticket;
+            LastChannelId = request.EffectiveChannelId;
+            if (Throw is not null) throw Throw;
             if (GuardExceptionMessage is not null)
-                throw new InvalidOperationException(GuardExceptionMessage);
+                throw new ServiceNotConfiguredException("ticket-service", GuardExceptionMessage) { ErrorCode = "TICKET_SERVICE_NOT_CONFIGURED" };
             if (RateLimitedMessage is not null)
-                throw new AuthenticationException(RateLimitedMessage);
+                throw new RateLimitedException(0, "ext:ticket:test") { ErrorCode = RateLimitedMessage };
+            // 缺 ticket 校验模拟（保留原 handler 400 INVALID_ARGUMENT 黑盒语义）
+            if (string.IsNullOrWhiteSpace(request.Ticket))
+                throw new DomainException("INVALID_ARGUMENT") { ErrorCode = "INVALID_ARGUMENT" };
             return Task.FromResult(Result);
         }
     }
@@ -225,6 +244,7 @@ internal static class AuthCenterEndpointHost
         public bool RefreshInvoked { get; private set; }
         public string? LastRefreshToken { get; private set; }
         public string? RevokedJti { get; private set; }
+        public bool RevokeCurrentInvoked { get; private set; }
 
         public Task<TokenIssueResult> IssueTokenAsync(TokenIssueRequest request, CancellationToken ct = default)
             => Task.FromResult(new TokenIssueResult("at-1", "rt-1", 7200));
@@ -232,11 +252,11 @@ internal static class AuthCenterEndpointHost
         public Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default)
+        public Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default)
         {
             RefreshInvoked = true;
-            LastRefreshToken = refreshToken;
-            return Task.FromResult(new TokenRefreshResult("at-2", "rt-2", 7200));
+            LastRefreshToken = request.EffectiveRefreshToken;
+            return Task.FromResult(new TokenResponse("at-2", "rt-2", "Bearer", 7200));
         }
 
         public Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default)
@@ -245,10 +265,24 @@ internal static class AuthCenterEndpointHost
             return Task.CompletedTask;
         }
 
-        public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default)
-            => throw new NotSupportedException();
+        public Task<VerifyResponse> GetCurrentTokenInfoAsync(CancellationToken ct = default)
+        {
+            // B3b 黑盒语义：已认证端点（/verify）无 Bearer → 门面 ambient null → AuthenticationException("AUTH_REQUIRED")
+            // （生产路径经 ITokenVerificationContext 判定；Fake 用可配置标志模拟——401 语义正确属认证异常）
+            if (VerifyRequiresAuth)
+                throw new System.Security.Authentication.AuthenticationException("AUTH_REQUIRED");
+            return Task.FromResult(new VerifyResponse(true, "u-100", AuthTypes.Sms, (int)AuthLevel.Phone, 1234567890, "jti-test"));
+        }
+
+        public Task RevokeCurrentSessionAsync(CancellationToken ct = default)
+        {
+            RevokeCurrentInvoked = true;
+            RevokedJti = "jti-test";   // 模拟 ambient 撤销（门面内经 ITokenVerificationContext 取当前 jti）
+            return Task.CompletedTask;
+        }
+
+        /// <summary>B3b：/verify 无 Bearer 模拟（对应生产 ambient null → AUTH_REQUIRED 401）。</summary>
+        public bool VerifyRequiresAuth { get; set; }
     }
 
     internal sealed class FakeSmsVerificationService : ISmsVerificationService
@@ -258,29 +292,39 @@ internal static class AuthCenterEndpointHost
         /// <summary>重置 Invoked 标志——共享宿主跨用例状态防污染（V0.8.0 修复：负向断言测试前置重置）。</summary>
         public void Reset() => SendCodeInvoked = false;
 
-        public Task SendCodeAsync(string phone, string scene, CancellationToken ct = default)
+        public Task SendCodeAsync(SendSmsCodeRequest request, CancellationToken ct = default)
         {
+            // 场景白名单校验模拟（保留原 handler 400 INVALID_SCENE 黑盒语义——校验先于 Invoked 置位）
+            if (!IsAllowedScene(request.Scene))
+                throw new DomainException("INVALID_SCENE") { ErrorCode = "INVALID_SCENE" };
             SendCodeInvoked = true;
             return Task.CompletedTask;
         }
 
-        public Task<bool> VerifyCodeAsync(string phone, string code, string scene, CancellationToken ct = default)
-            => Task.FromResult(true);
+        public Task<SmsVerifyResponse> VerifyCodeAsync(SmsVerifyRequest request, CancellationToken ct = default)
+        {
+            if (!IsAllowedScene(request.Scene))
+                throw new DomainException("INVALID_SCENE") { ErrorCode = "INVALID_SCENE" };
+            return Task.FromResult(new SmsVerifyResponse(true));
+        }
+
+        private static bool IsAllowedScene(string scene)
+            => scene == SmsScenes.Login || scene == SmsScenes.Register || scene == SmsScenes.Bind || scene == SmsScenes.Reset;
     }
 
     internal sealed class FakeTicketService : IOAuthTicketService
     {
         public bool ExchangeInvoked { get; private set; }
-        public OAuthTicketExchangeRequest? LastRequest { get; private set; }
+        public TicketExchangeRequest? LastRequest { get; private set; }
 
         public Task<string> IssueAsync(OAuthTicketIssueRequest request, CancellationToken ct = default)
             => Task.FromResult("t-1");
 
-        public Task<OAuthTicketExchangeResult> ExchangeAsync(OAuthTicketExchangeRequest request, CancellationToken ct = default)
+        public Task<TokenResponse> ExchangeAsync(TicketExchangeRequest request, CancellationToken ct = default)
         {
             ExchangeInvoked = true;
             LastRequest = request;
-            return Task.FromResult(new OAuthTicketExchangeResult("at-3", "rt-3", 7200));
+            return Task.FromResult(new TokenResponse("at-3", "rt-3", "Bearer", 7200));
         }
 
         public Task BindTicketAsync(string ticket, CancellationToken ct = default)
@@ -291,26 +335,26 @@ internal static class AuthCenterEndpointHost
     internal sealed class FakeAuthGrantQueryService : IAuthGrantQueryService
     {
         public bool Invoked { get; private set; }
+        public string? LastAppId { get; private set; }
 
-        public IReadOnlyList<AuthGrantEntity> Result { get; set; } =
-        [
-            new AuthGrantEntity
-            {
-                UserId = "u-100",
-                AppId = "app-1",
-                Scopes = "a,b",
-                ValidUntil = null,
-                Source = AuthGrantSources.Login,
-                Status = 0
-            }
-        ];
+        public GrantsResponse Result { get; set; } =
+            new GrantsResponse(
+            [
+                new GrantView("app-1", ["a", "b"], null, AuthGrantSources.Login, 0)
+            ]);
+
+        /// <summary>B3b：/grants 无 Bearer 模拟（对应生产 ambient null → AUTH_REQUIRED 401）。</summary>
+        public bool AuthRequired { get; set; }
 
         /// <summary>重置 Invoked 标志——共享宿主跨用例状态防污染（V0.8.0 修复：负向断言测试前置重置）。</summary>
         public void Reset() => Invoked = false;
 
-        public Task<IReadOnlyList<AuthGrantEntity>> GetGrantsAsync(string userId, string? appId = null, CancellationToken ct = default)
+        public Task<GrantsResponse> GetGrantsAsync(string? appId = null, CancellationToken ct = default)
         {
+            if (AuthRequired)
+                throw new System.Security.Authentication.AuthenticationException("AUTH_REQUIRED");
             Invoked = true;
+            LastAppId = appId;
             return Task.FromResult(Result);
         }
     }

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.AuthController;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Web.Authentication;
 using TKWF.Ext.AuthCenter;
 using TKWF.Ext.SecurityLog;
 
@@ -216,6 +217,23 @@ internal class StubDomainUser(string? userId = null, long? tenantId = null, bool
 
 /// <summary>认证用户桩——具 userId 的 IDomainUser（仅本人/上下文读取测试用）。</summary>
 internal sealed class AuthenticatedStubUser(string userId) : StubDomainUser(userId: userId, isAuthenticated: true);
+
+/// <summary>
+/// B3b（Oracle5 ambient 方案 A）：Fake <see cref="ITokenVerificationContext"/>——模拟当前请求 Bearer 验签产物
+/// （/verify /grants /logout 生成端点的 ambient 数据源；跨扩展等价——JwtAuthenticationMiddleware 写入）。
+/// 门面 ctor 注入读取（AuthGrantQueryService 等）；null 产物 = 未 Bearer 认证（抛 AUTH_REQUIRED）。
+/// </summary>
+internal sealed class FakeTokenVerificationContext : ITokenVerificationContext
+{
+    public TokenVerificationArtifact? Current { get; set; }
+
+    public FakeTokenVerificationContext(string? userId = null)
+    {
+        if (userId is not null)
+            Current = new TokenVerificationArtifact("jti-test", userId, AuthTypes.Sms, (int)AuthLevel.Phone,
+                DateTimeOffset.UtcNow.AddHours(2), null);
+    }
+}
 
 /// <summary>
 /// 测试凭据保护器（Fake——实现 public <see cref="ICredentialProtector"/>，base64 包装往返；

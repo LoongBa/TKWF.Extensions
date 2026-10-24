@@ -1,9 +1,9 @@
 using System;
-using System.Security.Authentication;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Utility.Caching;
 
@@ -38,7 +38,7 @@ public class OAuthTicketServiceTests
 
             // V0.8.0：应用授权写入门面（ExchangeAsync 成功落登录授权——生产路径经 User.Use<IAuthGrantCommandService>()）
             services.AddSingleton<IAuthGrantCommandService>(new AuthGrantCommandService(u));
-            services.AddSingleton<IAuthGrantQueryService>(new AuthGrantQueryService(u));
+            services.AddSingleton<IAuthGrantQueryService>(new AuthGrantQueryService(u, new FakeTokenVerificationContext("u-123")));
         });
         var service = new OAuthTicketService(stub, Options.Create(options), NullLogger<OAuthTicketService>.Instance);
         return (service, stub);
@@ -67,13 +67,13 @@ public class OAuthTicketServiceTests
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, State: "s1", CodeVerifier: codeVerifier, UserId: "u-123"));
 
         // PKCE 正确换取
-        var result = await service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, codeVerifier, "app-1", "s1"));
+        var result = await service.ExchangeAsync(new TicketExchangeRequest(ticket, codeVerifier, "app-1", "s1"));
         Assert.NotNull(result.AccessToken);
         Assert.NotNull(result.RefreshToken);
 
         // 单次消费——二次换取拒绝
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, codeVerifier, "app-1", "s1")));
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(ticket, codeVerifier, "app-1", "s1")));
         Assert.Equal(OAuthTicketErrorCodes.TicketConsumed, ex.Message);
     }
 
@@ -84,8 +84,8 @@ public class OAuthTicketServiceTests
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, CodeVerifier: "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz", UserId: "u-123"));
 
         // hash 非 null + verifier null → 拒绝（防无 verifier 请求绕过——C4）
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, null, "app-1", null)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null)));
         Assert.Equal(OAuthTicketErrorCodes.TicketStateMismatch, ex.Message);
     }
 
@@ -95,8 +95,8 @@ public class OAuthTicketServiceTests
         var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"));
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, null, "app-2", null)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-2", null)));
         Assert.Equal(OAuthTicketErrorCodes.TicketStateMismatch, ex.Message);
     }
 
@@ -115,7 +115,7 @@ public class OAuthTicketServiceTests
         var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"));
 
-        var result = await service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, null, "app-1", null));
+        var result = await service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null));
         Assert.NotNull(result.AccessToken);
         Assert.NotNull(result.RefreshToken);
     }
@@ -129,8 +129,8 @@ public class OAuthTicketServiceTests
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, CodeVerifier: codeVerifier, UserId: "u-123"));
 
         var wrongVerifier = codeVerifier[..^1] + "A"; // 末位改 A（仍在 unreserved 集合）
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, wrongVerifier, "app-1", null)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(ticket, wrongVerifier, "app-1", null)));
         Assert.Equal(OAuthTicketErrorCodes.TicketStateMismatch, ex.Message);
     }
 
@@ -151,8 +151,8 @@ public class OAuthTicketServiceTests
         };
         await ds.CreateAsync(expired);
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            service.ExchangeAsync(new OAuthTicketExchangeRequest(expired.Ticket, null, "app-1", null)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(expired.Ticket, null, "app-1", null)));
         Assert.Equal(OAuthTicketErrorCodes.TicketExpired, ex.Message);
     }
 
@@ -168,7 +168,7 @@ public class OAuthTicketServiceTests
         await service.BindTicketAsync(ticket);
 
         // 绑定后换取成功（不再 TICKET_NOT_BOUND——B5 闭环：第三方票据回调流 authorize→登录→绑定→exchange）
-        var result = await service.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, null, "app-1", null));
+        var result = await service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null));
         Assert.NotNull(result.AccessToken);
         Assert.NotNull(result.RefreshToken);
     }
@@ -193,7 +193,7 @@ public class OAuthTicketServiceTests
         var entity = await ds.GetByTicketAsync(ticket);
         await ds.MarkConsumedAsync(entity!.Id, DateTime.UtcNow);
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.BindTicketAsync(ticket));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.BindTicketAsync(ticket));
         Assert.Equal(OAuthTicketErrorCodes.TicketConsumed, ex.Message);
     }
 
@@ -214,7 +214,7 @@ public class OAuthTicketServiceTests
         };
         await ds.CreateAsync(expired);
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.BindTicketAsync(expired.Ticket));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.BindTicketAsync(expired.Ticket));
         Assert.Equal(OAuthTicketErrorCodes.TicketExpired, ex.Message);
     }
 
@@ -225,7 +225,7 @@ public class OAuthTicketServiceTests
         var (service, _) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new AuthenticatedStubUser("u-123"));
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"));
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.BindTicketAsync(ticket));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.BindTicketAsync(ticket));
         Assert.Equal(OAuthTicketErrorCodes.TicketAlreadyBound, ex.Message);
     }
 
@@ -266,7 +266,7 @@ public class OAuthTicketServiceTests
             await bindTask;
             return null;
         }
-        catch (AuthenticationException ex)
+        catch (DomainException ex)
         {
             return ex.Message;
         }

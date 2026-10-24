@@ -8,6 +8,7 @@ using FreeSql;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Utility.Caching;
 
@@ -226,12 +227,12 @@ public class TokenServiceTests
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
         var oldRefresh = result.RefreshToken;
 
-        var refreshed = await service.RefreshTokenAsync(oldRefresh);
+        var refreshed = await service.RefreshTokenAsync(new RefreshRequest(oldRefresh));
         Assert.NotEqual(oldRefresh, refreshed.RefreshToken);
 
-        // 旧 refresh 已撤销——重用 → 检测泄露
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.RefreshTokenAsync(oldRefresh));
-        Assert.Equal("REFRESH_REUSED", ex.Message);
+        // 旧 refresh 已撤销——重用 → 检测泄露（B3b：业务异常转 DomainException 400）
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.RefreshTokenAsync(new RefreshRequest(oldRefresh)));
+        Assert.Equal("REFRESH_REUSED", ex.ErrorCode);
     }
 
     [Fact]
@@ -247,8 +248,8 @@ public class TokenServiceTests
         // 密码/绑定变更 → TokenVersion++（闭环）
         await accountDs.IncrementTokenVersionAsync(account.UId);
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.RefreshTokenAsync(result.RefreshToken));
-        Assert.Equal("REFRESH_STALE", ex.Message);
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.RefreshTokenAsync(new RefreshRequest(result.RefreshToken)));
+        Assert.Equal("REFRESH_STALE", ex.ErrorCode);
     }
 
     [Fact]
@@ -264,10 +265,10 @@ public class TokenServiceTests
         var r2 = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
 
         // 正常刷新 r2（旧 r2 变 revoked）
-        await service.RefreshTokenAsync(r2.RefreshToken);
+        await service.RefreshTokenAsync(new RefreshRequest(r2.RefreshToken));
         // 重用旧 r2 → 泄露 → 撤销该用户全部 refresh（含 r1）
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.RefreshTokenAsync(r2.RefreshToken));
-        Assert.Equal("REFRESH_REUSED", ex.Message);
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.RefreshTokenAsync(new RefreshRequest(r2.RefreshToken)));
+        Assert.Equal("REFRESH_REUSED", ex.ErrorCode);
 
         var refreshDs = stub.Use<AuthRefreshTokenEntityDataService>();
         // r1 也应被撤销（清场）

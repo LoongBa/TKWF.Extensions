@@ -158,10 +158,11 @@ public class PasswordCapabilityTests
             NullLogger<PasswordLoginService>.Instance);
 
         var salt = NewSalt();
-        var result = await service.LoginAsync("u-anything", ClientHash("x", Convert.FromHexString(salt)), salt);
+        // B3b：门面抛 DomainException（PASSWORD_PROVIDER_NOT_ENABLED——EnabledAuthTypes fail-closed）
+        var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
+            service.LoginAsync(new PasswordLoginRequest("u-anything", ClientHash("x", Convert.FromHexString(salt)), salt)));
 
-        Assert.False(result.Success);
-        Assert.Equal("PASSWORD_PROVIDER_NOT_ENABLED", result.FailReason);
+        Assert.Equal("PASSWORD_PROVIDER_NOT_ENABLED", ex.ErrorCode);
     }
 
     // ── SetPasswordAsync / ChangePasswordAsync（SecurePassword clientHash 语义） ────────
@@ -313,15 +314,15 @@ public class PasswordCapabilityTests
             CreateRateLimit(),
             NullLogger<PasswordLoginService>.Instance);
 
-        // 首次（错密码——Provider 失败，但 TryAcquire 成功消耗额度）
+        // 首次（错密码——Provider 失败，但 TryAcquire 成功消耗额度；B3b：非频控失败 → DomainException）
         var salt = NewSalt();
-        var first = await service.LoginAsync("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt);
-        Assert.False(first.Success);
+        await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
+            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt)));
 
-        // 第二次 → TryAcquire 失败 → PASSWORD_RATE_LIMITED（锁定=限流，ADR 决策 2/3）
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.LoginAsync(
-            "u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt));
-        Assert.Equal("PASSWORD_RATE_LIMITED", ex.Message);
+        // 第二次 → TryAcquire 失败 → RateLimitedException（PASSWORD_RATE_LIMITED 锁定=限流，ADR 决策 2/3）
+        var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.RateLimitedException>(() =>
+            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt)));
+        Assert.Equal("PASSWORD_RATE_LIMITED", ex.ErrorCode);
     }
 
     // ── AuthLoginAttempt Password 频控分支（B.9/ADR15 COUNT 模式，审计面） ────
@@ -632,9 +633,9 @@ public class PasswordCapabilityTests
         private readonly bool _verifyResult;
         public FakeSmsVerificationService(bool verifyResult) => _verifyResult = verifyResult;
 
-        public Task SendCodeAsync(string phone, string scene, System.Threading.CancellationToken ct = default)
+        public Task SendCodeAsync(SendSmsCodeRequest request, System.Threading.CancellationToken ct = default)
             => Task.CompletedTask;
-        public Task<bool> VerifyCodeAsync(string phone, string code, string scene, System.Threading.CancellationToken ct = default)
-            => Task.FromResult(_verifyResult);
+        public Task<SmsVerifyResponse> VerifyCodeAsync(SmsVerifyRequest request, System.Threading.CancellationToken ct = default)
+            => Task.FromResult(new SmsVerifyResponse(_verifyResult));
     }
 }

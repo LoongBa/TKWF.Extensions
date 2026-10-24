@@ -113,7 +113,7 @@ public class AuthenticationProductionPathTests
         entity!.UserId = account.UId;
         await ticketDs.UpdateAsync(entity, CancellationToken.None);
 
-        var result = await ticketService.ExchangeAsync(new OAuthTicketExchangeRequest(ticket, null, "app-1", "s1"), CancellationToken.None);
+        var result = await ticketService.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", "s1"), CancellationToken.None);
         Assert.NotNull(result.AccessToken);
         Assert.NotNull(result.RefreshToken);
     }
@@ -162,24 +162,23 @@ public class AuthenticationProductionPathTests
 
         // 发码（生产路径门面）→ 从 CapturingSmsSender 提取验证码（dev mock 日志码——Fake 捕获短信内容）
         var sms = user.Use<ISmsVerificationService>();
-        await sms.SendCodeAsync("13800138000", SmsScenes.Login, CancellationToken.None);
+        await sms.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login), CancellationToken.None);
         var code = CapturingSmsSender.ExtractCode(sp.GetRequiredService<ISmsSender>() as CapturingSmsSender);
 
         // V4.10.55 新门面：User.Use<ISmsLoginService>()（AOP 帧内→守卫工厂→ctor 注入 IEnumerable<IAuthenticationProvider>
         // 集合版守卫工厂经 CurrentAopUser 供给 SmsAuthenticationProvider）
         var login = user.Use<ISmsLoginService>();
-        var result = await login.LoginAsync("13800138000", code, CancellationToken.None);
+        var result = await login.LoginAsync(new SmsLoginRequest("13800138000", code), CancellationToken.None);
 
-        Assert.True(result.Success);
-        Assert.NotNull(result.UserId);
+        Assert.NotNull(result.RefreshToken);   // B3b：TokenResponse 形态
 
-        // 建账号落库
-        var account = await user.Use<IAuthAccountQueryService>().GetByUIdAsync(result.UserId!, CancellationToken.None);
+        // 建账号落库（TokenResponse 无 UserId——按手机号查账号等价断言）
+        var account = await user.Use<IAuthAccountQueryService>().GetByPhoneAsync("13800138000", CancellationToken.None);
         Assert.NotNull(account);
-        Assert.Equal("13800138000", await user.Use<IAuthFactorService>().GetPrimaryPhoneAsync(result.UserId!, CancellationToken.None));
+        Assert.Equal("13800138000", await user.Use<IAuthFactorService>().GetPrimaryPhoneAsync(account!.UId, CancellationToken.None));
     }
 
-    /// <summary>SMS 登录门面：验证码错误 → ProviderAuthenticateResult.Success=false（FailReason 透传）。</summary>
+    /// <summary>SMS 登录门面：验证码错误 → DomainException 400（未发码 → SMS_CODE_NOT_FOUND；B3b 转类型化异常）。</summary>
     [Fact]
     public async Task Use_ISmsLoginService_InFrame_WrongCode_Fails()
     {
@@ -193,10 +192,11 @@ public class AuthenticationProductionPathTests
         var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
 
         var login = user.Use<ISmsLoginService>();
-        var result = await login.LoginAsync("13800138000", "000000", CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(
+            () => login.LoginAsync(new SmsLoginRequest("13800138000", "000000"), CancellationToken.None));
 
-        Assert.False(result.Success);
-        Assert.NotNull(result.FailReason);
+        // 本用例未先发码——SmsRecord 无记录 → 校验失败语义码 SMS_CODE_NOT_FOUND（与成功用例对称）;
+        Assert.Equal("SMS_CODE_NOT_FOUND", ex.ErrorCode);
     }
 
     /// <summary>⚠️ 禁止形态守卫：控制器 [FromServices] IEnumerable&lt;IAuthenticationProvider&gt; 帧外枚举抛集合守卫

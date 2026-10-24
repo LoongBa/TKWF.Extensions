@@ -1,21 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Ticket;
 using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
-/// V0.10.0：外部 IdP 票据 SPA 兑现门面 <see cref="ExternalTicketLoginService"/> 测试——
+/// V0.10.0 + B3b：外部 IdP 票据 SPA 兑现门面 <see cref="ExternalTicketLoginService"/> 测试——
 /// 频控（P2-4）→ 验票（P1-3 统一 TICKET_INVALID）→ 委托共享编排（P2-2）。
+/// <para>B3b（MapGenerated 生成化）：门面签名 <c>LoginAsync(ExternalTicketLoginRequest, ct)</c>（ipAddress 参数删除——
+/// 门面内经 <see cref="IHttpContextAccessor"/> 取服务端 RemoteIpAddress）；成功返回 <see cref="TokenResponse"/>，
+/// 失败抛类型化异常（频控 <see cref="RateLimitedException"/> 429 / 验票 <see cref="DomainException"/> TICKET_INVALID 400）。</para>
 /// <para>分层逻辑单测：StubDomainUser 直构门面（经基类 User 取上下文）+ Fake 依赖注册进桩 ServiceProvider
-/// （ISealedTicketService&lt;FederatedIdentity&gt;/IFederatedLoginOrchestrator Fake + 可配置 IRateLimitCheck）。</para>
+/// （ISealedTicketService&lt;FederatedIdentity&gt;/IFederatedLoginOrchestrator Fake + 可配置 IRateLimitCheck +
+/// Fake IHttpContextAccessor——IP 维度注入可测键值）。</para>
 /// </summary>
 public class ExternalTicketLoginServiceTests
 {
@@ -25,12 +30,14 @@ public class ExternalTicketLoginServiceTests
 
     private static (ExternalTicketLoginService Service, FakeSealedTicketService TicketSvc,
         FakeFederatedLoginOrchestrator Orchestrator, FakeRateLimitCheck RateLimit)
-        CreateService(Action<IServiceCollection, StubDomainUser>? register = null, AuthCenterOptions? options = null)
+        CreateService(Action<IServiceCollection, StubDomainUser>? register = null, AuthCenterOptions? options = null,
+            string? remoteIp = null)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var ticketSvc = new FakeSealedTicketService();
         var orchestrator = new FakeFederatedLoginOrchestrator();
         var rateLimit = new FakeRateLimitCheck();
+        var accessor = remoteIp is null ? null : new FakeHttpContextAccessor(remoteIp);
 
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
         {
@@ -44,9 +51,13 @@ public class ExternalTicketLoginServiceTests
             stub,
             Options.Create(options ?? new AuthCenterOptions()),
             rateLimit,
+            accessor,
             NullLogger<ExternalTicketLoginService>.Instance);
         return (service, ticketSvc, orchestrator, rateLimit);
     }
+
+    private static ExternalTicketLoginRequest Request(string ticket, string? channelId = null)
+        => new(ticket, channelId);
 
     private static FederatedIdentity Identity(string? uid = null, string? channelId = ChannelId)
         => new(uid ?? string.Empty, channelId ?? string.Empty, ExternalUserId, "wechat_event", 2);
@@ -55,15 +66,14 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_TicketValid_DelegatesOrchestrator_ReturnsToken()
     {
-        var (service, ticketSvc, orchestrator, rateLimit) = CreateService();
+        var (service, ticketSvc, orchestrator, rateLimit) = CreateService(remoteIp: "10.0.0.1");
         ticketSvc.Identity = Identity(uid: "u-ticket-1");
-        orchestrator.Result = new LoginResult(true, "u-ticket-1", new TokenIssueResult("at-t", "rt-t", 7200), null);
+        orchestrator.Result = new TokenResponse("at-t", "rt-t", "Bearer", 7200);
 
-        var result = await service.LoginAsync(Ticket, null, "10.0.0.1");
+        var result = await service.LoginAsync(Request(Ticket));
 
-        Assert.True(result.Success);
-        Assert.Equal("u-ticket-1", result.UserId);
-        Assert.NotNull(result.Token);
+        Assert.Equal("at-t", result.AccessToken);
+        Assert.NotNull(result.RefreshToken);
         Assert.True(rateLimit.LastTryAcquireCalled);
         Assert.Equal("ext:ticket:10.0.0.1", rateLimit.LastKey);
         Assert.Equal(Ticket, ticketSvc.LastTicket);
@@ -76,39 +86,39 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_RedeemNull_ReturnsTicketInvalid_NoDelegate()
     {
-        var (service, ticketSvc, orchestrator, _) = CreateService();
+        var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.2");
         ticketSvc.Identity = null;   // RedeemAsync null（无效/过期/已用/篡改统一）
 
-        var result = await service.LoginAsync(Ticket, null, "10.0.0.2");
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
 
-        Assert.False(result.Success);
-        Assert.Equal("TICKET_INVALID", result.FailReason);
+        Assert.Equal("TICKET_INVALID", ex.ErrorCode);
         Assert.False(orchestrator.Invoked);
     }
 
-    /// <summary>(c) 频控触发（P2-4）：TryAcquire false → TICKET_RATE_LIMITED 异常；orchestrator/验票均不执行。</summary>
+    /// <summary>(c) 频控触发（P2-4）：TryAcquire false → TICKET_RATE_LIMITED 异常（429）；orchestrator/验票均不执行。</summary>
     [Fact]
     public async Task Login_RateLimited_Throws_TicketSvcNotTouched()
     {
-        var (service, ticketSvc, orchestrator, rateLimit) = CreateService();
+        var (service, ticketSvc, orchestrator, rateLimit) = CreateService(remoteIp: "10.0.0.3");
         rateLimit.AcquireResult = false;
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            service.LoginAsync(Ticket, null, "10.0.0.3"));
+        var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
+            service.LoginAsync(Request(Ticket)));
 
-        Assert.Equal("TICKET_RATE_LIMITED", ex.Message);
+        Assert.Equal("TICKET_RATE_LIMITED", ex.ErrorCode);
         Assert.Null(ticketSvc.LastTicket);     // 频控前置——票服务未被触碰
         Assert.False(orchestrator.Invoked);
     }
 
-    /// <summary>(d) IP 空 → key 用 "unknown"（频控键不落空）。</summary>
+    /// <summary>(d) IP 空（无 IHttpContextAccessor）→ key 用 "unknown"（频控键不落空）。
+    /// B3b：ipAddress 参数删除，门面内经 IHttpContextAccessor 取——null → "unknown" 对齐原 handler 语义。</summary>
     [Fact]
     public async Task Login_NullIp_UsesUnknownKey()
     {
-        var (service, ticketSvc, _, rateLimit) = CreateService();
+        var (service, ticketSvc, _, rateLimit) = CreateService(remoteIp: null);
         ticketSvc.Identity = Identity();
 
-        await service.LoginAsync(Ticket, null, null);
+        await service.LoginAsync(Request(Ticket));
 
         Assert.Equal("ext:ticket:unknown", rateLimit.LastKey);
     }
@@ -117,13 +127,13 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_ChannelIdMismatch_ReturnsTicketInvalid()
     {
-        var (service, ticketSvc, orchestrator, _) = CreateService();
+        var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.4");
         ticketSvc.Identity = Identity(uid: "u-ticket-2", channelId: ChannelId);
 
-        var result = await service.LoginAsync(Ticket, "other-channel", "10.0.0.4");
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.LoginAsync(Request(Ticket, "other-channel")));
 
-        Assert.False(result.Success);
-        Assert.Equal("TICKET_INVALID", result.FailReason);
+        Assert.Equal("TICKET_INVALID", ex.ErrorCode);
         Assert.False(orchestrator.Invoked);
     }
 
@@ -131,12 +141,12 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_EmptyTicketChannelId_UsesProvidedChannelId()
     {
-        var (service, ticketSvc, orchestrator, _) = CreateService();
+        var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.5");
         ticketSvc.Identity = Identity(uid: "u-ticket-3", channelId: null);   // 票载荷 ChannelId 空
 
-        var result = await service.LoginAsync(Ticket, ChannelId, "10.0.0.5");
+        var result = await service.LoginAsync(Request(Ticket, ChannelId));
 
-        Assert.True(result.Success);                                    // 兜底生效
+        Assert.NotNull(result.AccessToken);                          // 兜底生效
         Assert.Equal(ChannelId, orchestrator.LastIdentity!.ChannelId);
     }
 
@@ -144,13 +154,12 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_NoChannelIdAtAll_ReturnsTicketInvalid()
     {
-        var (service, ticketSvc, orchestrator, _) = CreateService();
+        var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.6");
         ticketSvc.Identity = Identity(uid: "u-ticket-4", channelId: null);
 
-        var result = await service.LoginAsync(Ticket, null, "10.0.0.6");
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
 
-        Assert.False(result.Success);
-        Assert.Equal("TICKET_INVALID", result.FailReason);
+        Assert.Equal("TICKET_INVALID", ex.ErrorCode);
         Assert.False(orchestrator.Invoked);
     }
 
@@ -159,15 +168,14 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_ClaimantBoundTicket_ReturnsTicketInvalid()
     {
-        var (service, ticketSvc, orchestrator, _) = CreateService();
+        var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.7");
         // 模拟 TrustCenter SealedTicketService CAS：签发 ExpectedClaimant="app-1" + 兑换 context:null → 不 swap → null
         ticketSvc.RedeemBehavior = (ticket, context) =>
             context?.ExpectedClaimant == "app-1" ? Identity() : null;
 
-        var result = await service.LoginAsync(Ticket, null, "10.0.0.7");
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
 
-        Assert.False(result.Success);
-        Assert.Equal("TICKET_INVALID", result.FailReason);   // 统一判因——不泄露"claimant 不符"
+        Assert.Equal("TICKET_INVALID", ex.ErrorCode);   // 统一判因——不泄露"claimant 不符"
         Assert.False(orchestrator.Invoked);
     }
 
@@ -175,14 +183,28 @@ public class ExternalTicketLoginServiceTests
     [Fact]
     public async Task Login_OrchestratorThrows_Propagates()
     {
-        var (service, ticketSvc, orchestrator, _) = CreateService();
+        var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.8");
         ticketSvc.Identity = Identity(uid: "u-ticket-5");
         orchestrator.Throw = new InvalidOperationException("DB 瞬时故障——建号失败");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(Ticket, null, "10.0.0.8"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(Request(Ticket)));
     }
 
     // ── 测试桩（Fake 门面——仅测试项目，不注册进生产） ──
+
+    /// <summary>B3b：Fake IHttpContextAccessor——RemoteIpAddress 可配置（门面内经其取频控 IP 维度）。</summary>
+    internal sealed class FakeHttpContextAccessor(string remoteIp) : IHttpContextAccessor
+    {
+        private HttpContext? _httpContext;
+        public HttpContext? HttpContext
+        {
+            get => _httpContext ??= new DefaultHttpContext
+            {
+                Connection = { RemoteIpAddress = System.Net.IPAddress.Parse(remoteIp) }
+            };
+            set => _httpContext = value;
+        }
+    }
 
     /// <summary>
     /// Fake 密封票据服务——<see cref="Identity"/> 固定返回值（null = 验票失败）；
@@ -212,10 +234,10 @@ public class ExternalTicketLoginServiceTests
     {
         public bool Invoked { get; private set; }
         public FederatedIdentity? LastIdentity { get; private set; }
-        public LoginResult Result { get; set; } = new(true, "u-ticket-1", new TokenIssueResult("at-t", "rt-t", 7200), null);
+        public TokenResponse Result { get; set; } = new("at-t", "rt-t", "Bearer", 7200);
         public Exception? Throw { get; set; }
 
-        public Task<LoginResult> LoginAsync(FederatedIdentity identity, CancellationToken ct = default)
+        public Task<TokenResponse> LoginAsync(FederatedIdentity identity, CancellationToken ct = default)
         {
             Invoked = true;
             LastIdentity = identity;

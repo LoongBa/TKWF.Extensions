@@ -5,12 +5,15 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
-/// V0.10.0（P2-2 共享编排 + P1-1 fallback）：联邦登录共享编排 <see cref="FederatedLoginOrchestrator"/> 测试——
+/// V0.10.0（P2-2 共享编排 + P1-1 fallback）+ B3b：联邦登录共享编排 <see cref="FederatedLoginOrchestrator"/> 测试——
 /// identity → 账号回读（UId 直读优先）/ 映射复用 / 建号 fallback → 签 token1（authType=federated + channel_type）。
+/// <para>B3b：成功返回 <see cref="TokenResponse"/>（断言 AccessToken + FakeTokenService.LastRequest 契约）；
+/// 失败抛 <see cref="DomainException"/>（400，ErrorCode = ACCOUNT_FROZEN/ACCOUNT_DISABLED/ACCOUNT_NOT_FOUND/ACCOUNT_NOT_PROVISIONED）。</para>
 /// <para>分层逻辑单测：StubDomainUser 直构门面（经基类 User 取上下文）+ Fake 依赖注册进桩 ServiceProvider
 /// （Use&lt;接口&gt;() GetRequiredService 解析——IExternalIdentityService/IAuthAccountService/IAuthAccountQueryService/
 /// ITokenService 全 Fake）。</para>
@@ -65,8 +68,7 @@ public class FederatedLoginOrchestratorTests
 
         var result = await service.LoginAsync(Identity(uid: "u-direct-1"));
 
-        Assert.True(result.Success);
-        Assert.Equal("u-direct-1", result.UserId);
+        Assert.NotNull(result.AccessToken);
         Assert.False(accountSvc.CreateCalled);   // 直读命中不建号
         Assert.Equal(0, map.GetCalls);           // 直读命中不查映射
         Assert.Equal(0, map.LinkCalls);          // 直读命中不 Link
@@ -89,8 +91,7 @@ public class FederatedLoginOrchestratorTests
         //   Fake 需区分"首次直读（null）"与"映射后回读（MappedAccount）"——见 FakeAuthAccountQueryService 实现
         var result = await service.LoginAsync(Identity(uid: "u-nonexist"));
 
-        Assert.True(result.Success);
-        Assert.Equal("u-mapped-1", result.UserId);
+        Assert.NotNull(result.AccessToken);
         Assert.False(accountSvc.CreateCalled);
         Assert.Equal(0, map.LinkCalls);
         Assert.Equal(1, map.GetCalls);
@@ -108,8 +109,7 @@ public class FederatedLoginOrchestratorTests
 
         var result = await service.LoginAsync(Identity(uid: null));
 
-        Assert.True(result.Success);
-        Assert.Equal("u-mapped-2", result.UserId);
+        Assert.NotNull(result.AccessToken);
         Assert.False(accountSvc.CreateCalled);
         Assert.Equal(0, map.LinkCalls);
         Assert.Equal(1, accountQuery.GetByUidCalls);            // 仅映射命中后回读一次
@@ -125,7 +125,7 @@ public class FederatedLoginOrchestratorTests
 
         var result = await service.LoginAsync(Identity(uid: null));
 
-        Assert.True(result.Success);
+        Assert.NotNull(result.AccessToken);
         Assert.True(accountSvc.CreateCalled);
         Assert.Equal(1, map.LinkCalls);
         Assert.Equal(accountSvc.CreatedUid, map.LastLinkedUid);
@@ -135,7 +135,7 @@ public class FederatedLoginOrchestratorTests
         Assert.Equal("wechat_event", token.LastRequest.ChannelType);
     }
 
-    /// <summary>(e) 冻结拒（UId 直读命中但 IsFrozen）→ ACCOUNT_FROZEN（不签发）。</summary>
+    /// <summary>(e) 冻结拒（UId 直读命中但 IsFrozen）→ ACCOUNT_FROZEN（DomainException 400，不签发）。</summary>
     [Fact]
     public async Task Login_UidDirectHit_Frozen_ReturnsFrozen()
     {
@@ -144,25 +144,23 @@ public class FederatedLoginOrchestratorTests
             (services, _) => services.AddSingleton<IFreezeStateProvider>(freeze));
         accountQuery.Account = Account("u-frozen-1");
 
-        var result = await service.LoginAsync(Identity(uid: "u-frozen-1"));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: "u-frozen-1")));
 
-        Assert.False(result.Success);
-        Assert.Equal("ACCOUNT_FROZEN", result.FailReason);
+        Assert.Equal("ACCOUNT_FROZEN", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
         Assert.Null(token.LastRequest);
     }
 
-    /// <summary>(f) 禁用拒 → ACCOUNT_DISABLED（不签发）。</summary>
+    /// <summary>(f) 禁用拒 → ACCOUNT_DISABLED（DomainException 400，不签发）。</summary>
     [Fact]
     public async Task Login_UidDirectHit_Disabled_ReturnsDisabled()
     {
         var (service, _, accountSvc, accountQuery, token) = CreateService();
         accountQuery.Account = Account("u-disabled-1", enabled: false);
 
-        var result = await service.LoginAsync(Identity(uid: "u-disabled-1"));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: "u-disabled-1")));
 
-        Assert.False(result.Success);
-        Assert.Equal("ACCOUNT_DISABLED", result.FailReason);
+        Assert.Equal("ACCOUNT_DISABLED", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
         Assert.Null(token.LastRequest);
     }
@@ -177,11 +175,11 @@ public class FederatedLoginOrchestratorTests
 
         var result = await service.LoginAsync(Identity(uid: "u-nullct-1", channelType: null));
 
-        Assert.True(result.Success);
+        Assert.NotNull(result.AccessToken);
         Assert.Null(token.LastRequest!.ChannelType);   // null 不写 channel_type claim
     }
 
-    /// <summary>(h) 映射命中但回读 null（数据不一致）→ ACCOUNT_NOT_FOUND（fail-closed）。</summary>
+    /// <summary>(h) 映射命中但回读 null（数据不一致）→ ACCOUNT_NOT_FOUND（DomainException 400，fail-closed）。</summary>
     [Fact]
     public async Task Login_MappedButAccountMissing_ReturnsNotFound()
     {
@@ -189,14 +187,13 @@ public class FederatedLoginOrchestratorTests
         map.Mapping = new ExternalIdentityDto("u-mapped-3", ChannelId, ExternalUserId, DateTime.UtcNow);
         // MappedAccount 未设置 → 回读 null
 
-        var result = await service.LoginAsync(Identity(uid: null));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: null)));
 
-        Assert.False(result.Success);
-        Assert.Equal("ACCOUNT_NOT_FOUND", result.FailReason);
+        Assert.Equal("ACCOUNT_NOT_FOUND", ex.ErrorCode);
         Assert.Null(token.LastRequest);
     }
 
-    /// <summary>(i) 无映射 + AutoProvision=false → ACCOUNT_NOT_PROVISIONED（不建号/不绑定/不签发）。</summary>
+    /// <summary>(i) 无映射 + AutoProvision=false → ACCOUNT_NOT_PROVISIONED（DomainException 400，不建号/不绑定/不签发）。</summary>
     [Fact]
     public async Task Login_NoMapping_AutoProvisionDisabled_ReturnsNotProvisioned()
     {
@@ -204,10 +201,9 @@ public class FederatedLoginOrchestratorTests
         options.FederatedProvisioning.AutoProvision = false;
         var (service, map, accountSvc, _, token) = CreateService(options: options);
 
-        var result = await service.LoginAsync(Identity(uid: null));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: null)));
 
-        Assert.False(result.Success);
-        Assert.Equal("ACCOUNT_NOT_PROVISIONED", result.FailReason);
+        Assert.Equal("ACCOUNT_NOT_PROVISIONED", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
         Assert.Equal(0, map.LinkCalls);
         Assert.Null(token.LastRequest);
@@ -338,9 +334,9 @@ public class FederatedLoginOrchestratorTests
             return Task.FromResult(new TokenIssueResult("at-vec", "rt-vec", 7200));
         }
         public Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default) => Task.FromResult<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?>(null);
-        public Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default) => Task.FromResult(false);
+        public Task<VerifyResponse> GetCurrentTokenInfoAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task RevokeCurrentSessionAsync(CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

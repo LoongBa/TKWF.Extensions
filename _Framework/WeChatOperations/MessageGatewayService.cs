@@ -41,25 +41,25 @@ public interface IMessageGatewayService : IDomainService
     /// <summary>路由规则列表（按 ChannelId 过滤；<paramref name="msgType"/>/<paramref name="eventType"/> 可空 = 全部）。
     /// <para>REST：<c>GET /api/wechat-ops/gateway/rules?channel_id=&amp;msg_type=&amp;event_type=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/rules", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/gateway/rules", RestMethod = "GET")]
     Task<IReadOnlyList<MessageRouteRuleEntity>> ListRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default);
 
     /// <summary>保存路由规则（Id=0 新建 + <b>完全重复同键检测</b>——ChannelId+MsgType+Event+MatchMode+TriggerKey 全同 → 更新既有；已有更新）。
     /// <para>REST：<c>POST /api/wechat-ops/gateway/rules</c>（单复杂参数 MessageRouteRuleEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/rules", RestMethod = "POST")]
+    [ApiExpose(RestRoute = "/gateway/rules", RestMethod = "POST")]
     Task<long> SaveRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default);
 
     /// <summary>删除路由规则（物理删）。
     /// <para>REST：<c>DELETE /api/wechat-ops/gateway/rules/{ruleId}</c>。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/rules/{ruleId}", RestMethod = "DELETE")]
+    [ApiExpose(RestRoute = "/gateway/rules/{ruleId}", RestMethod = "DELETE")]
     Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default);
 
     /// <summary>下游端点列表（按 ChannelId 过滤；DTO 投影<b>不含 AuthToken 密文</b>——Oracle P1 安全）。
     /// <para>REST：<c>GET /api/wechat-ops/gateway/endpoints?channel_id=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/endpoints", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/gateway/endpoints", RestMethod = "GET")]
     Task<IReadOnlyList<DownstreamEndpointDto>> ListEndpointsAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>保存下游端点——新（Id=0）创建 / 已有更新；<paramref name="request"/> 承载鉴权令牌<b>明文</b>
@@ -67,26 +67,26 @@ public interface IMessageGatewayService : IDomainService
     /// <see cref="ISymmetricKeyProvider"/> AES-GCM 加密落库（明文永不落库）。
     /// <para>REST：<c>POST /api/wechat-ops/gateway/endpoints</c>（单复杂参数 SaveEndpointRequest → [FromBody]——AuthToken 走 body 防 URL 泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/endpoints", RestMethod = "POST")]
+    [ApiExpose(RestRoute = "/gateway/endpoints", RestMethod = "POST")]
     Task<long> SaveEndpointAsync(SaveEndpointRequest request, CancellationToken ct = default);
 
     /// <summary>删除下游端点（<b>被路由规则引用禁止删除</b>——引用保护；物理删）。
     /// <para>REST：<c>DELETE /api/wechat-ops/gateway/endpoints/{id}</c>。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/endpoints/{id}", RestMethod = "DELETE")]
+    [ApiExpose(RestRoute = "/gateway/endpoints/{id}", RestMethod = "DELETE")]
     Task<bool> DeleteEndpointAsync(long id, CancellationToken ct = default);
 
     /// <summary>网关状态只读（Enabled/规则数/下游数——无敏感明细；方案 §十·六 ③）。
     /// <para>REST：<c>GET /api/wechat-ops/gateway/status</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/status", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/gateway/status", RestMethod = "GET")]
     Task<WeChatGatewayStatusDto> GetGatewayStatusAsync(CancellationToken ct = default);
 
     /// <summary>网关全局开关（进程内运行时覆盖——重启回落 <see cref="WeChatMessageGatewayOptions.GatewayEnabled"/> 配置值；
     /// 对齐 <c>WeChatApiClient</c> 纯内存缓存先例，不落库）。
     /// <para>REST：<c>POST /api/wechat-ops/gateway/enabled</c>（单复杂参数 SetGatewayEnabledRequest → [FromBody]）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/enabled", RestMethod = "POST")]
+    [ApiExpose(RestRoute = "/gateway/enabled", RestMethod = "POST")]
     Task SetGatewayEnabledAsync(SetGatewayEnabledRequest request, CancellationToken ct = default);
 
     /// <summary>转发日志查询（<see cref="MessageForwardLogEntity"/>——全链留痕：Queued/Success/Fail/Timeout/SkippedDuplicate/NoRule；
@@ -94,7 +94,7 @@ public interface IMessageGatewayService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/gateway/forward-logs?channel_id=&amp;from=&amp;to=</c>；CreateTime 降序。</para>
     /// <para>V0.4.0 新增（反馈 §二 网关端点补全——转发网关页面对账列表）。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/wechat-ops/gateway/forward-logs", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/gateway/forward-logs", RestMethod = "GET")]
     Task<IReadOnlyList<MessageForwardLogEntity>> ListForwardLogsAsync(string channelId, DateTime? from = null, DateTime? to = null, CancellationToken ct = default);
 
     /// <summary>

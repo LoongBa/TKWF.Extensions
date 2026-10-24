@@ -26,7 +26,7 @@ public interface ISubscriptionStatService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats?from=&amp;to=&amp;source=</c>；
     /// I2-10 响应体形状变化（entity 9 字段 → DTO 5 字段，字段名亦异）——SG3 客户端重生成。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/subscription-stats", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/channels/{channelId}/subscription-stats", RestMethod = "GET")]
     Task<IReadOnlyList<SubscriptionStatPointDto>> GetTrendAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default);
 
     /// <summary>
@@ -38,7 +38,7 @@ public interface ISubscriptionStatService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/subscription-stats/summary?from=&amp;to=&amp;source=</c>。</para>
     /// </summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/wechat-ops/channels/{channelId}/subscription-stats/summary", RestMethod = "GET")]
+    [ApiExpose(RestRoute = "/channels/{channelId}/subscription-stats/summary", RestMethod = "GET")]
     Task<SubscriptionStatSummaryDto> GetSummaryAsync(string channelId, DateTime from, DateTime to, string? source = null, CancellationToken ct = default);
 }
 

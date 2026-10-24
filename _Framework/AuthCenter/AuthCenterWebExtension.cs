@@ -72,36 +72,40 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
         app.UseMiddleware<JwtAuthenticationMiddleware<TUserInfo>>(RestoreUser);
     }
 
-    /// <summary>端点映射（AfterRouting 排空）——内建标准对内端点（V0.6.0 T4 + V0.8.0 认证 API 补全 + T5 端点泛化），路径/开关经 <see cref="AuthCenterEndpointOptions"/> 可配置。
+    /// <summary>协议适配端点声明（Oracle C+E 2026-10-24——ConfigureEndpoints 删除，F13）——内建标准对内端点
+    /// （V0.6.0 T4 + V0.8.0 认证 API 补全 + T5/V0.10.0 端点泛化），路径/开关经 <see cref="AuthCenterEndpointOptions"/> 可配置。
+    /// 经窄接口 <see cref="IProtocolEndpointBuilder"/> 声明（路由模板相对组前缀；前缀拼接归框架 Module 前缀模型——
+    /// 组 = basePath /api + DefaultPrefix auth = /api/auth，与旧 RoutePrefix 默认值一致，消费方零迁移；
+    /// R2-3 无 builder 门禁保持）。handler 保留（内建 FailReason→HTTP 映射 + TokenResponse 双键序列化——
+    /// MapGenerated 生成化作为后续批次，见 §9.15）。
     /// <para>T5（2026-10-09 三层边界）：<c>POST {prefix}/login/wechat</c> → <c>POST {prefix}/login/external/{{channelType}}</c>
     /// （外部 IdP 桥接登录——channelType 为平台库通道类型如 <c>wechat_oauth</c>/<c>qq_oauth</c>，body = 参数字典）。</para></summary>
-    public void ConfigureEndpoints(IEndpointRouteBuilder endpoints, DomainWebOptions options)
+    public void DeclareProtocolEndpoints(IProtocolEndpointBuilder builder)
     {
-        var endpointOptions = ResolveOptions(endpoints.ServiceProvider);
-        var prefix = endpointOptions.RoutePrefix.TrimEnd('/');
+        var endpointOptions = ResolveOptions(builder.ServiceProvider);
 
         if (endpointOptions.SmsSendCodeEndpointEnabled)
-            endpoints.MapPost($"{prefix}/sms/send-code", HandleSendSmsCode).AllowAnonymous();
+            builder.Map("/sms/send-code", "POST").WithHandler(HandleSendSmsCode);
         if (endpointOptions.SmsVerifyEndpointEnabled)
-            endpoints.MapPost($"{prefix}/sms/verify", HandleSmsVerify).AllowAnonymous();  // V0.8.0 验证码独立校验
+            builder.Map("/sms/verify", "POST").WithHandler(HandleSmsVerify);  // V0.8.0 验证码独立校验
         if (endpointOptions.SmsLoginEndpointEnabled)
-            endpoints.MapPost($"{prefix}/login/sms", HandleSmsLogin).AllowAnonymous();
+            builder.Map("/login/sms", "POST").WithHandler(HandleSmsLogin);
         if (endpointOptions.ExternalLoginEndpointEnabled)
-            endpoints.MapPost($"{prefix}/login/external/{{channelType}}", HandleExternalLogin).AllowAnonymous();  // T5（2026-10-09）替代 login/wechat
+            builder.Map("/login/external/{channelType}", "POST").WithHandler(HandleExternalLogin);  // T5（2026-10-09）替代 login/wechat
         if (endpointOptions.TicketLoginEndpointEnabled)
-            endpoints.MapPost($"{prefix}/login/ticket", HandleExternalTicketLogin).AllowAnonymous();  // V0.10.0 票据 SPA 兑现（独立路由——不挂 external 前缀，P2-1）
+            builder.Map("/login/ticket", "POST").WithHandler(HandleExternalTicketLogin);  // V0.10.0 票据 SPA 兑现（独立路由——不挂 external 前缀，P2-1）
         if (endpointOptions.PasswordLoginEndpointEnabled)
-            endpoints.MapPost($"{prefix}/login/password", HandlePasswordLogin).AllowAnonymous();  // V0.9.0 B.9（P1-NEW-2 对称补全）
+            builder.Map("/login/password", "POST").WithHandler(HandlePasswordLogin);  // V0.9.0 B.9（P1-NEW-2 对称补全）
         if (endpointOptions.RefreshEndpointEnabled)
-            endpoints.MapPost($"{prefix}/refresh", HandleRefresh).AllowAnonymous();
+            builder.Map("/refresh", "POST").WithHandler(HandleRefresh);
         if (endpointOptions.LogoutEndpointEnabled)
-            endpoints.MapPost($"{prefix}/logout", HandleLogout);          // 不 AllowAnonymous——需 Bearer 认证
+            builder.Map("/logout", "POST").WithHandler(HandleLogout);          // 不 AllowAnonymous——需 Bearer 认证（handler 自检 Items 已认证帧）
         if (endpointOptions.TokenVerifyEndpointEnabled)
-            endpoints.MapGet($"{prefix}/verify", HandleVerify);           // V0.8.0 已认证内省——不 AllowAnonymous（Bearer 必需）
+            builder.Map("/verify", "GET").WithHandler(HandleVerify);           // V0.8.0 已认证内省——不 AllowAnonymous（Bearer 必需，handler 自检）
         if (endpointOptions.GrantsEndpointEnabled)
-            endpoints.MapGet($"{prefix}/grants", HandleGrants);           // V0.8.0 应用授权状态——不 AllowAnonymous（Bearer 必需）
+            builder.Map("/grants", "GET").WithHandler(HandleGrants);           // V0.8.0 应用授权状态——不 AllowAnonymous（Bearer 必需，handler 自检）
         if (endpointOptions.TicketExchangeEndpointEnabled)
-            endpoints.MapPost($"{prefix}/ticket/exchange", HandleTicketExchange).AllowAnonymous();
+            builder.Map("/ticket/exchange", "POST").WithHandler(HandleTicketExchange);
     }
 
     // ─────────────────────────── 端点处理器（匿名帧 / 已认证帧） ───────────────────────────

@@ -1,3 +1,4 @@
+using System;
 using TKW.Framework.Domain;
 
 namespace TKWF.Ext.AuthCenter;
@@ -16,7 +17,10 @@ namespace TKWF.Ext.AuthCenter;
 [Options("TKWF:AuthCenter:Web")]
 public class AuthCenterEndpointOptions
 {
-    /// <summary>对内端点路由前缀（默认 <c>/api/auth</c>——7 端点：sms/send-code · login/sms · login/external/{channelType} · login/password · refresh · logout · ticket/exchange · sms/verify · verify · grants 挂此前缀下）。</summary>
+    /// <summary>对内端点路由前缀（默认 <c>/api/auth</c>——7 端点：sms/send-code · login/sms · login/external/{channelType} · login/password · refresh · logout · ticket/exchange · sms/verify · verify · grants 挂此前缀下）。
+    /// ⚠️ B3a/B3b（MapGenerated 生成化）起<b>不再生效</b>——组路径 = <c>TKWF:Api:RestBasePath</c>（缺省 /api）+ <c>TKWF:Api:Modules:AuthCenter:Prefix</c>
+    /// （缺省回退程序集 [assembly: ExtensionModule("AuthCenter","auth")] 默认前缀）。属性保留避免配置绑定断裂（文档化）。</summary>
+    [Obsolete("MapGenerated 下由 TKWF:Api:Modules:AuthCenter:Prefix 控制，本属性不再生效")]
     public string RoutePrefix { get; set; } = "/api/auth";
 
     /// <summary>短信验证码发送端点开关（POST {prefix}/sms/send-code）。</summary>

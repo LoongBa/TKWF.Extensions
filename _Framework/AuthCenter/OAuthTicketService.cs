@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuthCenter;
@@ -17,13 +18,17 @@ namespace TKWF.Ext.AuthCenter;
 /// 一次性票据服务实现——签发/消费（TTL 5min 单次 + PKCE + app_id/redirect_uri 白名单 + state 防重放）。
 /// <para>方案 §5.7——回调承载铁律（用户裁定 + Oracle B1）：URL 只带一次性票据 + redirect_uri，绝不带敏感信息；</para>
 /// <para>纯前端静态站走公网 /oauth/exchange + PKCE code_verifier；白名单经 <c>AuthCenterOptions.RedirectUriWhitelist</c>。</para>
+/// <para>B3b（MapGenerated 生成化）：<c>ExchangeAsync</c> 返回 <see cref="TokenResponse"/>——业务失败（票据过期/已消费/
+/// state 不匹配/未绑定等）抛 <see cref="DomainException"/>（400，ErrorCode = 原 OAuthTicketErrorCodes 码——
+/// 不再抛 AuthenticationException 以免误映射 401）；<c>BindTicketAsync</c> 同改。</para>
 /// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
 /// （IDomainUser 永不注册 DI）；DataService/<see cref="ITokenService"/> 经 <c>User.Use&lt;T&gt;()</c> 懒加载；
 /// 注册改 <c>AddConstructibleService&lt;IOAuthTicketService, OAuthTicketService&gt;</c>。
 /// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
 [DiContractIgnore]
-internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
+[GenerateController]
+public sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
 {
     private readonly AuthCenterOptions _options;
     private OAuthTicketEntityDataService? _dataService;
@@ -92,93 +97,105 @@ internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketServic
         return ticket;
     }
 
-    /// <summary>换取——校验 TTL/单次/state/verifier/app_id/redirect_uri → 签发 JWT 对；失败抛 AuthenticationException（错误码见 OAuthTicketErrorCodes）。</summary>
-    public async Task<OAuthTicketExchangeResult> ExchangeAsync(OAuthTicketExchangeRequest request, CancellationToken ct = default)
+    /// <summary>换取——校验 TTL/单次/state/verifier/app_id/redirect_uri → 签发 JWT 对 <see cref="TokenResponse"/>；
+    /// 失败抛 <see cref="DomainException"/>（400，错误码见 OAuthTicketErrorCodes——业务失败不抛 AuthenticationException 以免误映射 401）。</summary>
+    public async Task<TokenResponse> ExchangeAsync(TicketExchangeRequest request, CancellationToken ct = default)
     {
-        // (a) 票据存在性。
-        var entity = await DataService.GetByTicketAsync(request.Ticket, ct);
-        if (entity is null)
-        {
-            throw new AuthenticationException("TICKET_NOT_FOUND");
-        }
-
-        // (b) 单次消费防重放。
-        if (entity.IsConsumed)
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
-        }
-
-        // (c) TTL 过期。
-        if (entity.ExpiresAt < DateTime.UtcNow)
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketExpired);
-        }
-
-        // (d) 跨应用抢先消费防御。
-        if (!string.Equals(request.AppId, entity.AppId, StringComparison.Ordinal))
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
-        }
-
-        // (e) CSRF state 比对（签发时带 state 则必比对）。
-        if (entity.State is not null && !string.Equals(request.State, entity.State, StringComparison.Ordinal))
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
-        }
-
-        // (f) PKCE 矩阵 C4：
-        //   hash null + verifier null  → 允许（服务端/trust 签发路径——依赖 AppId 白名单 + 可信网络）
-        //   hash 非 null + verifier null → 拒绝（缺 verifier）
-        //   hash 非 null + verifier 非 null → SHA256(verifier) 必须等于 hash
-        if (entity.CodeVerifierHash is not null)
-        {
-            if (request.CodeVerifier is null)
-            {
-                throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
-            }
-            if (!string.Equals(Sha256Hex(request.CodeVerifier), entity.CodeVerifierHash, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
-            }
-        }
-
-        // (g) 票据必须已绑定用户（签发时由调用方绑定）。
-        if (entity.UserId is null)
-        {
-            throw new AuthenticationException("TICKET_NOT_BOUND");
-        }
-
-        // (h) 条件标记已消费（单次消费防重放——Oracle M2：输者抛 TICKET_CONSUMED）
-        if (!await DataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct))
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
-        }
-
-        // (i) 签发 JWT 对。
-        // 说明：票据换取是认证完成路径，调用方在签发时已绑定用户；此处认证方式取默认登录方式 sms，
-        //      认证强度取手机号级（AuthLevel.Phone）。V0.9.0：teacher_verified 声明移除（A.4 ——令牌不再携带业务声明）。
-        var tokenResult = await TokenService.IssueTokenAsync(
-            new TokenIssueRequest(
-                entity.UserId,
-                AuthTypes.Sms,
-                (int)AuthLevel.Phone),
-            ct);
-
-        // (i') 落登录授权（V0.8.0 写入点——Oracle P1-1 经 IAuthGrantCommandService 门面，OAuthTicketService
-        //      不直触 AuthGrantEntityDataService）。best-effort：写入失败不阻断 JWT 签发——token 独立有效，
-        //      grant 仅服务 /grants 查询；可接受降级（README 标注）。
         try
         {
-            await GrantCommandService.RecordLoginGrantAsync(entity.UserId, entity.AppId, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex,
-                "登录授权记录写入失败（UserId={UserId} AppId={AppId}）——不影响 JWT 签发（grant 降级，/grants 暂缺该授权）",
-                entity.UserId, entity.AppId);
-        }
+            var exchangeRequest = new OAuthTicketExchangeRequest(
+                request.Ticket, request.EffectiveCodeVerifier, request.EffectiveAppId, request.State);
+            // (a) 票据存在性。
+            var entity = await DataService.GetByTicketAsync(exchangeRequest.Ticket, ct);
+            if (entity is null)
+            {
+                throw new AuthenticationException("TICKET_NOT_FOUND");
+            }
 
-        return new OAuthTicketExchangeResult(tokenResult.AccessToken, tokenResult.RefreshToken, tokenResult.ExpiresIn);
+            // (b) 单次消费防重放。
+            if (entity.IsConsumed)
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
+            }
+
+            // (c) TTL 过期。
+            if (entity.ExpiresAt < DateTime.UtcNow)
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketExpired);
+            }
+
+            // (d) 跨应用抢先消费防御。
+            if (!string.Equals(exchangeRequest.AppId, entity.AppId, StringComparison.Ordinal))
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
+            }
+
+            // (e) CSRF state 比对（签发时带 state 则必比对）。
+            if (entity.State is not null && !string.Equals(exchangeRequest.State, entity.State, StringComparison.Ordinal))
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
+            }
+
+            // (f) PKCE 矩阵 C4：
+            //   hash null + verifier null  → 允许（服务端/trust 签发路径——依赖 AppId 白名单 + 可信网络）
+            //   hash 非 null + verifier null → 拒绝（缺 verifier）
+            //   hash 非 null + verifier 非 null → SHA256(verifier) 必须等于 hash
+            if (entity.CodeVerifierHash is not null)
+            {
+                if (exchangeRequest.CodeVerifier is null)
+                {
+                    throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
+                }
+                if (!string.Equals(Sha256Hex(exchangeRequest.CodeVerifier), entity.CodeVerifierHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new AuthenticationException(OAuthTicketErrorCodes.TicketStateMismatch);
+                }
+            }
+
+            // (g) 票据必须已绑定用户（签发时由调用方绑定）。
+            if (entity.UserId is null)
+            {
+                throw new AuthenticationException("TICKET_NOT_BOUND");
+            }
+
+            // (h) 条件标记已消费（单次消费防重放——Oracle M2：输者抛 TICKET_CONSUMED）
+            if (!await DataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct))
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
+            }
+
+            // (i) 签发 JWT 对。
+            // 说明：票据换取是认证完成路径，调用方在签发时已绑定用户；此处认证方式取默认登录方式 sms，
+            //      认证强度取手机号级（AuthLevel.Phone）。V0.9.0：teacher_verified 声明移除（A.4 ——令牌不再携带业务声明）。
+            var tokenResult = await TokenService.IssueTokenAsync(
+                new TokenIssueRequest(
+                    entity.UserId,
+                    AuthTypes.Sms,
+                    (int)AuthLevel.Phone),
+                ct);
+
+            // (i') 落登录授权（V0.8.0 写入点——Oracle P1-1 经 IAuthGrantCommandService 门面，OAuthTicketService
+            //      不直触 AuthGrantEntityDataService）。best-effort：写入失败不阻断 JWT 签发——token 独立有效，
+            //      grant 仅服务 /grants 查询；可接受降级（README 标注）。
+            try
+            {
+                await GrantCommandService.RecordLoginGrantAsync(entity.UserId, entity.AppId, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "登录授权记录写入失败（UserId={UserId} AppId={AppId}）——不影响 JWT 签发（grant 降级，/grants 暂缺该授权）",
+                    entity.UserId, entity.AppId);
+            }
+
+            return new TokenResponse(tokenResult.AccessToken, tokenResult.RefreshToken, "Bearer", tokenResult.ExpiresIn);
+        }
+        catch (AuthenticationException ex)
+        {
+            // B3b：业务失败不再抛 AuthenticationException（中间件会误映射 401 AUTH_REQUIRED）——
+            // 转 DomainException（400），ErrorCode 保留原语义码（TICKET_EXPIRED/TICKET_CONSUMED 等）
+            throw new DomainException(ex.Message, ex.Message, ex);
+        }
     }
 
     /// <summary>
@@ -194,30 +211,39 @@ internal sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketServic
             throw new InvalidOperationException(
                 "BindTicketAsync 须在已认证帧内调用（userId 取当前认证用户，不可为空）——拒绝匿名绑定。");
 
-        // (a) 票据存在性。
-        var entity = await DataService.GetByTicketAsync(ticket, ct);
-        if (entity is null)
+        try
         {
-            throw new AuthenticationException("TICKET_NOT_FOUND");
-        }
+            // (a) 票据存在性。
+            var entity = await DataService.GetByTicketAsync(ticket, ct);
+            if (entity is null)
+            {
+                throw new AuthenticationException("TICKET_NOT_FOUND");
+            }
 
-        // (b) 已消费（单次消费防重放）。
-        if (entity.IsConsumed)
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
-        }
+            // (b) 已消费（单次消费防重放）。
+            if (entity.IsConsumed)
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketConsumed);
+            }
 
-        // (c) TTL 过期。
-        if (entity.ExpiresAt < DateTime.UtcNow)
-        {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketExpired);
-        }
+            // (c) TTL 过期。
+            if (entity.ExpiresAt < DateTime.UtcNow)
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketExpired);
+            }
 
-        // (d) CAS 条件绑定（Oracle P1-2）：WHERE Id = ? AND UserId IS NULL → SET UserId。
-        //     先查仅用于友好错误码（a-c）；最终一致性由条件更新保证——并发双绑败者返回 false → TICKET_ALREADY_BOUND。
-        if (!await DataService.BindUserAsync(entity.Id, userId, ct))
+            // (d) CAS 条件绑定（Oracle P1-2）：WHERE Id = ? AND UserId IS NULL → SET UserId。
+            //     先查仅用于友好错误码（a-c）；最终一致性由条件更新保证——并发双绑败者返回 false → TICKET_ALREADY_BOUND。
+            if (!await DataService.BindUserAsync(entity.Id, userId, ct))
+            {
+                throw new AuthenticationException(OAuthTicketErrorCodes.TicketAlreadyBound);
+            }
+        }
+        catch (AuthenticationException ex)
         {
-            throw new AuthenticationException(OAuthTicketErrorCodes.TicketAlreadyBound);
+            // B3b：业务失败不再抛 AuthenticationException（中间件会误映射 401 AUTH_REQUIRED）——
+            // 转 DomainException（400），ErrorCode 保留原语义码（TICKET_NOT_FOUND/TICKET_CONSUMED 等）
+            throw new DomainException(ex.Message, ex.Message, ex);
         }
     }
 

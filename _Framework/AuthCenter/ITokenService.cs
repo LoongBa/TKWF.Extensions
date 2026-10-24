@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
@@ -56,35 +57,47 @@ public sealed record TokenValidationResult(
 public interface ITokenService : IDomainService
 {
     /// <summary>签发 access + refresh 令牌对（RSA RS256 + kid + jti + exp/iat）。</summary>
-    /// <remarks>匿名面声明：登录签发为无会话入口（EduPlatform 转达 E1）。</remarks>
+    /// <remarks>匿名面声明：登录签发为无会话入口（EduPlatform 转达 E1）。<c>ExposeRest=false</c>：签发为认证流程内部入口，不生成端点。</remarks>
     [AllowAnonymousFlag]
+    [ApiExpose(ExposeRest = false)]
     Task<TokenIssueResult> IssueTokenAsync(TokenIssueRequest request, CancellationToken ct = default);
 
-    /// <summary>验证 access token——验签（alg 强制 RS256 + FixedTimeEquals）+ kid 白名单 + exp/iat + iss + 黑名单 → 载荷。</summary>
+    /// <summary>验证 access token——验签（alg 强制 RS256 + FixedTimeEquals）+ kid 白名单 + exp/iat + iss + 黑名单 → 载荷。
+    /// <c>ExposeRest=false</c>：验签为身份适配层内部入口（中间件/UserHelper 消费），不生成端点。</summary>
+    [ApiExpose(ExposeRest = false)]
     Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default);
 
-    /// <summary>刷新令牌 rotation——SHA256 查旧 → TokenVersion 校验 → 置 revoked → 签发新对；重用已撤销 → 全撤销 + Warning。</summary>
+    /// <summary>刷新令牌 rotation——SHA256 查旧 → TokenVersion 校验 → 置 revoked → 签发新对；重用已撤销 → 全撤销 + Warning。
+    /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（400，消息 = 原语义码如 REFRESH_NOT_FOUND/REFRESH_EXPIRED/ACCOUNT_FROZEN）。
+    /// <paramref name="request"/>：<c>{refresh_token|refreshToken}</c>（body 绑定——双收别名保留）。</summary>
     /// <remarks>匿名面声明：Refresh 自携带凭据（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
-    Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/refresh", RestMethod = "POST", AllowAnonymous = true)]
+    Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default);
 
-    /// <summary>撤销 access token——按 jti 落黑名单（ExpiresAt = 该 token 自然过期时间）。</summary>
+    /// <summary>撤销 access token——按 jti 落黑名单（ExpiresAt = 该 token 自然过期时间）。
+    /// <c>ExposeRest=false</c>：撤销为内部能力（/logout 经 <see cref="RevokeCurrentSessionAsync"/> 生成端点按 ambient 撤销）。</summary>
     /// <remarks>匿名面声明：登出按 jti 自携带凭据自校验（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
+    [ApiExpose(ExposeRest = false)]
     Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default);
 
     /// <summary>
     /// 当前请求 Bearer 验签产物（Oracle5 2026-10-24 ambient 方案 A——/verify 内省数据源）。
     /// 经框架 <see cref="TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext"/> 读中间件写入的
-    /// 当前令牌 jti/userId/authType/exp；请求非 Bearer 认证时 null（端点级 401 门禁前置保证非 null）。
+    /// 当前令牌 jti/userId/authType/exp；请求非 Bearer 认证时 null → 抛
+    /// <see cref="System.Security.Authentication.AuthenticationException"/>（401 AUTH_REQUIRED）。
     /// </summary>
     [AllowAnonymousFlag]
-    Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/verify", RestMethod = "GET")]   // AllowAnonymous=false（默认省略）——已认证端点，Bearer 必需（ RequireAuthorization）
+    Task<VerifyResponse> GetCurrentTokenInfoAsync(CancellationToken ct = default);
 
     /// <summary>
     /// 撤销当前请求的 Bearer 令牌（Oracle5 2026-10-24 ambient 方案 A——/logout 撤销数据源）。
-    /// jti 取自 ambient（不经请求体——Web 层零编排），reason 固定 "logout"。请求非 Bearer 认证时返回 false（防御）。
+    /// jti 取自 ambient（不经请求体——Web 层零编排），reason 固定 "logout"；ambient null（非 Bearer 认证）→
+    /// 抛 <see cref="System.Security.Authentication.AuthenticationException"/>（401 AUTH_REQUIRED）。
     /// </summary>
     [AllowAnonymousFlag]
-    Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/logout", RestMethod = "POST")]   // AllowAnonymous=false（默认省略）——已认证端点，Bearer 必需（RequireAuthorization）
+    Task RevokeCurrentSessionAsync(CancellationToken ct = default);
 }

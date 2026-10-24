@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
@@ -28,8 +29,12 @@ namespace TKWF.Ext.AuthCenter;
 /// </summary>
 public interface IFederatedLoginOrchestrator : IDomainService
 {
-    /// <summary>联邦身份统一登录编排——identity → 账号回读/建号 → 签 token1 → <see cref="LoginResult"/>。
-    /// <para>匿名面声明：联邦登录为无会话入口（对齐 <see cref="ITokenService.IssueTokenAsync"/> E1 语义）。</para></summary>
+    /// <summary>联邦身份统一登录编排——identity → 账号回读/建号 → 签 token1 → <see cref="TokenResponse"/>。
+    /// <para>匿名面声明：联邦登录为无会话入口（对齐 <see cref="ITokenService.IssueTokenAsync"/> E1 语义）。
+    /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（400——ACCOUNT_FROZEN/ACCOUNT_DISABLED/
+    /// ACCOUNT_NOT_FOUND/ACCOUNT_NOT_PROVISIONED/ACCOUNT_CREATE_FAILED 等）。</para>
+    /// <para><c>ExposeRest=false</c>：共享子编排为内部服务（code 通道/票据通道经 <c>User.Use</c> 委托），不生成端点。</para></summary>
     [AllowAnonymousFlag]
-    Task<LoginResult> LoginAsync(FederatedIdentity identity, CancellationToken ct = default);
+    [ApiExpose(ExposeRest = false)]
+    Task<TokenResponse> LoginAsync(FederatedIdentity identity, CancellationToken ct = default);
 }

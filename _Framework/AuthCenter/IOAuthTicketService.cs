@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
@@ -63,21 +64,29 @@ public static class OAuthTicketErrorCodes
 /// </summary>
 public interface IOAuthTicketService : IDomainService
 {
-    /// <summary>签发一次性票据——高熵 ticket + TTL 5min + state +（可选）PKCE code_verifier hash 落库。</summary>
+    /// <summary>签发一次性票据——高熵 ticket + TTL 5min + state +（可选）PKCE code_verifier hash 落库。
+    /// <c>ExposeRest=false</c>：签发为 OAuth authorize 流程内部入口（回调承载铁律——URL 只带票据），不生成端点。</summary>
     /// <remarks>匿名面声明：票据签发为无会话入口（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
+    [ApiExpose(ExposeRest = false)]
     Task<string> IssueAsync(OAuthTicketIssueRequest request, CancellationToken ct = default);
 
-    /// <summary>换取——校验 TTL/单次/state/verifier/app_id/redirect_uri → 签发 JWT 对；失败抛 AuthenticationException（错误码见 OAuthTicketErrorCodes）。</summary>
+    /// <summary>换取——校验 TTL/单次/state/verifier/app_id/redirect_uri → 签发 JWT 对 → <see cref="TokenResponse"/>；
+    /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（400，错误码见 OAuthTicketErrorCodes——业务失败
+    /// 不再抛 AuthenticationException 以免误映射 401）。
+    /// <paramref name="request"/>：<c>{ticket, code_verifier?, app_id, state?}</c>（body 绑定——双收别名保留）。</summary>
     /// <remarks>匿名面声明：票换令牌为无会话入口（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
-    Task<OAuthTicketExchangeResult> ExchangeAsync(OAuthTicketExchangeRequest request, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/ticket/exchange", RestMethod = "POST", AllowAnonymous = true)]
+    Task<TokenResponse> ExchangeAsync(TicketExchangeRequest request, CancellationToken ct = default);
 
     /// <summary>
     /// 登录后补绑——第三方回调先授权后登录绑定（authorize 签发 → 登录 → 绑定 → 换取）。
     /// <para>⚠️ V0.8.0（Oracle P0-1 安全模型）：<b>已认证帧</b>调用——userId 取 <see cref="DomainServiceBase.User"/>
     /// （当前认证用户），<b>不接受请求体 userId 参数</b>——防票据泄漏后攻击者绑定任意 userId 实现账号接管。
-    /// 失败抛 AuthenticationException（TICKET_NOT_FOUND / TICKET_CONSUMED / TICKET_EXPIRED / TICKET_ALREADY_BOUND）。</para>
+    /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（TICKET_NOT_FOUND / TICKET_CONSUMED / TICKET_EXPIRED / TICKET_ALREADY_BOUND）。
+    /// <c>ExposeRest=false</c>：绑定为已认证内部补绑入口，不生成端点。</para>
     /// </summary>
+    [ApiExpose(ExposeRest = false)]
     Task BindTicketAsync(string ticket, CancellationToken ct = default);
 }

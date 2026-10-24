@@ -1,31 +1,35 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.AuthCenter;
 
 /// <summary>
-/// 密码登录编排门面实现（V0.9.0 B.9——镜像 <see cref="SmsLoginService"/>：认证→取账号→签发 全编排，表现层零编排）。
+/// 密码登录编排门面实现（V0.9.0 B.9——镜像 <see cref="SmsLoginService"/>：认证→取账号→签发 全编排，表现层零编排；
+/// B3b MapGenerated 生成化返回 <see cref="TokenResponse"/>——失败抛类型化异常（频控
+/// <see cref="RateLimitedException"/> 429 / 业务 <see cref="DomainException"/> 400），异常直达中间件无 handler 映射）。
 /// <para>门面 ctor 注入 <c>IEnumerable&lt;IAuthenticationProvider&gt;</c>——经 <c>User.Use&lt;IPasswordLoginService&gt;()</c>
 /// 帧内创建时集合守卫工厂（<c>TryAddEnumerableConstructible</c>）经 CurrentAopUser 供给构造。</para>
 /// <para>注册：<c>AddConstructibleService&lt;IPasswordLoginService, PasswordLoginService&gt;</c>（接口可构造守卫工厂 +
 /// 实现类 throw-factory）。<c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// <para>V0.9.0（ADR-密码策略与口令协议 决策 2/3——锁定=限流）：登录前置 <see cref="IRateLimitCheck.TryAcquire"/>
 /// 点检查（key <c>pwd:login:{uid}</c>——未启用扩展限流时 Initializer fallback <c>MemoryRateLimitCheck</c> 兜底；
-/// 消费方显式注册 <c>SqlCountRateLimitCheck</c> 得 DB 跨实例版）；失败 = 锁定阻断（<c>GetRetryAfter</c> 阻断期，不落账号状态）。
+/// 消费方显式注册 <c>SqlCountRateLimitCheck</c> 得 DB 跨实例版）；失败 = 锁定阻断（抛
+/// <see cref="RateLimitedException"/> PASSWORD_RATE_LIMITED 429，不落账号状态）。
 /// <c>RecordAttemptAsync</c> 审计保留（与锁定解耦——审计表 COUNT 双目的）。</para>
 /// </summary>
 [DiContractIgnore]
-internal sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginService
+[GenerateController]
+public sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginService
 {
     private readonly IReadOnlyList<IAuthenticationProvider> _providers;
     private readonly IOptions<AuthCenterOptions> _options;
@@ -57,23 +61,23 @@ internal sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginSe
         => _options.Value.EnabledAuthTypes.Contains(authType, StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public async Task<LoginResult> LoginAsync(string identifier, string clientHash, string salt, CancellationToken ct = default)
+    public async Task<TokenResponse> LoginAsync(PasswordLoginRequest request, CancellationToken ct = default)
     {
+        var (identifier, clientHash, salt) = (request.Identifier, request.ClientHash, request.Salt);
         // V0.9.0 (P2-6 顺序裁定)：先按 EnabledAuthTypes.Contains(AuthType) 过滤集合 → 再 AuthType match（fail-closed）
         var provider = _providers.FirstOrDefault(p =>
             p.AuthType == AuthTypes.Password && IsEnabled(p.AuthType));
         if (provider == null)
         {
-            var fail = new LoginResult(false, null, null, "PASSWORD_PROVIDER_NOT_ENABLED");
             _logger.LogWarning("密码登录编排失败——Password Provider 未启用（EnabledAuthTypes 配置缺失 password）");
-            return fail;
+            throw new DomainException("PASSWORD_PROVIDER_NOT_ENABLED") { ErrorCode = "PASSWORD_PROVIDER_NOT_ENABLED" };
         }
 
         // V0.9.0（ADR 决策 2/3——锁定=限流）：登录前置点检查（key 规范 pwd:login:{identifier}）——
-        // TryAcquire 失败 = 锁定阻断（fail-closed；阻断期 GetRetryAfter 由装配层映射 429）
+        // TryAcquire 失败 = 锁定阻断（fail-closed）→ RateLimitedException 429（PASSWORD_RATE_LIMITED）
         var protection = _options.Value.LoginProtection;
         if (!_rateLimit.TryAcquire($"pwd:login:{identifier}", protection.PasswordPerMinutePerSubject, TimeSpan.FromMinutes(1), out _))
-            throw new AuthenticationException("PASSWORD_RATE_LIMITED");
+            throw new RateLimitedException(0, $"pwd:login:{identifier}") { ErrorCode = "PASSWORD_RATE_LIMITED" };
 
         var result = await provider.AuthenticateAsync(
             new ProviderAuthenticateContext(Identifier: identifier, ClientHash: clientHash, Salt: salt),
@@ -83,7 +87,7 @@ internal sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginSe
         if (!result.Success)
         {
             _logger.LogDebug("密码登录认证失败——{FailReason}", result.FailReason);
-            return new LoginResult(false, null, null, result.FailReason);
+            throw new DomainException(result.FailReason ?? "PASSWORD_LOGIN_FAILED") { ErrorCode = result.FailReason ?? "PASSWORD_LOGIN_FAILED" };
         }
 
         // 取持久化账号（签发需账号锚点；AuthLevel 由 AuthFactor 派生——V0.11.0 T9）
@@ -91,14 +95,14 @@ internal sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginSe
         if (account is null)
         {
             _logger.LogWarning("密码登录编排失败——账号查询返回 null（UserId={UserId}）", result.UserId);
-            return new LoginResult(false, null, null, "ACCOUNT_NOT_FOUND");
+            throw new DomainException("ACCOUNT_NOT_FOUND") { ErrorCode = "ACCOUNT_NOT_FOUND" };
         }
 
         var authLevel = await User.Use<IAuthFactorService>().GetAuthLevelAsync(account.UId, ct);
         var token = await TokenService.IssueTokenAsync(new TokenIssueRequest(
             account.UId, AuthTypes.Password, authLevel), ct);
         _logger.LogDebug("密码登录成功——UserId={UserId}", account.UId);
-        return new LoginResult(true, account.UId, token, null);
+        return new TokenResponse(token.AccessToken, token.RefreshToken, "Bearer", token.ExpiresIn);
     }
 
     /// <summary>P1-NEW-3：登录尝试审计落库（AuthLoginAttempt——append-only；频控窗口计数的数据源）。</summary>

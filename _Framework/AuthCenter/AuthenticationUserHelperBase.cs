@@ -39,8 +39,8 @@ public abstract class AuthenticationUserHelperBase<TUserInfo> : DomainUserHelper
         var smsVerification = user.GetService<ISmsVerificationService>();
         var accountDataService = user.GetService<AuthAccountEntityDataService>();
 
-        var verified = await smsVerification.VerifyCodeAsync(userName, credential, SmsScenes.Login);
-        if (!verified) throw new AuthenticationException("SMS_CODE_MISMATCH");
+        var verified = await smsVerification.VerifyCodeAsync(new SmsVerifyRequest(userName, credential, SmsScenes.Login));
+        if (!verified.Verified) throw new AuthenticationException("SMS_CODE_MISMATCH");
 
         // V0.11.0（方案 §6.5/T7）：手机号经 AuthFactor 反查 UId（账号不再落 Phone 列）。
         var factor = await user.Use<IAuthFactorService>().GetByPhoneAsync(userName);

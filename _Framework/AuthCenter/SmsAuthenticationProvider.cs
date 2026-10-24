@@ -50,7 +50,7 @@ internal sealed class SmsAuthenticationProvider : DomainServiceBase, IAuthentica
 
         try
         {
-            await SmsVerification.VerifyCodeAsync(context.Phone, context.Code, SmsScenes.Login, ct);
+            await SmsVerification.VerifyCodeAsync(new SmsVerifyRequest(context.Phone, context.Code, SmsScenes.Login), ct);
         }
         catch (AuthenticationException ex)
         {

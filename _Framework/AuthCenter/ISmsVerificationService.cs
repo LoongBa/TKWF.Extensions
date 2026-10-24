@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
@@ -40,16 +41,24 @@ public static class SmsScenes
 /// <summary>
 /// 短信验证码服务契约——发送（生成 6 位码 + TTL 5min + 频控 60s/小时/天/IP）+ 校验（单次消费 + 频控 5 次/小时）。
 /// <para>方案 §5.5——验证码单向散列（SHA256）落库（SmsRecordEntity）；生产 Mock → 503 语义（SmsMockForbiddenException）。</para>
+/// <para>B3b（MapGenerated 生成化）：两个方法均 [ApiExpose] 匿名端点（<c>POST /api/auth/sms/send-code</c> /
+/// <c>POST /api/auth/sms/verify</c>）；频控失败抛 <see cref="TKW.Framework.Domain.Exceptions.RateLimitedException"/>（429）、
+/// 业务失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（400）、未装配 ISmsSender 抛
+/// <see cref="TKW.Framework.Domain.Exceptions.ServiceNotConfiguredException"/>（503）——异常直达中间件，无 handler 映射。</para>
 /// </summary>
 public interface ISmsVerificationService : IDomainService
 {
-    /// <summary>发送验证码（频控命中抛 AuthenticationException；生产未接 ISmsSender 抛 SmsMockForbiddenException）。</summary>
+    /// <summary>发送验证码（频控命中抛 RateLimitedException；生产未接 ISmsSender 抛 ServiceNotConfiguredException）。
+    /// <paramref name="request"/>：<c>{phone, scene}</c>（body 绑定）。</summary>
     [AllowAnonymousFlag]
-    Task SendCodeAsync(string phone, string scene, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/sms/send-code", RestMethod = "POST", AllowAnonymous = true)]
+    Task SendCodeAsync(SendSmsCodeRequest request, CancellationToken ct = default);
 
-    /// <summary>校验验证码（成功单次消费；过期/不匹配/频控 → false 或抛 AuthenticationException）。</summary>
+    /// <summary>校验验证码（成功单次消费；过期/不匹配频控 → 抛类型化异常或返回 <see cref="SmsVerifyResponse"/>（Verified=false））。
+    /// <paramref name="request"/>：<c>{phone, code, scene}</c>（body 绑定）。</summary>
     [AllowAnonymousFlag]
-    Task<bool> VerifyCodeAsync(string phone, string code, string scene, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/sms/verify", RestMethod = "POST", AllowAnonymous = true)]
+    Task<SmsVerifyResponse> VerifyCodeAsync(SmsVerifyRequest request, CancellationToken ct = default);
 }
 
 /// <summary>生产 Mock 语义异常——未装配 ISmsSender 时拒绝发送（503，防 dev_code 泄露，Oracle D7）。</summary>

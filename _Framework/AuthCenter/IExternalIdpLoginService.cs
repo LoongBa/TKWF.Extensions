@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Filters;
 
@@ -11,7 +12,8 @@ namespace TKWF.Ext.AuthCenter;
 /// <para>AuthCenter 内网经 <see cref="IExternalIdpAuthenticator"/> 契约<b>借道 Federation 连接层</b>完成外部身份认证
 /// （微信/QQ/支付宝/OIDC 等平台库通道——平台协议单源归平台网关库，AuthCenter 零双实现）。</para>
 /// <para>流程（方案 §5.4）：桥接认证（<b>fail-hard</b>：Federation 未装配 → <c>User.Use&lt;IExternalIdpAuthenticator&gt;()</c>
-/// 抛守卫，不静默降级）→ <see cref="IExternalIdentityService"/> 映射（channelId 从 parameters["channel_id"]）→
+/// 抛守卫——B3b 捕获转 <see cref="TKW.Framework.Domain.Exceptions.ServiceNotConfiguredException"/> 503）→
+/// <see cref="IExternalIdentityService"/> 映射（channelId 从 parameters["channel_id"]）→
 /// 无映射建号（<see cref="IAuthAccountService"/>）+ LinkAsync → 回读账号 →
 /// <see cref="ITokenService.IssueTokenAsync"/> 签 token1（authType=<c>federated</c> + <c>channel_type</c> claim）。</para>
 /// <para>表现层经 <c>User.Use&lt;IExternalIdpLoginService&gt;().LoginAsync(channelType, parameters)</c> 编排——
@@ -20,8 +22,11 @@ namespace TKWF.Ext.AuthCenter;
 /// </summary>
 public interface IExternalIdpLoginService : IDomainService
 {
-    /// <summary>外部 IdP 登录（桥接认证 → 映射建号/复用 → 签发令牌）——返回 <see cref="LoginResult"/>。
+    /// <summary>外部 IdP 登录（桥接认证 → 映射建号/复用 → 签发令牌）——返回 <see cref="TokenResponse"/>；
+    /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（400——EXTERNAL_AUTH_FAILED/EXTERNAL_USER_ID_MISSING/
+    /// EXTERNAL_CHANNEL_ID_REQUIRED 等）；Federation 未装配 → <see cref="TKW.Framework.Domain.Exceptions.ServiceNotConfiguredException"/>（503）。
     /// <paramref name="parameters"/> 原样透传桥接（含 code/channel_id 等平台协议字段）。</summary>
     [AllowAnonymousFlag]
-    Task<LoginResult> LoginAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default);
+    [ApiExpose(RestRoute = "/login/external/{channelType}", RestMethod = "POST", AllowAnonymous = true)]
+    Task<TokenResponse> LoginAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default);
 }

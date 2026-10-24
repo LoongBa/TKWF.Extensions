@@ -76,7 +76,7 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
         // V0.11.0（方案 §6.5/T7）：投递手机号取自 Sms 因素（账号不再落 Phone 列）。
         var phone = await User.Use<IAuthFactorService>().GetPrimaryPhoneAsync(account.UId, ct)
             ?? throw new AuthenticationException("PHONE_NOT_BOUND");
-        await Sms.SendCodeAsync(phone, SmsScenes.Reset, ct);   // 自带投递（B.11）——SmsScenes.Reset 现成通道
+        await Sms.SendCodeAsync(new SendSmsCodeRequest(phone, SmsScenes.Reset), ct);   // 自带投递（B.11）——SmsScenes.Reset 现成通道
         _logger.LogDebug("找回密码发起（SMS）——identifier={Identifier}", MaskIdentifier(identifier));
         return "SMS_RESET_CODE_SENT";
     }
@@ -169,8 +169,8 @@ internal sealed class PasswordResetService : DomainServiceBase, IPasswordResetSe
         var account = await ResolveAccountAsync(identifier, ct);
         await EnsureNotFrozenAsync(account, ct);   // v0.9.1 裁定④：冻结与找回互斥——冻结中禁止自助找回（fail-closed，完成路径同拦）
         var uid = account.UId;
-        var verified = await Sms.VerifyCodeAsync(phone, code, SmsScenes.Reset, ct);
-        if (!verified) throw new AuthenticationException("SMS_CODE_MISMATCH");
+        var verified = await Sms.VerifyCodeAsync(new SmsVerifyRequest(phone, code, SmsScenes.Reset), ct);
+        if (!verified.Verified) throw new AuthenticationException("SMS_CODE_MISMATCH");
 
         await AccountWrite.SetPasswordAsync(uid, newClientHash, newSalt, ct);   // SecurePassword 零明文 + TokenVersion++ + 历史（①）
         _logger.LogDebug("找回密码完成（SMS 通道）——uid={UId}", uid);

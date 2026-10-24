@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.Caching;
 
@@ -25,13 +26,17 @@ namespace TKWF.Ext.AuthCenter;
 /// 内存 ConcurrentDictionary 黑名单（重启丢失）→ AuthTokenBlacklistEntity 落库 + IMemoryCache 短 TTL 前置过滤（Oracle C3）；
 /// 直注入 IEntityDAC&lt;AuthRefreshToken&gt;（红线违规）→ 委托 AuthRefreshTokenEntityDataService。</para>
 /// <para>🔒 验签安全加固清单（Oracle C1）：alg 强制 RS256 / FixedTimeEquals / RSA≥2048 / exp·iat / kid 白名单 / iss 校验 / Base64Url 边界。</para>
+/// <para>B3b（MapGenerated 生成化）：<c>/refresh</c> 失败抛 <see cref="DomainException"/>（400——不再抛
+/// AuthenticationException 以免误映射 401）；<c>/verify</c>/<c>/logout</c> 经 ambient
+/// <see cref="TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext"/> 读中间件写入的当前令牌产物。</para>
 /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取
 /// 用户上下文（IDomainUser 永不注册 DI，旧 TryAddScoped 构造注入 IDomainUser 生产必失败）；DataService 仍经
 /// <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载（DI004 零豁免）；注册改 <c>AddConstructibleService&lt;ITokenService, TokenService&gt;</c>。
 /// <c>[DiContractIgnore]</c>：运行时手写注册，豁免 SG1a DI001 误报。</para>
 /// </summary>
 [DiContractIgnore]
-internal sealed class TokenService : DomainServiceBase, ITokenService
+[GenerateController]
+public sealed class TokenService : DomainServiceBase, ITokenService
 {
     private const string AlgHeader = "RS256";
     private const int RsaMinKeyBits = 2048;
@@ -207,45 +212,55 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
             DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime, claims, channelType);
     }
 
-    public async Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default)
+    public async Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(refreshToken)) throw new AuthenticationException("REFRESH_NOT_FOUND");
-
-        var row = await RefreshTokenDataService.GetByTokenHashAsync(Sha256Hex(refreshToken), ct);
-        if (row == null) throw new AuthenticationException("REFRESH_NOT_FOUND");
-
-        // 重用检测（业界 BCP）：已撤销 TokenHash 再次出现 → 判定泄露 → 撤销该用户全部 refresh + Warning
-        if (row.IsRevoked)
+        try
         {
-            _logger.LogWarning("Refresh token reuse detected for user {UserId} — revoking all refresh tokens", row.UserId);
-            await RefreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
-            throw new AuthenticationException("REFRESH_REUSED");
+            var refreshToken = request.EffectiveRefreshToken;
+            if (string.IsNullOrWhiteSpace(refreshToken)) throw new AuthenticationException("REFRESH_NOT_FOUND");
+
+            var row = await RefreshTokenDataService.GetByTokenHashAsync(Sha256Hex(refreshToken), ct);
+            if (row == null) throw new AuthenticationException("REFRESH_NOT_FOUND");
+
+            // 重用检测（业界 BCP）：已撤销 TokenHash 再次出现 → 判定泄露 → 撤销该用户全部 refresh + Warning
+            if (row.IsRevoked)
+            {
+                _logger.LogWarning("Refresh token reuse detected for user {UserId} — revoking all refresh tokens", row.UserId);
+                await RefreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
+                throw new AuthenticationException("REFRESH_REUSED");
+            }
+
+            if (row.ExpiresAt <= DateTime.UtcNow) throw new AuthenticationException("REFRESH_EXPIRED");
+
+            var account = await AccountDataService.GetByUIdAsync(row.UserId, ct);
+            if (account == null || !account.IsEnabled) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
+            if (await FreezeState.IsFrozenAsync(account.UId, ct: ct)) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.11.0 冻结判定（多原因冻结行集合——refresh 续期拦截）
+
+            // TokenVersion 闭环：刷新时校验（不匹配 → 拒绝——密码/绑定变更后旧 refresh 失效）
+            if (row.TokenVersion != account.TokenVersion) throw new AuthenticationException("REFRESH_STALE");
+
+            // Oracle M1：条件撤销（TryMarkRevokedAsync 防 TOCTOU）——输者触发重用检测
+            //（并发同 token 刷新：谁先 TryMarkRevoked 赢；输者 false → 判定泄露 → 撤销该用户全部 refresh）
+            if (!await RefreshTokenDataService.TryMarkRevokedAsync(row.Id, DateTime.UtcNow, ct))
+            {
+                _logger.LogWarning("Refresh token race detected for user {UserId} — revoking all refresh tokens", row.UserId);
+                await RefreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
+                throw new AuthenticationException("REFRESH_REUSED");
+            }
+
+            // V0.11.0（方案 §6.5/T9）：AuthLevel 由 AuthFactor 派生（账号不再落该列）
+            var authLevel = await User.Use<IAuthFactorService>().GetAuthLevelAsync(account.UId, ct);
+            var result = await IssueTokenAsync(new TokenIssueRequest(
+                row.UserId, row.AuthType, authLevel, row.DeviceInfo), ct);
+
+            return new TokenResponse(result.AccessToken, result.RefreshToken, "Bearer", result.ExpiresIn);
         }
-
-        if (row.ExpiresAt <= DateTime.UtcNow) throw new AuthenticationException("REFRESH_EXPIRED");
-
-        var account = await AccountDataService.GetByUIdAsync(row.UserId, ct);
-        if (account == null || !account.IsEnabled) throw new AuthenticationException("ACCOUNT_NOT_FOUND");
-        if (await FreezeState.IsFrozenAsync(account.UId, ct: ct)) throw new AuthenticationException("ACCOUNT_FROZEN");   // V0.11.0 冻结判定（多原因冻结行集合——refresh 续期拦截）
-
-        // TokenVersion 闭环：刷新时校验（不匹配 → 拒绝——密码/绑定变更后旧 refresh 失效）
-        if (row.TokenVersion != account.TokenVersion) throw new AuthenticationException("REFRESH_STALE");
-
-        // Oracle M1：条件撤销（TryMarkRevokedAsync 防 TOCTOU）——输者触发重用检测
-        //（并发同 token 刷新：谁先 TryMarkRevoked 赢；输者 false → 判定泄露 → 撤销该用户全部 refresh）
-        if (!await RefreshTokenDataService.TryMarkRevokedAsync(row.Id, DateTime.UtcNow, ct))
+        catch (AuthenticationException ex)
         {
-            _logger.LogWarning("Refresh token race detected for user {UserId} — revoking all refresh tokens", row.UserId);
-            await RefreshTokenDataService.RevokeAllByUserIdAsync(row.UserId, ct);
-            throw new AuthenticationException("REFRESH_REUSED");
+            // B3b：业务失败不再抛 AuthenticationException（中间件会误映射 401 AUTH_REQUIRED）——
+            // 转 DomainException（400），ErrorCode 保留原语义码（REFRESH_NOT_FOUND/ACCOUNT_FROZEN 等）
+            throw new DomainException(ex.Message, ex.Message, ex);
         }
-
-        // V0.11.0（方案 §6.5/T9）：AuthLevel 由 AuthFactor 派生（账号不再落该列）
-        var authLevel = await User.Use<IAuthFactorService>().GetAuthLevelAsync(account.UId, ct);
-        var result = await IssueTokenAsync(new TokenIssueRequest(
-            row.UserId, row.AuthType, authLevel, row.DeviceInfo), ct);
-
-        return new TokenRefreshResult(result.AccessToken, result.RefreshToken, result.ExpiresIn);
     }
 
     public async Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default)
@@ -271,21 +286,33 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
 
     // Oracle5（2026-10-24 ambient 方案 A）：/verify、/logout 生成化数据源——读取中间件写入的当前令牌
     // 验签产物（经 DomainUser.GetService 解析框架 Web 层 ITokenVerificationContext——守护工厂帧内可用；
-    // 未注册/非 Web 解析路径返回 null = 未 Bearer 认证，端点级 401 门禁前置）。
+    // 未注册/非 Web 解析路径返回 null = 未 Bearer 认证 → 抛 AuthenticationException("AUTH_REQUIRED")（401 语义正确，
+    // 生成端点 .RequireAuthorization() 前置拦截下属防御性兜底）。
 
     /// <inheritdoc />
-    public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default)
-        => Task.FromResult(User.GetService<TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext>()?.Current);
-
-    /// <inheritdoc />
-    public async Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default)
+    public Task<VerifyResponse> GetCurrentTokenInfoAsync(CancellationToken ct = default)
     {
         var ambient = User.GetService<TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext>()?.Current;
         if (ambient is null)
-            return false; // 非 Bearer 认证请求——无当前令牌可撤销（防御）
+            throw new AuthenticationException("AUTH_REQUIRED");
+
+        return Task.FromResult(new VerifyResponse(
+            Valid: true,
+            UserId: ambient.UserId,
+            AuthType: ambient.AuthType,
+            AuthLevel: ambient.AuthLevel,
+            Exp: ambient.ExpiresAtUtc.ToUnixTimeSeconds(),
+            Jti: ambient.Jti));
+    }
+
+    /// <inheritdoc />
+    public async Task RevokeCurrentSessionAsync(CancellationToken ct = default)
+    {
+        var ambient = User.GetService<TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext>()?.Current;
+        if (ambient is null)
+            throw new AuthenticationException("AUTH_REQUIRED"); // 非 Bearer 认证请求——无当前令牌可撤销（应被 401 前置拦截）
 
         await RevokeTokenAsync(ambient.Jti, "logout", ct);
-        return true;
     }
 
     /// <summary>启动预检（Initializer.InitializeAsync 经系统作用域解析实例后调用）——触发密钥懒加载，生产 fail-fast（缺 Issuer/密钥 → InvalidOperationException）。</summary>
@@ -296,7 +323,9 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
     // V0.5.3：private → internal——DevRsaKeyCache（开发模式密钥集进程内缓存）复用同一类型（token 签发/验签一致性密钥对）
     // E4 密钥管理抽象（V0.7.0）：实现 IDisposable——DevKeyCache<TKey> 约束（class, IDisposable）前置条件；
     // ResetForTests 销毁时 Dispose 已缓存密钥集（原 DevRsaKeyCache.ResetForTests 的 Dispose 行为移入类型自身）
-    internal sealed record RsaKeySet(string CurrentKid, RSA SigningKey, Dictionary<string, RSA> VerifyKeys) : IDisposable
+    // 兼容性注记：TokenService 为 public（B3b [GenerateController] 要求），嵌套密钥集随之 public——
+    // 内部仍仅限本程序集构造（AddConstructibleService 守卫工厂 + Initializer DevKeyCache 注册）
+    public sealed record RsaKeySet(string CurrentKid, RSA SigningKey, Dictionary<string, RSA> VerifyKeys) : IDisposable
     {
         public void Dispose()
         {

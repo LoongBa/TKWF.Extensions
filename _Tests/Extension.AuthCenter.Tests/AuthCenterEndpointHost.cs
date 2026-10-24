@@ -244,6 +244,11 @@ internal static class AuthCenterEndpointHost
             RevokedJti = jti;
             return Task.CompletedTask;
         }
+
+        public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 
     internal sealed class FakeSmsVerificationService : ISmsVerificationService

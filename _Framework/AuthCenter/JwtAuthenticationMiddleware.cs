@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Web.Authentication;
 
 namespace TKWF.Ext.AuthCenter;
 
@@ -42,6 +43,16 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Oracle5（2026-10-24）：ambient 写面——验签成功后 Set（门面方法经 read 面读当前令牌），
+        // 请求结束 finally 清空（G13 守卫——零跨请求泄漏）。未验签/未写路径不清理（AsyncLocal 恒 null 无泄漏）。
+        var ambientWriter = context.RequestServices.GetService<ITokenVerificationContextWriter>();
+        var ambient = await InvokeCoreAsync(context, ambientWriter).ConfigureAwait(false);
+        if (ambient != null)
+            ambientWriter?.Set(null);
+    }
+
+    private async Task<TokenVerificationArtifact?> InvokeCoreAsync(HttpContext context, ITokenVerificationContextWriter? ambientWriter)
+    {
         // 互斥不叠加：Items 已有【已认证】DomainUser（SessionKey 会话恢复先到）→ 跳过（防双向覆盖竞态）。
         // ⚠️ v4.10.45 收敛迁移修正：匿名游客（未认证）不短路——ContextExtraction 阶段 2 恒写游客 DomainUser，
         //    原 `is DomainUser<TUserInfo>` 判定在 UseWebSession 全链下恒真 → JWT 验签永不执行（API 场景失效）；
@@ -49,7 +60,7 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
         if (context.Items[DomainUserKey] is DomainUser<TUserInfo> { IsAuthenticated: true })
         {
             await next(context);
-            return;
+            return null;
         }
 
         // 无 Bearer 头 → 透传（SessionKey 会话恢复路径）
@@ -58,14 +69,14 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
             || !authHeader.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
-            return;
+            return null;
         }
 
         var token = authHeader.AsSpan(BearerPrefix.Length).Trim().ToString();
         if (string.IsNullOrEmpty(token))
         {
             await next(context);
-            return;
+            return null;
         }
 
         try
@@ -93,7 +104,7 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
             {
                 logger.LogWarning("ITokenVerifier 未注册——JWT 恢复路径跳过（装配方须启用认证中心或注册验证器）");
                 await next(context);
-                return;
+                return null;
             }
 
             var tokenResult = await verifier.VerifyAsync(token, context.RequestAborted);
@@ -103,7 +114,21 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
                 context.Items[DomainUserKey] = user;
                 // V0.6.0（归层迭代 T4）：验签结果写入 Items——登出端点（AuthCenterWebExtension）取 jti 撤销用
                 context.Items[TokenValidationResultKey] = tokenResult;
+                // Oracle5（2026-10-24）：ambient 写入——门面方法（GetCurrentTokenInfoAsync/RevokeCurrentSessionAsync）
+                // 经 ITokenVerificationContext 读当前令牌 jti/authType/exp（/verify、/logout、/grants 生成化数据源；
+                // 通用内省端点复用）。tokenResult.ExpiresAtUtc 为 DateTime（本地语义，按 Kind 转 UTC 偏移）。
+                var artifact = new TokenVerificationArtifact(
+                    tokenResult.Jti,
+                    tokenResult.UserId,
+                    tokenResult.AuthType,
+                    tokenResult.AuthLevel,
+                    new DateTimeOffset(DateTime.SpecifyKind(tokenResult.ExpiresAtUtc, DateTimeKind.Utc)),
+                    tokenResult.ChannelType);
+                ambientWriter?.Set(artifact);
+                await next(context);
+                return artifact;
             }
+            return null;
         }
         catch (AuthenticationException ex)
         {
@@ -111,11 +136,12 @@ public class JwtAuthenticationMiddleware<TUserInfo>(
             if (options.Value.RejectInvalidToken)
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return; // 无效 Bearer → 401 短路（不继续管线）
+                return null; // 无效 Bearer → 401 短路（不继续管线）
             }
             // 验签失败透传匿名——由下游 HttpAuthenticationMiddleware / AuthorityFilter 判定
         }
 
         await next(context);
+        return null;
     }
 }

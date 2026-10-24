@@ -219,5 +219,9 @@ public class AuthCenterInitializerTests
             => throw new System.NotImplementedException();
         public System.Threading.Tasks.Task RevokeTokenAsync(string jti, string reason, System.Threading.CancellationToken ct = default)
             => throw new System.NotImplementedException();
+        public System.Threading.Tasks.Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(System.Threading.CancellationToken ct = default)
+            => throw new System.NotImplementedException();
+        public System.Threading.Tasks.Task<bool> RevokeCurrentSessionAsync(System.Threading.CancellationToken ct = default)
+            => throw new System.NotImplementedException();
     }
 }

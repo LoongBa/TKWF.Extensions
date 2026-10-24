@@ -72,4 +72,19 @@ public interface ITokenService : IDomainService
     /// <remarks>匿名面声明：登出按 jti 自携带凭据自校验（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
     Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default);
+
+    /// <summary>
+    /// 当前请求 Bearer 验签产物（Oracle5 2026-10-24 ambient 方案 A——/verify 内省数据源）。
+    /// 经框架 <see cref="TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext"/> 读中间件写入的
+    /// 当前令牌 jti/userId/authType/exp；请求非 Bearer 认证时 null（端点级 401 门禁前置保证非 null）。
+    /// </summary>
+    [AllowAnonymousFlag]
+    Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// 撤销当前请求的 Bearer 令牌（Oracle5 2026-10-24 ambient 方案 A——/logout 撤销数据源）。
+    /// jti 取自 ambient（不经请求体——Web 层零编排），reason 固定 "logout"。请求非 Bearer 认证时返回 false（防御）。
+    /// </summary>
+    [AllowAnonymousFlag]
+    Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default);
 }

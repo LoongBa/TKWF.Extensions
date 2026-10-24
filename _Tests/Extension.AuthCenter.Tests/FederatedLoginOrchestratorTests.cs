@@ -340,5 +340,7 @@ public class FederatedLoginOrchestratorTests
         public Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<TokenRefreshResult> RefreshTokenAsync(string refreshToken, CancellationToken ct = default) => throw new NotSupportedException();
         public Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default) => Task.FromResult<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?>(null);
+        public Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default) => Task.FromResult(false);
     }
 }

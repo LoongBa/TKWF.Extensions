@@ -269,6 +269,25 @@ internal sealed class TokenService : DomainServiceBase, ITokenService
         _cache.Set(cacheKey, true, TimeSpan.FromSeconds(BlacklistCacheSeconds));
     }
 
+    // Oracle5（2026-10-24 ambient 方案 A）：/verify、/logout 生成化数据源——读取中间件写入的当前令牌
+    // 验签产物（经 DomainUser.GetService 解析框架 Web 层 ITokenVerificationContext——守护工厂帧内可用；
+    // 未注册/非 Web 解析路径返回 null = 未 Bearer 认证，端点级 401 门禁前置）。
+
+    /// <inheritdoc />
+    public Task<TKW.Framework.Domain.Web.Authentication.TokenVerificationArtifact?> GetCurrentTokenInfoAsync(CancellationToken ct = default)
+        => Task.FromResult(User.GetService<TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext>()?.Current);
+
+    /// <inheritdoc />
+    public async Task<bool> RevokeCurrentSessionAsync(CancellationToken ct = default)
+    {
+        var ambient = User.GetService<TKW.Framework.Domain.Web.Authentication.ITokenVerificationContext>()?.Current;
+        if (ambient is null)
+            return false; // 非 Bearer 认证请求——无当前令牌可撤销（防御）
+
+        await RevokeTokenAsync(ambient.Jti, "logout", ct);
+        return true;
+    }
+
     /// <summary>启动预检（Initializer.InitializeAsync 经系统作用域解析实例后调用）——触发密钥懒加载，生产 fail-fast（缺 Issuer/密钥 → InvalidOperationException）。</summary>
     internal void EnsureKeysLoaded() => _ = _keys.Value;
 

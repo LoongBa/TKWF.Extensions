@@ -227,7 +227,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 - **引用**：外部 IdP 场景须装配 **Federation 连接层**（`TKWF.Ext.Federation` + 平台网关库如 `TKWF.Federation.WeChat`）+ 白名单声明 `FederationExtensionInitializer<>`；仅内部认证（短信/密码）场景零改动、无须引 Federation。
 - **登录改造**：控制器 `User.Use<IWechatLoginService>()` → `User.Use<IExternalIdpLoginService>().LoginAsync(channelType, parameters)`；禁用 `[FromServices] IEnumerable<IAuthenticationProvider>`（帧外抛守卫）。
 - **令牌解析**：`authType=="wechat"` 判断 → `"federated"`（并可用 `channel_type` 区分具体平台，`TokenValidationResult.ChannelType` 回读）。
-- **端点**：微信回调改打 `POST /api/auth/login/external/wechat_oauth`（`RoutePrefix` 默认 `/api/auth`；`channelType` 按平台库通道类型）。
+- **端点**：微信回调改打 `POST /api/auth/login/external/wechat_oauth`（组前缀 = `TKWF:Api:RestBasePath` 缺省 `/api` + `[assembly: ExtensionModule("AuthCenter","auth")]` → `/api/auth`；**v4.10.85 起 `RestBasePath` 显式空串可跳过第一级得 `/auth/...`**；`channelType` 按平台库通道类型）。
 - **DMP 微信凭证存量**：生产 DBA 执行 `DELETE FROM TKWF_PlatformCredential WHERE Platform='wechat'`（AuthCenter 侧微信凭证已无消费者——凭证迁移至 `Federation.WeChat` `WeChatOptions` 自持，平台库共用底座保留）。
 - **既有测试宿主**：白名单声明补 `FederationExtensionInitializer<>`（桥接契约由 Federation 注册——端到端验证见 `ExternalIdpLoginServiceTests`）。
 

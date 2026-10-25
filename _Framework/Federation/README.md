@@ -130,7 +130,7 @@ var result = await user.Use<ISsoLogin>().LoginAsync(channelId, context, ct);
         "IsProduction": true
       },
       "Web": {                             // 对外端点表现层（FederationWebExtension，配置分层 AGENTS §8——平台集成面含 {platformId} 平台段，信任/委托面根级）
-        "RoutePrefix": "/feberation",        // 端点挂此前缀（V0.7.0 默认 /feberation，可配）
+        "RoutePrefix": "/feberation",        // 链接组装前缀（图文链接/免登/子应用回调 URL 拼接——非挂载；端点挂载归 TKWF:Api:RestBasePath + [assembly: ExtensionModule("Federation","feberation")]，v4.10.85 空串语义将其对齐 /feberation）
         "LoginEndpointEnabled": true,      // POST {prefix}/{platformId}/login[ /{channelId}]
         "JwksEndpointEnabled": true,       // GET {prefix}/jwks（根级）
         "EventEndpointEnabled": true,      // POST {prefix}/{platformId}/event[/{channelId}]

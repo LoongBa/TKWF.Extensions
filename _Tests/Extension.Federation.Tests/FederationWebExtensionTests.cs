@@ -257,6 +257,33 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("wechat-mp", FederationEndpointHost.Channel.LastEventContext.Parameters["channel_id"]);
     }
 
+    // P1 安全修复（审核 F1，2026-10-26）：base_url 服务端可信填充——最后写覆盖 query，防攻击者
+    // query 注入 ?base_url=https://evil.com 劫持免登票据落地域（对齐 HandleAuthorizeStart 防伪造回调域语义）
+    /// <summary>event 端点 base_url 服务端注入不被 query 覆盖（P1 安全修复回归锁）：POST 带恶意
+    /// <c>?base_url=...evil...</c> → LastEventContext.Parameters["base_url"] 仍为服务端 scheme://host
+    /// （非 query 值）——防伪造回调域（攻击者可劫持图文 {ticket} 链接 → 票据外泄冒充受害者）。</summary>
+    [Fact]
+    public async Task Event_BaseUrl_ServerTrusted_NotOverridableByQuery()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.EventHandler1.Result =
+            new EventReplyResult("<xml><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[ok]]></Content></xml>", "text/xml");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        // 恶意 query 注入 base_url（攻击者企图劫持票据链接落地域——服务端必须权威覆盖）
+        var resp = await client.PostAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?base_url=https://evil.example.com&msg_signature=sig-1&timestamp=123&nonce=nc-1",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.NotNull(FederationEndpointHost.Channel.LastEventContext);
+        // P1 修复核心断言：base_url = 服务端 scheme://host（TestServer 默认 http://localhost），非 query 恶意值
+        var injected = FederationEndpointHost.Channel.LastEventContext!.Parameters["base_url"];
+        Assert.False(string.IsNullOrWhiteSpace(injected));
+        Assert.DoesNotContain("evil.example.com", injected, System.StringComparison.Ordinal);
+        Assert.StartsWith("http://", injected, System.StringComparison.Ordinal);
+    }
+
     /// <summary>URL 验证握手（echostr——微信回调 URL 验证契约）：GET query 含 echostr 且验签通过 → 原样回显（text/plain）。
     /// 双模式验签（VerifyUrlAsync——安全 msg_signature 4 参 + AES 解密 echostr / 明文 signature 3 参）。</summary>
     [Fact]

@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
+using Microsoft.Extensions.Configuration;
+
 using TKWF.Ext.Federation;
 
 namespace TKWF.Federation.WeChat;
@@ -30,12 +32,14 @@ public sealed record WechatReplyPayload(
 /// <summary>
 /// 图文模板条目（<c>Channel.Extra["news_reply"]</c> JSON <c>articles</c> 数组元素——微信图文条目，
 /// 占位符可替换；V0.4.1 多图文模板结构）。
+/// <para>双绑定：<see cref="JsonPropertyName"/>（JSON 序列化/反序列化——Extra 存储面）+
+/// <see cref="ConfigurationKeyName"/>（Options 绑定面——appsettings 全局/通道模板配置，snake_case 一致）。</para>
 /// </summary>
 public sealed record NewsReplyArticle(
-    [property: JsonPropertyName("title")] string? Title,
-    [property: JsonPropertyName("description")] string? Description,
-    [property: JsonPropertyName("link")] string? Link,
-    [property: JsonPropertyName("pic_url")] string? PicUrl);
+    [property: JsonPropertyName("title"), ConfigurationKeyName("title")] string? Title,
+    [property: JsonPropertyName("description"), ConfigurationKeyName("description")] string? Description,
+    [property: JsonPropertyName("link"), ConfigurationKeyName("link")] string? Link,
+    [property: JsonPropertyName("pic_url"), ConfigurationKeyName("pic_url")] string? PicUrl);
 
 /// <summary>
 /// 多图文模板 DTO（<c>Channel.Extra["news_reply"]</c> JSON——V0.4.1
@@ -49,12 +53,15 @@ public sealed record NewsReplyArticle(
 /// </code>
 /// <para><see cref="TtlSeconds"/> 保留字段一致性（无签票时无业务语义，忽略——对齐平台基类
 /// <see cref="WechatEventReplyHandlerBase.NewsReplyTemplate"/>）。</para>
+/// <para>双绑定：<see cref="JsonPropertyName"/>（JSON 存储面）+ <see cref="ConfigurationKeyName"/>
+/// （Options 绑定面——<see cref="WechatEventReplyOptions.DefaultNewsReplyTemplate"/> 与
+/// <see cref="WeChatChannelConfig.NewsReplyTemplate"/> 的 appsettings snake_case 配置键一致）。</para>
 /// </summary>
 public sealed record NewsReplyTemplateV2(
-    [property: JsonPropertyName("enabled")] bool? Enabled,
-    [property: JsonPropertyName("articles")] IReadOnlyList<NewsReplyArticle>? Articles,
-    [property: JsonPropertyName("title")] string? Title,
-    [property: JsonPropertyName("description")] string? Description,
-    [property: JsonPropertyName("link")] string? Link,
-    [property: JsonPropertyName("pic_url")] string? PicUrl,
-    [property: JsonPropertyName("ttl_seconds")] int? TtlSeconds);
+    [property: JsonPropertyName("enabled"), ConfigurationKeyName("enabled")] bool? Enabled,
+    [property: JsonPropertyName("articles"), ConfigurationKeyName("articles")] IReadOnlyList<NewsReplyArticle>? Articles,
+    [property: JsonPropertyName("title"), ConfigurationKeyName("title")] string? Title,
+    [property: JsonPropertyName("description"), ConfigurationKeyName("description")] string? Description,
+    [property: JsonPropertyName("link"), ConfigurationKeyName("link")] string? Link,
+    [property: JsonPropertyName("pic_url"), ConfigurationKeyName("pic_url")] string? PicUrl,
+    [property: JsonPropertyName("ttl_seconds"), ConfigurationKeyName("ttl_seconds")] int? TtlSeconds);

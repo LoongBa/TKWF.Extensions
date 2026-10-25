@@ -207,12 +207,13 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         {
             ["__raw"] = rawBody,
             ["channel_id"] = cfg.ChannelId,
-            // 本站点请求基址（scheme://host）——服务端可信填充（防伪造回调域，对齐 HandleAuthorizeStart
-            // 同款注入）；handler 签票链接第三级基址兜底（ChannelBaseUrls → TestTicketEndpointBaseUrl → 本值）
-            ["base_url"] = $"{ctx.Request.Scheme}://{ctx.Request.Host}",
         };
         foreach (var (key, value) in ctx.Request.Query)
             parameters[key] = value.ToString();
+        // 本站点请求基址（scheme://host）——服务端可信填充，<b>最后写覆盖 query</b>（防伪造回调域——
+        // 对齐 HandleAuthorizeStart 同款注入语义：攻击者 query 注入 ?base_url= 不得覆盖服务端权威值）；
+        // handler 签票链接第三级基址兜底（ChannelBaseUrls → TestTicketEndpointBaseUrl → 本值）
+        parameters["base_url"] = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
 
         ISsoChannel? channel;
         try

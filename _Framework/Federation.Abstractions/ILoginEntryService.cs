@@ -35,6 +35,25 @@ public interface ILoginEntryService : IDomainService
         int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default);
 
     /// <summary>
+    /// 签发票据并组装<b>测试端点</b> URL（URL 形态 <c>{baseUrl}{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——
+    /// 指向 FederationWebExtension <c>HandleTestTicket</c>（GET 匿名兑票 → 200 JSON 载荷），供开发期
+    /// ticket 闭环验证（内置测试图文卡片的点击落点——用户点卡片直达解票信息展示）。
+    /// <para><b>与 <see cref="BuildTicketUrlAsync"/> 的差异</b>：① 路径为测试端点（<c>/test/...</c>）而非免登落地
+    /// （<c>{TicketPath}?ticket=</c>）；② <b>不受 <see cref="FederationLoginEntryOptions.Enabled"/> 门控</b>——
+    /// 测试端点匿名兑票（不经免登入口），故签票能力独立可用（密钥/DB 就绪即可——零配置冒烟目标）。</para>
+    /// </summary>
+    /// <param name="channelId">渠道实例 id（URL 路径段 + 签入 identity.ChannelId）。</param>
+    /// <param name="platformId">平台段（<c>{PlatformType}</c>——微信 <c>wechat</c>；测试端点路由段）。</param>
+    /// <param name="channelType">通道类型（如 <c>wechat_event</c>——签入 identity.ChannelType）。</param>
+    /// <param name="externalUserId">外部用户标识（openid——签入 identity.ExternalUserId）。</param>
+    /// <param name="ttlSeconds">票据 TTL 秒（null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。</param>
+    /// <param name="requestBaseUrl">请求 Host 推导基址（<c>scheme://host</c>——Web 装配层注入；可空）。</param>
+    /// <param name="ct">取消令牌。</param>
+    Task<string?> BuildTestTicketUrlAsync(
+        string channelId, string platformId, string channelType, string externalUserId,
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default);
+
+    /// <summary>
     /// 静默授权入口（snsapi_base）——委托通道 <c>ISsoChannel.BuildAuthorizeUrlAsync(Scope: "snsapi_base")</c>
     /// （无需新契约，方案 §6.1 现状即支持）。
     /// <para>返回 null = 通道构造失败（未装配平台库）/ 通道不支持授权（<c>BuildAuthorizeUrlAsync</c> DIM null）——

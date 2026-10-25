@@ -80,14 +80,24 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
             return null;
 
         // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内；
-        // 内置测试模板经 ctx.BaseUrl（请求 Host 推导）组装本站点免登链接——零配置链路）
-        var ticketUrl = await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
+        // 内置测试模板经 ctx.BaseUrl（请求 Host 推导）组装本站点免登链接——零配置链路）。
+        // ⚠️ 缺口修复（2026-10-26 复审）：内置测试模板的目标是"点击卡片 → 显示解票信息"——该语义只有
+        // 测试端点（HandleTestTicket GET 匿名兑票 → 200 JSON）满足；免登 URL（{TicketPath}?ticket=）走
+        // 消费方 SPA 落地，Platform.Web 无前端 → 点击 404 死链。故内置模板分支走 ResolveTestTicketUrlAsync
+        // （{baseUrl}{RoutePrefix}/wechat/test/{channelId}/{ticket}），业务模板（Extra/全局默认）保持免登 URL。
+        var ticketUrl = IsBuiltInTestTemplate(template)
+            ? await ResolveTestTicketUrlAsync(ctx, ct, template.TtlSeconds)
+            : await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
 
         // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}/{ticket}——I2-8 5 参重载）
         var articles = BuildArticles(template, ctx, ticketUrl);
 
         return new WechatReplyPayload(News: articles);
     }
+
+    /// <summary>内置测试模板判定（ReferenceEquals 精确比对——唯一内置静态实例，防同名模板误判）。</summary>
+    private static bool IsBuiltInTestTemplate(NewsReplyTemplateV2 template)
+        => ReferenceEquals(template, BuiltInTestTemplate);
 
     /// <summary>内置测试图文模板（开发期 <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 门控——
     /// 模板链①②均空时回退；标题"链路测试"、link 含 <c>{ticket}</c> 签票占位、pic_url 空 = 图片不存在）。</summary>

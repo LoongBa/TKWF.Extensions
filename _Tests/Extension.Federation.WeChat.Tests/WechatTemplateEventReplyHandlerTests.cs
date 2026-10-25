@@ -287,6 +287,33 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.Contains("<Title><![CDATA[链路测试]]></Title>", reply.Content);
     }
 
+    /// <summary>内置"链路测试"卡片 link 走<b>测试端点</b>而非免登 URL（2026-10-26 复审缺口修复回归锁）：
+    /// 内置模板的目的是"点击卡片 → 显示解票信息"——只有测试端点（HandleTestTicket GET 匿名兑票 → 200 JSON）
+    /// 满足；免登 URL 走消费方 SPA 落地（Platform.Web 无前端 → 点击 404 死链）。断言 link 含
+    /// <c>/test/{channelId}/ticket</c> 路径段（经 RecordingLoginEntryService.BuildTestTicketUrlAsync 产 URL）。</summary>
+    [Fact]
+    public async Task Template_BuiltIn_UsesTestEndpointUrl()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<WechatEventReplyOptions>(o => o.EnableBuiltInTestTemplate = true);
+            services.AddScoped<ILoginEntryService>(_ => recorded);
+        });
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-no-template", uid: "u-1", openId: "openid-1"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        // link = {platformId}/test/{channelId}/ticket-test（BuildTestTicketUrlAsync 固定 URL——测试端点语义）
+        Assert.Contains("https://ticket.example.com/wechat/test/wx-no-template/ticket-test", reply!.Content);
+        // 免登 URL（/login/ticket?ticket=）不应出现——内置模板不走 ResolveTicketAsync 分支
+        Assert.DoesNotContain("/login/ticket?ticket=", reply.Content);
+    }
+
     /// <summary>模板解析链第三级 fail-safe：EnableBuiltInTestTemplate 默认 false（未开启）→ 模板缺失仍 null
     /// （不自动回退内置卡片——生产防护：绝不发"链路测试"给真实用户）。</summary>
     [Fact]
@@ -346,6 +373,13 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
             RequestBaseUrl = requestBaseUrl;
             ExternalUserId = externalUserId;
             return Task.FromResult<string?>($"https://ticket.example.com/t?ch={channelId}");
+        }
+
+        public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+        {
+            RequestBaseUrl = requestBaseUrl;
+            ExternalUserId = externalUserId;
+            return Task.FromResult<string?>($"https://ticket.example.com/{platformId}/test/{channelId}/ticket-test");
         }
 
         public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)

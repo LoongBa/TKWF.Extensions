@@ -93,6 +93,47 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
     }
 
     /// <inheritdoc />
+    public async Task<string?> BuildTestTicketUrlAsync(
+        string channelId, string platformId, string channelType, string externalUserId,
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+    {
+        // ① 基址解析（三级：ChannelBaseUrls 按 ChannelId 覆盖 → TestTicketEndpointBaseUrl → 请求 Host 推导；
+        //    全空 → CombineUrl 相对路径兜底——本站点同源；微信图文 link 恒有 requestBaseUrl 实际可用）
+        //    ⚠️ 不经 Enabled 门控——测试端点匿名兑票（HandleTestTicket 直兑 ISetaledTicketService），
+        //    签票能力与免登入口独立（零配置冒烟：密钥/DB 就绪即可产测试链接）
+        var options = _loginEntry.Value;
+        if (!options.ChannelBaseUrls.TryGetValue(channelId, out var baseUrl))
+            baseUrl = _eventReply.Value.TestTicketEndpointBaseUrl;
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            baseUrl = requestBaseUrl;
+
+        // ② 签密封票据（null-claimant——与免登票同原语；测试端点 Redeem 后展示载荷）
+        var identity = new FederatedIdentity(
+            UId: string.Empty,
+            ChannelId: channelId,
+            ExternalUserId: externalUserId,
+            ChannelType: channelType);
+        try
+        {
+            var issued = await TicketService().IssueAsync(
+                identity,
+                TimeSpan.FromSeconds(ttlSeconds ?? options.TicketTtlSeconds),
+                new SealedTicketOptions(),
+                ct);
+
+            // ③ URL 组装（测试端点路径 {baseUrl}{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——
+            //    与免登 URL 对照：免登走 {TicketPath}?ticket=，测试端点走 /test/{channelId}/{ticket} 路径段）
+            return CombineUrl(baseUrl, _eventReply.Value.RoutePrefix, $"{platformId}/test/{channelId}/{issued.Ticket}");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "测试端点签票失败（票据后端不可用）——不生成测试链接：ChannelId={ChannelId} ExternalUserId={ExternalUserIdPrefix}",
+                channelId, externalUserId.Length <= 6 ? externalUserId : externalUserId[..6]);
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
     {
         // 通道构造失败（未装配平台库 → CreateAsync null）→ null 非抛（fail-closed 降级）

@@ -233,6 +233,9 @@ public class WeChatChannelTestHost : TestHostBase
         public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
+        public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
         public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
     }

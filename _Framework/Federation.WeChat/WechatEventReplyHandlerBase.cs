@@ -335,6 +335,24 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     }
 
     /// <summary>
+    /// 测试端点票据 URL 解析（开发期 ticket 闭环验证——内置测试模板"链路测试"卡片的点击落点）。
+    /// <para>经 <see cref="ILoginEntryService.BuildTestTicketUrlAsync"/> 签密封票据并组装<b>测试端点</b>路径
+    /// （<c>{baseUrl}{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——平台段 = <c>wechat</c>，
+    /// 与 <see cref="ResolveTicketAsync"/> 的免登 URL（<c>{TicketPath}?ticket=</c>）对照：测试端点 GET 匿名
+    /// 兑票 → 200 JSON 载荷展示解票信息，免登 URL 走消费方 SPA 落地）。<b>不经
+    /// <see cref="FederationLoginEntryOptions.Enabled"/> 门控</b>——测试端点匿名兑票，零配置冒烟可用。</para>
+    /// </summary>
+    /// <param name="ttlSeconds">票据 TTL 秒（可空——调用方按模板 TtlSeconds 传入，null = 缺省）。</param>
+    protected async Task<string?> ResolveTestTicketUrlAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
+    {
+        if (ctx is null || string.IsNullOrWhiteSpace(ctx.ChannelId))
+            return null;
+        return await User.Use<ILoginEntryService>()
+            .BuildTestTicketUrlAsync(ctx.ChannelId, platformId: "wechat", ChannelType,
+                ctx.OpenId ?? string.Empty, ttlSeconds, ctx.BaseUrl, ct);
+    }
+
+    /// <summary>
     /// 图文模板 DTO（<c>Channel.Extra["news_reply"]</c> JSON——Title/Description/Link 占位符模板；
     /// I2-8 起 <see cref="TtlSeconds"/> 供 <see cref="ResolveTicketAsync"/> 作票据 TTL 来源——
     /// 模板 TtlSeconds 优先，缺省 <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。

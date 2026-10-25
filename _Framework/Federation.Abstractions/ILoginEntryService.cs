@@ -18,19 +18,21 @@ public interface ILoginEntryService : IDomainService
     /// <summary>
     /// 签发票据并组装免登链接（URL 形态 <c>{baseUrl}{RoutePrefix}{TicketPath}?ticket={ticket}</c>——基址复用
     /// <c>FederationEventReplyOptions.TestTicketEndpointBaseUrl</c> 单一事实源，<c>FederationLoginEntryOptions.ChannelBaseUrls</c>
-    /// 按 ChannelId 覆盖）。
-    /// <para>fail-closed（三层）：① <see cref="FederationLoginEntryOptions.Enabled"/> 默认 false → null；
-    /// ② 基址（ChannelBaseUrls 与 TestTicketEndpointBaseUrl 均空）→ null（不错拼相对链接）；
+    /// 按 ChannelId 覆盖，<paramref name="requestBaseUrl"/> 为请求 Host 推导兜底（本站点落地——反代/多域名显式配置覆盖）。
+    /// fail-closed（三层）：① <see cref="FederationLoginEntryOptions.Enabled"/> 默认 false → null；
+    /// ② 三级基址（ChannelBaseUrls / TestTicketEndpointBaseUrl / requestBaseUrl）均空 → 交 <c>CombineUrl</c>
+    /// 产<b>相对路径</b>（本站点同源——微信图文 link 须完整 URL，故实际链路恒有 requestBaseUrl）；
     /// ③ <c>IssueAsync</c> 抛异常（票据后端不可用）→ null（不阻断回复）。</para>
     /// </summary>
     /// <param name="channelId">渠道实例 id（如公众号 id——基址覆盖键 + 签入 identity.ChannelId）。</param>
     /// <param name="channelType">通道类型（如 <c>wechat_event</c>——签入 identity.ChannelType）。</param>
     /// <param name="externalUserId">外部用户标识（openid——签入 identity.ExternalUserId）。</param>
     /// <param name="ttlSeconds">票据 TTL 秒（null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。</param>
+    /// <param name="requestBaseUrl">请求 Host 推导基址（<c>scheme://host</c>——Web 装配层注入，本站点落地；可空）。</param>
     /// <param name="ct">取消令牌。</param>
     Task<string?> BuildTicketUrlAsync(
         string channelId, string channelType, string externalUserId,
-        int? ttlSeconds = null, CancellationToken ct = default);
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default);
 
     /// <summary>
     /// 静默授权入口（snsapi_base）——委托通道 <c>ISsoChannel.BuildAuthorizeUrlAsync(Scope: "snsapi_base")</c>

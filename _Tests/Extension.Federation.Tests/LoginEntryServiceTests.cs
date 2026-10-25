@@ -50,22 +50,24 @@ public sealed class LoginEntryServiceTests : TestHostBase
         Assert.Empty(_ticket.Issued);   // 未启用 → 不签票
     }
 
-    // ── 2. 基址缺失（fail-closed 第二层——不错拼相对链接）──
+    // ── 2. 基址缺失（相对路径兜底—— CombineUrl baseUrl 空 → /{routePrefix}/{path}）──
 
-    /// <summary>启用但 ChannelBaseUrls 与 TestTicketEndpointBaseUrl 均空 → null + 不签票（§6.4 不错拼相对链接）。</summary>
+    /// <summary>启用但 ChannelBaseUrls / TestTicketEndpointBaseUrl / requestBaseUrl 均空 → 签票 + 相对路径 URL
+    /// （CombineUrl baseUrl 空 → 本站点同源；微信图文 link 实际链路恒有 requestBaseUrl——本测试锁相对路径兜底语义）。</summary>
     [Fact]
-    public async Task BuildTicketUrl_NoBaseUrl_ReturnsNull()
+    public async Task BuildTicketUrl_NoBaseUrl_ReturnsRelativeUrl()
     {
         using var _ = this;
         var (_, user) = BindTestScope(services =>
         {
             services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
         });
+        _ticket.IssueResult = "ticket-abc-123";
 
         var url = await user.Use<ILoginEntryService>().BuildTicketUrlAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
 
-        Assert.Null(url);
-        Assert.Empty(_ticket.Issued);
+        Assert.Equal("/feberation/login/ticket?ticket=ticket-abc-123", url);
+        Assert.Single(_ticket.Issued);   // 相对路径兜底仍签票（票据可核销——落地在本服务同源）
     }
 
     // ── 3. 正常路径（启用 + 基址 → 签票 + URL 组装）──

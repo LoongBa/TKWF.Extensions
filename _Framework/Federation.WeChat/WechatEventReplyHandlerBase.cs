@@ -331,7 +331,7 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
         if (ctx is null || string.IsNullOrWhiteSpace(ctx.ChannelId))
             return null;
         return await User.Use<ILoginEntryService>()
-            .BuildTicketUrlAsync(ctx.ChannelId, ChannelType, ctx.OpenId ?? string.Empty, ttlSeconds, ct);
+            .BuildTicketUrlAsync(ctx.ChannelId, ChannelType, ctx.OpenId ?? string.Empty, ttlSeconds, ctx.BaseUrl, ct);
     }
 
     /// <summary>

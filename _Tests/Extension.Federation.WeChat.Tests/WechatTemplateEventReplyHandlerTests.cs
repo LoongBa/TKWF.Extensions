@@ -247,6 +247,111 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply!.Content);
     }
 
+    /// <summary>模板解析链第二级：Options.DefaultNewsReplyTemplate 全局兜底（Channel.Extra 无模板但全局配置）
+    /// → 图文回复（全局模板占位符替换——覆盖"模板缺失 → Options 全局默认"链）。</summary>
+    [Fact]
+    public async Task Template_Missing_GlobalDefaultTemplate_Fallback()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.Configure<WechatEventReplyOptions>(o => o.DefaultNewsReplyTemplate = new NewsReplyTemplateV2(
+                Enabled: true, Articles: null, Title: "全局默认 {uid}", Description: "global",
+                Link: "https://global.example.com/x", PicUrl: null, TtlSeconds: null)));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-no-template", uid: "u-global", openId: "openid-g"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply!.Content);
+        Assert.Contains("<Title><![CDATA[全局默认 u-global]]></Title>", reply.Content);
+    }
+
+    /// <summary>模板解析链第三级：EnableBuiltInTestTemplate=true 且 ①② 均空 → 内置"链路测试"卡片
+    /// （开发期零 seed 冒烟——标题固定、link 含 {ticket} 占位由签票替换）。</summary>
+    [Fact]
+    public async Task Template_Missing_BuiltInEnTestEnabled_ReturnsNewsXml()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.Configure<WechatEventReplyOptions>(o => o.EnableBuiltInTestTemplate = true));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-no-template", uid: "u-1", openId: "openid-1"),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply!.Content);
+        Assert.Contains("<Title><![CDATA[链路测试]]></Title>", reply.Content);
+    }
+
+    /// <summary>模板解析链第三级 fail-safe：EnableBuiltInTestTemplate 默认 false（未开启）→ 模板缺失仍 null
+    /// （不自动回退内置卡片——生产防护：绝不发"链路测试"给真实用户）。</summary>
+    [Fact]
+    public async Task Template_Missing_BuiltInDisabled_ReturnsNull()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            TemplateEvent("wx-no-template"), CancellationToken.None);
+
+        Assert.Null(reply);
+    }
+
+    /// <summary>BaseUrl 透传：ctx.BaseUrl（装配层请求 Host 注入）→ ILoginEntryService.BuildTicketUrlAsync
+    /// 第三参（requestBaseUrl——免登链接三级基址解析的请求级兜底）。</summary>
+    [Fact]
+    public async Task Template_BaseUrl_ForwardedToLoginEntry()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<WechatEventReplyOptions>(o => o.RequireUidForTicket = true);
+            services.AddScoped<ILoginEntryService>(_ => recorded);
+        });
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            WeChatTestHost.CreateEventDispatch(
+                ("msg_type", "event"),
+                ("event", "unknown_event"),
+                ("from_user_name", "openid-b"),
+                ("external_user_id", "openid-b"),
+                ("to_user_name", "gh_test"),
+                ("uid", "u-b"),
+                ("channel_id", "wx-template"),
+                ("base_url", "https://wx.loongba.cn"),
+                ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "unknown_event")))),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);                        // uid 绑定门开 + 已富化 → 进签票出图文
+        Assert.Equal("https://wx.loongba.cn", recorded.RequestBaseUrl);
+        Assert.Equal("openid-b", recorded.ExternalUserId);   // 签票身份 = openid（非 uid）
+    }
+
+    /// <summary>满足 <see cref="WechatEventReplyHandlerBase.ResolveTicketAsync"/> 签票调用（记录参数供断言；
+    /// 返回固定 URL——占位符替换验证透传链）。</summary>
+    private sealed class RecordingLoginEntryService : ILoginEntryService
+    {
+        public string? RequestBaseUrl { get; private set; }
+        public string? ExternalUserId { get; private set; }
+
+        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+        {
+            RequestBaseUrl = requestBaseUrl;
+            ExternalUserId = externalUserId;
+            return Task.FromResult<string?>($"https://ticket.example.com/t?ch={channelId}");
+        }
+
+        public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+    }
+
     /// <summary>构造模板驱动事件上下文（unknown_event 类型——路由至 OnDefaultAsync 兜底入口，
     /// 含 uid/openid/channel_id——占位符替换数据源 + registry 反查键）。</summary>
     private static ChannelEventDispatch TemplateEvent(string channelId, string? uid = "u-1", string? openId = "openid-1")

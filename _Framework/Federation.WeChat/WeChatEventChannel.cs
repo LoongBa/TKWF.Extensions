@@ -420,6 +420,9 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel, IFollow
                     ["wechat.FromUserName"] = openId,
                     ["wechat.Content"] = msgContent,
                     ["wechat.CreateTime"] = createTime?.ToString(),
+                    // 装配层注入的本站点请求基址（HandleEvent → ChannelInboundContext.Parameters["base_url"]）——
+                    // 透传 handler 供免登链接组装（BaseUrl 解析链第三级：ChannelBaseUrls → TestTicketEndpointBaseUrl → 本值）
+                    ["wechat.base_url"] = context.Parameters?.TryGetValue("base_url", out var baseUrl) == true ? baseUrl : null,
                 },
             };
 

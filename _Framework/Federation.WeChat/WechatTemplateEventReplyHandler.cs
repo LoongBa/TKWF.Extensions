@@ -15,15 +15,18 @@ namespace TKWF.Federation.WeChat;
 /// <summary>
 /// 模板驱动 handler（方案 docs/Federation/Wechat事件回复Handler基类与二级分发-开发方案.md §3.3——
 /// 消费方<b>显式注册</b>，Oracle P0-1：平台库不默认注册 handler 实例防过度设计）。
-/// <para>覆盖 <see cref="WechatEventReplyHandlerBase.OnDefaultAsync"/>——读
-/// <c>Channel.Extra["news_reply"]</c> 模板构造图文（占位符 <c>{uid}/{openid}/{channel_id}/{channel_type}</c> 替换）；
-/// 模板<b>缺失 / 损坏 / Enabled=false → 返回 null</b>（不回复不拦截——Oracle P0-2）。</para>
+/// <para>覆盖 <see cref="WechatEventReplyHandlerBase.OnDefaultAsync"/>——<b>模板解析链 4 级</b>：
+/// ① <c>Channel.Extra["news_reply"]</c>（per-channel：静态投影 / DB 动态权威层）→
+/// ② <see cref="WechatEventReplyOptions.DefaultNewsReplyTemplate"/>（全局默认）→
+/// ③ <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 内置测试卡片（开发期零 seed 冒烟）→
+/// ④ <c>null</c>（纯文本模式，不回复图文）。占位符 <c>{uid}/{openid}/{channel_id}/{channel_type}</c> 替换，
+/// <c>{ticket}</c> 经签票替换为免登链接。</para>
 /// <para><b>多图文升级（V0.4.1，方案 WeChatOperations §3.2.3）</b>：<c>articles</c> 数组优先（多图文 1..8 篇，
 /// 占位符替换逐篇应用），缺省回退单图文字段（title/description/link/pic_url——存量兼容零破坏）。</para>
-/// <para><b>无签票耦合</b>（Oracle 方案 §3.3"无签密封票据耦合"）：本 handler 为纯图文回复场景，
-/// <c>link</c> 模板的 <c>{ticket}</c> 占位符<b>不替换（保留原样）</b>——签票前不可用，
-/// 业务 handler 需签票时选用主包 <see cref="EventReplyHandlerBase"/>（签票专用基类）或
-/// <c>User.Use&lt;ISealedTicketService&lt;FederatedIdentity&gt;&gt;()</c> 懒加载签票后自行替换。</para>
+/// <para><b>免登链接基址解析链（BuildTicketUrlAsync 内，三级）</b>：
+/// <c>FederationLoginEntryOptions.ChannelBaseUrls[channelId]</c> → <see cref="FederationEventReplyOptions.TestTicketEndpointBaseUrl"/>
+/// → <c>ctx.BaseUrl</c>（装配层请求 Host 注入 <c>scheme://host</c>——本站点落地，零配置直觉）；
+/// 三级均空 → <c>CombineUrl</c> 相对路径兜底（微信图文 link 实际链路恒有 <c>ctx.BaseUrl</c>）。</para>
 /// <para>注册（消费方）：<c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, WechatTemplateEventReplyHandler&gt;()</c>；
 /// 与 <see cref="WechatProbeEventReplyHandler"/> <b>互斥使用</b>（Oracle P2-5——同时注册时 first-non-null-wins，
 /// 幂等语义，使用指南声明）。</para>
@@ -62,8 +65,12 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// </summary>
     protected override async Task<WechatReplyPayload?> OnDefaultAsync(WechatEventContext ctx, CancellationToken ct)
     {
-        // 模板读取（Extra["news_reply"]——通道级图文配置；缺失/损坏 → null，Oracle P0-2）
-        var template = ReadMultiNewsTemplate(ctx.Channel?.Extra);
+        // 模板解析链（4 级）：① Channel.Extra["news_reply"]（per-channel：静态投影/DB 动态权威层）
+        // → ② Options.DefaultNewsReplyTemplate（全局默认）→ ③ EnableBuiltInTestTemplate 内置测试卡片（开发期）
+        // → ④ null（纯文本模式——不回复图文）。①②③ 相互独立来源，逐级回退；全空且无内置 → null。
+        var template = ReadMultiNewsTemplate(ctx.Channel?.Extra)
+            ?? _replyOptions?.Value.DefaultNewsReplyTemplate
+            ?? (_replyOptions?.Value.EnableBuiltInTestTemplate == true ? BuiltInTestTemplate : null);
         if (template is null or { Enabled: not true })
             return null;
 
@@ -72,7 +79,8 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
         if (_replyOptions?.Value.RequireUidForTicket == true && string.IsNullOrEmpty(ctx.UId))
             return null;
 
-        // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内）
+        // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内；
+        // 内置测试模板经 ctx.BaseUrl（请求 Host 推导）组装本站点免登链接——零配置链路）
         var ticketUrl = await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
 
         // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}/{ticket}——I2-8 5 参重载）
@@ -80,6 +88,17 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
 
         return new WechatReplyPayload(News: articles);
     }
+
+    /// <summary>内置测试图文模板（开发期 <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 门控——
+    /// 模板链①②均空时回退；标题"链路测试"、link 含 <c>{ticket}</c> 签票占位、pic_url 空 = 图片不存在）。</summary>
+    private static readonly NewsReplyTemplateV2 BuiltInTestTemplate = new(
+        Enabled: true,
+        Articles: null,
+        Title: "链路测试",
+        Description: "点击验证完整回复链路",
+        Link: "{ticket}",
+        PicUrl: null,
+        TtlSeconds: null);
 
     /// <summary>
     /// 多图文模板读取（<c>Channel.Extra["news_reply"]</c> JSON——<see cref="NewsReplyTemplateV2"/>；

@@ -33,6 +33,14 @@ public class WeChatChannelConfig
 
     /// <summary>消息加解密密钥 EncodingAESKey（T5 事件推送 AES 解密用——43 字符，Base64Decode 派生 32 字节 AESKey）。</summary>
     public string EncodingAESKey { get; set; } = "";
+
+    /// <summary>
+    /// 通道级图文回复模板（可空——<c>null</c> = 走全局 <see cref="WechatEventReplyOptions.DefaultNewsReplyTemplate"/>）。
+    /// <para>配置形态：直接 per-channel 配置目标图文（<c>title/description/link/pic_url/ttl_seconds/enabled</c>），
+    /// 经 <see cref="WechatEventReplyHandlerBase.NewsReplyTemplateKey"/>（<c>news_reply</c>）投影进
+    /// <see cref="ChannelConfig.Extra"/>——与 DB 动态权威层的通道级模板同一解析面（静态层/DB 层统一语义）。</para>
+    /// </summary>
+    public NewsReplyTemplateV2? NewsReplyTemplate { get; set; }
 }
 
 /// <summary>

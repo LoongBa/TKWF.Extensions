@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using TKWF.Ext.Federation;
 
@@ -48,18 +49,26 @@ public sealed class WeChatChannelSource : IChannelSource
     /// <inheritdoc />
     public IReadOnlyList<ChannelConfig> GetChannels()
         => _options.Value.Channels
-            .Select(c => new ChannelConfig
-            {
-                ChannelId = c.ChannelId,
-                PlatformType = PlatformType,
-                Alias = c.Alias,   // 对外别名（可空——缺省 null = 用 ChannelId 对外，方案 §3.7 双键）
-                AppId = c.AppId,
-                AppSecret = c.AppSecret,
-                Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
-                {
-                    ["Token"] = c.Token,
-                    ["EncodingAESKey"] = c.EncodingAESKey,
-                },
-            })
+            .Select(c => Build(c))
             .ToList();
+
+    private static ChannelConfig Build(WeChatChannelConfig c)
+    {
+        var extra = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["Token"] = c.Token,
+            ["EncodingAESKey"] = c.EncodingAESKey,
+        };
+        if (c.NewsReplyTemplate is not null)
+            extra[WechatEventReplyHandlerBase.NewsReplyTemplateKey] = JsonSerializer.Serialize(c.NewsReplyTemplate);
+        return new ChannelConfig
+        {
+            ChannelId = c.ChannelId,
+            PlatformType = "wechat",
+            Alias = c.Alias,
+            AppId = c.AppId,
+            AppSecret = c.AppSecret,
+            Extra = extra,
+        };
+    }
 }

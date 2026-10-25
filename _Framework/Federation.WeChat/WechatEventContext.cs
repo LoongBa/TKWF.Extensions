@@ -49,6 +49,7 @@ public sealed record WechatEventContext(
     string? OpenId,                     // external_user_id 归一（通道/编排富化——OpenId=external_user_id ?? FromUserName）
     string? UId,                        // uid（编排层只读查询富化——openid 未绑定为 null）
     string? ChannelId,                  // channel_id（装配层传入——registry 选区键）
+    string? BaseUrl = null,             // base_url（装配层注入本站点请求基址 scheme://host——免登链接三级基址兜底）
     ChannelConfig? Channel = null,      // Channel（基类反查 registry 后富化——Channel.Extra 模板数据源；null = 查不到/未反查）
     string? MsgId = null,               // MsgId（微信消息 id——消息形态幂等键来源；__decrypted_xml 提取，事件类为 null；V0.2.0 网关幂等）
     long? CreateTime = null,            // CreateTime（微信原始时间戳 Unix 秒——事件形态幂等键来源；__decrypted_xml 提取，原样留存非 UTC 转换）
@@ -88,6 +89,7 @@ public sealed record WechatEventContext(
         var openId = GetValue(parameters, "external_user_id") ?? fromUserName;
         var uid = GetValue(parameters, "uid");
         var channelId = GetValue(parameters, "channel_id");
+        var baseUrl = GetValue(parameters, "base_url");
         var content = GetValue(parameters, "content");
 
         // __decrypted_xml（通道存解密后明文 XML——Oracle P1-4 Parse 数据源）缺失 → 未富化字段全 null（容错不抛）
@@ -176,6 +178,7 @@ public sealed record WechatEventContext(
             OpenId: openId,
             UId: uid,
             ChannelId: channelId,
+            BaseUrl: baseUrl,
             MsgId: msgId,
             CreateTime: createTime,
             RawXml: xml);
@@ -239,11 +242,14 @@ public sealed record WechatEventContext(
                     parameters[key] = value;
             }
             // 前缀键 → Parse 裸键映射（wechat.ToUserName/wechat.Content——RawPayload 缺失时降级数据源；
+            //    wechat.base_url——装配层请求基址透传（HandleEvent 注入 → 通道 Attributes → 本映射）
             //    RawPayload 在场时富化字段仍以 Attributes 为准，XML 仅补未富化字段）
             if (attrs.TryGetValue("wechat.ToUserName", out var toUserName) && toUserName is not null)
                 parameters["to_user_name"] = toUserName;
             if (attrs.TryGetValue("wechat.Content", out var content) && content is not null)
                 parameters["content"] = content;
+            if (attrs.TryGetValue("wechat.base_url", out var baseUrl) && baseUrl is not null)
+                parameters["base_url"] = baseUrl;
         }
         if (hasRawPayload)
             parameters["__decrypted_xml"] = evt.RawPayload;

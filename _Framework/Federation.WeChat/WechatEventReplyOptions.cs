@@ -33,4 +33,23 @@ public class WechatEventReplyOptions
     /// 兑换侧实时回查 uid）。</para>
     /// </summary>
     public bool RequireUidForTicket { get; set; }
+
+    /// <summary>
+    /// 全局默认图文回复模板（<c>null</c> = 未配置——模板解析链第二级兜底）。
+    /// <para>模板解析链（<see cref="WechatTemplateEventReplyHandler.OnDefaultAsync"/>）：
+    /// ① <c>Channel.Extra["news_reply"]</c>（per-channel：静态投影 / DB 动态权威层）→
+    /// ② 本全局默认 → ③ <see cref="EnableBuiltInTestTemplate"/> 内置测试卡片（开发期）→ ④ null（纯文本模式）。</para>
+    /// <para>配置形态：<c>TKWF:Federation:WeChat:EventReply:DefaultNewsReplyTemplate</c> 段——
+    /// 同 <see cref="NewsReplyTemplateV2"/> JSON 结构（enabled/articles/title/...，snake_case 绑定）。</para>
+    /// </summary>
+    public NewsReplyTemplateV2? DefaultNewsReplyTemplate { get; set; }
+
+    /// <summary>
+    /// 内置测试图文模板开关（默认 <c>false</c>——fail-safe：模板链①②均空时<b>不</b>自动回退内置卡片）。
+    /// <para><c>true</c>：模板解析链 ①② 均空时回退内置单图文卡片（标题"链路测试"、link 含 <c>{ticket}</c>
+    /// 签票占位、pic_url 空 = 图片不存在）——装配即测微信图文 + ticket 闭环，零 seed 零管理端
+    /// （开发期验证链路走通）。<b>开发联调配置 <c>appsettings.Development.json</c>（随仓库提交），
+    /// 生产 appsettings.json 不配（默认 false）——绝不发"链路测试"卡片给真实用户。</b></para>
+    /// </summary>
+    public bool EnableBuiltInTestTemplate { get; set; }
 }

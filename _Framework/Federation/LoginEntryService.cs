@@ -49,7 +49,7 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
     /// <inheritdoc />
     public async Task<string?> BuildTicketUrlAsync(
         string channelId, string channelType, string externalUserId,
-        int? ttlSeconds = null, CancellationToken ct = default)
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
     {
         // ① 能力开关（fail-closed 第一层——默认 false 显式启用）
         var options = _loginEntry.Value;
@@ -59,14 +59,12 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
             return null;
         }
 
-        // ② 基址解析（ChannelBaseUrls 按 ChannelId 覆盖 → TestTicketEndpointBaseUrl 兜底；均空 → fail-closed 不错拼相对链接）
+        // ② 基址解析（三级：ChannelBaseUrls 按 ChannelId 覆盖 → TestTicketEndpointBaseUrl → 请求 Host 推导；
+        //    全空 → CombineUrl 相对路径兜底——本站点同源，微信图文 link 恒有 requestBaseUrl 实际可用）
         if (!options.ChannelBaseUrls.TryGetValue(channelId, out var baseUrl))
             baseUrl = _eventReply.Value.TestTicketEndpointBaseUrl;
         if (string.IsNullOrWhiteSpace(baseUrl))
-        {
-            _logger.LogWarning("免登链接基址未配置（ChannelBaseUrls 与 TestTicketEndpointBaseUrl 均空）——不生成免登链接：ChannelId={ChannelId}", channelId);
-            return null;
-        }
+            baseUrl = requestBaseUrl;
 
         // ③ 签密封票据（null-claimant——免登终端兑票对应 AuthCenter V0.10.0 POST /login/ticket 仅消费 null-claimant 票）
         var identity = new FederatedIdentity(

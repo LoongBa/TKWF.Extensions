@@ -341,9 +341,9 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     /// <summary>测试端点（GET {prefix}/{platformId}/test/{channelId}/{ticket}，匿名游客帧，默认关）——ticket 闭环验证：
     /// 平台段 + 通道段选区校验（<see cref="ResolveChannelAsync"/>——对齐平台集成面统一入口，防跨平台错配/探测）
     /// → <c>ISealedTicketService&lt;FederatedIdentity&gt;.RedeemAsync(ticket)</c>（面①密封票据——v4.10.77 TicketRedeemContext
-    /// CAS，拆分命名 ADR109 D4）原子取回 payload → 200 载荷 JSON
-    /// （uid/channelId/openid/channelType——图文落地页联调验证，channel_id 取自签入载荷 FederatedIdentity.ChannelId，
-    /// 单通道也可取出、与选区分支无关）；失败/过期/已用/核销人不符 → null → 404（契约语义）。</summary>
+    /// CAS，拆分命名 ADR109 D4）原子取回 payload → <b>200 HTML 展示页</b>（uid/channelId/openid/channelType——图文
+    /// 卡片点击落点，微信内置浏览器渲染；channel_id 取自签入载荷 FederatedIdentity.ChannelId，单通道也可取出、
+    /// 与选区分支无关）；失败/过期/已用/核销人不符 → null → 404（契约语义，JSON 机器可读）。</summary>
     private static async Task<IResult> HandleTestTicket(HttpContext ctx, string platformId, string channelId, string ticket, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(ticket))
@@ -362,14 +362,9 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
                 return Results.Json(new ErrorResponse("TICKET_NOT_FOUND", null),
                     statusCode: StatusCodes.Status404NotFound);
 
-            return Results.Ok(new
-            {
-                ok = true,
-                uid = identity.UId,
-                channel_id = identity.ChannelId,
-                external_user_id = identity.ExternalUserId,
-                channel_type = identity.ChannelType,
-            });
+            // 200 HTML 展示页（微信内置浏览器渲染——裸 JSON 白屏无反应，2026-10-26 修复）
+            var html = BuildTestTicketHtml(identity);
+            return Results.Content(html, "text/html; charset=utf-8");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -377,6 +372,33 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             var reason = ex.Message ?? "TICKET_REDEEM_FAILED";
             return Results.Json(new ErrorResponse(reason, null), statusCode: StatusCodes.Status400BadRequest);
         }
+    }
+
+    /// <summary>测试端点 HTML 展示页（图文卡片点击落点——内联样式零依赖，微信内置浏览器可渲染；
+    /// 字段 HTML 转义防注入——externalUserId 来自微信回调外部输入）。</summary>
+    private static string BuildTestTicketHtml(TKW.Framework.Domain.FederatedIdentity identity)
+    {
+        static string Esc(string? v) => System.Net.WebUtility.HtmlEncode(v ?? "");
+        var rows = new[]
+        {
+            ("uid", Esc(identity.UId)),
+            ("channel_id", Esc(identity.ChannelId)),
+            ("external_user_id", Esc(identity.ExternalUserId)),
+            ("channel_type", Esc(identity.ChannelType)),
+        };
+        var trs = string.Concat(rows.Select(r => $"<tr><th align=\"left\" style=\"padding:8px 16px 8px 0;color:#666\">{r.Item1}</th><td style=\"padding:8px 0\">{r.Item2}</td></tr>"));
+        return $"""
+            <!DOCTYPE html>
+            <html lang="zh-CN">
+            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>票据兑验成功</title></head>
+            <body style="margin:0;background:#f5f6f7;font-family:system-ui,-apple-system,sans-serif">
+            <div style="max-width:480px;margin:48px auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+            <h2 style="margin:0 0 8px;font-size:18px">✅ 链路测试·票据兑验成功</h2>
+            <p style="margin:0 0 24px;color:#888;font-size:13px">密封票据已兑现（SealedTicket Redeem）</p>
+            <table style="border-collapse:collapse;font-size:14px">{trs}</table>
+            <p style="margin:24px 0 0;color:#bbb;font-size:12px">Federation 测试端点 · 开发期联调验证</p>
+            </div></body></html>
+            """;
     }
 
     /// <summary>免登落地端点（GET {prefix}/land/{ticket}，匿名游客帧，默认关——v0.12.0 排他单模型登录闭环）：

@@ -611,8 +611,8 @@ public sealed class FederationWebExtensionTests
     // ═══════════════════ 测试端点（ticket 闭环——2026-10-16 路径/命名专题改造） ═══════════════════
 
     /// <summary>TestTicket：GET /feberation/{platformId}/test/{channelId}/{ticket——平台段 + 通道段选区通过 →
-    /// RedeemAsync(ticket, context:null) → 200 载荷 JSON（channel_id 取自签入载荷 FederatedIdentity.ChannelId——
-    /// 用户裁定 3：单通道也必须能取出、与选区分支无关）。</summary>
+    /// RedeemAsync(ticket, context:null) → 200 HTML 展示页（微信内置浏览器渲染——裸 JSON 白屏，2026-10-26 修复；
+    /// channel_id 取自签入载荷 FederatedIdentity.ChannelId——用户裁定 3：单通道也必须能取出、与选区分支无关）。</summary>
     [Fact]
     public async Task TestTicket_ByPlatformAndChannel_ReturnsPayload()
     {
@@ -624,13 +624,13 @@ public sealed class FederationWebExtensionTests
         var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-        var root = doc.RootElement;
-        Assert.True(root.GetProperty("ok").GetBoolean());
-        Assert.Equal("u-100", root.GetProperty("uid").GetString());
-        Assert.Equal("wechat-mp", root.GetProperty("channel_id").GetString());   // 签入载荷 ChannelId（选区无关）
-        Assert.Equal("ext-100", root.GetProperty("external_user_id").GetString());
-        Assert.Equal("wechat_event", root.GetProperty("channel_type").GetString());
+        Assert.Contains("text/html", resp.Content.Headers.ContentType?.ToString());
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("票据兑验成功", body);
+        Assert.Contains("u-100", body);                 // uid（签入载荷）
+        Assert.Contains("wechat-mp", body);             // channel_id（签入载荷 ChannelId——选区无关）
+        Assert.Contains("ext-100", body);               // external_user_id
+        Assert.Contains("wechat_event", body);          // channel_type
         Assert.Equal("ticket-1", FederationEndpointHost.Ticket.LastTicket);   // RedeemAsync 收到 ticket
         Assert.Null(FederationEndpointHost.Ticket.LastContext);               // 测试端点 Redeem context=null（可转让语义）
     }

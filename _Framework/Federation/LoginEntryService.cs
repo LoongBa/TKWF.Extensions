@@ -27,6 +27,7 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
 {
     private readonly IOptions<FederationLoginEntryOptions> _loginEntry;
     private readonly IOptions<FederationEventReplyOptions> _eventReply;
+    private readonly IOptions<FederationChannelRegistryOptions> _channelRegistry;
     private readonly ILogger<LoginEntryService> _logger;
 
     private ISealedTicketService<FederatedIdentity>? _ticket;
@@ -37,19 +38,21 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
         IServiceProvider sp,
         IOptions<FederationLoginEntryOptions> loginEntry,
         IOptions<FederationEventReplyOptions> eventReply,
+        IOptions<FederationChannelRegistryOptions> channelRegistry,
         ILogger<LoginEntryService> logger)
         : base(user)
     {
         _ = sp;
         _loginEntry = loginEntry ?? throw new ArgumentNullException(nameof(loginEntry));
         _eventReply = eventReply ?? throw new ArgumentNullException(nameof(eventReply));
+        _channelRegistry = channelRegistry;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
     public async Task<string?> BuildTicketUrlAsync(
         string channelId, string channelType, string externalUserId,
-        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
     {
         // ① 能力开关（fail-closed 第一层——默认 false 显式启用）
         var options = _loginEntry.Value;
@@ -66,9 +69,11 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
         if (string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = requestBaseUrl;
 
-        // ③ 签密封票据（null-claimant——免登终端兑票对应 AuthCenter V0.10.0 POST /login/ticket 仅消费 null-claimant 票）
+        // ③ 签密封票据（null-claimant——免登终端兑票对应 AuthCenter V0.10.0 POST /login/ticket 仅消费 null-claimant 票；
+        //    uId 可空 = 未绑定 → 签空串（编排映射反查/自动建号兜底）；已绑定用户 uId 入载荷——落地端
+        //    FederatedLoginOrchestrator UId 直读复用既有账号，免二次映射）
         var identity = new FederatedIdentity(
-            UId: string.Empty,
+            UId: uId ?? string.Empty,
             ChannelId: channelId,
             ExternalUserId: externalUserId,
             ChannelType: channelType);
@@ -81,7 +86,13 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
                 ct);
 
             // ④ URL 组装（{baseUrl}{RoutePrefix}{TicketPath}?ticket={ticket}——RoutePrefix 复用 eventReply，单一事实源）
-            return CombineUrl(baseUrl, _eventReply.Value.RoutePrefix, $"{options.TicketPath}?ticket={issued.Ticket}");
+            var url = CombineUrl(baseUrl, _eventReply.Value.RoutePrefix, $"{options.TicketPath}?ticket={issued.Ticket}");
+            // 衔接测试机制（v0.16.0）：非生产模式输出完整 URL 到日志——扩展模块/消费方测试可复制日志
+            // URL 直接访问（微信图文卡片链接无法从客户端复制）；生产（IsProduction=true）零输出——
+            // §6.4 红线"ticket 全串不落日志"生产恒定（仅 dev 出口，测试方受控访问）
+            if (_channelRegistry?.Value.IsProduction != true)
+                _logger.LogInformation("免登链接已生成（开发模式）——测试方可直接访问：{Url}", url);
+            return url;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -124,7 +135,11 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
 
             // ③ URL 组装（测试端点路径 {baseUrl}{RoutePrefix}/{platformId}/test/{channelId}/{ticket}——
             //    与免登 URL 对照：免登走 {TicketPath}?ticket=，测试端点走 /test/{channelId}/{ticket} 路径段）
-            return CombineUrl(baseUrl, _eventReply.Value.RoutePrefix, $"{platformId}/test/{channelId}/{issued.Ticket}");
+            var url = CombineUrl(baseUrl, _eventReply.Value.RoutePrefix, $"{platformId}/test/{channelId}/{issued.Ticket}");
+            // 衔接测试机制（v0.16.0）：非生产模式输出完整 URL——与免登同款 dev 出口（生产 IsProduction=true 零输出）
+            if (_channelRegistry?.Value.IsProduction != true)
+                _logger.LogInformation("测试端点链接已生成（开发模式）——测试方可直接访问：{Url}", url);
+            return url;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

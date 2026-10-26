@@ -284,7 +284,7 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
 
         Assert.NotNull(reply);
         Assert.Contains("<MsgType><![CDATA[news]]></MsgType>", reply!.Content);
-        // v0.16.0 Q1：内置模板标题带 {type} 占位符（= event ?? msg_type——TemplateEvent 用 event=unknown_event）
+        // v0.16.0 Q1 + v0.16.1：内置模板标题 {text} 占位符——事件消息无正文回退 {type}（= event ?? msg_type，TemplateEvent 用 event=unknown_event）
         Assert.Contains("<Title><![CDATA[链路测试·unknown_event]]></Title>", reply.Content);
     }
 
@@ -315,9 +315,9 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.DoesNotContain("/login/ticket?ticket=", reply.Content);
     }
 
-    /// <summary>Q1 类型可区分（v0.16.0）：内置模板标题/描述含 <c>{type}</c> 合并占位符（= event ?? msg_type）——
-    /// 文本消息（msg_type=text，无 event）→ 标题"链路测试·text"；菜单点击（msg_type=event + event=CLICK）→
-    /// "链路测试·CLICK"——测试反馈可区分触发源。</summary>
+    /// <summary>Q1 类型可区分（v0.16.0）+ Q3 动态化（v0.16.1）：内置模板标题/描述含 <c>{text}</c> 合并占位符——
+    /// 文本消息（msg_type=text）→ 用户原文（"链路测试·hi"）；事件消息（无正文）→ 回退 {type}（event ?? msg_type，
+    /// 菜单点击 "链路测试·CLICK"）——测试反馈可体现触发源与用户输入。</summary>
     [Fact]
     public async Task Template_BuiltIn_TypePlaceholder_ReflectsTriggerSource()
     {
@@ -326,7 +326,8 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
             services.Configure<WechatEventReplyOptions>(o => o.EnableBuiltInTestTemplate = true));
         var handler = user.Use<WechatTemplateEventReplyHandler>();
 
-        // 文本消息（msg_type=text，无 event）→ {type} = msg_type = "text"
+        // 文本消息（msg_type=text，无 event）→ {text} = Content 用户原文 = "hi"（v0.16.1 动态化；
+        // content 为通道富化基础键（Parse 不从未富化 XML 提取 Content）——测试显式注入）
         var textReply = await handler.HandleAsync(
             WeChatTestHost.CreateEventDispatch(
                 ("msg_type", "text"),
@@ -335,11 +336,12 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
                 ("to_user_name", "gh_test"),
                 ("uid", "u-t"),
                 ("channel_id", "wx-no-template"),
+                ("content", "hi"),
                 ("__decrypted_xml", WxXml(("MsgType", "text"), ("Content", "hi")))),
             CancellationToken.None);
         Assert.NotNull(textReply);
-        Assert.Contains("<Title><![CDATA[链路测试·text]]></Title>", textReply!.Content);
-        Assert.Contains("点击验证完整回复链路（text）", textReply.Content);
+        Assert.Contains("<Title><![CDATA[链路测试·hi]]></Title>", textReply!.Content);
+        Assert.Contains("点击验证完整回复链路（hi）", textReply.Content);
 
         // 菜单点击（msg_type=event + event=CLICK）→ {type} = event = "CLICK"
         var clickReply = await handler.HandleAsync(
@@ -387,6 +389,42 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.NotNull(reply);
         Assert.Equal("u-bound-100", recorded.UId);          // 已绑定 uid 透传签票
         Assert.Equal("openid-u", recorded.ExternalUserId);  // 签票身份仍为 openid
+    }
+
+    /// <summary>免登链路 uid 透传（v0.16.0 对称补齐——与测试端点 Q2 同构）：业务模板（wx-template，非内置）
+    /// 走 <see cref="ResolveTicketAsync"/> → <c>BuildTicketUrlAsync</c> 透传 <c>ctx.UId</c>——免登落地端
+    /// （AuthCenter POST /login/ticket）兑换后 <c>FederatedLoginOrchestrator</c> UId 直读复用既有账号，
+    /// 已绑定用户免登不再走映射反查（生产免登闭环完整承载 uid）。</summary>
+    [Fact]
+    public async Task Template_Business_UidForwardedToLoginUrl()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
+            services.AddScoped<ILoginEntryService>(_ => recorded);
+        });
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            WeChatTestHost.CreateEventDispatch(
+                ("msg_type", "event"),
+                ("event", "unknown_event"),
+                ("from_user_name", "openid-biz"),
+                ("external_user_id", "openid-biz"),
+                ("to_user_name", "gh_test"),
+                ("uid", "u-biz-200"),
+                ("channel_id", "wx-template"),           // 业务模板（含 {ticket} → 免登 URL 分支）
+                ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "unknown_event")))),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal("u-biz-200", recorded.UId);          // 免登签票透传 uid（对称 Q2）
+        Assert.Equal("openid-biz", recorded.ExternalUserId);
+        // 业务模板走免登分支（BuildTicketUrlAsync——link 由模板 {ticket} 替换为免登 URL）；
+        // 与内置模板（ResolveTestTicketUrlAsync → 测试端点）区分：业务模板 link 不得含测试端点路径
+        Assert.DoesNotContain("/test/wx-template/ticket-test", reply!.Content);
     }
 
     /// <summary>模板解析链第三级 fail-safe：EnableBuiltInTestTemplate 默认 false（未开启）→ 模板缺失仍 null
@@ -444,10 +482,11 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         public string? ExternalUserId { get; private set; }
         public string? UId { get; private set; }   // v0.16.0 Q2：测试端点签票透传 uid 记录（断言已绑定体现）
 
-        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
         {
             RequestBaseUrl = requestBaseUrl;
             ExternalUserId = externalUserId;
+            UId = uId;
             return Task.FromResult<string?>($"https://ticket.example.com/t?ch={channelId}");
         }
 

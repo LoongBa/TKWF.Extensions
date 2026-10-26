@@ -101,14 +101,13 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
         => ReferenceEquals(template, BuiltInTestTemplate);
 
     /// <summary>内置测试图文模板（开发期 <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 门控——
-    /// 模板链①②均空时回退；标题"链路测试·{type}"（{type} 按 MsgType 分流：msg_type=event → Event（CLICK/VIEW/
-    /// subscribe/SCAN），普通消息 → MsgType（text/image）——v0.16.0 Q1 类型可区分）、link 含 <c>{ticket}</c>
-    /// 签票占位、pic_url 空 = 图片不存在）。</summary>
+    /// 模板链①②均空时回退；标题"链路测试·{text}"（{text} = 用户文本原文，事件类无正文回退 {type}——v0.16.1 动态化），
+    /// link 含 <c>{ticket}</c> 签票占位、pic_url 空 = 图片不存在）。</summary>
     private static readonly NewsReplyTemplateV2 BuiltInTestTemplate = new(
         Enabled: true,
         Articles: null,
-        Title: "链路测试·{type}",
-        Description: "点击验证完整回复链路（{type}）",
+        Title: "链路测试·{text}",
+        Description: "点击验证完整回复链路（{text}）",
         Link: "{ticket}",
         PicUrl: null,
         TtlSeconds: null);
@@ -143,17 +142,22 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// </summary>
     private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx, string? ticketUrl)
     {
+        // {text} 回退 {type}：事件类消息无用户正文，回退触发源值防空后缀（"链路测试·CLICK" 可读）
         string Render(string? text)
-            => ReplacePlaceholders(text ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl)
+        {
+            var typeValue = string.Equals(ctx.MsgType, "event", StringComparison.OrdinalIgnoreCase)
+                ? ctx.Event ?? ctx.MsgType ?? string.Empty
+                : ctx.MsgType ?? string.Empty;
+            var userText = string.IsNullOrWhiteSpace(ctx.Content)
+                ? typeValue
+                : ctx.Content.Trim();
+
+            return ReplacePlaceholders(text ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl)
                 .Replace("{msg_type}", ctx.MsgType ?? string.Empty)
                 .Replace("{event}", ctx.Event ?? string.Empty)
-                // {type} 按 MsgType 分流：msg_type=event（事件消息）→ 显示 Event（CLICK/VIEW/subscribe/SCAN）；
-                // 普通消息（text/image/voice/...）→ 显示 MsgType（ctx.Event 带 evt.EventType "unknown" 兜底值，
-                // 不能以 Event 非空判定——文本消息 Event 也非空）
-                .Replace("{type}",
-                    string.Equals(ctx.MsgType, "event", StringComparison.OrdinalIgnoreCase)
-                        ? ctx.Event ?? ctx.MsgType ?? string.Empty
-                        : ctx.MsgType ?? string.Empty);
+                .Replace("{type}", typeValue)
+                .Replace("{text}", userText);
+        }
 
         if (template.Articles is { Count: > 0 })
         {

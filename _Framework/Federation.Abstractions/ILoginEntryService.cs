@@ -29,10 +29,12 @@ public interface ILoginEntryService : IDomainService
     /// <param name="externalUserId">外部用户标识（openid——签入 identity.ExternalUserId）。</param>
     /// <param name="ttlSeconds">票据 TTL 秒（null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。</param>
     /// <param name="requestBaseUrl">请求 Host 推导基址（<c>scheme://host</c>——Web 装配层注入，本站点落地；可空）。</param>
+    /// <param name="uId">平台账号 uid（编排层 uid 命中时富化——签入 identity.UId，免登落地端兑换后
+    /// <c>FederatedLoginOrchestrator</c> UId 直读复用；可空 = 未绑定，签入空串——编排走映射反查/自动建号兜底）。</param>
     /// <param name="ct">取消令牌。</param>
     Task<string?> BuildTicketUrlAsync(
         string channelId, string channelType, string externalUserId,
-        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default);
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null);
 
     /// <summary>
     /// 签发票据并组装<b>测试端点</b> URL（URL 形态 <c>{baseUrl}{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——

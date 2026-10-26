@@ -230,7 +230,7 @@ public class WeChatChannelTestHost : TestHostBase
     /// <summary>免登入口 Fake（返回 null = 未启用语义——平台库测试宿主免登签票断言归 Federation.Tests）。</summary>
     private sealed class NullLoginEntryService : ILoginEntryService
     {
-        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
             => Task.FromResult<string?>(null);
 
         public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)

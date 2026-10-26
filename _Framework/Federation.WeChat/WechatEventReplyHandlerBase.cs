@@ -339,8 +339,10 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// <para>经 <see cref="ILoginEntryService.BuildTestTicketUrlAsync"/> 签密封票据并组装<b>测试端点</b>路径
     /// （<c>{baseUrl}{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——平台段 = <c>wechat</c>，
     /// 与 <see cref="ResolveTicketAsync"/> 的免登 URL（<c>{TicketPath}?ticket=</c>）对照：测试端点 GET 匿名
-    /// 兑票 → 200 JSON 载荷展示解票信息，免登 URL 走消费方 SPA 落地）。<b>不经
+    /// 兑票 → 200 HTML 展示页载荷展示解票信息，免登 URL 走消费方 SPA 落地）。<b>不经
     /// <see cref="FederationLoginEntryOptions.Enabled"/> 门控</b>——测试端点匿名兑票，零配置冒烟可用。</para>
+    /// <para>uid 透传（v0.16.0）：编排层 uid 命中时 <c>ctx.UId</c> 入签票载荷——测试端点展示页体现
+    /// 已绑定用户（未绑定 null → 签空串，零配置冒烟不依赖绑定）。</para>
     /// </summary>
     /// <param name="ttlSeconds">票据 TTL 秒（可空——调用方按模板 TtlSeconds 传入，null = 缺省）。</param>
     protected async Task<string?> ResolveTestTicketUrlAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
@@ -349,7 +351,7 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
             return null;
         return await User.Use<ILoginEntryService>()
             .BuildTestTicketUrlAsync(ctx.ChannelId, platformId: "wechat", ChannelType,
-                ctx.OpenId ?? string.Empty, ttlSeconds, ctx.BaseUrl, ct);
+                ctx.OpenId ?? string.Empty, ttlSeconds, ctx.BaseUrl, ctx.UId, ct);
     }
 
     /// <summary>

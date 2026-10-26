@@ -48,10 +48,12 @@ public interface ILoginEntryService : IDomainService
     /// <param name="externalUserId">外部用户标识（openid——签入 identity.ExternalUserId）。</param>
     /// <param name="ttlSeconds">票据 TTL 秒（null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。</param>
     /// <param name="requestBaseUrl">请求 Host 推导基址（<c>scheme://host</c>——Web 装配层注入；可空）。</param>
+    /// <param name="uId">平台账号 uid（编排层 uid 命中时富化——签入 identity.UId，测试端点展示页体现已绑定用户；
+    /// 可空 = 未绑定，签入空串——零配置冒烟不依赖绑定）。</param>
     /// <param name="ct">取消令牌。</param>
     Task<string?> BuildTestTicketUrlAsync(
         string channelId, string platformId, string channelType, string externalUserId,
-        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default);
+        int? ttlSeconds = null, string? requestBaseUrl = null, string? uId = null, CancellationToken ct = default);
 
     /// <summary>
     /// 静默授权入口（snsapi_base）——委托通道 <c>ISsoChannel.BuildAuthorizeUrlAsync(Scope: "snsapi_base")</c>

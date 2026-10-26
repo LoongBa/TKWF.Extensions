@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -100,12 +101,13 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
         => ReferenceEquals(template, BuiltInTestTemplate);
 
     /// <summary>内置测试图文模板（开发期 <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 门控——
-    /// 模板链①②均空时回退；标题"链路测试"、link 含 <c>{ticket}</c> 签票占位、pic_url 空 = 图片不存在）。</summary>
+    /// 模板链①②均空时回退；标题"链路测试·{type}"（{type} = event ?? msg_type——菜单点击显示 CLICK/VIEW、
+    /// 普通消息显示 text/image，v0.16.0 Q1 类型可区分）、link 含 <c>{ticket}</c> 签票占位、pic_url 空 = 图片不存在）。</summary>
     private static readonly NewsReplyTemplateV2 BuiltInTestTemplate = new(
         Enabled: true,
         Articles: null,
-        Title: "链路测试",
-        Description: "点击验证完整回复链路",
+        Title: "链路测试·{type}",
+        Description: "点击验证完整回复链路（{type}）",
         Link: "{ticket}",
         PicUrl: null,
         TtlSeconds: null);
@@ -135,18 +137,31 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// <summary>
     /// 图文条目构建——<see cref="NewsReplyTemplateV2.Articles"/> 数组优先（多图文，微信上限 8 篇——
     /// <c>Take(8)</c> 钳制；空数组视同缺省回退）；缺省回退单图文字段（Title/Description/Link/PicUrl——存量兼容）。
-    /// 占位符替换逐篇应用（I2-8：5 参重载含 <c>{ticket}</c>——<paramref name="ticketUrl"/> 可空 → 空串替换）。
+    /// 占位符替换逐篇应用（I2-8：5 参重载含 <c>{ticket}</c>——<paramref name="ticketUrl"/> 可空 → 空串替换；
+    /// Q1 类型可区分（v0.16.0）：新增 <c>{msg_type}</c>/<c>{event}</c> 占位符 + 合并占位符 <c>{type}</c>（=<c>event ?? msg_type</c>——事件消息显示 CLICK/VIEW 等，普通消息显示 text/image 等）——内置"链路测试"卡片标题可体现触发源（如 <c>链路测试·CLICK</c>/<c>链路测试·text</c>），业务模板同受益）。
     /// </summary>
     private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx, string? ticketUrl)
     {
+        string Render(string? text)
+            => ReplacePlaceholders(text ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl)
+                .Replace("{msg_type}", ctx.MsgType ?? string.Empty)
+                .Replace("{event}", ctx.Event ?? string.Empty)
+                // {type} 按 MsgType 分流：msg_type=event（事件消息）→ 显示 Event（CLICK/VIEW/subscribe/SCAN）；
+                // 普通消息（text/image/voice/...）→ 显示 MsgType（ctx.Event 带 evt.EventType "unknown" 兜底值，
+                // 不能以 Event 非空判定——文本消息 Event 也非空）
+                .Replace("{type}",
+                    string.Equals(ctx.MsgType, "event", StringComparison.OrdinalIgnoreCase)
+                        ? ctx.Event ?? ctx.MsgType ?? string.Empty
+                        : ctx.MsgType ?? string.Empty);
+
         if (template.Articles is { Count: > 0 })
         {
             return template.Articles
                 .Take(8)
                 .Select(a => new EventReplyNewsArticle(
-                    ReplacePlaceholders(a.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    ReplacePlaceholders(a.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                    ReplacePlaceholders(a.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                    Render(a.Title),
+                    Render(a.Description),
+                    Render(a.Link),
                     a.PicUrl))
                 .ToList();
         }
@@ -155,9 +170,9 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
         return
         [
             new EventReplyNewsArticle(
-                ReplacePlaceholders(template.Title ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                ReplacePlaceholders(template.Description ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
-                ReplacePlaceholders(template.Link ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl),
+                Render(template.Title),
+                Render(template.Description),
+                Render(template.Link),
                 template.PicUrl),
         ];
     }

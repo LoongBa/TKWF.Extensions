@@ -635,6 +635,26 @@ public sealed class FederationWebExtensionTests
         Assert.Null(FederationEndpointHost.Ticket.LastContext);               // 测试端点 Redeem context=null（可转让语义）
     }
 
+    /// <summary>TestTicket HTML 转义回归锁（2026-10-26 审核 P2）：FederatedIdentity 载荷字段含 HTML 元字符
+    /// （external_user_id 来自微信回调外部输入——恶意 <c>&lt;script&gt;</c>）→ HTML 展示页必须转义
+    /// （<c>&amp;lt;script&amp;gt;</c>），原始 <c>&lt;script&gt;</c> 不得出现在响应（XSS 面关闭）。</summary>
+    [Fact]
+    public async Task TestTicket_HtmlEscapesExternalInput()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Ticket.RedeemResult = new FederatedIdentity(
+            UId: "u-100", ChannelId: "wechat-mp", ExternalUserId: "<script>alert(1)</script>", ChannelType: "wechat_event");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("&lt;script&gt;", body);        // 转义后实体（标签闭合符转义）
+        Assert.DoesNotContain("<script>", body);         // 原始标签不得出现（XSS 面关闭）
+        // 注：alert(1) 为脚本内容非元字符 → HtmlEncode 不转义，作为纯文本保留（不在 <script> 标签内，浏览器不执行）——安全
+    }
+
     /// <summary>TestTicket 平台段错配（channelId 存在但 PlatformType != 路由 platformId）→ 404 CHANNEL_NOT_FOUND
     /// （统一防枚举——对齐平台集成面校验语义，不触达 Redeem）。</summary>
     [Fact]

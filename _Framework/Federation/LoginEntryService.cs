@@ -95,7 +95,7 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
     /// <inheritdoc />
     public async Task<string?> BuildTestTicketUrlAsync(
         string channelId, string platformId, string channelType, string externalUserId,
-        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default)
+        int? ttlSeconds = null, string? requestBaseUrl = null, string? uId = null, CancellationToken ct = default)
     {
         // ① 基址解析（三级：ChannelBaseUrls 按 ChannelId 覆盖 → TestTicketEndpointBaseUrl → 请求 Host 推导；
         //    全空 → CombineUrl 相对路径兜底——本站点同源；微信图文 link 恒有 requestBaseUrl 实际可用）
@@ -107,9 +107,10 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
         if (string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = requestBaseUrl;
 
-        // ② 签密封票据（null-claimant——与免登票同原语；测试端点 Redeem 后展示载荷）
+        // ② 签密封票据（null-claimant——与免登票同原语；测试端点 Redeem 后展示载荷；
+        //    uId 可空 = 未绑定 → 签空串（零配置冒烟不依赖绑定；已绑定用户 uId 入载荷，展示页体现）
         var identity = new FederatedIdentity(
-            UId: string.Empty,
+            UId: uId ?? string.Empty,
             ChannelId: channelId,
             ExternalUserId: externalUserId,
             ChannelType: channelType);

@@ -101,7 +101,7 @@ public class SalesAnalyticsService(IAnalyticsQueryService analytics)
 - flint 模板注册表快照（0.5.1：47 chartType + 5 后端矩阵 + 44 SemanticType + pivot 门控）
 - tkwf-analytics-view skill 骨架（产物契约）
 - **Oracle 评审**：主框架 v4.10.27 方案 4 P0 + 6 P1 + 4 P2 全吸收
-- **待发布**：tag `Analytics/v0.1.0`（4.10.27 发布后，经双模式 `UseLocalFw=false` + CPM 4.10.27）
+- **已发布**：tag `Analytics/v0.1.0`（2026-09-19，CI 发布闭环）
 
 ### V0.2.0+（候选）
 - DMP-Lite 端到端样例：消费方接线（`[TKWFEnabledExtension]` + Domain Service + AdminWeb React flint 渲染）

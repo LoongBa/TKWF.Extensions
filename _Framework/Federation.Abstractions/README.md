@@ -1,4 +1,4 @@
-# TKWF.Federation.Abstractions — 联邦通道编排契约包（V0.2.0，2026-10-20 Iteration 2——通道契约归属收口 + 关注域契约；**待发布**）
+# TKWF.Federation.Abstractions — 联邦通道编排契约包（已发布 **V0.5.0**，2026-10-26；功能线 V0.2.0 Iteration 2——通道契约归属收口 + 关注域契约，随 V0.2.0~V0.5.0 发布链落地）
 
 > **定位**：联邦对外连接层的**通道编排契约抽象**（对齐 TrustCenter.Abstractions 先例——契约继承 `IDomainService` + 引主框架 `TKWF.Domain`，非"零框架引用"）。**零实体、零 SG1 分析器、零 Initializer**——纯契约 + DTO。
 
@@ -42,6 +42,6 @@ DMP-Lite 消费方反馈 §四（P2）：`TKWF.Ext.Federation` 主包承载通�
 
 - MinVerTagPrefix：`Federation.Abstractions/v`（独立版本，对齐 `Account.Abstractions`/`TrustCenter.Abstractions`/`AuthCenter.Abstractions` 先例）
 - 发布：契约包新 tag + 9 平台库 + Federation 主包 + WeChatOperations 新版本联动（tag 须征得用户同意——AGENTS §5）
-- **V0.2.0（Iteration 2）发布顺序（方案 §14，均待发布——tag 未打）**：① TrustCenter.Abstractions 0.4.0（删 `ISsoChannel.cs` 破坏）→ ② 本包 0.2.0（收口通道契约 + 关注域契约，破坏）→ ③ 平台库（Federation.WeChat 0.6.0 / DingTalk·WeCom·QQ 0.4.1 / Alipay·Oidc·Google·Microsoft 0.3.1）→ ④ TrustCenter 0.3.3（依赖对齐补丁）→ ⑤ Federation 0.11.0 → ⑥ WeChatOperations 0.5.0；每个 tag **逐个 push**（多 tag 单命令会丢事件——已有先例）
+- **V0.2.0（Iteration 2）发布顺序（方案 §14，已全部执行——2026-10-21~26 发布链）**：① TrustCenter.Abstractions 0.4.0（删 `ISsoChannel.cs` 破坏）→ ② 本包 0.2.0（收口通道契约 + 关注域契约，破坏）→ ③ 平台库（Federation.WeChat 0.6.0 / DingTalk·WeCom·QQ 0.4.1 / Alipay·Oidc·Google·Microsoft 0.3.1）→ ④ TrustCenter 0.3.3（依赖对齐补丁）→ ⑤ Federation 0.11.0 → ⑥ WeChatOperations 0.5.0；每个 tag **逐个 push**（多 tag 单命令会丢事件——已有先例）
 
 <!-- EOF -->

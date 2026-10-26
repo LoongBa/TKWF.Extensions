@@ -1,0 +1,294 @@
+{
+  "generatedAt": "2026-10-27",
+  "repo": "TKWF.Extensions",
+  "note": "发布事实源 = git tag（{Package}/vX.Y.Z）；README 版本一览表为展示层，打 tag 后须同步。生成：build/gen-versions.ps1",
+  "commonTags": [
+    "v0.1.0",
+    "v0.2.0",
+    "v0.3.0",
+    "v0.4.0",
+    "v0.6.0",
+    "v0.7.0",
+    "v0.7.1",
+    "v0.8.1",
+    "v0.8.2",
+    "v0.8.3"
+  ],
+  "packages": {
+    "Account": {
+      "version": "0.5.0",
+      "tag": "Account/v0.5.0",
+      "created": "2026-10-04"
+    },
+    "Account.Abstractions": {
+      "version": "0.1.2",
+      "tag": "Account.Abstractions/v0.1.2",
+      "created": "2026-09-30"
+    },
+    "Analytics": {
+      "version": "0.1.0",
+      "tag": "Analytics/v0.1.0",
+      "created": "2026-09-19"
+    },
+    "Approval": {
+      "version": "0.4.0",
+      "tag": "Approval/v0.4.0",
+      "created": "2026-10-04"
+    },
+    "AuditLogging": {
+      "version": "0.5.1",
+      "tag": "AuditLogging/v0.5.1",
+      "created": "2026-10-25"
+    },
+    "AuthCenter": {
+      "version": "0.10.1",
+      "tag": "AuthCenter/v0.10.1",
+      "created": "2026-10-20"
+    },
+    "AuthCenter.Abstractions": {
+      "version": "0.1.0",
+      "tag": "AuthCenter.Abstractions/v0.1.0",
+      "created": "2026-10-06"
+    },
+    "Authentication": {
+      "version": "0.5.4",
+      "tag": "Authentication/v0.5.4",
+      "created": "2026-10-05"
+    },
+    "AuthSurface": {
+      "version": "0.2.0",
+      "tag": "AuthSurface/v0.2.0",
+      "created": "2026-10-10"
+    },
+    "BackgroundJobs": {
+      "version": "0.4.1",
+      "tag": "BackgroundJobs/v0.4.1",
+      "created": "2026-10-04"
+    },
+    "BackgroundJobs.Quartz": {
+      "version": "0.1.1",
+      "tag": "BackgroundJobs.Quartz/v0.1.1",
+      "created": "2026-09-15"
+    },
+    "BlobStoring": {
+      "version": "0.3.0",
+      "tag": "BlobStoring/v0.3.0",
+      "created": "2026-10-04"
+    },
+    "BlobStoring.Abstractions": {
+      "version": "0.1.1",
+      "tag": "BlobStoring.Abstractions/v0.1.1",
+      "created": "2026-09-15"
+    },
+    "Calendar": {
+      "version": "0.4.0",
+      "tag": "Calendar/v0.4.0",
+      "created": "2026-10-04"
+    },
+    "Dashboard": {
+      "version": "0.1.2",
+      "tag": "Dashboard/v0.1.2",
+      "created": "2026-09-15"
+    },
+    "DataDictionary": {
+      "version": "0.3.0",
+      "tag": "DataDictionary/v0.3.0",
+      "created": "2026-10-04"
+    },
+    "DataPort": {
+      "version": "0.1.4",
+      "tag": "DataPort/v0.1.4",
+      "created": "2026-10-04"
+    },
+    "Emailing": {
+      "version": "0.3.0",
+      "tag": "Emailing/v0.3.0",
+      "created": "2026-10-04"
+    },
+    "Emailing.Abstractions": {
+      "version": "0.1.1",
+      "tag": "Emailing.Abstractions/v0.1.1",
+      "created": "2026-09-15"
+    },
+    "FeatureManagement": {
+      "version": "0.4.6",
+      "tag": "FeatureManagement/v0.4.6",
+      "created": "2026-10-25"
+    },
+    "Federation": {
+      "version": "0.15.0",
+      "tag": "Federation/v0.15.0",
+      "created": "2026-10-26"
+    },
+    "Federation.Abstractions": {
+      "version": "0.5.0",
+      "tag": "Federation.Abstractions/v0.5.0",
+      "created": "2026-10-26"
+    },
+    "Federation.Alipay": {
+      "version": "0.3.1",
+      "tag": "Federation.Alipay/v0.3.1",
+      "created": "2026-10-21"
+    },
+    "Federation.DingTalk": {
+      "version": "0.4.1",
+      "tag": "Federation.DingTalk/v0.4.1",
+      "created": "2026-10-21"
+    },
+    "Federation.Google": {
+      "version": "0.3.1",
+      "tag": "Federation.Google/v0.3.1",
+      "created": "2026-10-21"
+    },
+    "Federation.Microsoft": {
+      "version": "0.3.1",
+      "tag": "Federation.Microsoft/v0.3.1",
+      "created": "2026-10-21"
+    },
+    "Federation.Oidc": {
+      "version": "0.3.1",
+      "tag": "Federation.Oidc/v0.3.1",
+      "created": "2026-10-21"
+    },
+    "Federation.QQ": {
+      "version": "0.4.1",
+      "tag": "Federation.QQ/v0.4.1",
+      "created": "2026-10-21"
+    },
+    "Federation.WeChat": {
+      "version": "0.16.1",
+      "tag": "Federation.WeChat/v0.16.1",
+      "created": "2026-10-27"
+    },
+    "Federation.WeChat.MessageGateway": {
+      "version": "0.1.1",
+      "tag": "Federation.WeChat.MessageGateway/v0.1.1",
+      "created": "2026-10-18"
+    },
+    "Federation.WeCom": {
+      "version": "0.4.1",
+      "tag": "Federation.WeCom/v0.4.1",
+      "created": "2026-10-21"
+    },
+    "FileManagement": {
+      "version": "0.4.1",
+      "tag": "FileManagement/v0.4.1",
+      "created": "2026-10-07"
+    },
+    "HealthCheck": {
+      "version": "0.3.0",
+      "tag": "HealthCheck/v0.3.0",
+      "created": "2026-10-02"
+    },
+    "Identity": {
+      "version": "0.5.3",
+      "tag": "Identity/v0.5.3",
+      "created": "2026-10-25"
+    },
+    "Metrics": {
+      "version": "0.2.1",
+      "tag": "Metrics/v0.2.1",
+      "created": "2026-09-15"
+    },
+    "MFA": {
+      "version": "0.2.1",
+      "tag": "MFA/v0.2.1",
+      "created": "2026-10-08"
+    },
+    "Navigation": {
+      "version": "0.1.2",
+      "tag": "Navigation/v0.1.2",
+      "created": "2026-09-15"
+    },
+    "Navigation.Abstractions": {
+      "version": "0.1.0",
+      "tag": "Navigation.Abstractions/v0.1.0",
+      "created": "2026-09-18"
+    },
+    "Notifications": {
+      "version": "0.6.3",
+      "tag": "Notifications/v0.6.3",
+      "created": "2026-10-25"
+    },
+    "Notifications.SignalR": {
+      "version": "0.2.0",
+      "tag": "Notifications.SignalR/v0.2.0",
+      "created": "2026-10-02"
+    },
+    "OrganizationUnit": {
+      "version": "0.5.0",
+      "tag": "OrganizationUnit/v0.5.0",
+      "created": "2026-10-04"
+    },
+    "Permissions": {
+      "version": "0.9.5",
+      "tag": "Permissions/v0.9.5",
+      "created": "2026-10-25"
+    },
+    "Permissions.Abstractions": {
+      "version": "0.2.1",
+      "tag": "Permissions.Abstractions/v0.2.1",
+      "created": "2026-10-02"
+    },
+    "Permissions.Validation": {
+      "version": "0.1.1",
+      "tag": "Permissions.Validation/v0.1.1",
+      "created": "2026-09-15"
+    },
+    "PrintTemplates": {
+      "version": "0.3.0",
+      "tag": "PrintTemplates/v0.3.0",
+      "created": "2026-10-04"
+    },
+    "RateLimiting": {
+      "version": "0.3.0",
+      "tag": "RateLimiting/v0.3.0",
+      "created": "2026-10-08"
+    },
+    "SecurityLog": {
+      "version": "0.4.0",
+      "tag": "SecurityLog/v0.4.0",
+      "created": "2026-10-04"
+    },
+    "SecurityLog.Abstractions": {
+      "version": "0.1.1",
+      "tag": "SecurityLog.Abstractions/v0.1.1",
+      "created": "2026-10-02"
+    },
+    "Settings": {
+      "version": "0.3.1",
+      "tag": "Settings/v0.3.1",
+      "created": "2026-10-07"
+    },
+    "Tagging": {
+      "version": "0.4.6",
+      "tag": "Tagging/v0.4.6",
+      "created": "2026-10-05"
+    },
+    "TrustCenter": {
+      "version": "0.3.3",
+      "tag": "TrustCenter/v0.3.3",
+      "created": "2026-10-21"
+    },
+    "TrustCenter.Abstractions": {
+      "version": "0.4.0",
+      "tag": "TrustCenter.Abstractions/v0.4.0",
+      "created": "2026-10-21"
+    },
+    "UserCenter": {
+      "version": "0.1.0",
+      "tag": "UserCenter/v0.1.0",
+      "created": "2026-10-01"
+    },
+    "UserCenter.Abstractions": {
+      "version": "0.1.0",
+      "tag": "UserCenter.Abstractions/v0.1.0",
+      "created": "2026-10-01"
+    },
+    "WeChatOperations": {
+      "version": "0.6.1",
+      "tag": "WeChatOperations/v0.6.1",
+      "created": "2026-10-25"
+    }
+  }
+}

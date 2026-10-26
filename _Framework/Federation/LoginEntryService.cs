@@ -95,7 +95,7 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
     /// <inheritdoc />
     public async Task<string?> BuildTestTicketUrlAsync(
         string channelId, string platformId, string channelType, string externalUserId,
-        int? ttlSeconds = null, string? requestBaseUrl = null, string? uId = null, CancellationToken ct = default)
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
     {
         // ① 基址解析（三级：ChannelBaseUrls 按 ChannelId 覆盖 → TestTicketEndpointBaseUrl → 请求 Host 推导；
         //    全空 → CombineUrl 相对路径兜底——本站点同源；微信图文 link 恒有 requestBaseUrl 实际可用）

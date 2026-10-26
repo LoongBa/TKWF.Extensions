@@ -101,8 +101,9 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
         => ReferenceEquals(template, BuiltInTestTemplate);
 
     /// <summary>内置测试图文模板（开发期 <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 门控——
-    /// 模板链①②均空时回退；标题"链路测试·{type}"（{type} = event ?? msg_type——菜单点击显示 CLICK/VIEW、
-    /// 普通消息显示 text/image，v0.16.0 Q1 类型可区分）、link 含 <c>{ticket}</c> 签票占位、pic_url 空 = 图片不存在）。</summary>
+    /// 模板链①②均空时回退；标题"链路测试·{type}"（{type} 按 MsgType 分流：msg_type=event → Event（CLICK/VIEW/
+    /// subscribe/SCAN），普通消息 → MsgType（text/image）——v0.16.0 Q1 类型可区分）、link 含 <c>{ticket}</c>
+    /// 签票占位、pic_url 空 = 图片不存在）。</summary>
     private static readonly NewsReplyTemplateV2 BuiltInTestTemplate = new(
         Enabled: true,
         Articles: null,
@@ -138,7 +139,7 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// 图文条目构建——<see cref="NewsReplyTemplateV2.Articles"/> 数组优先（多图文，微信上限 8 篇——
     /// <c>Take(8)</c> 钳制；空数组视同缺省回退）；缺省回退单图文字段（Title/Description/Link/PicUrl——存量兼容）。
     /// 占位符替换逐篇应用（I2-8：5 参重载含 <c>{ticket}</c>——<paramref name="ticketUrl"/> 可空 → 空串替换；
-    /// Q1 类型可区分（v0.16.0）：新增 <c>{msg_type}</c>/<c>{event}</c> 占位符 + 合并占位符 <c>{type}</c>（=<c>event ?? msg_type</c>——事件消息显示 CLICK/VIEW 等，普通消息显示 text/image 等）——内置"链路测试"卡片标题可体现触发源（如 <c>链路测试·CLICK</c>/<c>链路测试·text</c>），业务模板同受益）。
+    /// Q1 类型可区分（v0.16.0）：新增 <c>{msg_type}</c>/<c>{event}</c> 占位符 + 合并占位符 <c>{type}</c>（按 MsgType 分流——事件消息显示 Event（CLICK/VIEW 等），普通消息显示 MsgType（text/image 等））——内置"链路测试"卡片标题可体现触发源（如 <c>链路测试·CLICK</c>/<c>链路测试·text</c>），业务模板同受益）。
     /// </summary>
     private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx, string? ticketUrl)
     {

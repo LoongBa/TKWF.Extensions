@@ -53,7 +53,7 @@ public interface ILoginEntryService : IDomainService
     /// <param name="ct">取消令牌。</param>
     Task<string?> BuildTestTicketUrlAsync(
         string channelId, string platformId, string channelType, string externalUserId,
-        int? ttlSeconds = null, string? requestBaseUrl = null, string? uId = null, CancellationToken ct = default);
+        int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null);
 
     /// <summary>
     /// 静默授权入口（snsapi_base）——委托通道 <c>ISsoChannel.BuildAuthorizeUrlAsync(Scope: "snsapi_base")</c>

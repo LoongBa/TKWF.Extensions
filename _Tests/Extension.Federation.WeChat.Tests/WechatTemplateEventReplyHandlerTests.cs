@@ -451,7 +451,7 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
             return Task.FromResult<string?>($"https://ticket.example.com/t?ch={channelId}");
         }
 
-        public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, string? uId = null, CancellationToken ct = default)
+        public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
         {
             RequestBaseUrl = requestBaseUrl;
             ExternalUserId = externalUserId;

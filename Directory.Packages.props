@@ -126,7 +126,9 @@
          D5 LoginAsFederatedAsync + ISealedTicketService<T> 密封票据原语（InMemory 后端 + TryRemove 原子）；
          扩展侧 E1-E3 适配；⚠️ 本地 DLL 模式掩盖 NuGet restore 时序（CI 曾因 CPM 4.10.72 restore 编译失败
          CS0246 FederatedIdentity 不存在——上架后 lockstep 解除，复验全绿））。
-          本地 DLL 模式消费部署根 build\refs（UseLocalFw=true 零 restore，部署根已至 4.10.88-preview——含全部新 API）。
+          本地 DLL 模式消费部署根 build\refs（UseLocalFw=true 零 restore，部署根已至 4.10.92 构建产物
+          ——含 ADR117/ADR118 全部修复：InterfaceNames 符号回填 + WARN007 + IDomainService 判定放宽；
+          ⚠️ 注意 refs 的 FileVersion 可能显示 4.10.91（MinVer 标注滞后），以二进制内容为准（UTF-16 实证）。
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->

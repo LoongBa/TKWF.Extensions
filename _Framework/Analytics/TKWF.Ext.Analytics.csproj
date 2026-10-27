@@ -25,6 +25,9 @@
          Utility 4.10.28 已含 Utility.Analytics（部署根已同步），无需 ProjectReference 源码。
          传递依赖（Microsoft.Extensions.*）由集中块（Directory.Build.props）补齐，不在此重复。 -->
     <Reference Include="TKWF.Utility" HintPath="$(_LocalFwRefsDir)TKWF.Utility.dll" Condition="Exists('$(_LocalFwRefsDir)TKWF.Utility.dll')" />
+    <!-- 2026-10-27：DI003 豁免（[DiContractIgnore]——接线型门面，见 AnalyticsQueryService.cs 注释）——
+         特性所在程序集 CodeGeneration.Abstractions 双模式引用 -->
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalFw)' != 'true'">
@@ -32,6 +35,8 @@
          依赖 TKWF.Utility 4.10.27+（含 Utility.Analytics）——发布后 CI 置 ANALYTICS_ENABLED=true 纳入 -->
     <PackageReference Include="TKWF.Domain" />
     <PackageReference Include="TKWF.Utility" />
+    <!-- 2026-10-27：DI003 豁免（[DiContractIgnore]）——CodeGeneration.Abstractions 双模式引用（NuGet 侧） -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" />
   </ItemGroup>
 
   <!-- 测试项目访问 internal（如有） -->

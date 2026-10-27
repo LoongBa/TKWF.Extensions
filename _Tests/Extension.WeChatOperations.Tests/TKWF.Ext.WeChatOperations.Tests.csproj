@@ -23,6 +23,12 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- T22 gate（2026-10-27 补）：——WeChatOperationsWebExtension 端点级黑盒冒烟——
+         TestServer 全链宿主（WebApplication + ConfigWebAppDomain + UseWebExtensions + UseWebSession +
+         UseAspNetCoreRouting）；Caching.Hybrid = UseWebSession 运行时依赖（DLL 模式 Reference 不传递 NuGet
+         依赖——显式声明，对齐 AuthCenter.Tests 先例） -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="FreeSql" />
     <PackageReference Include="FreeSql.Provider.Sqlite" />
     <PackageReference Include="FreeSql.Extensions.Linq" />
@@ -58,6 +64,9 @@
     <ProjectReference Include="..\..\_Framework\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- T22 gate：TKWF.Domain.Web（ConfigWebAppDomain/UseWebExtensions/UseWebSession/UseAspNetCoreRouting——Web 装配链）双模式引用 -->
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />

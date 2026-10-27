@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
   <!--
     ════════════════════════════════════════════════════════════
     集中包版本管理（Central Package Management）
@@ -65,11 +65,26 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ⚠️ 历史批次注记（当前 lockstep = **4.10.90**——nuget.org 最新 4.10.90；4.10.89 曾因 SG3 发射 partial
-         GeneratedJsonContext 致 CS0534 编译阻塞（Roslyn 生成器互不可见架构死路）→ **4.10.90 修复版**改
-         RestTypeInfoRegistry 编译期闭集注册表（ADR116 决策 1 修订，v4.10.90 转告 `GeneratedJsonContext编译阻塞已修复`）。
-         ⚠️ **桥接历史（2026-10-28 早间）**：4.10.89 nuget.org 未发布时曾暂锁 4.10.88（AGENTS §6 v4.10.39→4.10.38 先例），
-         4.10.90 发布后解除桥接直接锁 4.10.90（跳过 4.10.89 损坏版）：
+         ⚠️ 历史批次注记（当前 lockstep = **4.10.92**——nuget.org 最新 4.10.92；ADR117/ADR118 扩展门面
+         不进消费方 ApiMetadata 结构性 bug 的框架侧修复收官：InterfaceNames 符号回填真名 + 扩展侧产契约接口 +
+         手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）+ DataService 缺口根治 + TUSER001/EXTIFACE001
+         零猜测守卫。扩展侧适配：CPM lockstep 即完成（门面保持 `: IDomainService`——用户裁定语义修正，ADR118
+         决策 4 两者均接受，零代码改动）；重建后生成物 InterfaceNames 真名（无 `.Controllers` 假名）+ 新契约接口
+         生成物（`{扩展根Ns}.I{X} : IDomainService`）；消费方重编应零 WARN007/TUSER001/EXTIFACE001。
+         ⚠️ **桥接历史（2026-10-28）**：4.10.89 曾因 SG3 发射 partial GeneratedJsonContext 致 CS0534 被跳过；
+         4.10.90（RestTypeInfoRegistry 闭集注册表修复）曾暂锁；**4.10.91（ADR117）不可锁**——门面判定仍只认
+         `IAopContract`，对 `: IDomainService` 门面无效（框架组自述"旧严格判定致 ADR117 修复对其无效"）；
+         **直接跳锁 4.10.92（ADR118）**——本仓手写门面均为 `: IDomainService`（WeChat/AuthCenter 实证）：
+         v4.10.92（2026-10-28——ADR118 扩展端点暴露机制根治：扩展侧产契约接口 + 消费方补生成控制器 +
+         TUser 宿主声明单一权威（TUSER001 Error，删 UserInfo 后缀猜测）+ 手写门面判定放宽（IAopContract 或
+         IDomainService 均接受）+ `EXTIFACE001`（扩展接口名被同名非接口类型占用 Error）；
+         契约接口基类最终定稿 **IDomainService**（用户裁定 2026-10-28：语义逻辑角度 IDomainService 更合适——
+         领域服务能力声明 vs IAopContract 控制器契约标记；框架组 291ef43a 落地 + 重打 tag）。
+         v4.10.91（2026-10-28——ADR117：`GenerateControllerCatalog.InterfaceNames` 符号回填真名（废弃
+         `{ControllerNamespace}.{GetInterfaceName}` 拼接假名——扩展门面手写接口在根命名空间 `.Controllers`
+         假名指向不存在类型致 SG2 `GetTypeByMetadataName` null 静默跳过）+ SG2 解析失败报诊断
+         `TKWF_SG2a_WARN007`（Warning，[TKWFSeverity] 可升级）+ OPT003 取首段（三段式分层节 `TKWF:{Ext}:{Sub}`
+         不再误报）。⚠️ 门面判定未放宽——对 `: IDomainService` 门面无效，**跳过本版**。
          v4.10.90（2026-10-28——ADR116 决策 1 修订：SG3 发射 `RestTypeInfoRegistrar`（[ModuleInitializer] 闭集注册表）+
          `RestTypeInfoRegistry.Register/Resolve`（烘焙 DefaultJsonTypeInfoResolver + JsonSerializerDefaults.Web）；
          零配置（ModuleInitializer 自动执行）；替代 4.10.89 损坏的 GeneratedJsonContext 发射；AOT 路径 Phase 2 预告
@@ -115,41 +130,47 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.90" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.90" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.90" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.90" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.90" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.90" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.90" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.90" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.92" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.92" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.92" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.92" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.92" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.92" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.92" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.92" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.92" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.90" />
-<!-- ✅ 全量 lockstep 4.10.90（2026-10-28——延续 4.10.88 的 ADR112 让路守卫精细化（per-interface + 三关注点分离 +
-     DataService 连带伤害修复 + `TKWF_SG2a_EXTENDPOINT001` 缺省守卫）+ 4.10.90 修复版（4.10.89 因 SG3 发射 partial
-     GeneratedJsonContext 致 CS0534 编译阻塞——Roslyn 生成器互不可见架构死路，被 4.10.90 替代：SG3 改发射
-     RestTypeInfoRegistrar（[ModuleInitializer] 闭集注册表）+ RestTypeInfoRegistry.Register/Resolve，零配置）——
-     扩展门面恢复进消费方 ApiMetadata → SG3 GraphQL 客户端链路恢复 + REST 通道（IRestApiClient/SendRestAsync）
-     就绪；⚠️ 桥接历史见 L67 注记（曾暂锁 4.10.88，4.10.90 发布后直接跳锁，跳过 4.10.89 损坏版） -->
-    <!-- ✅ TKWF.CodeGeneration 4.10.90（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.92" />
+<!-- ✅ 全量 lockstep 4.10.92（2026-10-28——ADR118 扩展端点暴露机制根治，扩展门面不进消费方 ApiMetadata
+     结构性 bug 收官：扩展侧产契约接口（`{扩展根Ns}.I{X} : IDomainService`——用户裁定语义修正 291ef43a）+
+     消费方补生成控制器 + TUser 宿主声明单一权威（TUSER001/EXTIFACE001 Error，删 UserInfo 后缀猜测）+
+     手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受——真实 WeChat/AuthCenter 门面为
+     `: IDomainService`，ADR117 旧严格判定致其无效故跳过 4.10.91 直锁 4.10.92）→ 扩展门面真名进消费方
+     ApiMetadata → SG3 客户端生成（手写客户端可退役）；桥接历史见 L67 注记（4.10.89 CS0534 跳过 /
+     4.10.90 RestTypeInfoRegistry 修复 / 4.10.91 门面判定未放宽不可锁） -->
+    <!-- ✅ TKWF.CodeGeneration 4.10.92（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
          4.10.87 为 SG2 `IsExposed` 暴露面口径修正 ADR113，与 SG3 同包原子发布零偏斜；
          4.10.88（ADR112 让路守卫精细化——per-interface + 三关注点分离 + DataService 连带伤害修复 + 缺省守卫）；
          4.10.89（C-3 路由元数据 ADR115 + C-4 SG3 REST 传输分支 ADR116，**CS0534 阻塞版**——SG3 发射 partial
          GeneratedJsonContext 依赖 STJ 源生成器不可见，被 4.10.90 替代）；
          4.10.90（ADR116 决策 1 修订——SG3 改发射 RestTypeInfoRegistrar [ModuleInitializer] 闭集注册表 +
          RestTypeInfoRegistry.Register/Resolve，零配置，AOT 路径 Phase 2 预告）；
+         4.10.91（ADR117——GenerateControllerCatalog.InterfaceNames 符号回填真名 + SG2 WARN007 诊断 +
+         OPT003 取首段；⚠️ 门面判定未放宽（只认 IAopContract），对 `: IDomainService` 门面无效——**跳过不锁**）；
+         4.10.92（ADR118 扩展端点暴露机制根治——扩展侧产契约接口（基类 IDomainService 用户裁定）+ DataService
+         缺口根治 + TUSER001/EXTIFACE001 零猜测守卫 + 手写门面判定放宽（IAopContract 或 IDomainService 均接受）；
+         本仓门面保持 `: IDomainService` 零代码改动）；
          4.10.82（B4 fallback 修复——非泛型 DomainServiceBase 门面空壳）+ 4.10.83（AspNetCore 门控三处——
          仅 Web 扩展生成注册表 + dispatcher 空守卫 + IsDataService 跳过）+ 4.10.85（门控精化——
          referencesAspNetCore 从 StartsWith(Microsoft.AspNetCore) 改精确名单——TKWF.Domain 传递依赖
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.90" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.90" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.92" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.92" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.92" />
   </ItemGroup>
 </Project>
 

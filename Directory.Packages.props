@@ -65,11 +65,17 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ⚠️ 历史批次注记（当前 lockstep = **4.10.88 桥接**——nuget.org 最新 4.10.88；v4.10.89 源码/部署根已就绪但
-         nuget.org 发布未完成（AGENTS §6 先例：CodeGeneration 恒 NuGet 纯 Analyzer，4.10.89 未上架则不可锁）→
-         **暂锁 4.10.88 桥接**，框架组发布后同步提升（同 v4.10.39→4.10.38 桥接先例）：
-         v4.10.89（2026-10-28——ADR112 让路守卫修复收官（框架组裁决 C-3/C-4 批次，nuget.org 待发布）
-         ——C-3 路由元数据 ADR115：`GeneratedControllerCatalog.RestEndpoint*` 四常量 + `ModuleKey/ModuleDefaultPrefix`；
+         ⚠️ 历史批次注记（当前 lockstep = **4.10.90**——nuget.org 最新 4.10.90；4.10.89 曾因 SG3 发射 partial
+         GeneratedJsonContext 致 CS0534 编译阻塞（Roslyn 生成器互不可见架构死路）→ **4.10.90 修复版**改
+         RestTypeInfoRegistry 编译期闭集注册表（ADR116 决策 1 修订，v4.10.90 转告 `GeneratedJsonContext编译阻塞已修复`）。
+         ⚠️ **桥接历史（2026-10-28 早间）**：4.10.89 nuget.org 未发布时曾暂锁 4.10.88（AGENTS §6 v4.10.39→4.10.38 先例），
+         4.10.90 发布后解除桥接直接锁 4.10.90（跳过 4.10.89 损坏版）：
+         v4.10.90（2026-10-28——ADR116 决策 1 修订：SG3 发射 `RestTypeInfoRegistrar`（[ModuleInitializer] 闭集注册表）+
+         `RestTypeInfoRegistry.Register/Resolve`（烘焙 DefaultJsonTypeInfoResolver + JsonSerializerDefaults.Web）；
+         零配置（ModuleInitializer 自动执行）；替代 4.10.89 损坏的 GeneratedJsonContext 发射；AOT 路径 Phase 2 预告
+         （裁剪消费端当前 fail-closed）。扩展侧适配：CPM lockstep 即完成（扩展主包不直接消费 RestTypeInfoRegistry）。
+         v4.10.89（2026-10-28——ADR112 让路守卫修复收官 C-3/C-4 批次，**nuget.org 已发布但 CS0534 阻塞即被 4.10.90 替代**——
+         C-3 路由元数据 ADR115：`GeneratedControllerCatalog.RestEndpoint*` 四常量 + `ModuleKey/ModuleDefaultPrefix`；
          ApiMetadata 增 `RestMethod/RestRoute`（编译期组内相对路由 + 运行期组前缀，配置优先默认回退）；
          C-4 SG3 REST 传输分支 ADR116：`IRestApiClient`+`SendRestAsync`（非泛型 JsonTypeInfo 零反射 AOT 安全）+
          双传输分派 + WASM 缺客户端 fail-closed。扩展侧适配：扩展主包 csproj 若消费新 API 需同步；
@@ -109,36 +115,41 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.88" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.88" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.88" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.88" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.88" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.88" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.88" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.88" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.88" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.90" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.90" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.90" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.90" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.88" />
-<!-- ✅ 全量 lockstep 4.10.88（2026-10-28——延续 4.10.87 的 B1-c 端点契约化基线 + ADR112 让路守卫精细化：扩展门面恢复进消费方 ApiMetadata → SG3 GraphQL 客户端链路恢复 + `TKWF_SG2a_EXTENDPOINT001` 缺省守卫（旧版扩展升级即消除）；⚠️ **4.10.89 桥接锁**（nuget.org 未发布 4.10.89，仅部署根源码 4.10.89——AGENTS §6 先例暂锁前一正式版；发布后同步提升，见 L67 注记） -->
-    <!-- ✅ TKWF.CodeGeneration 4.10.88（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.90" />
+<!-- ✅ 全量 lockstep 4.10.90（2026-10-28——延续 4.10.88 的 ADR112 让路守卫精细化（per-interface + 三关注点分离 +
+     DataService 连带伤害修复 + `TKWF_SG2a_EXTENDPOINT001` 缺省守卫）+ 4.10.90 修复版（4.10.89 因 SG3 发射 partial
+     GeneratedJsonContext 致 CS0534 编译阻塞——Roslyn 生成器互不可见架构死路，被 4.10.90 替代：SG3 改发射
+     RestTypeInfoRegistrar（[ModuleInitializer] 闭集注册表）+ RestTypeInfoRegistry.Register/Resolve，零配置）——
+     扩展门面恢复进消费方 ApiMetadata → SG3 GraphQL 客户端链路恢复 + REST 通道（IRestApiClient/SendRestAsync）
+     就绪；⚠️ 桥接历史见 L67 注记（曾暂锁 4.10.88，4.10.90 发布后直接跳锁，跳过 4.10.89 损坏版） -->
+    <!-- ✅ TKWF.CodeGeneration 4.10.90（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
          4.10.87 为 SG2 `IsExposed` 暴露面口径修正 ADR113，与 SG3 同包原子发布零偏斜；
-         4.10.88（ADR112 让路守卫精细化——per-interface + 三关注点分离 + DataService 连带伤害修复 + 缺省守卫）；——
+         4.10.88（ADR112 让路守卫精细化——per-interface + 三关注点分离 + DataService 连带伤害修复 + 缺省守卫）；
+         4.10.89（C-3 路由元数据 ADR115 + C-4 SG3 REST 传输分支 ADR116，**CS0534 阻塞版**——SG3 发射 partial
+         GeneratedJsonContext 依赖 STJ 源生成器不可见，被 4.10.90 替代）；
+         4.10.90（ADR116 决策 1 修订——SG3 改发射 RestTypeInfoRegistrar [ModuleInitializer] 闭集注册表 +
+         RestTypeInfoRegistry.Register/Resolve，零配置，AOT 路径 Phase 2 预告）；
          4.10.82（B4 fallback 修复——非泛型 DomainServiceBase 门面空壳）+ 4.10.83（AspNetCore 门控三处——
          仅 Web 扩展生成注册表 + dispatcher 空守卫 + IsDataService 跳过）+ 4.10.85（门控精化——
          referencesAspNetCore 从 StartsWith(Microsoft.AspNetCore) 改精确名单——TKWF.Domain 传递依赖
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.88" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.88" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.90" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.90" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.88" />
-    <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
-         IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
-         对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.88" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.90" />
   </ItemGroup>
 </Project>
 

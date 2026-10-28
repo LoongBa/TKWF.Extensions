@@ -65,7 +65,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ⚠️ 历史批次注记（当前 lockstep = **4.10.94**——nuget.org 最新 4.10.94；ADR117/ADR118 扩展门面
+         ⚠️ 历史批次注记（当前 lockstep = **4.10.95**——nuget.org 最新 4.10.95；ADR117/ADR118 扩展门面
          不进消费方 ApiMetadata 结构性 bug 的框架侧修复收官：InterfaceNames 符号回填真名 + 扩展侧产契约接口 +
          手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）+ DataService 缺口根治 + TUSER001/EXTIFACE001
          零猜测守卫。扩展侧适配：CPM lockstep 即完成（门面保持 `: IDomainService`——用户裁定语义修正，ADR118
@@ -83,6 +83,20 @@
          （`Execute` 的 `targets.IsEmpty` 分支从不生成扩展消费方控制器/装饰器，P7）一并修复；框架自身生成物零变化；
          扩展侧适配 = **lockstep + 全量重建**（生成物命名口径变更，无源码改写；有手写门面扩展零改动——其成员本就含
          `Async`，与本次声明同口径）。
+         4.10.95（2026-10-28——**能力清单假名 + 级联 TUSER001 修复**（DMP 4.10.94 回执第三轮：WebApi 2 Error +
+         1 Warn + WARN004×12）：① **假名 WARN007/ERR002**——SG2 读 `GeneratedControllerRegistrations.InterfaceNames`，
+         其发射处（`GenerateRegistrationContext`）另有内联推导 `{ControllerNamespace}.{GetInterfaceName}`（`AuthController`
+         推成 `IAuthService`），而 A 路径真名早已存入 `TargetInfo.InterfaceName` 未被使用（P2 双推导链）→ 新增
+         `GetAuthoritativeInterfaceName` 统一三处 + 注册发射改单次配对遍历（顺带消除 O(n²) 与同名歧义）+ 删除死代码
+         `CollectAllTypesInNamespace`/`TryGetNamespaceTypes`；② **级联 TUSER001**——真实发射点 `ResolveFrameworkContractMetadata`
+         （框架契约补充路径）无元数据入口 → `TUserHostResolver.Resolve` 仅遍历当前编译单元（WebApi 无宿主，声明在
+         Domain）→ 0 候选；修法 = `TryResolveFromGeneratedRegistrations` 返回权威 `TUserFullName` 并传入，该路径 TUser
+         优先级改 **元数据 → 控制器基类 → 宿主声明**（与 `ExtractFromContractInterface` 同序）；③ **fail-closed 未放宽**
+         （元数据缺失仍报 TUSER001，不引入猜测）；框架侧验证 Domain.SG 302/302 · ApiService.SG 136/136 + 双向有效性。
+         扩展侧适配 = lockstep + 全量重建（注册常量内容变化，必须重建）。
+         ⚠️ **WARN004 为预期行为**（非缺陷）：同 GraphQL 根类型下多服务同名方法（`List`/`Save`/`Delete`/`ListRules`）→
+         第一轮加服务短名前缀 `{服务短名}_{方法名}` 并报 WARN004（每冲突组 1 条）；仍冲突则第二轮全类型名前缀 +
+         WARN005；编译期确定性消歧，SG3 客户端方法名跟随消歧后字段名。
          ⚠️ **桥接历史（2026-10-28）**：4.10.89 曾因 SG3 发射 partial GeneratedJsonContext 致 CS0534 被跳过；
          4.10.90（RestTypeInfoRegistry 闭集注册表修复）曾暂锁；**4.10.91（ADR117）不可锁**——门面判定仍只认
          `IAopContract`，对 `: IDomainService` 门面无效（框架组自述"旧严格判定致 ADR117 修复对其无效"）；
@@ -142,19 +156,19 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.94" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.94" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.94" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.94" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.94" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.94" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.94" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.94" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.94" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.95" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.95" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.95" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.95" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.95" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.95" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.95" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.95" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.95" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.94" />
-<!-- ✅ 全量 lockstep 4.10.94（2026-10-28——延续 4.10.92 ADR118 扩展端点暴露机制根治：扩展侧产契约接口
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.95" />
+<!-- ✅ 全量 lockstep 4.10.95（2026-10-28——延续 4.10.92 ADR118 扩展端点暴露机制根治：扩展侧产契约接口
      （`{扩展根Ns}.I{X} : IDomainService`——用户裁定语义修正 291ef43a）+ 消费方补生成控制器 + TUser 宿主声明
      单一权威（TUSER001/EXTIFACE001 Error）+ 手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）→
      扩展门面真名进消费方 ApiMetadata → SG3 客户端生成（手写客户端可退役）；+ **4.10.93 ControllerGenerator
@@ -162,10 +176,13 @@
      第 1 项 Domain 编译阻塞；CreateTypedArg Array 分支 + FindApiExposeOnSymbol 复用 + FormatLiteral Array case，
      纯生成器修复零代码适配）+ **4.10.94 扩展门面装饰器 CS0535 修复**（装饰器声明名取契约接口成员名 `MethodName`
      含 Async / 转发与 InvocationContext 名仍取控制器剥离名；同源 `GenerateExtensionFacadeInterface` 成员名 +
-     `targets.IsEmpty` 静默缺口一并修复——生成物命名口径变更，扩展侧 lockstep + 全量重建即对齐，无源码改写）；
+     `targets.IsEmpty` 静默缺口一并修复——生成物命名口径变更，扩展侧 lockstep + 全量重建即对齐，无源码改写）+
+     **4.10.95 能力清单假名 + 级联 TUSER001 修复**（注册发射处内联推导假名（`AuthController`→`IAuthService`）改用
+     `TargetInfo.InterfaceName` 权威真名——WARN007/ERR002 同源消除；`ResolveFrameworkContractMetadata` 补元数据入口
+     `TUserFullName`——TUSER001 消除；WARN004×12 为预期行为：同根类型同名方法两轮确定性消歧 `{服务短名}_{方法名}`）；
      桥接历史见 L67 注记（4.10.89 CS0534 跳过 / 4.10.90 RestTypeInfoRegistry 修复 / 4.10.91 门面判定未放宽不可锁 /
-     4.10.92 ADR118 根治 / 4.10.93 CS8785 数组特性参数） -->
-    <!-- ✅ TKWF.CodeGeneration 4.10.94（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
+     4.10.92 ADR118 根治 / 4.10.93 CS8785 数组特性参数 / 4.10.94 CS0535 装饰器命名口径） -->
+    <!-- ✅ TKWF.CodeGeneration 4.10.95（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
          4.10.87 为 SG2 `IsExposed` 暴露面口径修正 ADR113，与 SG3 同包原子发布零偏斜；
          4.10.88（ADR112 让路守卫精细化——per-interface + 三关注点分离 + DataService 连带伤害修复 + 缺省守卫）；
          4.10.89（C-3 路由元数据 ADR115 + C-4 SG3 REST 传输分支 ADR116，**CS0534 阻塞版**——SG3 发射 partial
@@ -192,16 +209,27 @@
          `Execute` 的 `targets.IsEmpty` 分支补生成扩展消费方控制器/装饰器（P7）；框架自身生成物零变化；
          框架侧验证 Domain.SG 301/301 · ApiService.SG 135/135 · slnx Release 0 错误；
          扩展侧适配 = lockstep + 全量重建（生成物命名口径，无源码改写；有手写门面扩展零改动））；
+         4.10.95（2026-10-28——**能力清单假名 + 级联 TUSER001 修复**（DMP 4.10.94 回执第三轮：WebApi 2 Error +
+         1 Warn（WARN007/ERR002/TUSER001）+ WARN004×12）：① 假名——`GenerateRegistrationContext` 内联推导
+         `{ControllerNamespace}.{GetInterfaceName}`（`AuthController`→`IAuthService`）而权威真名
+         `TargetInfo.InterfaceName` 未被使用（P2 双推导链）→ 新增 `GetAuthoritativeInterfaceName` 统一 catalog 回退/
+         自检/注册发射三处 + 注册发射改单次配对遍历（消除 O(n²) 与同名歧义）+ 删死代码 `CollectAllTypesInNamespace`/
+         `TryGetNamespaceTypes`；② TUSER001——`ResolveFrameworkContractMetadata` 无元数据入口致 `TUserHostResolver`
+         仅遍历当前编译单元（WebApi 无宿主）→ 0 候选；修法 = 由 `TryResolveFromGeneratedRegistrations` 传入权威
+         `TUserFullName`，优先级 **元数据 → 控制器基类 → 宿主声明**（与 `ExtractFromContractInterface` 同序）；
+         ③ fail-closed 未放宽（元数据缺失仍报 TUSER001）；④ **WARN004 预期行为**——同根类型同名方法两轮消歧
+         （`{服务短名}_{方法名}` → 仍冲突则全类型名 + WARN005），SG3 方法名跟随消歧字段名；
+         框架侧验证 Domain.SG 302/302 · ApiService.SG 136/136 + 双向有效性）；
          4.10.82（B4 fallback 修复——非泛型 DomainServiceBase 门面空壳）+ 4.10.83（AspNetCore 门控三处——
          仅 Web 扩展生成注册表 + dispatcher 空守卫 + IsDataService 跳过）+ 4.10.85（门控精化——
          referencesAspNetCore 从 StartsWith(Microsoft.AspNetCore) 改精确名单——TKWF.Domain 传递依赖
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.94" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.94" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.95" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.95" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.94" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.95" />
   </ItemGroup>
 </Project>
 

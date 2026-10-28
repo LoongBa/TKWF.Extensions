@@ -23,12 +23,16 @@ public class ConsumerIntegrationTests
     /// 消费方项目激活 SG1b（csproj Analyzer 引用）→ 扩展 <c>[GenerateController(FromDataService=true)]</c>
     /// 的 DataService 接口名被记录进 <see cref="TKW.Framework.SourceGen.GeneratedControllerRegistrations"/>。
     /// 证明扩展控制器生成契约在消费方编译期生效（SG#2 依此生成 REST API）。
+    /// <para>v4.10.96（ADR120）：接口名须为扩展根命名空间的真名——旧 SDK 产出过 <c>{ControllerNamespace}.</c>
+    /// 拼接的 <c>.Controllers</c> 假名（该命名空间不存在，消费方 SG2 解析 null 后静默跳过）。</para>
     /// </summary>
     [Fact]
     public void Sg1b_InterfaceNames_IncludesPermissionDataService()
     {
-        const string expectedIface = "TKWF.Ext.Permissions.Controllers.IPermissionGrantEntityDataService";
+        const string expectedIface = "TKWF.Ext.Permissions.IPermissionGrantEntityDataService";
+
         Assert.Contains(expectedIface, TKW.Framework.SourceGen.GeneratedControllerRegistrations.InterfaceNames);
+        Assert.DoesNotContain("TKWF.Ext.Permissions.Controllers.", TKW.Framework.SourceGen.GeneratedControllerRegistrations.InterfaceNames);
     }
 
     // ─── 2. 三钩子接线：ConfigureServices 收集消费方贡献者定义 + 注册服务 ───

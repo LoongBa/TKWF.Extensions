@@ -200,7 +200,9 @@ public class WeChatChannelTestHost : TestHostBase
 
         // 多通道联邦核心门面（v0.3.0）——平台库测试宿主不启动 FederationExtensionInitializer，
         // 需补注册"已启用 Federation"的最小生产等价面（对齐 FederationExtensionInitializer.ConfigureServices
-        // 对应片段）：StaticChannelRegistry + CompositeChannelRegistry + SsoChannelFactory + SsoLogin
+        // 对应片段）：IMemoryCache（D03 1.7 Composite 缓存层依赖）+ StaticChannelRegistry +
+        // CompositeChannelRegistry + SsoChannelFactory + SsoLogin
+        services.TryAddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.Extensions.Caching.Memory.MemoryCache>();
         services.AddOptions<FederationStaticChannelOptions>();
         services.AddScoped<StaticChannelRegistry>();
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();

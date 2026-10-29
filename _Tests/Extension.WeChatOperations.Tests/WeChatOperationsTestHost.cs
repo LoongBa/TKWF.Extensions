@@ -124,7 +124,8 @@ public class WeChatOperationsTestHost : IDisposable
     {
         // ① 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices：
         //    6 门面 AddConstructibleService + handler TryAddEnumerableConstructible + keyed ISymmetricKeyProvider +
-        //    DbWeChatCredentialResolver（TryAddEnumerable Scoped）+ DbWeChatChannelSource（Insert(0) 前置）+ AddOptions）
+        //    DbWeChatCredentialResolver（TryAddEnumerable Scoped）+ WeChatChannelRegistrySource（TryAddEnumerable——D03 1.7
+        //    Priority=100 高优先替代 Insert(0) 注册序）+ AddOptions）
         new WeChatOperationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         // ①b V0.4.0 ③ FeatureManagement 消费面（消息业务总开关 DB 化——生产路径最小等价面，对齐
@@ -175,7 +176,7 @@ public class WeChatOperationsTestHost : IDisposable
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(Handler));
 
         // ⑤ 测试桥接：IDomainUser 注册（DataService ctor 需 IDomainUser——接线型 DbWeChatCredentialResolver/
-        //    DbWeChatChannelSource 的 GetRequiredService<DataService>() 需 DI 可构造；生产永不注册 IDomainUser，D01）
+        //    WeChatChannelRegistrySource 的 GetRequiredService<DataService>() 需 DI 可构造；生产永不注册 IDomainUser，D01）
         var user = new TestDomainUser();
         services.AddSingleton<IDomainUser>(sp => { user.Provider = sp; return user; });
 

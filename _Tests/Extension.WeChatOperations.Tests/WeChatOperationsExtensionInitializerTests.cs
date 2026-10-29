@@ -140,17 +140,18 @@ public class WeChatOperationsExtensionInitializerTests
         Assert.Equal(ServiceLifetime.Scoped, descriptor!.Lifetime);
     }
 
-    /// <summary>DbWeChatChannelSource 两源并存注册（Insert(0) 前置——组合遍历序首位，DB 源优先语义）。</summary>
+    /// <summary>WeChatChannelRegistrySource 两源并存注册（D03 1.7——TryAddEnumerable 集合元素；Priority 语义断言归 Federation.Tests 组合测试）。</summary>
     [Fact]
-    public void ConfigureServices_Registers_DbChannelSource_First()
+    public void ConfigureServices_Registers_DbChannelSource()
     {
         var services = new ServiceCollection();
         new WeChatOperationsExtensionInitializer<WeChatOperationsUserInfo>().ConfigureServices(services);
 
-        var descriptors = services.Where(d => d.ServiceType == typeof(IChannelSource)).ToList();
-        // DB 源须在 Options 源之前（§九 验收 7——CompositeChannelRegistry 遍历顺序 = 注册顺序）
-        var dbIndex = descriptors.FindIndex(d => d.ImplementationType == typeof(DbWeChatChannelSource));
-        Assert.True(dbIndex >= 0, "DbWeChatChannelSource 未注册为 IChannelSource 集合元素");
-        Assert.Equal(0, dbIndex);   // Insert(0) 前置
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IChannelSource)
+            && d.ImplementationType == typeof(WeChatChannelRegistrySource));
+        Assert.NotNull(descriptor);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor!.Lifetime);
+        // Priority 契约存在（DIM 可覆盖——D03 §8.2 优先权语义）
+        Assert.NotNull(typeof(WeChatChannelRegistrySource).GetProperty(nameof(WeChatChannelRegistrySource.Priority)));
     }
 }

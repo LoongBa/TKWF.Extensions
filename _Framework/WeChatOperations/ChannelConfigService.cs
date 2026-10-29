@@ -7,6 +7,7 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
+using TKWF.Ext.Federation;
 using TKWF.Ext.Permissions.Abstractions;
 using TKWF.Ext.WeChatOperations.DTOs;
 
@@ -97,6 +98,14 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         if (string.IsNullOrWhiteSpace(request.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(request));
         if (string.IsNullOrWhiteSpace(request.AppId)) throw new ArgumentException("AppId 必填", nameof(request));
 
+        // D03 1.2 通道形态校验（fail-fast——误传协议类型 wechat_oauth/wechat_event 被拦截，Oracle6 条件 4 红线）
+        var channelForm = string.IsNullOrWhiteSpace(request.ChannelForm) ? "mp_service" : request.ChannelForm.Trim().ToLowerInvariant();
+        if (!ChannelTypeRegistry.IsLegal("wechat", channelForm))
+            throw new ArgumentException($"通道形态非法：{request.ChannelForm}（合法值见 ChannelTypeRegistry wechat 域）", nameof(request));
+        var verification = string.IsNullOrWhiteSpace(request.Verification) ? "none" : request.Verification.Trim().ToLowerInvariant();
+        if (verification is not ("none" or "verified"))
+            throw new ArgumentException($"认证状态非法：{request.Verification}（none/verified）", nameof(request));
+
         // 构造实体（wire DTO → 领域实体——凭证承载于 DTO 明文，服务端加密落库）
         var entity = new WeChatChannelConfigEntity
         {
@@ -107,6 +116,9 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             Remark = request.Remark,
             IsEnabled = request.IsEnabled,
             ChannelType = request.ChannelType ?? "wechat_event",
+            ChannelForm = channelForm,          // D03 1.2 新列（形态——默认 mp_service 存量兼容）
+            Verification = verification,        // D03 1.2 新列（认证状态——默认 none）
+            Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : request.Alias.Trim().ToLowerInvariant(),   // D03 1.2 新列（对外别名——1.6 守卫另立）
         };
 
         // ChannelId/AppId 冲突预查（唯一索引 UX——TOCTOU 由数据库兜底）
@@ -131,6 +143,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             entity.CreateTime = now;
             entity.UpdateTime = now;
             var created = await Ds.EntityCreateAsync(entity, ct);
+            await PublishChangedAsync(created.ChannelId, created.UpdateTime.Ticks);   // D03 三机制-事件失效（落库后发布）
             return created.Id;
         }
 
@@ -144,19 +157,47 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         db.Remark = entity.Remark;
         db.IsEnabled = entity.IsEnabled;
         db.ChannelType = entity.ChannelType;
+        db.ChannelForm = entity.ChannelForm;      // D03 1.2 新列透传
+        db.Verification = entity.Verification;    // D03 1.2 新列透传
+        db.Alias = entity.Alias;                  // D03 1.2 新列透传（1.6 不可变守卫另立）
         if (request.AppSecret is not null) db.AppSecretCipher = _keys.Encrypt(request.AppSecret);
         if (request.Token is not null) db.TokenCipher = _keys.Encrypt(request.Token);
         if (request.EncodingAesKey is not null) db.EncodingAESKeyCipher = _keys.Encrypt(request.EncodingAesKey);
         db.UpdateTime = now;
         await Ds.EntityUpdateAsync(db, ct);
+        await PublishChangedAsync(db.ChannelId, db.UpdateTime.Ticks);   // D03 三机制-事件失效（落库后发布）
         return db.Id;
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(long id, CancellationToken ct = default)
     {
+        var db = await Ds.EntityGetAsync(e => e.Id == id, ct);
         var affected = await Ds.EntityDeleteBatchAsync(new[] { id }, ct);
+        if (affected > 0 && db is not null)
+            await PublishChangedAsync(db.ChannelId, db.UpdateTime.Ticks);   // D03 三机制-事件失效（删除后发布）
         return affected > 0;
+    }
+
+    /// <summary>
+    /// 落库后发布 <see cref="ChannelConfigChanged"/> 域事件（D03 §4.2.3 事件失效——<see cref="ChannelConfigChangedHandler"/>
+    /// 订阅失效缓存命中通道；对齐 <see cref="FollowChangedEvent"/> 发布形态——经 <c>User.GetService&lt;ILocalEventBus&gt;()</c>
+    /// AOP 帧内收集，UoW 提交后派发）。<paramref name="dataVersion"/> = 数据版本快照（UpdateTime.Ticks——Obs5 定稿）。
+    /// </summary>
+    private async Task PublishChangedAsync(string channelId, long dataVersion)
+    {
+        try
+        {
+            var evt = new ChannelConfigChanged(channelId, dataVersion);
+            var bus = User.GetService<TKW.Framework.Domain.Events.ILocalEventBus>();
+            if (bus is not null)
+                await bus.PublishAsync(evt);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 事件失效为旁路（TTL 兜底仍在）——发布失败不阻断写路径（降级矩阵惯例），Debug 留痕
+            System.Diagnostics.Debug.WriteLine($"[ChannelConfigService] ChannelConfigChanged 发布失败：{ex.Message}");
+        }
     }
 
     private string EncryptOrEmpty(string? plain)

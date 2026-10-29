@@ -85,8 +85,10 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         //   未命中内部降级 Options——设计 §3.2.2 Oracle P1）
         services.TryAddEnumerable(ServiceDescriptor.Scoped<TKWF.Federation.WeChat.IWeChatCredentialResolver, DbWeChatCredentialResolver>());
 
-        // 两源并存 ②：DB 通道来源（Insert(0) 前置——组合遍历序首位，§九 验收 7"DB 源优先"语义保证）
-        services.Insert(0, ServiceDescriptor.Scoped<IChannelSource, DbWeChatChannelSource>());
+        // 两源并存 ②：DB 通道来源（D03 1.7——WeChatChannelRegistrySource 优先权语义替代 Insert(0) 前置：
+        //   Priority=100 高优先（DB 权威恒先于静态源 0 / Federation 主包 SsoChannelRegistryEntity 系 0——
+        //   组合按 Priority 降序首命中，方案 §8.4 条件 5；含 disabled 全行投影——S3 降级判据）
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, WeChatChannelRegistrySource>());
 
         // 事件回复 handler（ADR92 集合版守卫工厂——平台基类二级分发 + 内部 template 兜底）
         services.TryAddEnumerableConstructible<IEventReplyHandler, WeChatOperationsReplyHandler>();

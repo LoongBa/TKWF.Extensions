@@ -200,7 +200,9 @@ public class DingTalkChannelTestHost : TestHostBase
         // 需补注册"已启用 Federation"的最小生产等价面（对齐 FederationExtensionInitializer.ConfigureServices
         // 对应片段）：StaticChannelRegistry + CompositeChannelRegistry + SsoChannelFactory + SsoLogin
         services.AddOptions<FederationStaticChannelOptions>();
-        services.AddScoped<StaticChannelRegistry>();
+        // D03 1.7 Composite 缓存层依赖（IMemoryCache——AddSingleton 无害，消费方已有注册不覆盖）
+            services.AddSingleton<global::Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.Extensions.Caching.Memory.MemoryCache>();
+            services.AddScoped<StaticChannelRegistry>();
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
         services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
         services.AddConstructibleService<ISsoLogin, SsoLogin>();

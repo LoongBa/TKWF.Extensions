@@ -1,5 +1,7 @@
 using System;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
@@ -67,17 +69,19 @@ namespace TKWF.Ext.Federation;
                 return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());
             });
 
-        // ── 多通道联邦（v0.3.0，方案 docs/Federation/多通道联邦-开发方案.md §3.2/3.4）──
-        // 通道注册表门面：Composite = 组合语义单点（DB 命中优先 → Static 回退）；
-        // StaticChannelRegistry 具体类注册（普通 DI——Composite 守卫工厂 ActivatorUtilities 解析依赖）
-        services.AddScoped<StaticChannelRegistry>();
+        // ── 多通道联邦（v0.3.0，方案 docs/Federation/多通道联邦-开发方案.md §3.2/3.4；D03 1.7 改造）──
+        // 通道注册表门面：Composite = 组合 + 缓存单点（按 IChannelSource.Priority 降序选区 + IMemoryCache 三键
+        // + 三机制失效——D03 §4.2.3，方案 §8.4：替代硬编码「DB 命中优先 → 静态回退」）
+        services.TryAddSingleton<IMemoryCache, MemoryCache>();
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
 
-        // ── 多通道联邦 Phase 2：DB 动态权威层（P2-2/P2-3）──
-        // DbChannelRegistry：DomainServiceBase 派生（ctor 含 IDomainUser + keyed ISymmetricKeyProvider，不可直接 DI 解析）——
-        // Composite 经基类 User.Use<DbChannelRegistry>() 帧内 NoAop 直建；DI 注册守卫工厂形态（防直取/ValidateOnBuild 安全）
+        // ⚠️ D03 1.7 停用新装配（方案 §8.4——Oracle6 裁决）：SsoChannelRegistryEntity 系（DbChannelRegistry）
+        //   **不再参与 Composite 选区**（权威归 WeChatOperations WeChatChannelRegistrySource，Priority=100）；
+        //   旧装配保留兼容（类与注册保留，既有显式消费方零破坏）+ 文档标注废弃（彻底删除留后续清理迭代）——
+        //   显式 Use<DbChannelRegistry>() 仍可解析（NoAop 直建 + throw-factory 守卫照旧）。
+        services.AddScoped<StaticChannelRegistry>();
         services.Add(ServiceDescriptor.Scoped(typeof(DbChannelRegistry), _ => throw new InvalidOperationException(
-            "[领域架构守卫] DbChannelRegistry 必须经 User.Use<DbChannelRegistry>() 解析（Composite 帧内 NoAop 直建）")));
+            "[领域架构守卫] DbChannelRegistry 必须经 User.Use<DbChannelRegistry>() 解析（旧装配兼容——弃用，见 CompositeChannelRegistry 注释）")));
         // 通道注册表写入门面（Register/Update/Unregister + AES-GCM 加解密——管理端点不建，服务层方法保留）
         services.AddConstructibleService<ISsoChannelRegistryService, SsoChannelRegistryService>();
 

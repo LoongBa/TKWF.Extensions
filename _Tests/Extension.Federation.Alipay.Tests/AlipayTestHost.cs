@@ -236,7 +236,9 @@ public class AlipayChannelTestHost : TestHostBase
         // 多通道联邦核心门面（v0.3.0）——平台库测试宿主不启动 FederationExtensionInitializer，
         // 需补注册"已启用 Federation"的最小生产等价面（对齐 FederationExtensionInitializer.ConfigureServices 对应片段）
         services.AddOptions<FederationStaticChannelOptions>();
-        services.AddScoped<StaticChannelRegistry>();
+        // D03 1.7 Composite 缓存层依赖（IMemoryCache——AddSingleton 无害，消费方已有注册不覆盖）
+            services.AddSingleton<global::Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.Extensions.Caching.Memory.MemoryCache>();
+            services.AddScoped<StaticChannelRegistry>();
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
         services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
         services.AddConstructibleService<ISsoLogin, SsoLogin>();

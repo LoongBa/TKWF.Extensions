@@ -122,7 +122,9 @@ public class DerivedChannelTestHost : TestHostBase
 
         // 多通道联邦核心门面（v0.3.0）——不启动 FederationExtensionInitializer 的最小生产等价面
         services.AddOptions<FederationStaticChannelOptions>();
-        services.AddScoped<StaticChannelRegistry>();
+        // D03 1.7 Composite 缓存层依赖（IMemoryCache——AddSingleton 无害，消费方已有注册不覆盖）
+            services.AddSingleton<global::Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.Extensions.Caching.Memory.MemoryCache>();
+            services.AddScoped<StaticChannelRegistry>();
         services.AddConstructibleService<IChannelRegistry, CompositeChannelRegistry>();
         services.AddConstructibleService<ISsoChannelFactory, SsoChannelFactory>();
         services.AddConstructibleService<ISsoLogin, SsoLogin>();

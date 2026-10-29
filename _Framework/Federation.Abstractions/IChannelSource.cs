@@ -22,6 +22,17 @@ public interface IChannelSource
     /// <summary>
     /// 通道能力声明（I2 方案 §3.4 Q5）——<b>DIM 默认 <see cref="ChannelCapabilities.None"/> = 刻意 fail-closed</b>：
     /// 新增平台库忘记声明 → 事件/关注域/免登静默跳过（而非「试着调一下看报不报错」）。既有 8 平台库零改动即可编译。
+    /// <para>⚠️ per-source 粗粒度（一个源一个平台）；<b>per-channel 能力</b>（D03 Capability 派生——
+    /// DB 源多公众号各自 (ChannelForm, Verification) 不同）经 <see cref="ChannelConfig.Capabilities"/> 承载
+    /// （Oracle6 条件 1 方案 A——本 DIM 供静态源投影填充用，DB 源投影时覆盖）。</para>
     /// </summary>
     ChannelCapabilities Capabilities => ChannelCapabilities.None;
+
+    /// <summary>
+    /// 组合选区优先级（D03 §4.2.3「优先级配置化」——替代现状硬编码 <c>Insert(0)</c>）。
+    /// <b>DIM 默认 0</b>——数值高者优先；DB Provider（WeChatOperations）声明 100，静态源默认 0。
+    /// 组合语义 = 按 Priority 降序<b>首命中返回</b>（首个返回非 null 的源即终值——高优先源覆盖低优先源，
+    /// Oracle6 条件 5 alias 覆盖语义）。零破坏：既有实现零改动编译。
+    /// </summary>
+    int Priority => 0;
 }

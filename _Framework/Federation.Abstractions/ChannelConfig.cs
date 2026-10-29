@@ -49,4 +49,16 @@ public sealed class ChannelConfig
 
     /// <summary>启停标记（false → CHANNEL_DISABLED）。</summary>
     public bool IsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// 通道能力面（D03 §4.1 Capability——由 (ChannelForm, Verification) 派生的<b>协议能力</b>，非营业能力）。
+    /// <para><b>默认 <see cref="ChannelCapabilities.None"/> = 刻意 fail-closed</b>（Oracle6 条件 1 方案 A——
+    /// per-channel 粒度：`IChannelSource.Capabilities` 是 per-source（一个源一个平台）无法表达
+    /// "同一 WeChatOperations DB 源下多公众号各自 (Form, Verification) 不同 → 能力不同"）。
+    /// 投影规则：DB Source 按实体 ChannelForm/Verification 经 capability resolver 派生填充；
+    /// 静态 Source 按 <c>IChannelSource.Capabilities</c> DIM 填充（per-source 粗粒度，对齐既有语义）。</para>
+    /// <para>营业能力（模板消息/支付等）不入本位——经 <c>Extra["capabilities_ext"]</c> 承载
+    /// （协议能力与营业能力分层，Oracle6 确认点 A）。</para>
+    /// </summary>
+    public ChannelCapabilities Capabilities { get; init; } = ChannelCapabilities.None;
 }

@@ -37,4 +37,11 @@ public interface IChannelRegistry : IDomainService
     /// <summary>默认通道（单通道降级选区——活跃数 ==1 唯一通道；多通道由消费者层 B 守卫 CHANNEL_REQUIRED，
     /// IsDefault 标记仅单通道场景生效；对外路由命名空间 2026-10-11）。</summary>
     Task<ChannelConfig?> GetDefaultAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// 显式失效缓存（D03 §4.2.3 三机制之一——管理端写配置后调用，逐通道或全量）。
+    /// <para><b>DIM 默认 no-op</b>（Oracle6 条件 2）：静态源不失效（配置变更靠重启/重载——静态源语义 =
+    /// 启动快照，天然无需失效）；DB 源经组合实现覆盖（缓存层 Remove + 事件失效命中）。</para>
+    /// </summary>
+    Task InvalidateAsync(string? channelId = null, CancellationToken ct = default) => Task.CompletedTask;
 }

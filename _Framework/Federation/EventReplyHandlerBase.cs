@@ -134,12 +134,13 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <summary>
     /// 运营配置 URL 模板解析（D03 1.5/1.10 三级回退中间级——LinkTemplate 空时经 <see cref="IOperationsConfigQuery"/>
     /// 读运营配置面 ArticleReply.UrlTemplate；未装配 WeChatOperations / 未配置 → null）。
-    /// <para>fail-safe：契约实现经 <c>User.GetService</c> 探测（未装配 → null，不抛守卫）；
-    /// 读取异常 → Warning 日志 + null（回退内置测试端点——微信 5 秒约束不阻塞）。</para>
+    /// <para>fail-safe：契约实现经 <c>User.GetOptionalService</c> 探测（⚠️ 不能用 GetService——其语义为
+    /// GetRequiredService 未注册抛异常，2026-10-30 审核 P0-1 修复）；读取异常 → Warning 日志 + null
+    /// （回退内置测试端点——微信 5 秒约束不阻塞）。</para>
     /// </summary>
     private async Task<string?> ResolveOperationsUrlTemplateAsync(string channelId, CancellationToken ct)
     {
-        var query = User.GetService<IOperationsConfigQuery>();
+        var query = User.GetOptionalService<IOperationsConfigQuery>();
         if (query is null)
         {
             return null;
@@ -160,7 +161,7 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         }
     }
 
-    /// <summary>构造自定义模板 URL（模板驱动两级模型——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}/{channel_alias}</c>；
+    /// <summary>构造自定义模板 URL（模板驱动三级模型（审核 P2-10）——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}/{channel_alias}</c>；
     /// D03 1.3：载荷类型改 <see cref="FederatedTicketPayload"/>——<c>{channel_type}</c> = 通道形态（payload.ChannelType），
     /// 新增 <c>{channel_alias}</c>（D03 §八 白名单占位符——值取 <see cref="ChannelConfig.Alias"/> 非用户输入）。
     /// ⚠️ 注意：<c>{channel_type}</c> 语义为形态（mp_service）——业务模板段（mid 等）字面输出不解析（§八）。</summary>
@@ -179,7 +180,7 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <see cref="ISealedTicketService{T}"/> 签发；⚠️ 子类构造点组装 payload：ChannelType=通道形态、
     /// 协议类型进 Extensions["protocol_type"]——误传被 ChannelTypeRegistry 拦截，Oracle6 条件 4）；
     /// LinkTemplate 空 = 内置测试端点 URL，非空 = 模板 URL（占位符 <c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}/{channel_alias}</c>
-    /// 签票后替换——模板驱动两级模型第一级）。
+    /// 签票后替换——模板驱动三级模型第一级）。
     /// </summary>
     protected sealed record EventReplyPayload(
         string Title,

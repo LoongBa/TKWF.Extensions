@@ -69,7 +69,11 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
 
     /// <summary>D03 1.6 channel alias slug 规则——3-64 位小写字母/数字/连字符，首字符须字母或数字
     /// （值已 Trim + ToLowerInvariant 归一后匹配；请求空白时不参与校验）。</summary>
-    private static readonly Regex AliasPattern = new("^[a-z0-9][a-z0-9-]{2,63}$", RegexOptions.Compiled);
+    /// <summary>审计时间秒级截断（框架 UpdateWhereAsync 参数化 DateTime 秒精度 vs CreateAsync 毫秒——两路径统一防 UpdateTime 倒退；框架缺陷已登记）。</summary>
+    private static DateTime TruncateToSecond(DateTime value)
+        => new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, value.Kind);
+
+    private static readonly Regex AliasPattern = new("^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$", RegexOptions.Compiled);
 
     public ChannelConfigService(
         IDomainUser user,
@@ -144,7 +148,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         }
 
         // 明文 → AES-GCM 加密落库（null = 保持既有密文不变——更新时不覆盖）
-        var now = DateTime.UtcNow;
+        var now = TruncateToSecond(DateTime.UtcNow);
         if (entity.Id == 0)
         {
             entity.AppSecretCipher = EncryptOrEmpty(request.AppSecret);
@@ -161,27 +165,63 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         var db = await Ds.EntityGetAsync(e => e.Id == entity.Id, ct);
         if (db is null) throw new InvalidOperationException($"公众号配置不存在：Id={entity.Id}");
 
-        db.ChannelId = entity.ChannelId;
-        db.AppId = entity.AppId;
-        db.DisplayName = entity.DisplayName;
-        db.Remark = entity.Remark;
-        db.IsEnabled = entity.IsEnabled;
-        db.ChannelType = entity.ChannelType;
-        db.ChannelForm = entity.ChannelForm;      // D03 1.2 新列透传
-        db.Verification = entity.Verification;    // D03 1.2 新列透传
-        // D03 1.6 alias 不可变 + 一次性设置——已设置 alias 后拒绝修改（请求空白 = 保留原值，不清空）；
-        // 一次性设置：db.Alias 为空 && 请求非空 → 允许写入（校验已在上方 fail-fast 通过）
+        // D03 1.6 alias 不可变 fail-fast（正常路径友好错误；并发窗口由下方 CAS WHERE 兜底——审核 P1-2）
         if (!string.IsNullOrWhiteSpace(db.Alias) && entity.Alias is not null && db.Alias != entity.Alias)
             throw new DomainException($"channel alias 不可修改（既有 '{db.Alias}'，请求 '{entity.Alias}'），如需改名请新建通道") { ErrorCode = "CHANNEL_ALIAS_IMMUTABLE" };
+
+        var appSecretCipher = request.AppSecret is not null ? _keys.Encrypt(request.AppSecret) : db.AppSecretCipher;
+        var tokenCipher = request.Token is not null ? _keys.Encrypt(request.Token) : db.TokenCipher;
+        var aesKeyCipher = request.EncodingAesKey is not null ? _keys.Encrypt(request.EncodingAesKey) : db.EncodingAESKeyCipher;
+
+        // CAS 条件更新（审核 P1-2——替代整行回写：① 请求无 alias 时不 SET Alias 列（并发写入的 alias 不会被抹掉）；
+        // ② 请求有 alias 时 WHERE 要求库中 alias 为空或同值（并发设置 alias 的败者 0 行 → IMMUTABLE））
+        int affected;
         if (entity.Alias is not null)
-            db.Alias = entity.Alias;
-        if (request.AppSecret is not null) db.AppSecretCipher = _keys.Encrypt(request.AppSecret);
-        if (request.Token is not null) db.TokenCipher = _keys.Encrypt(request.Token);
-        if (request.EncodingAesKey is not null) db.EncodingAESKeyCipher = _keys.Encrypt(request.EncodingAesKey);
-        db.UpdateTime = now;
-        await Ds.EntityUpdateAsync(db, ct);
-        await PublishChangedAsync(db.ChannelId, db.UpdateTime.Ticks);   // D03 三机制-事件失效（落库后发布）
-        return db.Id;
+        {
+            affected = await Ds.EntityUpdateWhereAsync(
+                e => e.Id == entity.Id && (e.Alias == null || e.Alias == entity.Alias),
+                e => new WeChatChannelConfigEntity
+                {
+                    ChannelId = entity.ChannelId,
+                    AppId = entity.AppId,
+                    DisplayName = entity.DisplayName,
+                    Remark = entity.Remark,
+                    IsEnabled = entity.IsEnabled,
+                    ChannelType = entity.ChannelType,
+                    ChannelForm = entity.ChannelForm,
+                    Verification = entity.Verification,
+                    Alias = entity.Alias,
+                    AppSecretCipher = appSecretCipher,
+                    TokenCipher = tokenCipher,
+                    EncodingAESKeyCipher = aesKeyCipher,
+                    UpdateTime = now,
+                }, ct);
+        }
+        else
+        {
+            affected = await Ds.EntityUpdateWhereAsync(
+                e => e.Id == entity.Id,
+                e => new WeChatChannelConfigEntity
+                {
+                    ChannelId = entity.ChannelId,
+                    AppId = entity.AppId,
+                    DisplayName = entity.DisplayName,
+                    Remark = entity.Remark,
+                    IsEnabled = entity.IsEnabled,
+                    ChannelType = entity.ChannelType,
+                    ChannelForm = entity.ChannelForm,
+                    Verification = entity.Verification,
+                    AppSecretCipher = appSecretCipher,
+                    TokenCipher = tokenCipher,
+                    EncodingAESKeyCipher = aesKeyCipher,
+                    UpdateTime = now,
+                }, ct);
+        }
+        if (affected == 0)
+            throw new DomainException("channel alias 并发冲突：alias 已被并发设置或修改，请刷新后重试") { ErrorCode = "CHANNEL_ALIAS_IMMUTABLE" };
+
+        await PublishChangedAsync(entity.ChannelId, now.Ticks);   // D03 三机制-事件失效（落库后发布）
+        return entity.Id;
     }
 
     /// <inheritdoc />
@@ -228,6 +268,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             Remark: e.Remark,
             IsEnabled: e.IsEnabled,
             ChannelType: e.ChannelType,
+            Alias: e.Alias,
             HasCredentials: !string.IsNullOrWhiteSpace(e.AppSecretCipher) || !string.IsNullOrWhiteSpace(e.TokenCipher) || !string.IsNullOrWhiteSpace(e.EncodingAESKeyCipher),
             CreateTime: e.CreateTime,
             UpdateTime: e.UpdateTime);
@@ -254,6 +295,8 @@ public sealed record WeChatChannelConfigDto(
     string? Remark,
     bool IsEnabled,
     string ChannelType,
+    /// <summary>对外别名（D03 1.6——审核 P2-1：管理读 API 可见别名，运维可确认是否已一次性设置）。</summary>
+    string? Alias,
     bool HasCredentials,
     DateTime CreateTime,
     DateTime UpdateTime);

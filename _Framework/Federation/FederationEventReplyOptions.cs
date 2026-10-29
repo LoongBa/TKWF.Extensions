@@ -1,3 +1,5 @@
+using TKW.Framework.Domain;
+
 namespace TKWF.Ext.Federation;
 
 /// <summary>
@@ -9,7 +11,10 @@ namespace TKWF.Ext.Federation;
 /// <para>内置测试 handler 注册开关 <c>TestEventReplyHandlerEnabled</c> 已迁平台库
 /// （<c>TKWF.Federation.WeChat</c> 的 <c>WechatEventReplyOptions.ProbeEventReplyHandlerEnabled</c>——
 /// 方案 §3.6 主包删除，2026-10-17 用户裁定不保留过渡）。</para>
+/// <para>⚠️ <c>[Options]</c> 特性为 2026-10-30 审核 P1-4 修复——缺该特性时 SG1 不生成消费者配置绑定，
+/// <c>TKWF:Federation:EventReply:*</c> 键无法进入 IOptions（S2/S3/S5 配置静默失效）。</para>
 /// </summary>
+[Options("TKWF:Federation:EventReply")]
 public class FederationEventReplyOptions
 {
     /// <summary>

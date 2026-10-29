@@ -37,6 +37,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
     private readonly FakeSealedTicketService _codes = new();
     private readonly FakeChannelRegistry _registry = new();
     private readonly FakeOpsConfigQuery _opsQuery = new();
+    private bool _registerOpsQuery = true;
     private FederationEventReplyOptions _eventReplyOptions = new();
 
     /// <summary>构造语义事件派发（I2——<see cref="IEventReplyHandler.HandleAsync"/> 入参：参数包 → ChannelEvent；external_user_id 未绑定时 uid=null）。</summary>
@@ -67,8 +68,10 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         // Fake 通道注册表（channelId → PlatformType 反查——图文链接 {platformId} 段）
         services.AddScoped<IChannelRegistry>(_ => _registry);
 
-        // Fake 运营配置查询（D03 1.5/1.10 三级回退中间级——默认 null = 未配置 → 回退内置测试端点；测试可设 UrlTemplate）
-        services.AddScoped<IOperationsConfigQuery>(_ => _opsQuery);
+        // Fake 运营配置查询（D03 1.5/1.10 三级回退中间级——默认 null = 未配置 → 回退内置测试端点；测试可设 UrlTemplate）。
+        // 审核 P0-1 回归锁：_registerOpsQuery=false 模拟「未装配 WeChatOperations」——基类必须经 GetOptionalService 判空降级。
+        if (_registerOpsQuery)
+            services.AddScoped<IOperationsConfigQuery>(_ => _opsQuery);
 
         // 领域 Options（BaseUrl + RoutePrefix——按测试配置；TestEventReplyHandlerEnabled 开关已随
         // 2026-10-17 迁移平台库 WechatEventReplyOptions.ProbeEventReplyHandlerEnabled）
@@ -195,6 +198,27 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
     }
 
     // ═══════════════════ 2. 三级回退（D03 1.5/1.10——LinkTemplate → OperationsConfig.UrlTemplate → 内置测试端点） ═══════════════════
+
+    /// <summary>P0-1 回归锁（2026-10-30 审核）：**完全不注册** <see cref="IOperationsConfigQuery"/>
+    /// （模拟未装配 WeChatOperations 的 Federation-only 部署）→ 事件回复必须正常降级内置测试端点，
+    /// 不得因 <c>GetRequiredService</c> 语义抛异常（修复前 GetService 路径必抛 → 端点 503）。</summary>
+    [Fact]
+    public async Task HandleAsync_NoOperationsConfigRegistered_FallsBackToTestEndpoint_NoThrow()
+    {
+        EnableTicketUrl();
+        _registerOpsQuery = false;                     // 关键：不注册 IOperationsConfigQuery（真实未装配路径）
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<ProbeEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1"), ("uid", "u-1"), ("channel_id", "probe-channel")),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        var article = Assert.Single(reply!.NewsArticles!);
+        Assert.StartsWith("https://api.example.com/feberation/probe/test/probe-channel/", article.Url);
+    }
 
     /// <summary>三级回退中间级：LinkTemplate 空 + 运营配置命中 → 图文链接用运营模板 URL（{ticket} 替换）。</summary>
     [Fact]

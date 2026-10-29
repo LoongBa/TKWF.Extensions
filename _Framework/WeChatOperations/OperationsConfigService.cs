@@ -14,10 +14,12 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 运营配置管理门面（D03 1.10——按域多表 O4-4：每域单行配置表 Id=1，独立版本/并发写/schema 演进）。
-/// <para>乐观并发（R7）：写请求带 <see cref="SaveOpsConfigRequestBase.ExpectedVersion"/>——非空时必须等于库中
-/// <c>Version</c>，不等 → <c>OPS_CONFIG_VERSION_CONFLICT</c>（HTTP 409 语义）；空 = 强制覆盖（初始化/运维兜底）。</para>
-/// <para>安全：<c>WeChatOperations.Query</c>/<c>WeChatOperations.Manage</c> 权限门控 + 审计（写路径 SecurityLog
-/// 事件扩展 <c>OpsConfigUpdate</c>——评审确认点倾向，实施时核对 SecurityLog 事件枚举扩展面）。</para>
+/// <para>乐观并发（R7）：写请求带 <see cref="SaveOpsConfigTicketRequest.ExpectedVersion"/>——非空时 CAS 比对库中
+/// <c>Version</c>（<c>EntityUpdateWhereAsync</c> 单语句原子更新），不匹配 → <c>OPS_CONFIG_VERSION_CONFLICT</c>
+/// （HTTP 400——框架 DomainException 默认映射；如需 409 需框架扩展 ErrorCode→Status 映射）；空 = 强制覆盖（初始化/运维兜底）。</para>
+/// <para>安全：<c>WeChatOperations.Query</c>/<c>WeChatOperations.Manage</c> 权限门控。
+/// ⚠️ <b>审计未实现</b>（审核 P2-11 如实标注）——原计划写路径记 SecurityLog <c>OpsConfigUpdate</c> 事件，
+/// 本期仅落 <c>UpdatedAt</c>/<c>UpdatedBy</c> 行内痕迹；跨系统审计待后续迭代（SecurityLog 事件枚举扩展面）。</para>
 /// </summary>
 public interface IOperationsConfigService : IDomainService
 {
@@ -116,7 +118,7 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
     public async Task<long> SaveArticleReplyAsync(SaveOpsConfigArticleReplyRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var now = DateTime.UtcNow;
+        var now = TruncateToSecond(DateTime.UtcNow);
         var existing = await ArticleReplyDs.EntityGetAsync(e => e.Id == 1, ct);
         if (existing is null)
         {
@@ -125,13 +127,18 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
             return existing.Version;
         }
 
-        AssertVersion(current: existing.Version, expected: request.ExpectedVersion);
-        existing.UrlTemplate = request.UrlTemplate;
-        existing.Version++;
-        existing.UpdatedAt = now;
-        existing.UpdatedBy = Operator;
-        await ArticleReplyDs.EntityUpdateAsync(existing, ct);
-        return existing.Version;
+        // CAS 原子更新（ADR89 EntityUpdateWhereAsync——单语句 WHERE 版本比对 + Version 原子自增，并发下不丢写不覆盖）
+        var affected = await ArticleReplyDs.EntityUpdateWhereAsync(
+            e => e.Id == 1 && (request.ExpectedVersion == null || e.Version == request.ExpectedVersion),
+            e => new ArticleReplyOpsConfigEntity
+            {
+                UrlTemplate = request.UrlTemplate,
+                Version = e.Version + 1,
+                UpdatedAt = now,
+                UpdatedBy = Operator,
+            }, ct);
+        AssertCasAffected(affected, request.ExpectedVersion, existing.Version);
+        return request.ExpectedVersion == null ? existing.Version + 1 : request.ExpectedVersion.Value + 1;
     }
 
     /// <inheritdoc />
@@ -145,7 +152,7 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
     public async Task<long> SaveReplyTextAsync(SaveOpsConfigReplyTextRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var now = DateTime.UtcNow;
+        var now = TruncateToSecond(DateTime.UtcNow);
         var existing = await ReplyTextDs.EntityGetAsync(e => e.Id == 1, ct);
         if (existing is null)
         {
@@ -160,14 +167,18 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
             return existing.Version;
         }
 
-        AssertVersion(current: existing.Version, expected: request.ExpectedVersion);
-        existing.DisabledChannelReplyTemplate = request.DisabledChannelReplyTemplate;
-        existing.DefaultReplyText = request.DefaultReplyText;
-        existing.Version++;
-        existing.UpdatedAt = now;
-        existing.UpdatedBy = Operator;
-        await ReplyTextDs.EntityUpdateAsync(existing, ct);
-        return existing.Version;
+        var affected = await ReplyTextDs.EntityUpdateWhereAsync(
+            e => e.Id == 1 && (request.ExpectedVersion == null || e.Version == request.ExpectedVersion),
+            e => new ReplyTextOpsConfigEntity
+            {
+                DisabledChannelReplyTemplate = request.DisabledChannelReplyTemplate,
+                DefaultReplyText = request.DefaultReplyText,
+                Version = e.Version + 1,
+                UpdatedAt = now,
+                UpdatedBy = Operator,
+            }, ct);
+        AssertCasAffected(affected, request.ExpectedVersion, existing.Version);
+        return request.ExpectedVersion == null ? existing.Version + 1 : request.ExpectedVersion.Value + 1;
     }
 
     /// <inheritdoc />
@@ -181,7 +192,7 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
     public async Task<long> SaveDegradeAsync(SaveOpsConfigDegradeRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var now = DateTime.UtcNow;
+        var now = TruncateToSecond(DateTime.UtcNow);
         var existing = await DegradeDs.EntityGetAsync(e => e.Id == 1, ct);
         if (existing is null)
         {
@@ -194,13 +205,17 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
             return existing.Version;
         }
 
-        AssertVersion(current: existing.Version, expected: request.ExpectedVersion);
-        existing.UnknownChannelReplyEnabled = request.UnknownChannelReplyEnabled;
-        existing.Version++;
-        existing.UpdatedAt = now;
-        existing.UpdatedBy = Operator;
-        await DegradeDs.EntityUpdateAsync(existing, ct);
-        return existing.Version;
+        var affected = await DegradeDs.EntityUpdateWhereAsync(
+            e => e.Id == 1 && (request.ExpectedVersion == null || e.Version == request.ExpectedVersion),
+            e => new DegradeOpsConfigEntity
+            {
+                UnknownChannelReplyEnabled = request.UnknownChannelReplyEnabled,
+                Version = e.Version + 1,
+                UpdatedAt = now,
+                UpdatedBy = Operator,
+            }, ct);
+        AssertCasAffected(affected, request.ExpectedVersion, existing.Version);
+        return request.ExpectedVersion == null ? existing.Version + 1 : request.ExpectedVersion.Value + 1;
     }
 
     /// <inheritdoc />
@@ -214,7 +229,7 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
     public async Task<long> SaveWeakIdentityAsync(SaveOpsConfigWeakIdentityRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var now = DateTime.UtcNow;
+        var now = TruncateToSecond(DateTime.UtcNow);
         var existing = await WeakIdentityDs.EntityGetAsync(e => e.Id == 1, ct);
         if (existing is null)
         {
@@ -232,17 +247,21 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
             return existing.Version;
         }
 
-        AssertVersion(current: existing.Version, expected: request.ExpectedVersion);
-        existing.Enabled = request.Enabled;
-        existing.InactiveDays = request.InactiveDays;
-        existing.Action = request.Action;
-        existing.RecoveryWindowDays = request.RecoveryWindowDays;
-        existing.ExcludeBound = request.ExcludeBound;
-        existing.Version++;
-        existing.UpdatedAt = now;
-        existing.UpdatedBy = Operator;
-        await WeakIdentityDs.EntityUpdateAsync(existing, ct);
-        return existing.Version;
+        var affected = await WeakIdentityDs.EntityUpdateWhereAsync(
+            e => e.Id == 1 && (request.ExpectedVersion == null || e.Version == request.ExpectedVersion),
+            e => new WeakIdentityOpsConfigEntity
+            {
+                Enabled = request.Enabled,
+                InactiveDays = request.InactiveDays,
+                Action = request.Action,
+                RecoveryWindowDays = request.RecoveryWindowDays,
+                ExcludeBound = request.ExcludeBound,
+                Version = e.Version + 1,
+                UpdatedAt = now,
+                UpdatedBy = Operator,
+            }, ct);
+        AssertCasAffected(affected, request.ExpectedVersion, existing.Version);
+        return request.ExpectedVersion == null ? existing.Version + 1 : request.ExpectedVersion.Value + 1;
     }
 
     /// <inheritdoc />
@@ -256,7 +275,7 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
     public async Task<long> SaveTicketAsync(SaveOpsConfigTicketRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var now = DateTime.UtcNow;
+        var now = TruncateToSecond(DateTime.UtcNow);
         var existing = await TicketDs.EntityGetAsync(e => e.Id == 1, ct);
         if (existing is null)
         {
@@ -269,53 +288,60 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
             return existing.Version;
         }
 
-        AssertVersion(current: existing.Version, expected: request.ExpectedVersion);
-        existing.Mode = request.Mode;
-        existing.TtlSeconds = request.TtlSeconds;
-        existing.Version++;
-        existing.UpdatedAt = now;
-        existing.UpdatedBy = Operator;
-        await TicketDs.EntityUpdateAsync(existing, ct);
-        return existing.Version;
+        var affected = await TicketDs.EntityUpdateWhereAsync(
+            e => e.Id == 1 && (request.ExpectedVersion == null || e.Version == request.ExpectedVersion),
+            e => new TicketOpsConfigEntity
+            {
+                Mode = request.Mode,
+                TtlSeconds = request.TtlSeconds,
+                Version = e.Version + 1,
+                UpdatedAt = now,
+                UpdatedBy = Operator,
+            }, ct);
+        AssertCasAffected(affected, request.ExpectedVersion, existing.Version);
+        return request.ExpectedVersion == null ? existing.Version + 1 : request.ExpectedVersion.Value + 1;
     }
 
-    /// <summary>乐观并发校验（R7）——expected null = 强制覆盖（初始化/运维兜底）；非空不等 → OPS_CONFIG_VERSION_CONFLICT。</summary>
-    private static void AssertVersion(long current, long? expected)
+    /// <summary>
+    /// CAS 影响行数校验（R7 乐观并发——EntityUpdateWhereAsync 命中 0 行 = ExpectedVersion 不匹配/行被并发改写
+    /// → OPS_CONFIG_VERSION_CONFLICT）。<paramref name="current"/> 为读时版本（日志参考，非判定依据——判定在 CAS WHERE）。
+    /// </summary>
+    private static void AssertCasAffected(int affected, long? expected, long current)
     {
-        if (expected is not null && expected.Value != current)
+        if (affected == 0)
         {
             throw new DomainException(
-                $"运营配置版本冲突：期望 {expected.Value}，当前 {current}（请刷新后重试）")
+                $"运营配置版本冲突：期望 {expected?.ToString() ?? "任意"}，读时 {current}（请刷新后重试）")
             {
                 ErrorCode = VersionConflictError,
             };
         }
     }
 
+    /// <summary>
+    /// 审计时间秒级截断——框架 <c>EntityUpdateWhereAsync</c>（CAS SET 表达式）对 DateTime 参数按秒精度落库，
+    /// 而 <c>EntityCreateAsync</c>（SetSource）保留毫秒；两条路径统一秒级避免 UpdatedAt 读回倒退
+    /// （框架缺陷已登记：UpdateWhere 参数化 DateTime 精度截断）。
+    /// </summary>
+    private static DateTime TruncateToSecond(DateTime value)
+        => new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, value.Kind);
+
     /// <summary>变更操作人（UId——未认证/系统上下文为空；运营写路径来自已认证管理用户）。</summary>
     private string? Operator => User.IsAuthenticated ? User.UserId?.ToString() : null;
 }
 
-/// <summary>运营配置写请求基座（乐观并发令牌——<see cref="ExpectedVersion"/> null = 强制覆盖）。</summary>
-public abstract record SaveOpsConfigRequestBase(long? ExpectedVersion);
+/// <summary>图文回复域写请求（<paramref name="ExpectedVersion"/> = 乐观并发令牌，null = 强制覆盖）。</summary>
+public sealed record SaveOpsConfigArticleReplyRequest(string? UrlTemplate, long? ExpectedVersion);
 
-/// <summary>图文回复域写请求。</summary>
-public sealed record SaveOpsConfigArticleReplyRequest(string? UrlTemplate, long? ExpectedVersion)
-    : SaveOpsConfigRequestBase(ExpectedVersion);
+/// <summary>回复文案域写请求（同前——ExpectedVersion 乐观并发令牌）。</summary>
+public sealed record SaveOpsConfigReplyTextRequest(string? DisabledChannelReplyTemplate, string? DefaultReplyText, long? ExpectedVersion);
 
-/// <summary>回复文案域写请求。</summary>
-public sealed record SaveOpsConfigReplyTextRequest(string? DisabledChannelReplyTemplate, string? DefaultReplyText, long? ExpectedVersion)
-    : SaveOpsConfigRequestBase(ExpectedVersion);
+/// <summary>降级行为域写请求（同前）。</summary>
+public sealed record SaveOpsConfigDegradeRequest(bool? UnknownChannelReplyEnabled, long? ExpectedVersion);
 
-/// <summary>降级行为域写请求。</summary>
-public sealed record SaveOpsConfigDegradeRequest(bool? UnknownChannelReplyEnabled, long? ExpectedVersion)
-    : SaveOpsConfigRequestBase(ExpectedVersion);
-
-/// <summary>弱身份策略域写请求。</summary>
+/// <summary>弱身份策略域写请求（同前）。</summary>
 public sealed record SaveOpsConfigWeakIdentityRequest(
-    bool? Enabled, int? InactiveDays, string? Action, int? RecoveryWindowDays, bool? ExcludeBound, long? ExpectedVersion)
-    : SaveOpsConfigRequestBase(ExpectedVersion);
+    bool? Enabled, int? InactiveDays, string? Action, int? RecoveryWindowDays, bool? ExcludeBound, long? ExpectedVersion);
 
-/// <summary>票据域写请求。</summary>
-public sealed record SaveOpsConfigTicketRequest(string? Mode, int? TtlSeconds, long? ExpectedVersion)
-    : SaveOpsConfigRequestBase(ExpectedVersion);
+/// <summary>票据域写请求（同前）。</summary>
+public sealed record SaveOpsConfigTicketRequest(string? Mode, int? TtlSeconds, long? ExpectedVersion);

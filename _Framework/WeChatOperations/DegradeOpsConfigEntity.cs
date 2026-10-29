@@ -10,7 +10,7 @@ namespace TKWF.Ext.WeChatOperations
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。</para>
     /// <para><see cref="UnknownChannelReplyEnabled"/>：S2 未知通道提示开关（D03 §4.3 S2——默认 false 静默防探测；
     /// 开启后事件端点未知通道以 200 空响应替代 404，防微信重试风暴）。</para>
-    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 409；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
+    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射）；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
     /// </summary>
     [Table("TKWF_OpsConfig_Degrade")]
     [DomainGenerateCode(DefaultPageSize = 50)]
@@ -24,7 +24,7 @@ namespace TKWF.Ext.WeChatOperations
         [FreeSql.DataAnnotations.Column(Position = 2)]
         public bool? UnknownChannelReplyEnabled { get; set; }
 
-        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 409）。</summary>
+        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射））。</summary>
         [FreeSql.DataAnnotations.Column(Position = 3)]
         public long Version { get; set; }
 

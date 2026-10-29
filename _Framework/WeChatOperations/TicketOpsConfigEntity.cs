@@ -11,7 +11,7 @@ namespace TKWF.Ext.WeChatOperations
     /// <para>密封票据行为策略（D03 1.3 签票载荷切换 + 本次运营配置化）：
     /// <see cref="Mode"/>（Sealed | Loose——仅 Sealed 本期可用，O3 定稿）/
     /// <see cref="TtlSeconds"/> 票据有效期（默认 300）。</para>
-    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 409；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
+    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射）；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
     /// </summary>
     [Table("TKWF_OpsConfig_Ticket")]
     [DomainGenerateCode(DefaultPageSize = 50)]
@@ -30,7 +30,7 @@ namespace TKWF.Ext.WeChatOperations
         [FreeSql.DataAnnotations.Column(Position = 3)]
         public int? TtlSeconds { get; set; }
 
-        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 409）。</summary>
+        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射））。</summary>
         [FreeSql.DataAnnotations.Column(Position = 4)]
         public long Version { get; set; }
 

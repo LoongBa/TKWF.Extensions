@@ -13,7 +13,7 @@ namespace TKWF.Ext.WeChatOperations
     /// <see cref="Action"/>（SoftDelete | PhysicalDelete）/
     /// <see cref="RecoveryWindowDays"/> 恢复窗口（软删后期限内可恢复）/
     /// <see cref="ExcludeBound"/> 排除已绑定账号。</para>
-    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 409；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
+    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射）；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
     /// </summary>
     [Table("TKWF_OpsConfig_WeakIdentity")]
     [DomainGenerateCode(DefaultPageSize = 50)]
@@ -44,7 +44,7 @@ namespace TKWF.Ext.WeChatOperations
         [FreeSql.DataAnnotations.Column(Position = 6)]
         public bool? ExcludeBound { get; set; }
 
-        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 409）。</summary>
+        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射））。</summary>
         [FreeSql.DataAnnotations.Column(Position = 7)]
         public long Version { get; set; }
 

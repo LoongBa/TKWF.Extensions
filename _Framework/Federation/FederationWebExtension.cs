@@ -191,16 +191,30 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
         if (cfg is null)
         {
+            // 审核 P2-15：GET echostr（微信后台 URL 验证）不受 S2/S3 降级影响——未知/停用通道按原错误码返回，
+            // 否则 200 空会让「服务器配置验证」静默失败、运维无从排障。
+            var isUrlVerification = HttpMethods.IsGet(ctx.Request.Method) && ctx.Request.Query.ContainsKey("echostr");
+            if (isUrlVerification)
+            {
+                logger.LogWarning("微信事件端点 URL 验证请求通道解析失败：PlatformId={PlatformId} ChannelId={ChannelId} FailReason={FailReason}",
+                    platformId, channelId ?? "", failReason ?? "");
+                return MapFailReason(failReason);
+            }
+
             // D03 §4.3 降级分级（S2/S3）——微信语义：非 200 会重试（重试风暴），故停用/未知通道按 200 空回复；
             // 提示文案的 XML 信封由平台库 + handler 层渲染（主包不构造 XML，见 FederationEventReplyOptions）。
+            // 审核 P1-3：S2 开关与 S3 文案经运营配置面（IOperationsConfigQuery）DB 优先 → Options 兜底（单一事实源）
             var replyOptions = ResolveEventReplyOptions(ctx.RequestServices);
+            var opsConfig = await ResolveOperationsConfigAsync(ctx, ct);
             if (string.Equals(failReason, "CHANNEL_DISABLED", StringComparison.Ordinal))
             {
+                var replyText = opsConfig?.ReplyText?.DisabledChannelReplyTemplate ?? replyOptions.DisabledChannelReplyTemplate;
                 logger.LogWarning("微信事件端点通道停用（S3）：PlatformId={PlatformId} ChannelId={ChannelId} 应提示文案={ReplyText}",
-                    platformId, channelId ?? "", replyOptions.DisabledChannelReplyTemplate);
+                    platformId, channelId ?? "", replyText);
                 return Results.Text("", contentType: "text/xml");
             }
-            if (string.Equals(failReason, "CHANNEL_NOT_FOUND", StringComparison.Ordinal) && replyOptions.UnknownChannelReplyEnabled)
+            var unknownReplyEnabled = opsConfig?.UnknownChannelReplyEnabled ?? replyOptions.UnknownChannelReplyEnabled;
+            if (string.Equals(failReason, "CHANNEL_NOT_FOUND", StringComparison.Ordinal) && unknownReplyEnabled)
             {
                 logger.LogWarning("微信事件端点未知通道（S2，已开启静默 200）：PlatformId={PlatformId} ChannelId={ChannelId}",
                     platformId, channelId ?? "");
@@ -505,13 +519,19 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         if (string.IsNullOrWhiteSpace(channelId))
         {
             // B 守卫（Oracle 评审条件 1）：多通道（活跃数 >1）+ 省略 channelId → CHANNEL_REQUIRED 硬失败；
-            // 单通道（活跃数 ==1）→ 唯一活跃通道降级（无歧义）；0 → CHANNEL_NOT_FOUND。
-            var active = (await registry.GetAllAsync(ct)).Where(c => c.IsEnabled).ToList();
+            // 单通道（活跃数 ==1）→ 唯一活跃通道降级（无歧义）；0 → 判定（审核 P1-5：同平台族存在停用通道
+            // → CHANNEL_DISABLED（让 S3 提示/200 空生效，避免单通道停用时被误判 CHANNEL_NOT_FOUND 走 404 触发重试））
+            var all = await registry.GetAllAsync(ct);
+            var active = all.Where(c => c.IsEnabled).ToList();
             if (active.Count > 1)
                 return (null, "CHANNEL_REQUIRED");
             cfg = active.FirstOrDefault();
             if (cfg is null)
-                return (null, "CHANNEL_NOT_FOUND");
+            {
+                var disabledSamePlatform = all.Any(c => !c.IsEnabled
+                    && string.Equals(c.PlatformType, platformId, StringComparison.Ordinal));
+                return (null, disabledSamePlatform ? "CHANNEL_DISABLED" : "CHANNEL_NOT_FOUND");
+            }
         }
         else
         {
@@ -549,6 +569,29 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         services.GetService<IConfiguration>()?.GetSection("TKWF:Federation:EventReply").Bind(fallback);
         return fallback;
     }
+
+    /// <summary>运营配置面聚合读取（D03 1.10 / 审核 P1-3——S2 开关 + S3/S5 文案 DB 权威；未装配 WeChatOperations
+    /// → 全 null → 调用方 Options 兜底。fail-safe：GetOptionalService 探测 + 读取异常吞为 null（降级不阻断事件端点））。</summary>
+    private static async Task<OpsConfigSnapshot?> ResolveOperationsConfigAsync(HttpContext ctx, CancellationToken ct)
+    {
+        try
+        {
+            var query = GetGuest(ctx).GetOptionalService<IOperationsConfigQuery>();
+            if (query is null) return null;
+            return new OpsConfigSnapshot(
+                UnknownChannelReplyEnabled: await query.GetUnknownChannelReplyEnabledAsync(ct),
+                ReplyText: await query.GetReplyTextConfigAsync(ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ctx.RequestServices.GetService<ILoggerFactory>()?
+                .CreateLogger("Federation.Web.Event").LogWarning(ex, "运营配置读取失败（回退 Options 默认）");
+            return null;
+        }
+    }
+
+    /// <summary>运营配置快照（事件端点降级判定用——null 字段 = 未配置/未装配 → Options 兜底）。</summary>
+    private sealed record OpsConfigSnapshot(bool? UnknownChannelReplyEnabled, ReplyTextConfigDto? ReplyText);
 }
 
 // ─────────────────────────── 请求/响应 DTO（Web 层语义，T3 装配面） ───────────────────────────

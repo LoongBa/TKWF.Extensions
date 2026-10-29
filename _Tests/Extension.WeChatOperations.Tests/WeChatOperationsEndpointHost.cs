@@ -111,7 +111,7 @@ internal static class WeChatOperationsEndpointHost
             ListInvoked = true;
             return Task.FromResult<IReadOnlyList<WeChatChannelConfigDto>>(
             [
-                new WeChatChannelConfigDto(1, "wechat-mp-main", "wx_main", "主公众号", null, true, "wechat_event", true,
+                new WeChatChannelConfigDto(1, "wechat-mp-main", "wx_main", "主公众号", null, true, "wechat_event", "main", true,
                     new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)),
             ]);
         }

@@ -263,6 +263,27 @@ public sealed class FederationWebExtensionTests
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
     }
 
+    /// <summary>event 端点 S3（D03 1.8，审核 P1-5 回归锁）——**单通道停用且回调 URL 无通道段** →
+    /// 按 CHANNEL_DISABLED 处理（200 空），不得误判 CHANNEL_NOT_FOUND 走 404 触发微信重试风暴。</summary>
+    [Fact]
+    public async Task Event_DisabledSingleChannel_NoChannelId_200Empty()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = false },
+        };
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync());
+        Assert.False(FederationEndpointHost.Factory.CreateInvoked);
+    }
+
     /// <summary>event 端点 S1（D03 1.8）——验签失败（信任根一票否决，硬线不可配置）→ 400 AUTHENTICATION_FAILED
     /// + 不触达编排（Factory 已构造但 Orchestrator 不 invoked——编排不短路通道实例构造）。</summary>
     [Fact]

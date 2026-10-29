@@ -10,7 +10,7 @@ namespace TKWF.Ext.WeChatOperations
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。</para>
     /// <para><see cref="DisabledChannelReplyTemplate"/>：S3 通道停用提示文案（D03 §4.3 S3）；
     /// <see cref="DefaultReplyText"/>：S5 无 handler 命中兜底文案（WeChatOperations 回复 handler 模板兜底优先）。</para>
-    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 409；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
+    /// <para>乐观并发（R7）：<see cref="Version"/> 为并发令牌——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射）；<see cref="UpdatedAt"/>/<see cref="UpdatedBy"/> 写路径统一填充。</para>
     /// </summary>
     [Table("TKWF_OpsConfig_ReplyText")]
     [DomainGenerateCode(DefaultPageSize = 50)]
@@ -30,7 +30,7 @@ namespace TKWF.Ext.WeChatOperations
         [MaxLength(500)]
         public string? DefaultReplyText { get; set; }
 
-        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 409）。</summary>
+        /// <summary>乐观并发令牌（R7——PUT 带 expected version，冲突 OPS_CONFIG_VERSION_CONFLICT（HTTP 400——框架 DomainException 映射；409 需框架扩展 ErrorCode→Status 映射））。</summary>
         [FreeSql.DataAnnotations.Column(Position = 4)]
         public long Version { get; set; }
 

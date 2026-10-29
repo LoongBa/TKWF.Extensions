@@ -173,6 +173,45 @@ public class OperationsConfigServiceTests : WeChatOperationsTestHost
         Assert.Equal(2, dto.Version);
     }
 
+    /// <summary>P1-1 回归锁（2026-10-30 审核）：**真并发**两路 PUT 携同一 ExpectedVersion → CAS 保证恰一路成功、
+    /// 另一路 `OPS_CONFIG_VERSION_CONFLICT`（修复前读改写双通过 → 丢更新；SQLite 单连接串行下仍验证 CAS 语义）。</summary>
+    [Fact]
+    public async Task Save_Concurrent_SameExpectedVersion_ExactlyOneSucceeds()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+        var service = user.Use<IOperationsConfigService>();
+
+        await service.SaveTicketAsync(new SaveOpsConfigTicketRequest("Sealed", 300, ExpectedVersion: null),
+            TestContext.Current.CancellationToken);
+
+        var outcomes = await Task.WhenAll(
+            RunAsync(() => service.SaveTicketAsync(new SaveOpsConfigTicketRequest("Sealed", 600, ExpectedVersion: 1), TestContext.Current.CancellationToken)),
+            RunAsync(() => service.SaveTicketAsync(new SaveOpsConfigTicketRequest("Sealed", 900, ExpectedVersion: 1), TestContext.Current.CancellationToken)));
+
+        var successes = outcomes.Count(o => o is null);
+        var conflicts = outcomes.Count(o => o == "OPS_CONFIG_VERSION_CONFLICT");
+        Assert.Equal(1, successes);
+        Assert.Equal(1, conflicts);
+
+        var final = await service.GetTicketAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, final!.Version);          // 仅一路递增
+        Assert.Contains(final.TtlSeconds, new int?[] { 600, 900 });
+    }
+
+    private static async Task<string?> RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            return null;
+        }
+        catch (DomainException ex)
+        {
+            return ex.ErrorCode;
+        }
+    }
+
     [Fact]
     public async Task Save_Update_UpdatedAtAndByOverwritten()
     {
@@ -193,6 +232,7 @@ public class OperationsConfigServiceTests : WeChatOperationsTestHost
         Assert.Equal(2, after!.Version);
         Assert.Equal(900, after.TtlSeconds);
         Assert.Null(after.UpdatedBy); // 宿主未认证 → UpdatedBy 为空（认证写路径 UId 填充见使用指南）
-        Assert.True(after.UpdatedAt >= before!.UpdatedAt);
+        Assert.True(after.UpdatedAt >= before!.UpdatedAt,
+            $"UpdatedAt 应递增：before={before.UpdatedAt:O} after={after.UpdatedAt:O}");
     }
 }

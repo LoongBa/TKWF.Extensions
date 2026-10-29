@@ -1,64 +1,80 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
-/// 微信通道 DB 注册表源（D03 §4.2 供给层——1.7 改造，替代 <c>DbWeChatChannelSource</c>：Priority=100 高优先
-/// DB 权威 + ChannelForm/Verification/Capabilities 投影 + Alias 双键 + 全行投影（含 disabled——S3 降级判据））。
-/// <para>投影（方案 §8.3 映射表）：<c>ChannelId→ChannelId</c> / <c>Alias→Alias</c> /
-/// <c>ChannelForm→Extra["channel_form"]</c> / <c>Verification→Extra["verification"]</c> /
-/// <c>AppId→AppId</c> / <c>IsEnabled→IsEnabled</c>（<b>全行投影</b>——disabled 行保留，消费侧
-/// <c>B 守卫 Where(IsEnabled)</c> 过滤活跃数 + S3 降级命中 disabled 返回提示）；派生能力 →
-/// <see cref="ChannelConfig.Capabilities"/>（per-channel 动态覆盖 DIM——方案 §4.3 确认点 A）。</para>
-/// <para>⚠️ 凭证安全姿态（Oracle P1 安全 3，保留现状）：<b>AppSecret 密文不进公共列</b>（投影 null，
-/// 出站凭证经 <see cref="DbWeChatCredentialResolver"/> 解密路径单独解析）；Token/EncodingAESKey <b>密文进 Extra</b>
-/// （不解密——事件验签信任根经 resolver 解密；密文不进明文 Extra 防泄露）。投影仅声明通道存在性/选区，
-/// 与事件验签热路径的凭证获取解耦。</para>
-/// <para>⚠️ <see cref="IChannelSource.GetChannels"/> 为<b>同步契约</b>——DB 读取经 DataService
-/// <c>EntitySelectAsync</c> 同步阻塞（<c>.GetAwaiter().GetResult()</c>）：调用点恒在用户帧内
-/// （CompositeChannelRegistry 经 <c>User.Use&lt;IChannelRegistry&gt;()</c> 解析 → 源集合枚举），无死锁；
-/// 配置行少（公众号 scale）阻塞可忽略。DB 不可用 → 空列表（Composite 已按来源 try/catch 跳过）。</para>
-/// <para>注册：<c>TryAddEnumerable(ServiceDescriptor.Scoped&lt;IChannelSource, WeChatChannelRegistrySource&gt;())</c>
-/// ——普通 DI 集合；<b>Priority=100 语义替代「Insert(0) 前置注册序」</b>（D03 §8.2——组合按 Priority 降序首命中，
-/// DB 源恒先于静态源（默认 0）与 Federation 主包 SsoChannelRegistryEntity 系源（0，停用新装配））。</para>
+/// 微信通道 DB 注册表源（D03 §4.2 供给层——Priority=100 DB 权威）。
+/// <para>投影（方案 §8.3）：<c>ChannelId/Alias/AppId/IsEnabled</c> 公共列 +
+/// <c>ChannelForm→Extra["channel_form"]</c>、<c>Verification→Extra["verification"]</c>、
+/// <b><c>Token/EncodingAESKey</c> 解密为明文进 Extra</b>（与静态源 <c>WeChatChannelSource</c> 同语义——
+/// <c>WeChatEventChannel</c> 验签直接消费明文；密文进 Extra 会使 DB 通道事件验签恒失败）。
+/// <c>AppSecret</c> 仍不进公共列（出站经 <see cref="DbWeChatCredentialResolver"/> 解密解析）。</para>
+/// <para>取数：经 <see cref="IUserBoundChannelSource"/> 由 <c>CompositeChannelRegistry</c> 构造时绑定域用户，
+/// 再以 <c>IDomainUser.Use&lt;DataService&gt;()</c> 直建读取（DataService 的 DI 注册为 throw-factory，
+/// 不可 <c>IServiceProvider</c> 直取）。未绑定 → 空列表 + Warning（fail-closed 降级静态源）。</para>
+/// <para><c>GetChannels()</c> 为同步契约，DB 读取同步阻塞（配置行少，调用点恒在用户帧内）；读取/解密失败均
+/// Warning 留痕后降级，不抛出——单来源故障不阻断组合枚举。</para>
 /// </summary>
-public sealed class WeChatChannelRegistrySource : IChannelSource
+public sealed class WeChatChannelRegistrySource : IChannelSource, IUserBoundChannelSource
 {
     private const int DbPriority = 100;
 
-    private readonly IServiceProvider _sp;
+    private readonly ISymmetricKeyProvider _keys;
+    private readonly ILogger<WeChatChannelRegistrySource> _logger;
 
+    private IDomainUser? _user;
     private WeChatChannelConfigEntityDataService? _ds;
-    private WeChatChannelConfigEntityDataService Ds => _ds ??= _sp.GetRequiredService<WeChatChannelConfigEntityDataService>();
 
-    public WeChatChannelRegistrySource(IServiceProvider sp)
+    private WeChatChannelConfigEntityDataService Ds => _ds ??= (_user
+        ?? throw new InvalidOperationException(
+            $"{nameof(WeChatChannelRegistrySource)} 未绑定 DomainUser——应由 CompositeChannelRegistry 构造时绑定。"))
+        .Use<WeChatChannelConfigEntityDataService>();
+
+    public WeChatChannelRegistrySource(
+        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)] ISymmetricKeyProvider keys,
+        ILogger<WeChatChannelRegistrySource> logger)
     {
-        _sp = sp ?? throw new ArgumentNullException(nameof(sp));
+        _keys = keys ?? throw new ArgumentNullException(nameof(keys));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    /// <inheritdoc />
+    public void BindDomainUser(IDomainUser user)
+        => _user = user ?? throw new ArgumentNullException(nameof(user));
 
     /// <inheritdoc />
     public string PlatformType => "wechat";
 
     /// <inheritdoc />
-    /// <remarks>DIM 覆盖——per-channel 能力经 <see cref="ChannelConfig.Capabilities"/> 派生填充（源级声明仅兜底）。</remarks>
+    /// <remarks>per-channel 能力经 <see cref="ChannelConfig.Capabilities"/> 派生；此处为源级兜底声明。</remarks>
     public ChannelCapabilities Capabilities => ChannelCapabilities.Event | ChannelCapabilities.Follow | ChannelCapabilities.OAuth
         | ChannelCapabilities.SilentAuthorize | ChannelCapabilities.FollowQuery | ChannelCapabilities.Menu;
 
     /// <inheritdoc />
-    /// <remarks>数值高者优先——DB 权威（WeChatOperations）恒先于静态源/停用源（D03 §8.4 条件 5 定稿）。</remarks>
+    /// <remarks>数值高者优先——DB 权威恒先于静态源（默认 0）。</remarks>
     public int Priority => DbPriority;
 
     /// <inheritdoc />
-    /// <remarks>全行投影（含 disabled——S3 降级判据；B 守卫消费侧 Where(IsEnabled) 过滤活跃数）。</remarks>
+    /// <remarks>全行投影（含 disabled——S3 降级判据；B 守卫消费侧按 IsEnabled 过滤活跃数）。</remarks>
     public IReadOnlyList<ChannelConfig> GetChannels()
     {
-        // IChannelSource 同步契约 + DataService 异步——同步阻塞（帧内调用无死锁；见类注释）
+        if (_user is null)
+        {
+            _logger.LogWarning(
+                "WeChatChannelRegistrySource 未绑定 DomainUser（非 CompositeChannelRegistry 装配链）——跳过 DB 通道来源，降级静态源。");
+            return [];
+        }
+
         var entities = GetEntitiesSync();
         var list = new List<ChannelConfig>(entities.Count);
+        // ChannelId 序投影——默认选区/枚举确定性（P1-3：无排序时同 Priority 首项依回执行序漂移）
+        entities.Sort((a, b) => StringComparer.Ordinal.Compare(a.ChannelId, b.ChannelId));
         foreach (var e in entities)
         {
             list.Add(new ChannelConfig
@@ -66,22 +82,39 @@ public sealed class WeChatChannelRegistrySource : IChannelSource
                 ChannelId = e.ChannelId,
                 PlatformType = PlatformType,
                 AppId = e.AppId,
-                AppSecret = null,   // 凭证密文不进公共列（Oracle P1 安全 3——出站解密走 resolver）
-                Alias = e.Alias,    // 1.6 alias 双键（对外名投影）
+                AppSecret = null,
+                Alias = e.Alias,
                 Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
                 {
-                    // 凭证密文承载——仅声明通道存在；验签信任根经 resolver 解密（见类注释）
-                    ["Token"] = e.TokenCipher,
-                    ["EncodingAESKey"] = e.EncodingAESKeyCipher,
-                    // D03 §4.1 通道形态/认证状态（方案 §8.3 投影映射表——Extra 承载，不挤 FA 公共列）
+                    ["Token"] = DecryptOrNull(e.ChannelId, e.TokenCipher),
+                    ["EncodingAESKey"] = DecryptOrNull(e.ChannelId, e.EncodingAESKeyCipher),
                     ["channel_form"] = e.ChannelForm,
                     ["verification"] = e.Verification,
                 },
-                IsEnabled = e.IsEnabled,   // 全行投影（含 disabled——S3 降级判据）
-                Capabilities = WeChatChannelCapabilityResolver.Resolve(e.ChannelForm, e.Verification),   // 派生不落库（§4.3）
+                IsEnabled = e.IsEnabled,
+                Capabilities = WeChatChannelCapabilityResolver.Resolve(e.ChannelForm, e.Verification),
             });
         }
         return list;
+    }
+
+    private string? DecryptOrNull(string channelId, string? cipher)
+    {
+        if (string.IsNullOrWhiteSpace(cipher))
+            return null;
+
+        try
+        {
+            return _keys.Decrypt(cipher);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 解密失败 → null（下游验签 fail-closed）；异常消息不含明文
+            _logger.LogWarning(
+                "通道凭证解密失败（ChannelId={ChannelId}）——该通道事件验签将 fail-closed：{Message}",
+                channelId, ex.Message);
+            return null;
+        }
     }
 
     private List<WeChatChannelConfigEntity> GetEntitiesSync()
@@ -90,9 +123,17 @@ public sealed class WeChatChannelRegistrySource : IChannelSource
         {
             return Ds.EntitySelectAsync(null, 0, 1000, null, default).GetAwaiter().GetResult();
         }
+        catch (InvalidOperationException ex)
+        {
+            // 守卫/DI 装配错误（DataService 未注册、User 帧缺失等）——Error 级（非瞬时故障），仍降级避免阻断组合
+            _logger.LogError(ex,
+                "WeChatChannelRegistrySource 装配错误（DataService 解析失败）——本来源降级为空列表，请检查 DI 接线");
+            return [];
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // DB 不可用 → 空列表（Composite 已按来源容错跳过——降级静态源）
+            _logger.LogWarning(
+                "WeChatChannelRegistrySource 读取 DB 通道配置失败——本来源降级为空列表：{Message}", ex.Message);
             return [];
         }
     }

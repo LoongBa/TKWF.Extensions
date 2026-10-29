@@ -409,6 +409,51 @@ public class SsoChannelRegistryTests : TestHostBase
         Assert.True(cache.TryGetValue(ChannelCacheKeys.Channel("ch-x"), out _));    // 忽略——缓存保留
     }
 
+    /// <summary>
+    /// 乱序防线的进程级语义（审核 P1-1 修复回归）：SG4 以 Transient 注册 handler，版本表若为实例字段则恒空。
+    /// 两个独立实例必须共享已见版本 → 第二实例收到旧事件仍忽略。
+    /// </summary>
+    [Fact]
+    public async Task ChannelConfigChanged_TwoHandlerInstances_ShareVersionState()
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var channelId = "ch:" + Guid.NewGuid().ToString("N");
+        var v1 = DateTime.UtcNow.Ticks;
+
+        cache.Set(ChannelCacheKeys.Channel(channelId), new ChannelConfig { ChannelId = channelId, PlatformType = "stub" });
+        await new ChannelConfigChangedHandler(cache, NullLogger<ChannelConfigChangedHandler>.Instance)
+            .HandleEventAsync(new ChannelConfigChanged(channelId, v1));
+        Assert.False(cache.TryGetValue(ChannelCacheKeys.Channel(channelId), out _));
+
+        cache.Set(ChannelCacheKeys.Channel(channelId), new ChannelConfig { ChannelId = channelId, PlatformType = "stub" });
+        await new ChannelConfigChangedHandler(cache, NullLogger<ChannelConfigChangedHandler>.Instance)
+            .HandleEventAsync(new ChannelConfigChanged(channelId, v1 - 1));
+        Assert.True(cache.TryGetValue(ChannelCacheKeys.Channel(channelId), out _));
+    }
+
+    /// <summary>
+    /// 默认选区 fail-closed（审核 P1-3 + P2-1 回归）：全停用 → null；停用行仍出现在 GetAllAsync（S3 判据）。
+    /// </summary>
+    [Fact]
+    public async Task Composite_GetDefault_AllDisabled_ReturnsNull()
+    {
+        var (_, user) = BindTestScope();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        IChannelSource[] sources =
+        [
+            new StubChannelSource(100, new ChannelConfig
+            {
+                ChannelId = "only-disabled", PlatformType = "stub", AppId = "wx-off", IsEnabled = false,
+            }),
+        ];
+        var registry = new CompositeChannelRegistry(
+            user, sources, cache, Options.Create(new FederationChannelRegistryOptions()),
+            NullLogger<CompositeChannelRegistry>.Instance);
+
+        Assert.Null(await registry.GetDefaultAsync(CancellationToken.None));
+        Assert.Single(await registry.GetAllAsync(CancellationToken.None));
+    }
+
     /// <summary>cache key 规范：ch:{ChannelId} 单键 + ch:all + ch:default（方案 §8.2——断言格式防漂移）。</summary>
     [Fact]
     public void CacheKeyFormat_MatchesSpec()

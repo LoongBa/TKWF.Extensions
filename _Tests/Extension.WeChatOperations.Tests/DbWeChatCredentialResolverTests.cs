@@ -140,6 +140,39 @@ public class DbWeChatCredentialResolverTests : WeChatOperationsTestHost
         Assert.DoesNotContain("not-a-valid-cipher", ex.Message);
     }
 
+    /// <summary>
+    /// 生产形态 fail-safe（审核 P1 处置回归）：DataService 在 DI 中不可解析（守卫注册，仅 User.Use 帧内可建）
+    /// → 本解析器必须降级 Options 且**不抛出**（修复前 GetRequiredService 直接抛 → 出站链路全断）。
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_DataServiceUnresolvable_DegradesToOptionsWithoutThrow()
+    {
+        using var _ = this;
+        ConfigureWeChatOptions = o => o.Channels.Add(new WeChatChannelConfig
+        {
+            ChannelId = "ch-opt-fallback",
+            AppId = "wx-opt-fallback",
+            AppSecret = "opt-secret-fallback",
+            Token = "opt-token",
+            EncodingAESKey = WeChatOperationsTestSupport.GenerateEncodingAESKey(),
+        });
+        var (provider, _) = BindScope();
+
+        using var bare = new ServiceCollection().BuildServiceProvider();
+        var resolver = new DbWeChatCredentialResolver(
+            bare,
+            provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<WeChatOptions>>(),
+            provider.GetRequiredKeyedService<TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider>(
+                WeChatOperationsKeyProviderKeys.WeChatOperations),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DbWeChatCredentialResolver>.Instance);
+
+        var result = await resolver.ResolveAsync("wx-opt-fallback", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("ch-opt-fallback", result!.ChannelId);
+        Assert.Equal("opt-secret-fallback", result.AppSecret);
+    }
+
     private static async Task SeedConfigAsync(DomainUser<TestUserInfo> user, string channelId, string appId,
         string? appSecretPlain, string? tokenPlain = null)
     {

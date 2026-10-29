@@ -31,9 +31,10 @@ namespace TKWF.Ext.WeChatOperations;
 ///     （契约 <see cref="TKWF.Federation.WeChat.IWeChatCredentialResolver"/> <b>非 IDomainService</b>——
 ///     普通 DI TryAddEnumerable Scoped；追加在平台库 <c>AddWeChatFederationChannels()</c> 注册的缺省
 ///     Options 实现（TryAddSingleton）<b>之后</b>——DI 单解析取最后注册 → DB 优先生效）；
-///     ② <b>DB 通道来源</b>：<see cref="DbWeChatChannelSource"/>（IChannelSource 普通 DI 集合——
-///     ⚠️ §九 验收 7：CompositeChannelRegistry 遍历顺序 = 注册顺序，DB 源须在 Options 源之前——
-///     <c>Insert(0,...)</c> 前置注册保证枚举序首位，不论消费方 AddWeChatFederationChannels 调用时机）。</item>
+///     ② <b>DB 通道来源</b>：<see cref="WeChatChannelRegistrySource"/>（IChannelSource 普通 DI 集合——
+///     Priority=100 恒先于静态源 0，组合层按 Priority 降序首命中，<b>不依赖注册顺序</b>；
+///     取数经 <c>IUserBoundChannelSource</c> 由 Composite 构造时绑定域用户 + <c>User.Use&lt;DataService&gt;()</c>
+///     NoAop 直建——DataService 的 DI 注册为 throw-factory，不可 IServiceProvider 直取）。</item>
 /// <item><b>E4 密钥管理</b>——keyed <see cref="ISymmetricKeyProvider"/>（键
 ///     <see cref="WeChatOperationsKeyProviderKeys.WeChatOperations"/>——C11 第 6 扩展边界自建常量，
 ///     FileSymmetricKeyProvider 构造即加载：生产缺密钥 fail-fast / 开发随机兜底）——

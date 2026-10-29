@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Federation.WeChat;
@@ -28,6 +29,7 @@ public sealed class DbWeChatCredentialResolver : IWeChatCredentialResolver
     private readonly IServiceProvider _sp;
     private readonly IOptions<WeChatOptions> _options;
     private readonly ISymmetricKeyProvider _keys;
+    private readonly ILogger<DbWeChatCredentialResolver> _logger;
 
     private WeChatChannelConfigEntityDataService? _ds;
     private WeChatChannelConfigEntityDataService Ds => _ds ??= _sp.GetRequiredService<WeChatChannelConfigEntityDataService>();
@@ -35,18 +37,39 @@ public sealed class DbWeChatCredentialResolver : IWeChatCredentialResolver
     public DbWeChatCredentialResolver(
         IServiceProvider sp,
         IOptions<WeChatOptions> options,
-        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)] ISymmetricKeyProvider keys)
+        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)] ISymmetricKeyProvider keys,
+        ILogger<DbWeChatCredentialResolver> logger)
     {
         _sp = sp ?? throw new ArgumentNullException(nameof(sp));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>
+    /// DB 读取（fail-safe）：DataService 的 DI 注册为守卫工厂，仅 <c>User.Use&lt;T&gt;()</c> 帧内可解析；
+    /// 本解析器为普通 DI（无帧用户），出站调用期帧已关闭 → 解析失败按「DB 不可用」降级 Options
+    /// （不抛出——避免把整个出站链路打成 500）。DB 命中优先生效路径待框架暴露 ambient 用户入口后启用。
+    /// </summary>
+    private async Task<WeChatChannelConfigEntity?> TryGetEntityAsync(string appId, CancellationToken ct)
+    {
+        try
+        {
+            return await Ds.EntityGetAsync(e => e.AppId == appId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "微信 DB 凭证解析不可用——本次降级 Options（Channels 按 AppId 匹配）：{Message}", ex.Message);
+            return null;
+        }
     }
 
     /// <inheritdoc />
     public async Task<WeChatChannelConfig?> ResolveAsync(string appId, CancellationToken ct = default)
     {
         // ① DB 命中（按 AppId 精确匹配——出站凭证解析键）→ AES-GCM 解密返回
-        var entity = await Ds.EntityGetAsync(e => e.AppId == appId, ct);
+        var entity = await TryGetEntityAsync(appId, ct);
         if (entity is not null)
         {
             var config = new WeChatChannelConfig

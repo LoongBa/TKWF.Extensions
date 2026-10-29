@@ -39,7 +39,9 @@ public sealed class ChannelConfigChangedHandler : ILocalEventHandler<ChannelConf
 {
     private readonly IMemoryCache _cache;
     private readonly ILogger<ChannelConfigChangedHandler> _logger;
-    private readonly ConcurrentDictionary<string, long> _dataVersions = new(StringComparer.Ordinal);
+
+    // 进程级版本表：handler 生命周期由 SG4 决定（Transient）——实例字段会使乱序防线恒空失效
+    private static readonly ConcurrentDictionary<string, long> DataVersions = new(StringComparer.Ordinal);
 
     public ChannelConfigChangedHandler(IMemoryCache cache, ILogger<ChannelConfigChangedHandler> logger)
     {
@@ -59,14 +61,18 @@ public sealed class ChannelConfigChangedHandler : ILocalEventHandler<ChannelConf
             return Task.CompletedTask;
         }
 
-        // 乱序防线（Obs5）：按 ChannelId 隔离——版本小于等于已见 → 忽略
-        if (_dataVersions.TryGetValue(eventData.ChannelId, out var last) && eventData.DataVersion <= last)
+        // 乱序防线（Obs5）：按 ChannelId 隔离——严格小于已见才忽略（等值/并发由原子 Max 更新收敛）
+        var lastSeen = DataVersions.AddOrUpdate(
+            eventData.ChannelId,
+            eventData.DataVersion,
+            (_, existing) => Math.Max(existing, eventData.DataVersion));
+
+        if (eventData.DataVersion < lastSeen)
         {
             _logger.LogDebug("ChannelConfigChanged 乱序旧事件忽略：ChannelId={ChannelId} DataVersion={DataVersion}（已见 {Last}）",
-                eventData.ChannelId, eventData.DataVersion, last);
+                eventData.ChannelId, eventData.DataVersion, lastSeen);
             return Task.CompletedTask;
         }
-        _dataVersions[eventData.ChannelId] = eventData.DataVersion;
 
         _cache.Remove(ChannelCacheKeys.Channel(eventData.ChannelId));
         _cache.Remove(ChannelCacheKeys.All);        // 全量聚合含该通道——保守清理重算（Count 级代价可忽略）

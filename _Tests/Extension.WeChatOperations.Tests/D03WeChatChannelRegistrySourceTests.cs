@@ -1,4 +1,6 @@
+using System;
 using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
 using System.Threading.Tasks;
 using TKWF.Ext.Federation;
@@ -128,7 +130,8 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
             AppSecret: "s2"),
             ct: TestContext.Current.CancellationToken);
 
-        var source = provider.GetServices<TKWF.Ext.Federation.IChannelSource>().OfType<WeChatChannelRegistrySource>().Single();
+        var source = CreateSource(provider);
+        source.BindDomainUser(user);
         var channels = source.GetChannels();
         var mp1 = Assert.Single(channels, c => c.ChannelId == "d03-mp-1");
         Assert.Equal("merchant-d03", mp1!.Alias);
@@ -156,14 +159,19 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
             ChannelType: "wechat_event", IsEnabled: false),
             ct: TestContext.Current.CancellationToken);
 
-        var source = provider.GetServices<TKWF.Ext.Federation.IChannelSource>().OfType<WeChatChannelRegistrySource>().Single();
+        var source = CreateSource(provider);
+        source.BindDomainUser(user);
         var row = Assert.Single(source.GetChannels(), c => c.ChannelId == "d03-disabled");
         Assert.False(row!.IsEnabled);   // disabled 行保留（非过滤）
     }
 
-    /// <summary>凭证安全姿态（Oracle P1 安全 3 保留）：AppSecret 不进公共列（null）；Token/EncodingAESKey 密文进 Extra（不解密）。</summary>
+    /// <summary>
+    /// 凭证收敛点（审核 P0-2 修复后语义）：<c>AppSecret</c> 不进公共列（null，出站经 resolver），
+    /// <b><c>Token</c>/<c>EncodingAESKey</c> 解密为明文进 Extra</b>——与静态源同语义，
+    /// <c>WeChatEventChannel</c> 验签/解密可直接消费（密文承载会使 DB 通道事件验签恒失败）。
+    /// </summary>
     [Fact]
-    public async Task GetChannels_CredentialSafePosture()
+    public async Task GetChannels_ProjectsPlaintextCredentials_SignatureVerifies()
     {
         using var _ = this;
         var (provider, user) = BindScope();
@@ -175,11 +183,77 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
             ChannelType: "wechat_event", AppSecret: "secret-plain", Token: "token-plain", EncodingAesKey: aesKey),
             ct: TestContext.Current.CancellationToken);
 
-        var source = provider.GetServices<TKWF.Ext.Federation.IChannelSource>().OfType<WeChatChannelRegistrySource>().Single();
+        var source = CreateSource(provider);
+        source.BindDomainUser(user);
+
         var row = Assert.Single(source.GetChannels(), c => c.ChannelId == "d03-sec");
-        Assert.Null(row!.AppSecret);                                  // 密文不进公共列
-        Assert.DoesNotContain("secret-plain", row.Extra.Values);      // 明文不可见
-        Assert.NotEqual("token-plain", row.Extra["Token"]);           // Token 密文承载
-        Assert.NotEqual(aesKey, row.Extra["EncodingAESKey"]);         // EncodingAESKey 密文承载
+        Assert.Null(row!.AppSecret);                                  // 出站凭证不进公共列
+        Assert.Equal("token-plain", row.Extra["Token"]);              // 明文（非密文）
+        Assert.Equal(aesKey, row.Extra["EncodingAESKey"]);
+
+        // 收敛证明：投影 Token 经微信 4 参签名算法得硬编码期望值（外部事实源，非自反比较）
+        const string timestamp = "1700000000";
+        const string nonce = "d03-nonce";
+        const string msgEncrypt = "cipher-payload-d03";
+        Assert.Equal(
+            "ca1c20789494c3cc72a2f6448dae8bc549d6296c",
+            WeChatSignature(row.Extra["Token"]!, timestamp, nonce, msgEncrypt));
     }
+
+    private static string WeChatSignature(string token, string timestamp, string nonce, string msgEncrypt)
+    {
+        var parts = new[] { token, timestamp, nonce, msgEncrypt };
+        Array.Sort(parts, StringComparer.Ordinal);
+        var hash = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes(string.Concat(parts)));
+        return Convert.ToHexStringLower(hash);
+    }
+
+    /// <summary>
+    /// 审核 P0-1 回归：未绑定 DomainUser（脱离 Composite 装配链）→ fail-closed 空列表且不抛出。
+    /// 修复前该场景经 <c>IServiceProvider</c> 直取 DataService 在生产必抛（被 catch-all 吞成恒空）。
+    /// </summary>
+    [Fact]
+    public async Task GetChannels_WithoutBoundUser_FailClosedEmpty()
+    {
+        using var _ = this;
+        var (provider, user) = BindScope();
+
+        await user.Use<IChannelConfigService>().SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "d03-unbound", AppId: "wx-d03-u", DisplayName: "有行但未绑定",
+            ChannelType: "wechat_event"),
+            ct: TestContext.Current.CancellationToken);
+
+        var source = CreateSource(provider);
+        Assert.Empty(source.GetChannels());
+    }
+
+    /// <summary>
+    /// 审核 P0-1 回归（生产路径）：经 <c>User.Use&lt;IChannelRegistry&gt;()</c> → Composite 构造时绑定用户 →
+    /// DB 源以 <c>IDomainUser.Use&lt;DataService&gt;()</c> NoAop 直建取数（不经 DI 注册，生产同形态）。
+    /// </summary>
+    [Fact]
+    public async Task GetAllAsync_ViaComposite_ProjectsDbRows()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+
+        await user.Use<IChannelConfigService>().SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "d03-composite", AppId: "wx-d03-c", DisplayName: "组合路径",
+            ChannelType: "wechat_event", ChannelForm: "mp_service", Verification: "verified", Token: "tok-composite"),
+            ct: TestContext.Current.CancellationToken);
+
+        var all = await user.Use<TKWF.Ext.Federation.IChannelRegistry>()
+            .GetAllAsync(TestContext.Current.CancellationToken);
+
+        var row = Assert.Single(all, c => c.ChannelId == "d03-composite");
+        Assert.Equal("tok-composite", row!.Extra["Token"]);
+        Assert.Equal("mp_service", row.Extra["channel_form"]);
+    }
+
+    private static WeChatChannelRegistrySource CreateSource(IServiceProvider provider)
+        => new(
+            provider.GetRequiredKeyedService<TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider>(
+                WeChatOperationsKeyProviderKeys.WeChatOperations),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatChannelRegistrySource>.Instance);
 }

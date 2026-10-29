@@ -56,6 +56,14 @@ public sealed class CompositeChannelRegistry : DomainServiceBase, IChannelRegist
         var o = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _ttlSeconds = o.CacheTtlSeconds > 0 ? o.CacheTtlSeconds : 120;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        // P0-1 修复：DataService 仅可经 IDomainUser.Use<T>() 解析（DI 直取为 throw-factory），
+        // 而 IChannelSource 是普通 DI 集合元素拿不到用户——故在本帧内（守卫工厂已注入 user）绑定。
+        foreach (var source in _sources)
+        {
+            if (source is IUserBoundChannelSource bound)
+                bound.BindDomainUser(user);
+        }
     }
 
     /// <inheritdoc />
@@ -103,7 +111,11 @@ public sealed class CompositeChannelRegistry : DomainServiceBase, IChannelRegist
         if (_cache.TryGetValue(key, out ChannelConfig? cached) && cached != null)
             return Task.FromResult(cached);
 
-        var cfg = FirstMatch(src => src.IsDefault) ?? FirstMatch(_ => true);
+        // 选区语义：IsDefault 且启用 → 首个启用（全停用 → null，fail-closed）；
+        // 取自已去重的合并列表，保证与 GetAsync/GetAllAsync 同源（避免低优先重复项与高优先停用项取向不一致）
+        var all = GetAllCached();
+        var cfg = all.FirstOrDefault(c => c.IsDefault && c.IsEnabled)
+            ?? all.FirstOrDefault(c => c.IsEnabled);
         if (cfg != null)
             CacheSet(key, cfg);
         return Task.FromResult(cfg);

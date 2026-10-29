@@ -263,6 +263,25 @@ public sealed class FederationWebExtensionTests
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
     }
 
+    /// <summary>event 端点 S1（D03 1.8）——验签失败（信任根一票否决，硬线不可配置）→ 400 AUTHENTICATION_FAILED
+    /// + 不触达编排（Factory 已构造但 Orchestrator 不 invoked——编排不短路通道实例构造）。</summary>
+    [Fact]
+    public async Task Event_AuthFailed_400_AuthenticationFailed_PerSchemeHardwire()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Channel.Result = new SsoChannelAuthResult(false, null, "AUTHENTICATION_FAILED", 2);
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("AUTHENTICATION_FAILED", body!.Code);
+        Assert.Equal(0, FederationEndpointHost.Orchestrator.Invoked);   // 验签失败 → 编排不 invoked（信任根一票否决）
+    }
+
     /// <summary>event 端点无通道段（单通道降级）——唯一活跃通道解析 → 平台段推导 + 构造。</summary>
     [Fact]
     public async Task Event_NoChannelId_SingleChannel_DerivesAndConstructs()

@@ -210,6 +210,59 @@ public sealed class FederationWebExtensionTests
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
     }
 
+    /// <summary>event 端点 S3（D03 1.8）——通道停用（显式 channelId + IsEnabled=false）→ 200 空回复
+    /// （微信对非 200 重试——停用通道按 200 空处理防重试风暴；提示文案 XML 信封归 handler 层渲染）。</summary>
+    [Fact]
+    public async Task Event_DisabledChannel_200Empty()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wechat-mp", PlatformType = "wechat", IsEnabled = false },
+        };
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync());
+        Assert.False(FederationEndpointHost.Factory.CreateInvoked);      // 停用通道不触达通道工厂
+    }
+
+    /// <summary>event 端点 S2（D03 1.8）——未知通道默认 404 静默（UnknownChannelReplyEnabled=false 防探测）。</summary>
+    [Fact]
+    public async Task Event_UnknownChannel_Default_404()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/ghost",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        Assert.False(FederationEndpointHost.Factory.CreateInvoked);
+    }
+
+    /// <summary>event 端点 S2（D03 1.8）——UnknownChannelReplyEnabled=true → 未知通道 200 空回复
+    /// （微信不重试；探测者不可区分「通道不存在」与「无回复」）。</summary>
+    [Fact]
+    public async Task Event_UnknownChannel_SilentEnabled_200Empty()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.EventReplyOptions.UnknownChannelReplyEnabled = true;
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/ghost",
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync());
+        Assert.False(FederationEndpointHost.Factory.CreateInvoked);
+    }
+
     /// <summary>event 端点无通道段（单通道降级）——唯一活跃通道解析 → 平台段推导 + 构造。</summary>
     [Fact]
     public async Task Event_NoChannelId_SingleChannel_DerivesAndConstructs()

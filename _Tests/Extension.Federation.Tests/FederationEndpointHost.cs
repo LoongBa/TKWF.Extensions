@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
@@ -54,6 +55,10 @@ internal static class FederationEndpointHost
     public static FakeEventOrchestrator Orchestrator { get; } = new();
     public static FakeSealedTicketService Ticket { get; } = new();
 
+    /// <summary>事件回复领域配置（D03 1.8 S2/S3 冒烟——DI 替换为指向本实例的 OptionsWrapper，测试热改属性即生效；
+    /// 只读属性防 Reset 换实例断链（DI 捕获构建时引用）。</summary>
+    public static FederationEventReplyOptions EventReplyOptions { get; } = new();
+
     /// <summary>共享宿主状态复位（跨用例防污染——负向/正向断言前置调用，对齐 AuthCenter V0.8.0 复位范式）。</summary>
     public static void Reset()
     {
@@ -71,6 +76,9 @@ internal static class FederationEndpointHost
         EventHandler2.Reset();
         Orchestrator.Reset();
         Ticket.Reset();
+        EventReplyOptions.UnknownChannelReplyEnabled = false;
+        EventReplyOptions.DisabledChannelReplyTemplate = "服务暂停中，请稍后再试";
+        EventReplyOptions.DefaultReplyText = "感谢您的关注，请稍后再试";
     }
 
     private static TestServer CreateServer()
@@ -113,6 +121,10 @@ internal static class FederationEndpointHost
             // 测试宿主 Replace 为普通 Scoped Fake 编排（复刻真实行为：通道 HandleEventAsync + uid 只读富化 +
             // handler first-non-null-wins——无守卫依赖，规避守卫工厂与 TestMetaContext 空上下文的发现不确定性）
             svc.Replace(ServiceDescriptor.Scoped<IEventOrchestrator>(_ => Orchestrator));
+            // IOptions<FederationEventReplyOptions>：D03 1.8 S2/S3 冒烟——替换为指向静态 EventReplyOptions 的
+            // OptionsWrapper（测试热改属性即生效；Endpoints 语义与 AddOptions 默认实例一致）
+            svc.Replace(ServiceDescriptor.Singleton<IOptions<FederationEventReplyOptions>>(
+                Options.Create(EventReplyOptions)));
             // ISealedTicketService<FederatedTicketPayload>：面① 密封票据（测试端点 HandleTestTicket RedeemAsync 依赖）——
             // 契约在主框架 TKW.Framework.Domain.Ticket；宿主仅启用 Federation（无 TrustCenter 初始器注册）→ AddScoped 直注 Fake
             svc.AddScoped<ISealedTicketService<FederatedTicketPayload>>(_ => Ticket);

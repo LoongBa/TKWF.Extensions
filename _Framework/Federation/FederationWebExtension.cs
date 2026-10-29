@@ -191,6 +191,21 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         var (cfg, failReason) = await ResolveChannelAsync(registry, platformId, channelId, ct);
         if (cfg is null)
         {
+            // D03 §4.3 降级分级（S2/S3）——微信语义：非 200 会重试（重试风暴），故停用/未知通道按 200 空回复；
+            // 提示文案的 XML 信封由平台库 + handler 层渲染（主包不构造 XML，见 FederationEventReplyOptions）。
+            var replyOptions = ResolveEventReplyOptions(ctx.RequestServices);
+            if (string.Equals(failReason, "CHANNEL_DISABLED", StringComparison.Ordinal))
+            {
+                logger.LogWarning("微信事件端点通道停用（S3）：PlatformId={PlatformId} ChannelId={ChannelId} 应提示文案={ReplyText}",
+                    platformId, channelId ?? "", replyOptions.DisabledChannelReplyTemplate);
+                return Results.Text("", contentType: "text/xml");
+            }
+            if (string.Equals(failReason, "CHANNEL_NOT_FOUND", StringComparison.Ordinal) && replyOptions.UnknownChannelReplyEnabled)
+            {
+                logger.LogWarning("微信事件端点未知通道（S2，已开启静默 200）：PlatformId={PlatformId} ChannelId={ChannelId}",
+                    platformId, channelId ?? "");
+                return Results.Text("", contentType: "text/xml");
+            }
             logger.LogWarning("微信事件端点通道解析失败：PlatformId={PlatformId} ChannelId={ChannelId} FailReason={FailReason}",
                 platformId, channelId ?? "", failReason ?? "");
             return MapFailReason(failReason);
@@ -522,6 +537,16 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         if (options is not null) return options;
         var fallback = new FederationEndpointOptions();
         services.GetService<IConfiguration>()?.GetSection("TKWF:Federation:Web").Bind(fallback);
+        return fallback;
+    }
+
+    /// <summary>事件回复领域配置解析（同 <see cref="ResolveOptions"/> 三段兜底——<c>TKWF:Federation:EventReply</c> 节）。</summary>
+    private static FederationEventReplyOptions ResolveEventReplyOptions(IServiceProvider services)
+    {
+        var options = services.GetService<IOptions<FederationEventReplyOptions>>()?.Value;
+        if (options is not null) return options;
+        var fallback = new FederationEventReplyOptions();
+        services.GetService<IConfiguration>()?.GetSection("TKWF:Federation:EventReply").Bind(fallback);
         return fallback;
     }
 }

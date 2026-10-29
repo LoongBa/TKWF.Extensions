@@ -120,6 +120,12 @@ public class WeChatOperationsTestHost : IDisposable
         // I2-10 关注域（Federation 主包——订阅统计委托 IFollowStateService 数据源：FollowEvent/FollowState 两表）
         fsql.CodeFirst.SyncStructure<TKWF.Ext.Federation.FollowEventEntity>();
         fsql.CodeFirst.SyncStructure<TKWF.Ext.Federation.FollowStateEntity>();
+        // D03 1.10 运营配置面 5 域单行配置表（Id=1）
+        fsql.CodeFirst.SyncStructure<ArticleReplyOpsConfigEntity>();
+        fsql.CodeFirst.SyncStructure<ReplyTextOpsConfigEntity>();
+        fsql.CodeFirst.SyncStructure<DegradeOpsConfigEntity>();
+        fsql.CodeFirst.SyncStructure<WeakIdentityOpsConfigEntity>();
+        fsql.CodeFirst.SyncStructure<TicketOpsConfigEntity>();
     }
 
     /// <summary>额外服务/基础设施注册（AddLogging + IFreeSql + UnitOfWorkManager 已在 BindScope 注册——见上）。</summary>
@@ -204,6 +210,12 @@ public class WeChatOperationsTestHost : IDisposable
         // I2-10 关注域两实体 IEntityDAC（同 UoW 单连接——订阅统计委托数据源）
         services.AddSingleton<IEntityDAC<TKWF.Ext.Federation.FollowEventEntity>>(sp => new FreeSqlEntityDAC<TKWF.Ext.Federation.FollowEventEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
         services.AddSingleton<IEntityDAC<TKWF.Ext.Federation.FollowStateEntity>>(sp => new FreeSqlEntityDAC<TKWF.Ext.Federation.FollowStateEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        // D03 1.10 运营配置面 5 域单行配置表
+        services.AddSingleton<IEntityDAC<ArticleReplyOpsConfigEntity>>(sp => new FreeSqlEntityDAC<ArticleReplyOpsConfigEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddSingleton<IEntityDAC<ReplyTextOpsConfigEntity>>(sp => new FreeSqlEntityDAC<ReplyTextOpsConfigEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddSingleton<IEntityDAC<DegradeOpsConfigEntity>>(sp => new FreeSqlEntityDAC<DegradeOpsConfigEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddSingleton<IEntityDAC<WeakIdentityOpsConfigEntity>>(sp => new FreeSqlEntityDAC<WeakIdentityOpsConfigEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddSingleton<IEntityDAC<TicketOpsConfigEntity>>(sp => new FreeSqlEntityDAC<TicketOpsConfigEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
 
         // ⑦ DataService 可构造注册（测试镜像生产 ADR61 可构造工厂，非 throw-factory——接线型 GetRequiredService 需要；
         //    单例对齐 IEntityDAC（⑥）——同 UoW 同连接数据可见）
@@ -224,6 +236,12 @@ public class WeChatOperationsTestHost : IDisposable
         // I2-10 关注域两 DataService（Federation 主包——FollowStateService 组合生产路径）
         services.AddSingleton<TKWF.Ext.Federation.FollowEventEntityDataService>();
         services.AddSingleton<TKWF.Ext.Federation.FollowStateEntityDataService>();
+        // D03 1.10 运营配置面 5 DataService
+        services.AddSingleton<ArticleReplyOpsConfigEntityDataService>();
+        services.AddSingleton<ReplyTextOpsConfigEntityDataService>();
+        services.AddSingleton<DegradeOpsConfigEntityDataService>();
+        services.AddSingleton<WeakIdentityOpsConfigEntityDataService>();
+        services.AddSingleton<TicketOpsConfigEntityDataService>();
 
         // ⑧ ITransactionManager（MenuService 写路径事务包裹——Noop Begin/Commit 空操作，
         //    DataService 逐操作经 UnitOfWorkManager 持久化）

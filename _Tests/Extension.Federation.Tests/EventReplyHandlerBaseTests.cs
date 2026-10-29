@@ -36,6 +36,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
 {
     private readonly FakeSealedTicketService _codes = new();
     private readonly FakeChannelRegistry _registry = new();
+    private readonly FakeOpsConfigQuery _opsQuery = new();
     private FederationEventReplyOptions _eventReplyOptions = new();
 
     /// <summary>构造语义事件派发（I2——<see cref="IEventReplyHandler.HandleAsync"/> 入参：参数包 → ChannelEvent；external_user_id 未绑定时 uid=null）。</summary>
@@ -65,6 +66,9 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
 
         // Fake 通道注册表（channelId → PlatformType 反查——图文链接 {platformId} 段）
         services.AddScoped<IChannelRegistry>(_ => _registry);
+
+        // Fake 运营配置查询（D03 1.5/1.10 三级回退中间级——默认 null = 未配置 → 回退内置测试端点；测试可设 UrlTemplate）
+        services.AddScoped<IOperationsConfigQuery>(_ => _opsQuery);
 
         // 领域 Options（BaseUrl + RoutePrefix——按测试配置；TestEventReplyHandlerEnabled 开关已随
         // 2026-10-17 迁移平台库 WechatEventReplyOptions.ProbeEventReplyHandlerEnabled）
@@ -190,6 +194,48 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         Assert.False(_codes.Issued);                                     // 反查失败 → 未签密封票据
     }
 
+    // ═══════════════════ 2. 三级回退（D03 1.5/1.10——LinkTemplate → OperationsConfig.UrlTemplate → 内置测试端点） ═══════════════════
+
+    /// <summary>三级回退中间级：LinkTemplate 空 + 运营配置命中 → 图文链接用运营模板 URL（{ticket} 替换）。</summary>
+    [Fact]
+    public async Task HandleAsync_NoLinkTemplate_OperationsUrlTemplate_Used()
+    {
+        EnableTicketUrl();
+        _opsQuery.UrlTemplate = "https://m.loongba.cn/wx-auth?t={ticket}";
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<ProbeEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1"), ("uid", "u-1"), ("channel_id", "probe-channel")),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        var article = Assert.Single(reply!.NewsArticles!);
+        Assert.StartsWith("https://m.loongba.cn/wx-auth?t=", article.Url);   // 运营模板替换 {ticket}
+        Assert.EndsWith("ac-1", article.Url);                                // ticket="ac-1"（Fake 签票返回值）
+        Assert.DoesNotContain("/probe/test/", article.Url);                  // 不再回落内置测试端点
+    }
+
+    /// <summary>三级回退末级（既有语义回归锁）：LinkTemplate 空 + 运营配置未装配/未配置（null）→ 内置测试端点 URL。</summary>
+    [Fact]
+    public async Task HandleAsync_NoLinkTemplate_NoOperationsConfig_FallsBackToTestEndpoint()
+    {
+        EnableTicketUrl();
+        _opsQuery.UrlTemplate = null;                                        // 未配置（默认）
+        using var _ = this;
+        var (_, user) = BindTestScope();
+        var handler = user.Use<ProbeEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(
+            Ctx(("external_user_id", "openid-1"), ("uid", "u-1"), ("channel_id", "probe-channel")),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        var article = Assert.Single(reply!.NewsArticles!);
+        Assert.StartsWith("https://api.example.com/feberation/probe/test/probe-channel/", article.Url);
+    }
+
     // ═══════════════════ 探针子类（模板方法测试） ═══════════════════
 
     /// <summary>模板方法探针子类——context.Parameters 含 "skip" → null；否则返回固定载荷；
@@ -220,6 +266,24 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
                     Ttl: TimeSpan.FromMinutes(5),
                     ExpectedClaimant: "claimant-1"));
         }
+    }
+
+    /// <summary>Fake 运营配置查询（D03 1.5/1.10——测试可配 UrlTemplate；其余方法零语义）。</summary>
+    private sealed class FakeOpsConfigQuery : IOperationsConfigQuery
+    {
+        public string? UrlTemplate { get; set; }
+
+        public Task<string?> GetArticleReplyUrlTemplateAsync(CancellationToken ct = default)
+            => Task.FromResult(UrlTemplate);
+
+        public Task<ReplyTextConfigDto?> GetReplyTextConfigAsync(CancellationToken ct = default)
+            => Task.FromResult<ReplyTextConfigDto?>(null);
+
+        public Task<bool?> GetUnknownChannelReplyEnabledAsync(CancellationToken ct = default)
+            => Task.FromResult<bool?>(null);
+
+        public Task<TicketConfigDto?> GetTicketConfigAsync(CancellationToken ct = default)
+            => Task.FromResult<TicketConfigDto?>(null);
     }
 
     /// <summary>Fake 密封票据服务（ISealedTicketService&lt;FederatedTicketPayload&gt;——面① 记录 payload/claimant/ttl）。</summary>

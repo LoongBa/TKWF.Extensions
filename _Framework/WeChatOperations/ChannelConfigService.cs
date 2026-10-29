@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Federation;
@@ -65,6 +67,10 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     private WeChatChannelConfigEntityDataService? _ds;
     private WeChatChannelConfigEntityDataService Ds => _ds ??= User.Use<WeChatChannelConfigEntityDataService>();
 
+    /// <summary>D03 1.6 channel alias slug 规则——3-64 位小写字母/数字/连字符，首字符须字母或数字
+    /// （值已 Trim + ToLowerInvariant 归一后匹配；请求空白时不参与校验）。</summary>
+    private static readonly Regex AliasPattern = new("^[a-z0-9][a-z0-9-]{2,63}$", RegexOptions.Compiled);
+
     public ChannelConfigService(
         IDomainUser user,
         [Microsoft.Extensions.DependencyInjection.FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)]
@@ -121,6 +127,10 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : request.Alias.Trim().ToLowerInvariant(),   // D03 1.2 新列（对外别名——1.6 守卫另立）
         };
 
+        // D03 1.6 channel alias 规则——slug 格式校验（仅当请求提供了非空 Alias；新建 + 更新共用，fail-fast 于 DB 访问前）
+        if (entity.Alias is not null && !AliasPattern.IsMatch(entity.Alias))
+            throw new DomainException($"channel alias 格式非法：'{request.Alias}'（要求 3-64 位小写字母/数字/连字符，首字符须字母或数字）") { ErrorCode = "CHANNEL_ALIAS_INVALID" };
+
         // ChannelId/AppId 冲突预查（唯一索引 UX——TOCTOU 由数据库兜底）
         var existing = await Ds.EntityGetAsync(e => e.ChannelId == entity.ChannelId || e.AppId == entity.AppId, ct);
         if (existing is not null && (existing.Id != entity.Id || (entity.Id == 0 && (existing.ChannelId == entity.ChannelId || existing.AppId == entity.AppId))))
@@ -159,7 +169,12 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         db.ChannelType = entity.ChannelType;
         db.ChannelForm = entity.ChannelForm;      // D03 1.2 新列透传
         db.Verification = entity.Verification;    // D03 1.2 新列透传
-        db.Alias = entity.Alias;                  // D03 1.2 新列透传（1.6 不可变守卫另立）
+        // D03 1.6 alias 不可变 + 一次性设置——已设置 alias 后拒绝修改（请求空白 = 保留原值，不清空）；
+        // 一次性设置：db.Alias 为空 && 请求非空 → 允许写入（校验已在上方 fail-fast 通过）
+        if (!string.IsNullOrWhiteSpace(db.Alias) && entity.Alias is not null && db.Alias != entity.Alias)
+            throw new DomainException($"channel alias 不可修改（既有 '{db.Alias}'，请求 '{entity.Alias}'），如需改名请新建通道") { ErrorCode = "CHANNEL_ALIAS_IMMUTABLE" };
+        if (entity.Alias is not null)
+            db.Alias = entity.Alias;
         if (request.AppSecret is not null) db.AppSecretCipher = _keys.Encrypt(request.AppSecret);
         if (request.Token is not null) db.TokenCipher = _keys.Encrypt(request.Token);
         if (request.EncodingAesKey is not null) db.EncodingAESKeyCipher = _keys.Encrypt(request.EncodingAesKey);

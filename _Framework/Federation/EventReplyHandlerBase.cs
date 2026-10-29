@@ -2,6 +2,8 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -36,6 +38,7 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     public abstract string ChannelType { get; }
 
     private readonly IOptions<FederationEventReplyOptions>? _eventReplyOptions;
+    private readonly ILogger<EventReplyHandlerBase> _logger;
 
     /// <summary>测试端点 URL 基址（消费方部署域名——图文链接拼接用；空 = 相对路径 <c>/feberation/.../test/...</c> 默认指向本服务同源）。</summary>
     protected string? TestTicketEndpointBaseUrl => _eventReplyOptions?.Value.TestTicketEndpointBaseUrl;
@@ -45,11 +48,13 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 
     /// <summary>
     /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser；<see cref="IOptions{TOptions}"/> 从 DI 解析——
-    /// 非 IDomainService 普通注册，非构造注入守卫约束范围）。
+    /// 非 IDomainService 普通注册，非构造注入守卫约束范围；logger 可选——缺省静默降级）。
     /// </summary>
-    protected EventReplyHandlerBase(IDomainUser user, IOptions<FederationEventReplyOptions>? options = null) : base(user)
+    protected EventReplyHandlerBase(IDomainUser user, IOptions<FederationEventReplyOptions>? options = null,
+        ILogger<EventReplyHandlerBase>? logger = null) : base(user)
     {
         _eventReplyOptions = options;
+        _logger = logger ?? NullLogger<EventReplyHandlerBase>.Instance;
     }
 
     /// <summary>
@@ -85,10 +90,15 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
 
         var issue = await User.Use<ISealedTicketService<FederatedTicketPayload>>()
             .IssueAsync(ticketPayload, payload.Ttl, new SealedTicketOptions(ExpectedClaimant: payload.ExpectedClaimant), ct);
-        // URL 模式（模板驱动两级模型）：LinkTemplate 配置 → 占位符替换（{ticket} 等）；空 → 回退内置测试端点 URL
-        var url = string.IsNullOrWhiteSpace(payload.LinkTemplate)
+        // URL 模式（模板驱动三级模型——D03 §7.1）：LinkTemplate（子类载荷）→ OperationsConfig.UrlTemplate（D03 1.10 运营配置面）→ 内置测试端点 URL
+        string? linkTemplate = payload.LinkTemplate;
+        if (string.IsNullOrWhiteSpace(linkTemplate))
+        {
+            linkTemplate = await ResolveOperationsUrlTemplateAsync(channelId, ct);
+        }
+        var url = string.IsNullOrWhiteSpace(linkTemplate)
             ? BuildTestTicketUrl(issue.Ticket, channelCfg.PlatformType, channelCfg.ChannelId)
-            : BuildTemplateUrl(payload.LinkTemplate, issue.Ticket, channelCfg, ticketPayload);
+            : BuildTemplateUrl(linkTemplate, issue.Ticket, channelCfg, ticketPayload);
         return new EventReplyResult(
             Content: string.Empty,
             ContentType: "text/xml",
@@ -120,6 +130,35 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <para>I2-8 委托 <see cref="LoginEntryService.CombineUrl"/>（单一 URL 组装点——逐字节等价，测试锁定）。</para></summary>
     protected string BuildTestTicketUrl(string ticket, string platformId, string channelId)
         => LoginEntryService.CombineUrl(TestTicketEndpointBaseUrl, RoutePrefix, $"{platformId}/test/{channelId}/{ticket}");
+
+    /// <summary>
+    /// 运营配置 URL 模板解析（D03 1.5/1.10 三级回退中间级——LinkTemplate 空时经 <see cref="IOperationsConfigQuery"/>
+    /// 读运营配置面 ArticleReply.UrlTemplate；未装配 WeChatOperations / 未配置 → null）。
+    /// <para>fail-safe：契约实现经 <c>User.GetService</c> 探测（未装配 → null，不抛守卫）；
+    /// 读取异常 → Warning 日志 + null（回退内置测试端点——微信 5 秒约束不阻塞）。</para>
+    /// </summary>
+    private async Task<string?> ResolveOperationsUrlTemplateAsync(string channelId, CancellationToken ct)
+    {
+        var query = User.GetService<IOperationsConfigQuery>();
+        if (query is null)
+        {
+            return null;
+        }
+        try
+        {
+            var template = await query.GetArticleReplyUrlTemplateAsync(ct);
+            if (!string.IsNullOrWhiteSpace(template))
+            {
+                _logger.LogDebug("事件回复 URL 模板命中运营配置：ChannelId={ChannelId} Template={Template}", channelId, template);
+            }
+            return template;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "运营配置 URL 模板读取失败（回退内置测试端点）：ChannelId={ChannelId}", channelId);
+            return null;
+        }
+    }
 
     /// <summary>构造自定义模板 URL（模板驱动两级模型——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}/{channel_alias}</c>；
     /// D03 1.3：载荷类型改 <see cref="FederatedTicketPayload"/>——<c>{channel_type}</c> = 通道形态（payload.ChannelType），

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.WeChatOperations.DTOs;
 
@@ -139,5 +140,133 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         var fsql = provider.GetRequiredService<IFreeSql>();
         Assert.Equal(0, await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
             .CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    // ============================ D03 1.6 channel alias 规则 ============================
+
+    /// <summary>SaveAsync 新建——请求 Alias 不合法 slug → DomainException CHANNEL_ALIAS_INVALID（消息含实际值）。
+    /// 非法样本：2 位（"AB"——降归一后过短）、1 位（"a"）、下划线（"a_b"）、空格（"a b"）、65 位超长。</summary>
+    [Fact]
+    public async Task Save_NewChannel_InvalidAlias_Throws()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+        var service = user.Use<IChannelConfigService>();
+
+        string[] invalidAliases = { "AB", "a", "a_b", "a b", new string('a', 65) };
+        foreach (var alias in invalidAliases)
+        {
+            var ex = await Assert.ThrowsAsync<DomainException>(() => service.SaveAsync(new SaveChannelRequest(
+                Id: null,
+                ChannelId: "ch-inv-" + Guid.NewGuid().ToString("N")[..6],
+                AppId: "wx-inv-" + Guid.NewGuid().ToString("N")[..6],
+                DisplayName: "非法别名", IsEnabled: true,
+                ChannelType: "wechat_event", Alias: alias),
+                ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal("CHANNEL_ALIAS_INVALID", ex.ErrorCode);
+            Assert.Contains(alias, ex.Message);
+        }
+    }
+
+    /// <summary>SaveAsync 新建——合法 Alias 归一化落库（"My-Shop" → "my-shop"——Trim + ToLowerInvariant）。</summary>
+    [Fact]
+    public async Task Save_NewChannel_ValidAlias_Normalized()
+    {
+        using var _ = this;
+        var (provider, user) = BindScope();
+        var service = user.Use<IChannelConfigService>();
+
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-valid", AppId: "wx-valid", DisplayName: "合法别名", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: " My-Shop "), ct: TestContext.Current.CancellationToken);
+
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var saved = await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("my-shop", saved!.Alias);
+    }
+
+    /// <summary>SaveAsync 更新——既有 alias="shop-a" 请求改 "shop-b" → DomainException CHANNEL_ALIAS_IMMUTABLE
+    /// （alias 不可修改，如需改名请新建通道）。</summary>
+    [Fact]
+    public async Task Save_UpdateChannel_ChangeAlias_Throws()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+        var service = user.Use<IChannelConfigService>();
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-upd1", AppId: "wx-upd1", DisplayName: "一号", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: "shop-a"), ct: TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.SaveAsync(new SaveChannelRequest(
+            Id: id, ChannelId: "ch-upd1", AppId: "wx-upd1", DisplayName: "一号", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: "shop-b"), ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal("CHANNEL_ALIAS_IMMUTABLE", ex.ErrorCode);
+    }
+
+    /// <summary>SaveAsync 更新——请求 Alias 与既有相同 → 成功（不可变守卫仅拦修改，同值放行）。</summary>
+    [Fact]
+    public async Task Save_UpdateChannel_SameAlias_Ok()
+    {
+        using var _ = this;
+        var (provider, user) = BindScope();
+        var service = user.Use<IChannelConfigService>();
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-upd2", AppId: "wx-upd2", DisplayName: "二号", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: "shop-a"), ct: TestContext.Current.CancellationToken);
+
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: id, ChannelId: "ch-upd2", AppId: "wx-upd2", DisplayName: "二号-改名", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: "shop-a"), ct: TestContext.Current.CancellationToken);
+
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var saved = await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("shop-a", saved!.Alias);
+        Assert.Equal("二号-改名", saved.DisplayName);
+    }
+
+    /// <summary>SaveAsync 更新——请求 Alias=null → 保留既有 alias（不清空；null 请求不写 Alias 列）。</summary>
+    [Fact]
+    public async Task Save_UpdateChannel_NullAlias_KeepsExisting()
+    {
+        using var _ = this;
+        var (provider, user) = BindScope();
+        var service = user.Use<IChannelConfigService>();
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-upd3", AppId: "wx-upd3", DisplayName: "三号", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: "shop-a"), ct: TestContext.Current.CancellationToken);
+
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: id, ChannelId: "ch-upd3", AppId: "wx-upd3", DisplayName: "三号-改名", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
+
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var saved = await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("shop-a", saved!.Alias);
+    }
+
+    /// <summary>SaveAsync 更新——既有 alias 为空，请求 "shop-b" → 一次性设置成功（校验通过后写入）。</summary>
+    [Fact]
+    public async Task Save_UpdateChannel_SetAliasOnce_Ok()
+    {
+        using var _ = this;
+        var (provider, user) = BindScope();
+        var service = user.Use<IChannelConfigService>();
+        var id = await service.SaveAsync(new SaveChannelRequest(
+            Id: null, ChannelId: "ch-upd4", AppId: "wx-upd4", DisplayName: "四号", IsEnabled: true,
+            ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
+
+        await service.SaveAsync(new SaveChannelRequest(
+            Id: id, ChannelId: "ch-upd4", AppId: "wx-upd4", DisplayName: "四号", IsEnabled: true,
+            ChannelType: "wechat_event", Alias: "shop-b"), ct: TestContext.Current.CancellationToken);
+
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var saved = await fsql.Select<WeChatChannelConfigEntity>().Where(c => c.Id == id)
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("shop-b", saved!.Alias);
     }
 }

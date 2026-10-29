@@ -133,6 +133,11 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         // V0.3.0 系统状态聚合门面（DMP-Lite 5.8 "系统状态"页四卡——公众号连接状态/今日消息量/
         //   自动回复命中率/转发成功率；只读聚合——ChannelConfig AOP 解析 + DataService Count 原语）
         services.AddConstructibleService<IWeChatOperationsStatusService, WeChatOperationsStatusService>();
+
+        // D03 1.10 运营配置面：管理门面（5 域 GET/PUT + 乐观并发）+ 只读查询（契约在 FA——Federation 编排链
+        //   经 User.Use<IOperationsConfigQuery>() 帧内解析降级文案/模板/TicketMode）
+        services.AddConstructibleService<IOperationsConfigService, OperationsConfigService>();
+        services.AddConstructibleService<IOperationsConfigQuery, WeChatOperationsConfigQuery>();
     }
 
     // ConfigureFilters: 空（非过滤器扩展）

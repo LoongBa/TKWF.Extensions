@@ -74,6 +74,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
     //       + 登录编排门面（V0.5.0/V0.9.0/T5/V0.10.0）：ISmsLoginService / IPasswordLoginService / IExternalIdpLoginService /
 //         IFederatedLoginOrchestrator（V0.10.0 共享编排——code 通道 + 票据通道统一委托）/
 //         IExternalTicketLoginService（V0.10.0 票据 SPA 兑现——POST {prefix}/login/ticket）
+    //       + D03 1.4（L2 预置 + 档案合并 + 弱身份清理）：IExternalIdentityProvisioningService / IWeakIdentityCleanupService
     //         ——控制器经此编排，禁 [FromServices] 集合（T5：IWechatLoginService 已删，外部 IdP 经 IExternalIdpLoginService 桥接）
     //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 密码）
     //   + 12 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
@@ -190,6 +191,8 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 | **`IPasswordResetService`（V0.9.0）** | 找回密码多通道（SMS `SmsScenes.Reset` 现成 / Email `IEmailSender` 可空降级 / 扫码 OAuthTicket 前置——**UId-keyed，不实现 IAccountPasswordManager，自带投递 B.11**） | `PasswordResetService`（internal sealed，本扩展） |
 | **`IAuthGrantQueryService`（V0.8.0）** | 应用授权**查询**门面（只读——`/grants` 端点数据底座：`GetGrantsAsync(userId, appId?)` 按用户/应用查询有效授权，Status=Active 按 CreateTime 倒序） | `AuthGrantQueryService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
 | **`IAuthGrantCommandService`（V0.8.0）** | 应用授权**写入**门面（`RecordLoginGrantAsync` upsert 幂等——`OAuthTicketService.ExchangeAsync` 成功经 `User.Use` 落登录授权；唯一约束 `UX_AuthGrant_User_App_Source` 兜底 TOCTOU；[AllowAnonymousFlag] 匿名面） | `AuthGrantCommandService`（internal sealed，本扩展，委托 `AuthGrantEntityDataService`） |
+| **`IExternalIdentityProvisioningService`（D03 1.4 §6.1/§6.2）** | 事件路径 L2 预置门面——`ProvisionAsync`（与登录路径 `FederatedLoginOrchestrator` 共享映射/建号内核：UId 直读→映射→AutoProvision 门控建号+`LinkAsync` 冲突回滚）+ `MergeProfileAsync`（档案合并 §5.2 优先级 user_filled>merchant_set>oauth_userinfo>event；绝不覆盖 user_filled；「微信用户」默认昵称不覆盖真实值；ProfileSource/LastProfileSourceAt 戳仅字段实际写入时落）；契约依赖 FA `FederatedTicketPayload`（AuthCenter.Abstractions→Federation.Abstractions 契约包引用）；`UserProfileEntity` 增 ProfileSource/LastProfileSourceAt 列 | `ExternalIdentityProvisioningService`（internal sealed，本扩展） |
+| **`IWeakIdentityCleanupService`（D03 1.4 §6.3 O2）** | 弱身份清理能力门面（能力归 AuthCenter、策略归业务）——Query/Purge/Stats；判据 5 条（无 Password/Sms 因素+无档案+未冻结+InactiveDays 阈值）；PurgeMode SoftDelete（IsEnabled=false 留恢复窗口）/PhysicalDelete（GDPR 级联删+强身份守卫）；Stats 为身份形态基线（忽略 InactiveDays） | `WeakIdentityCleanupService`（internal sealed，本扩展） |
 
 ## 四之二、V0.2.0 查询契约与档案能力
 

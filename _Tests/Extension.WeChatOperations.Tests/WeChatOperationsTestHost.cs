@@ -9,9 +9,12 @@ using FreeSql;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Interception;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
@@ -250,6 +253,28 @@ public class WeChatOperationsTestHost : IDisposable
             services.AddSingleton(CircuitBreaker);
     }
 
+    /// <summary>
+    /// 帧内执行辅助——驱动<b>真实生产拦截器</b>（<see cref="StaticDomainInterceptor"/>，消费方装饰器同款入口）
+    /// 构造 AOP 帧：<see cref="StaticDomainInterceptor.InterceptAsync"/> 在 proceed 前设置
+    /// <c>CurrentContext</c>（ambient 域用户——<see cref="StaticDomainInterceptor.CurrentContext"/>）。
+    /// <para>用途：本测试宿主守卫工厂（<c>AddConstructibleService</c>）直建门面实现（无装饰器帧）——
+    /// 经 <see cref="DbWeChatCredentialResolver"/> DB 优先路径（ambient 用户入口）的出站门面调用
+    /// （门面 → <c>WeChatApiClient</c> → resolver）须包帧执行，与生产形态（消费方装饰器帧内执行）一致。</para>
+    /// <para>帧内 User 用测试绑定的 <see cref="DomainUser{TUserInfo}"/>；<see cref="TestFrameHost"/> 仅提供
+    /// 空过滤器的最小 <see cref="IDomainHost"/> 表面（帧机制本身走生产拦截器主链）。</para>
+    /// </summary>
+    public static async Task<T> RunInFrameAsync<T>(
+        IServiceProvider provider, DomainUser<TestUserInfo> user, Func<Task<T>> action)
+    {
+        var interceptor = new StaticDomainInterceptor(
+            new TestFrameHost(user),
+            provider.GetRequiredService<IServiceScopeFactory>());
+        var context = new InvocationContext(new object(), new FrameTarget(), nameof(FrameTarget.Invoke), []);
+        T result = default!;
+        await interceptor.InterceptAsync(context, async () => { result = await action(); });
+        return result;
+    }
+
     /// <summary>模板方法：UnBindScope + Provider 释放 + 清理临时库文件（测试类 <c>using var _ = this</c> 触发）。</summary>
     public void Dispose()
     {
@@ -288,6 +313,32 @@ public class WeChatOperationsTestHost : IDisposable
     {
         var field = typeof(MessageGatewayService).GetField("_gatewayEnabledOverride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         field?.SetValue(null, null);
+    }
+
+    /// <summary>帧目标桩（InvocationContext 需真实 MethodInfo——GetMethodInfo 反射 Name=Invoke）。</summary>
+    private sealed class FrameTarget
+    {
+        public void Invoke() { }
+    }
+
+    /// <summary>
+    /// 最小 <see cref="IDomainHost"/> 表面（测试帧辅助用）——空过滤器 + 直接构造
+    /// <see cref="DomainContext{TUserInfo}"/>（泛型帧——消费方装饰器产泛型 <see cref="DomainContext{TUserInfo}"/>，
+    /// 泛型门面 <see cref="StaticDomainInterceptor{TUserInfo}.CurrentContext"/> 强转依赖泛型形态）：
+    /// 仅供给帧机制所需的构造入口，帧内业务走生产拦截器主链（PreProceed/PostProceed 空过滤器 no-op）。
+    /// </summary>
+    private sealed class TestFrameHost : IDomainHost
+    {
+        private readonly DomainUser<TestUserInfo> _user;
+
+        public TestFrameHost(DomainUser<TestUserInfo> user) => _user = user;
+
+        public DomainContext NewDomainContext(InvocationContext invocation, IServiceProvider sp)
+            => new DomainContext<TestUserInfo>(_user, invocation, new DomainContracts<TestUserInfo>(), sp, NullLoggerFactory.Instance);
+
+        public IReadOnlyList<DomainFilterAttribute> GlobalFilters => Array.Empty<DomainFilterAttribute>();
+        public ILoggerFactory LoggerFactory => NullLoggerFactory.Instance;
+        public DefaultExceptionLoggerFactory? ExceptionLoggerFactory => null;
     }
 
     /// <summary>Stub IHttpClientFactory（返回固定 handler 的 HttpClient——不真打微信）。</summary>

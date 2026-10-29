@@ -168,6 +168,11 @@ namespace TKWF.Ext.AuthCenter;
         // V0.11.0（方案 §4.6 D3）：冻结状态读取提供者——帧内（请求级）快照缓存；活跃判据单点仍在 IFreezeService，
         // 写路径（Freeze/ReleaseFreeze/ReleaseAllFreezes）变更后经 Invalidate 主动失效同帧快照。
         services.AddConstructibleService<IFreezeStateProvider, FreezeStateProvider>();
+
+        // D03 1.4（§6.1/§6.3）：外部身份 L2 预置 + 档案合并门面（事件路径专用——与登录路径 FederatedLoginOrchestrator
+        // 共享映射/建号内核）+ 弱身份清理能力门面（能力归 AuthCenter、策略归业务——调用方传 inactiveDays）。
+        services.AddConstructibleService<IExternalIdentityProvisioningService, ExternalIdentityProvisioningService>();
+        services.AddConstructibleService<IWeakIdentityCleanupService, WeakIdentityCleanupService>();
     }
 
     /// <summary>

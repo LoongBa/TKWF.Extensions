@@ -36,7 +36,8 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        var confirmed = await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
+        var confirmed = await RunInFrameAsync(provider, user,
+            () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
 
         Assert.NotNull(confirmed);   // 拉取确认（发布成功语义）
         // ① menu/create 收到 raw JSON 透传
@@ -80,8 +81,8 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
-        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken);
+        await RunInFrameAsync(provider, user, () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
+        await RunInFrameAsync(provider, user, () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken));
 
         var fsql = provider.GetRequiredService<IFreeSql>();
         var versions = await fsql.Select<MenuVersionEntity>().Where(v => v.ChannelId == "ch-menu")
@@ -103,11 +104,12 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
-        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken);
+        await RunInFrameAsync(provider, user, () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
+        await RunInFrameAsync(provider, user, () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken));
         var v1 = (await service.ListVersionsAsync("ch-menu", TestContext.Current.CancellationToken))[0];
 
-        var confirmed = await service.RollbackAsync("ch-menu", new RollbackMenuRequest(v1.Id), ct: TestContext.Current.CancellationToken);
+        var confirmed = await RunInFrameAsync(provider, user,
+            () => service.RollbackAsync("ch-menu", new RollbackMenuRequest(v1.Id), ct: TestContext.Current.CancellationToken));
 
         Assert.NotNull(confirmed);
         // menu/create 第三次收到 v1 的 AfterJson
@@ -131,7 +133,8 @@ public class MenuServiceTests : WeChatOperationsTestHost
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        var current = await service.GetCurrentAsync("ch-menu", ct: TestContext.Current.CancellationToken);
+        var current = await RunInFrameAsync(provider, user,
+            () => service.GetCurrentAsync("ch-menu", ct: TestContext.Current.CancellationToken));
 
         Assert.NotNull(current);
         Assert.Equal(1, current!.IsMenuOpen);
@@ -161,9 +164,14 @@ public class MenuServiceTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
-        await service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken);
+        await RunInFrameAsync(provider, user,
+            () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
 
-        await service.DeleteAsync("ch-menu", ct: TestContext.Current.CancellationToken);
+        await RunInFrameAsync(provider, user, async () =>
+        {
+            await service.DeleteAsync("ch-menu", ct: TestContext.Current.CancellationToken);
+            return true;
+        });
 
         var fsql = provider.GetRequiredService<IFreeSql>();
         var snapshot = await fsql.Select<MenuSnapshotEntity>().Where(s => s.ChannelId == "ch-menu")

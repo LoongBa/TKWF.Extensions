@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain.Interception;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Federation.WeChat;
 
@@ -14,9 +15,11 @@ namespace TKWF.Ext.WeChatOperations;
 /// 未命中 → 委托缺省 Options 实现（<see cref="WeChatOptions.Channels"/> 按 AppId 精确匹配——现状语义降级））。
 /// <para>⚠️ 契约 <see cref="IWeChatCredentialResolver"/> 为平台库契约<b>非 IDomainService</b>（DB 命中解密返回 +
 /// 未命中回退 Options——try-fail-到-options 降级矩阵，Oracle P2-4 凭证自持语义保持）——<b>接线型</b>
-/// （tkwf-extension §4.8 #7：ctor 收 IServiceProvider + Options + keyed 密钥，普通 DI TryAddScoped 注册；
-/// DataService 经 <c>sp.GetRequiredService&lt;WeChatChannelConfigEntityDataService&gt;()</c> C1 延迟解析——
-/// ⚠️ C1 帧内限制：本 resolver 出站调用在用户帧内（门面/事件 handler）执行，DataService 解析/读取合法）。</para>
+/// （tkwf-extension §4.8 #7：ctor 收 Options + keyed 密钥，普通 DI TryAddScoped 注册；DataService 经
+/// ambient 域用户 <c>StaticDomainInterceptor.CurrentContext?.DomainUser</c>（2026-10-30 框架组转达确认的
+/// 公开入口——AOP 帧内门面/事件 handler 执行期非空）+ <c>User.Use&lt;WeChatChannelConfigEntityDataService&gt;()</c>
+/// NoAop 直建（具体类 → ActivatorUtilities，不查 DI 守卫注册——不再 <c>GetRequiredService&lt;DataService&gt;</c>）。
+/// ⚠️ C1 帧内限制已解除：出站调用链在帧内执行 → DB-first 生效；非 AOP 帧（裸后台任务直调等）→ 降级 Options）。</para>
 /// <para>注册形态：<c>TryAddEnumerable(ServiceDescriptor.Scoped&lt;IWeChatCredentialResolver,
 /// DbWeChatCredentialResolver&gt;())</c>（⚡ 注意：并非 TryAddEnumerableConstructible——契约非 IDomainService，
 /// 普通 DI 集合；平台库 <c>AddWeChatFederationChannels()</c> 已注册缺省 Options 实现（TryAddSingleton）——
@@ -26,41 +29,44 @@ namespace TKWF.Ext.WeChatOperations;
 /// </summary>
 public sealed class DbWeChatCredentialResolver : IWeChatCredentialResolver
 {
-    private readonly IServiceProvider _sp;
     private readonly IOptions<WeChatOptions> _options;
     private readonly ISymmetricKeyProvider _keys;
     private readonly ILogger<DbWeChatCredentialResolver> _logger;
 
-    private WeChatChannelConfigEntityDataService? _ds;
-    private WeChatChannelConfigEntityDataService Ds => _ds ??= _sp.GetRequiredService<WeChatChannelConfigEntityDataService>();
-
     public DbWeChatCredentialResolver(
-        IServiceProvider sp,
         IOptions<WeChatOptions> options,
         [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)] ISymmetricKeyProvider keys,
         ILogger<DbWeChatCredentialResolver> logger)
     {
-        _sp = sp ?? throw new ArgumentNullException(nameof(sp));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
-    /// DB 读取（fail-safe）：DataService 的 DI 注册为守卫工厂，仅 <c>User.Use&lt;T&gt;()</c> 帧内可解析；
-    /// 本解析器为普通 DI（无帧用户），出站调用期帧已关闭 → 解析失败按「DB 不可用」降级 Options
-    /// （不抛出——避免把整个出站链路打成 500）。DB 命中优先生效路径待框架暴露 ambient 用户入口后启用。
+    /// DB 读取（fail-safe）：DataService 为守卫工厂注册，经 ambient 域用户 <c>User.Use&lt;T&gt;()</c>
+    /// 帧内 NoAop 直建（具体类 → ActivatorUtilities，不查 DI 注册——守卫不会触发）。
+    /// 非 AOP 帧（现网应不触达——裸后台任务直调等）→ 按「DB 不可用」降级 Options
+    /// （不抛出——避免把整个出站链路打成 500）。
     /// </summary>
     private async Task<WeChatChannelConfigEntity?> TryGetEntityAsync(string appId, CancellationToken ct)
     {
+        // 出站调用链在 AOP 帧内（门面/事件 handler 执行期）——取 ambient 域用户；非 AOP 帧 → 降级 Options
+        var user = StaticDomainInterceptor.CurrentContext?.DomainUser;
+        if (user is null)
+        {
+            _logger.LogWarning("微信 DB 凭证解析跳过（非 AOP 帧）——降级 Options 按 AppId 匹配");
+            return null;
+        }
+
         try
         {
-            return await Ds.EntityGetAsync(e => e.AppId == appId, ct);
+            var ds = user.Use<WeChatChannelConfigEntityDataService>();
+            return await ds.EntityGetAsync(e => e.AppId == appId, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(
-                "微信 DB 凭证解析不可用——本次降级 Options（Channels 按 AppId 匹配）：{Message}", ex.Message);
+            _logger.LogWarning("微信 DB 凭证解析失败——降级 Options：{Message}", ex.Message);
             return null;
         }
     }

@@ -52,13 +52,15 @@ public class MenuClickKeyTests : WeChatOperationsTestHost
     {
         using var _ = this;
         Handler = WeChatOperationsTestSupport.CreateStubHandler(menuJson: NestedMenuJson);
-        var (_, user) = BindScope();
+        var (provider, user) = BindScope();
         await SeedConfigAsync(user);
         var service = user.Use<IMenuService>();
 
-        // 发布菜单（menu/create raw 透传——快照取拉取确认的嵌套菜单结构）
-        await service.PublishAsync(Ch, new PublishMenuRequest("""{"button":[{"type":"click","name":"提交菜单","key":"RAW"}]}"""),
-            TestContext.Current.CancellationToken);
+        // 发布菜单（menu/create raw 透传——快照取拉取确认的嵌套菜单结构；出站调用包帧——
+        // 测试宿主守卫工厂直建实现（无装饰器帧），微信 API 出站链（门面 → WeChatApiClient → 凭证 DB 优先）须帧内执行）
+        await WeChatOperationsTestHost.RunInFrameAsync(provider, user,
+            () => service.PublishAsync(Ch, new PublishMenuRequest("""{"button":[{"type":"click","name":"提交菜单","key":"RAW"}]}"""),
+                TestContext.Current.CancellationToken));
 
         var keys = await service.GetClickKeysAsync(Ch, TestContext.Current.CancellationToken);
 

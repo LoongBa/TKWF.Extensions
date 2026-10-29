@@ -52,6 +52,19 @@ namespace TKWF.Ext.AuthCenter
         [MaxLength(64)]
         public string? Email { get; set; }
 
+        /// <summary>
+        /// 档案来源（D03 1.4 §6.2——字符串常量见 <see cref="ProfileSource"/>：user_filled/oauth_userinfo/event/merchant_set）。
+        /// <para>记录级 last-write-wins（Obs1）；字段级保护由合并策略「绝不覆盖 user_filled」兜底——本列仅溯源，
+        /// 不代表每字段均为该源写入。</para>
+        /// </summary>
+        [FreeSql.DataAnnotations.Column(Position = 10)]
+        [MaxLength(32)]
+        public string? ProfileSource { get; set; }
+
+        /// <summary>最近档案来源写入时刻（UTC，可空——未做过档案合并的纯自建账号）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 11)]
+        public DateTime? LastProfileSourceAt { get; set; }
+
         /// <summary>创建时间（UTC）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 8)]
         public DateTime CreateTime { get; set; } = DateTime.UtcNow;

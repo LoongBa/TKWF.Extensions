@@ -27,7 +27,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 平台网关库（库引——通讯走平台库，单向依赖无循环；设计文档 §3.3.4：DbWeChatCredentialResolver/DbWeChatChannelSource
+    <!-- 平台网关库（库引——通讯走平台库，单向依赖无循环；设计文档 §3.3.4：DbWeChatCredentialResolver/WeChatChannelRegistrySource
          消费 Federation.WeChat 出站/验签/事件回复逻辑，此处仅声明库引用，凭证/事件能力由后续门面任务装配） -->
     <ProjectReference Include="..\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
     <!-- 网关运行库（纯逻辑零实体零持久化——V0.2.0 增网关模块：路由规则判定/幂等键规范化/转发决策与降级链/熔断状态机；

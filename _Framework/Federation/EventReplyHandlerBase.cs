@@ -10,16 +10,22 @@ using TKW.Framework.Domain.Ticket;
 namespace TKWF.Ext.Federation;
 
 /// <summary>
-/// 事件回复 handler 基类（外部身份联邦 E3 高内聚设施——方案 docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md）。
+/// 事件回复 handler 基类（外部身份联邦 E3 高内聚设施——方案 docs/Federation/EventReplyHandlerBase与内置测试Handler-开发方案.md；
+/// D03 1.3——签票载荷切换 <see cref="FederatedIdentity"/> → <see cref="FederatedTicketPayload"/>）。
 /// <para>模板方法封装"签密封票据 → 构造图文（news）链接"——子类只需实现
 /// <see cref="BuildReplyAsync"/>（业务规则：检查 context → 返回载荷或 null）。</para>
-/// <para>高内聚核心：经 <see cref="ISealedTicketService{T}"/>（<c>ISealedTicketService&lt;FederatedIdentity&gt;</c>
-/// ——TrustCenter DB 后端）签密封票据（FederatedIdentity 载荷 AES-GCM 加密落库 + ExpectedClaimant 原子 CAS），
+/// <para>高内聚核心：经 <see cref="ISealedTicketService{T}"/>（<c>ISealedTicketService&lt;FederatedTicketPayload&gt;</c>
+/// ——TrustCenter DB 后端）签密封票据（载荷 AES-GCM 加密落库 + ExpectedClaimant 原子 CAS），
 /// 自动构造 <see cref="EventReplyNewsArticle"/> 图文链接（URL 指内置测试端点
 /// <c>{BaseUrl?}/{RoutePrefix}/{platformId}/test/{channelId}/{ticket}</c>——platformId 经
-/// <see cref="IChannelRegistry"/> 从 identity.ChannelId 反查，BaseUrl 空 = 相对路径默认指向本服务同源）——
-/// 减少业务 handler 样板代码。
-/// （ADR109 D4 拆分命名——面① 密封票据替代旧 <c>IAccessCodeService.IssueAsync(payloadJson, ttl, claimant)</c>。）</para>
+/// <see cref="IChannelRegistry"/> 从 ChannelId 反查，BaseUrl 空 = 相对路径默认指向本服务同源）——
+/// 减少业务 handler 样板代码。</para>
+/// <para>载荷切换语义（D03 §6.1 A7/P2 定稿）：子类产 <see cref="EventReplyPayload.PayloadJson"/>
+/// 为 <see cref="FederatedTicketPayload"/> 序列化 JSON——基类反序列化还原后经
+/// <see cref="FederatedTicketPayloadBuilder"/> 语义校验（provider×channelType 取值矩阵）签发；
+/// ⚠️ 子类构造点须组装 payload（ChannelType = 通道形态 mp_service...，协议类型进
+/// Extensions["protocol_type"]）——误传协议类型（wechat_event）会被校验拦截（Oracle6 条件 4）。
+/// <see cref="FederatedIdentity"/> 不再承载本链路载荷（框架通用类型经 SsoSubAppBridge/LoginAsFederatedAsync 保留）。</para>
 /// <para>注册：消费方 <c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, X&gt;()</c>
 /// （ADR92 集合版守卫工厂——帧内供给 IDomainUser；守卫工厂 ActivatorUtilities 构造，子类 ctor 仅 IDomainUser，
 /// 配置经 <see cref="IOptions{TOptions}"/> 惰性读取——不构造注入 Options）。</para>
@@ -71,18 +77,18 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         if (payload is null)
             return null;
 
-        // 高内聚核心：签密封票据（面① ADR109 D4——FederatedIdentity 载荷 JSON 反序列化 → AES-GCM 落库 +
+        // 高内聚核心：签密封票据（D03 1.3——FederatedTicketPayload 载荷 JSON 反序列化 → AES-GCM 落库 +
         // ExpectedClaimant 原子 CAS）→ 图文链接 URL（ticket 携带 code）
-        var identity = JsonSerializer.Deserialize<FederatedIdentity>(payload.PayloadJson);
-        if (identity is null)
+        var ticketPayload = JsonSerializer.Deserialize<FederatedTicketPayload>(payload.PayloadJson);
+        if (ticketPayload is null)
             return null;
 
-        var issue = await User.Use<ISealedTicketService<FederatedIdentity>>()
-            .IssueAsync(identity, payload.Ttl, new SealedTicketOptions(ExpectedClaimant: payload.ExpectedClaimant), ct);
+        var issue = await User.Use<ISealedTicketService<FederatedTicketPayload>>()
+            .IssueAsync(ticketPayload, payload.Ttl, new SealedTicketOptions(ExpectedClaimant: payload.ExpectedClaimant), ct);
         // URL 模式（模板驱动两级模型）：LinkTemplate 配置 → 占位符替换（{ticket} 等）；空 → 回退内置测试端点 URL
         var url = string.IsNullOrWhiteSpace(payload.LinkTemplate)
             ? BuildTestTicketUrl(issue.Ticket, channelCfg.PlatformType, channelCfg.ChannelId)
-            : BuildTemplateUrl(payload.LinkTemplate, issue.Ticket, channelCfg, identity);
+            : BuildTemplateUrl(payload.LinkTemplate, issue.Ticket, channelCfg, ticketPayload);
         return new EventReplyResult(
             Content: string.Empty,
             ContentType: "text/xml",
@@ -115,20 +121,26 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     protected string BuildTestTicketUrl(string ticket, string platformId, string channelId)
         => LoginEntryService.CombineUrl(TestTicketEndpointBaseUrl, RoutePrefix, $"{platformId}/test/{channelId}/{ticket}");
 
-    /// <summary>构造自定义模板 URL（模板驱动两级模型——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}</c>）。</summary>
-    protected string BuildTemplateUrl(string linkTemplate, string ticket, ChannelConfig channel, FederatedIdentity identity)
+    /// <summary>构造自定义模板 URL（模板驱动两级模型——LinkTemplate 占位符替换：<c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}/{channel_alias}</c>；
+    /// D03 1.3：载荷类型改 <see cref="FederatedTicketPayload"/>——<c>{channel_type}</c> = 通道形态（payload.ChannelType），
+    /// 新增 <c>{channel_alias}</c>（D03 §八 白名单占位符——值取 <see cref="ChannelConfig.Alias"/> 非用户输入）。
+    /// ⚠️ 注意：<c>{channel_type}</c> 语义为形态（mp_service）——业务模板段（mid 等）字面输出不解析（§八）。</summary>
+    protected string BuildTemplateUrl(string linkTemplate, string ticket, ChannelConfig channel, FederatedTicketPayload payload)
         => linkTemplate
             .Replace("{ticket}", ticket)
-            .Replace("{uid}", identity.UId ?? string.Empty)
-            .Replace("{openid}", identity.ExternalUserId ?? string.Empty)
+            .Replace("{uid}", payload.PlatformUid ?? string.Empty)
+            .Replace("{openid}", payload.ExternalUserId ?? string.Empty)
             .Replace("{channel_id}", channel.ChannelId)
-            .Replace("{channel_type}", channel.PlatformType);
+            .Replace("{channel_type}", payload.ChannelType)
+            .Replace("{channel_alias}", channel.Alias ?? string.Empty);
 
     /// <summary>
     /// 子类载荷 DTO（Title/Description/PayloadJson/Ttl/ExpectedClaimant/PicUrl/LinkTemplate——签密封票据与图文构造输入；
-    /// PayloadJson = <see cref="FederatedIdentity"/> 序列化 JSON——基类反序列化后经
-    /// <see cref="ISealedTicketService{T}"/> 签发；LinkTemplate 空 = 内置测试端点 URL，非空 = 模板 URL
-    /// （占位符 <c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}</c> 签票后替换——模板驱动两级模型第一级）。
+    /// PayloadJson = <see cref="FederatedTicketPayload"/> 序列化 JSON（D03 1.3——基类反序列化后经
+    /// <see cref="ISealedTicketService{T}"/> 签发；⚠️ 子类构造点组装 payload：ChannelType=通道形态、
+    /// 协议类型进 Extensions["protocol_type"]——误传被 ChannelTypeRegistry 拦截，Oracle6 条件 4）；
+    /// LinkTemplate 空 = 内置测试端点 URL，非空 = 模板 URL（占位符 <c>{ticket}/{uid}/{openid}/{channel_id}/{channel_type}/{channel_alias}</c>
+    /// 签票后替换——模板驱动两级模型第一级）。
     /// </summary>
     protected sealed record EventReplyPayload(
         string Title,

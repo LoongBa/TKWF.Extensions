@@ -36,7 +36,7 @@ namespace TKWF.Federation.WeChat;
 /// <see cref="ReplacePlaceholders"/>（占位符替换 <c>{uid}/{openid}/{channel_id}/{channel_type}</c>；
 /// <c>{ticket}</c> 不替换——本基类无签票耦合，方案 §3.3）。</para>
 /// <para><b>签票能力边界</b>（方案 §3.2）：签票（<see cref="ISealedTicketService{T}"/> 图文链接）不再经继承
-/// 获得——业务 handler 需要签票时经 <c>User.Use&lt;ISealedTicketService&lt;FederatedIdentity&gt;&gt;()</c>
+/// 获得——业务 handler 需要签票时经 <c>User.Use&lt;ISealedTicketService&lt;FederatedTicketPayload&gt;&gt;()（D03 1.3 载荷切换——联邦免登域专用载荷；框架通用 FederatedIdentity 经子应用委托面保留）</c>
 /// 懒加载直接调（DI004 合规），或选用主包 <see cref="EventReplyHandlerBase"/>（签票专用基类）。</para>
 /// <para>注册：消费方 <c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, X&gt;()</c>
 /// （ADR92 集合版守卫工厂——帧内供给 IDomainUser；ctor 仅 IDomainUser + 可空 ILogger）。</para>

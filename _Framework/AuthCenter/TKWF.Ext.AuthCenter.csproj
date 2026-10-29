@@ -46,6 +46,14 @@
     <ProjectReference Include="..\Emailing.Abstractions\TKWF.Ext.Emailing.Abstractions.csproj" />
   </ItemGroup>
 
+  <!-- D03 1.3（2026-10-30 载荷切换）：外部 IdP 票据兑付面（ExternalTicketLoginService）消费
+       FederatedTicketPayload（FederatedTicketPayloadExtensions.ToFederatedIdentity 适配编排输入）——
+       引 Federation.Abstractions 契约包（L2 门控合法：契约包非主包，对齐 TrustCenter → FA 先例；
+       FA 仅依赖 TKWF.Domain 无循环；AuthCenter 仍不引 Federation 主包——对外连接层正交） -->
+  <ItemGroup>
+    <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
+  </ItemGroup>
+
   <!-- V0.9.0（ADR-密码策略与口令协议 决策 6/7）：账号冻结/解冻 SecurityLog 事件直写——引 SecurityLog.Abstractions 契约包
        （L2 门控；冻结门面经 User.Use<ISecurityLogStore>() 直写 Freeze/Unfreeze，自读 IOptions<SecurityLoggingOptions> 门控） -->
   <ItemGroup>

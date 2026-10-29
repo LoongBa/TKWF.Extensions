@@ -113,9 +113,9 @@ internal static class FederationEndpointHost
             // 测试宿主 Replace 为普通 Scoped Fake 编排（复刻真实行为：通道 HandleEventAsync + uid 只读富化 +
             // handler first-non-null-wins——无守卫依赖，规避守卫工厂与 TestMetaContext 空上下文的发现不确定性）
             svc.Replace(ServiceDescriptor.Scoped<IEventOrchestrator>(_ => Orchestrator));
-            // ISealedTicketService<FederatedIdentity>：面① 密封票据（测试端点 HandleTestTicket RedeemAsync 依赖）——
+            // ISealedTicketService<FederatedTicketPayload>：面① 密封票据（测试端点 HandleTestTicket RedeemAsync 依赖）——
             // 契约在主框架 TKW.Framework.Domain.Ticket；宿主仅启用 Federation（无 TrustCenter 初始器注册）→ AddScoped 直注 Fake
-            svc.AddScoped<ISealedTicketService<FederatedIdentity>>(_ => Ticket);
+            svc.AddScoped<ISealedTicketService<FederatedTicketPayload>>(_ => Ticket);
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -496,20 +496,20 @@ internal static class FederationEndpointHost
         }
     }
 
-    /// <summary>Fake 面① 密封票据服务（ISealedTicketService&lt;FederatedIdentity&gt;——测试端点 HandleTestTicket
+    /// <summary>Fake 面① 密封票据服务（ISealedTicketService&lt;FederatedTicketPayload&gt;——测试端点 HandleTestTicket
     /// RedeemAsync 依赖）：记录 ticket/context + 返回可配置 RedeemResult（null = 未发现/过期/已用 → 404）。</summary>
-    internal sealed class FakeSealedTicketService : ISealedTicketService<FederatedIdentity>
+    internal sealed class FakeSealedTicketService : ISealedTicketService<FederatedTicketPayload>
     {
-        public FederatedIdentity? RedeemResult { get; set; }
+        public FederatedTicketPayload? RedeemResult { get; set; }
         public string? LastTicket { get; private set; }
         public TicketRedeemContext? LastContext { get; private set; }
 
         public void Reset() { RedeemResult = null; LastTicket = null; LastContext = null; }
 
-        public Task<SealedTicketResult> IssueAsync(FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
+        public Task<SealedTicketResult> IssueAsync(FederatedTicketPayload payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public Task<FederatedIdentity?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
+        public Task<FederatedTicketPayload?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
         {
             LastTicket = ticket;
             LastContext = context;

@@ -31,7 +31,7 @@ public sealed class LoginEntryServiceTests : TestHostBase
     protected override void ConfigureHost(IServiceCollection services)
     {
         new FederationExtensionInitializer<TestUserInfo>().ConfigureServices(services);
-        services.AddScoped<ISealedTicketService<FederatedIdentity>>(_ => _ticket);
+        services.AddScoped<ISealedTicketService<FederatedTicketPayload>>(_ => _ticket);
         services.AddScoped<ISsoChannelFactory>(_ => new FakeFactory(_channel));
     }
 
@@ -91,11 +91,13 @@ public sealed class LoginEntryServiceTests : TestHostBase
         var url = await user.Use<ILoginEntryService>().BuildTicketUrlAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
 
         Assert.Equal("https://sso.example.com/feberation/login/ticket?ticket=ticket-abc-123", url);
-        // 签票载荷（FederatedIdentity 四要素——identity.ChannelId/ExternalUserId/ChannelType + UId 空 = null-claimant 语义）
+        // 签票载荷（FederatedTicketPayload——D03 1.3：ChannelId/ExternalUserId/协议类型双写 + UId 空 = null-claimant 语义）
         var issued = Assert.Single(_ticket.Issued);
-        Assert.Equal("mp-1", issued.Identity.ChannelId);
-        Assert.Equal("openid-1", issued.Identity.ExternalUserId);
-        Assert.Equal("wechat_event", issued.Identity.ChannelType);
+        Assert.Equal("mp-1", issued.Payload.ChannelId);
+        Assert.Equal("openid-1", issued.Payload.ExternalUserId);
+        Assert.Equal("wechat_event", issued.Payload.Extensions?[FederatedTicketPayloadExtensions.ProtocolTypeKey]);
+        Assert.Null(issued.Payload.PlatformUid);    // uId 未传 → null-claimant（免登编排映射/建号兜底）
+        Assert.Equal("mp_subscription", issued.Payload.ChannelType);   // 形态回退（wechat_event → mp_subscription）
     }
 
     /// <summary>ttlSeconds 显式传入 → 覆盖 Options.TicketTtlSeconds（模板 TTL 优先语义）。</summary>
@@ -218,20 +220,20 @@ public sealed class LoginEntryServiceTests : TestHostBase
     // ── 测试设施 ──
 
     /// <summary>可签发票务服务（Fake ISealedTicketService&lt;FederatedIdentity&gt;——返回固定 ticket + 记录签发载荷）。</summary>
-    private sealed class IssuingTicketService : ISealedTicketService<FederatedIdentity>
+    private sealed class IssuingTicketService : ISealedTicketService<FederatedTicketPayload>
     {
         public string? IssueResult { get; set; } = "ticket-fixed";
         public bool ThrowOnIssue { get; set; }
-        public List<(FederatedIdentity Identity, TimeSpan Ttl)> Issued { get; } = [];
+        public List<(FederatedTicketPayload Payload, TimeSpan Ttl)> Issued { get; } = [];
 
-        public Task<SealedTicketResult> IssueAsync(FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
+        public Task<SealedTicketResult> IssueAsync(FederatedTicketPayload payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
         {
             if (ThrowOnIssue) throw new InvalidOperationException("票据后端不可用模拟");
             Issued.Add((payload, ttl));
             return Task.FromResult(new SealedTicketResult(IssueResult ?? "ticket-fixed", 300));
         }
 
-        public Task<FederatedIdentity?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
+        public Task<FederatedTicketPayload?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
             => throw new NotSupportedException();
 
         public Task<int> CleanupExpiredAsync(CancellationToken ct = default)

@@ -70,7 +70,10 @@ namespace TKWF.Ext.TrustCenter;
         services.AddConstructibleService<ISsoClientService, SsoClientService>();
         // 拆分命名（2026-10-16，ADR109 D4——AccessCode 拆 SealedTicket/AuthorizationCode，旧命名 2026-10-16 全删）：
         // 面① 密封票据 DB CAS 后端（SealedTicketService<T>——逐 T 注册，蓝图 D1 当前仅 FederatedIdentity 一例；
-        //       P2 单一事实源，无适配器间接层）
+        //       P2 单一事实源，无适配器间接层；FederatedIdentity 为主框架 Core 类型（TrustCenter 依赖面内）——
+        //       D03 1.3 起联邦免登载荷 FederatedTicketPayload（Federation.Abstractions 域类型）注册移出：
+        //       TrustCenter 纯信任内核不反向引用 FA（TrustCenter ⟂ Federation 分层），消费方装配
+        //       services.AddSealedTicketFor<FederatedTicketPayload>() 闭合（SealedTicketRegistrationExtensions））
         services.AddConstructibleService<ISealedTicketService<FederatedIdentity>, SealedTicketService<FederatedIdentity>>();
         // 面② OAuth 授权码（AuthorizationCodeService——SSO 联邦流）
         services.AddConstructibleService<IAuthorizationCodeService, AuthorizationCodeService>();

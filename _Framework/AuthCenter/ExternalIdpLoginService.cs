@@ -73,6 +73,9 @@ public sealed class ExternalIdpLoginService : DomainServiceBase, IExternalIdpLog
 
             // ③ 委托共享编排（P2-2）：构建 FederatedIdentity（UId 恒空——认证结果无平台内部 id，走映射/建号路径）
             //    → IFederatedLoginOrchestrator（映射命中复用 / 建号 + LinkAsync / 回读守卫 / 签 token1）→ TokenResponse
+            //    ⚠️ 本路径**不经票据**（code 通道直达编排）——载荷类型保持框架通用 FederatedIdentity（D03 A7/P2：
+            //    编排签名吃 FederatedIdentity；票据链 ExternalTicketLoginService 兑票得 FederatedTicketPayload
+            //    后经 ToFederatedIdentity() 适配再进编排——两通道在编排口收敛，语义归一）
             var identity = new FederatedIdentity(
                 UId: string.Empty,
                 ChannelId: channelId,

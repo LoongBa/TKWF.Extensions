@@ -617,8 +617,9 @@ public sealed class FederationWebExtensionTests
     public async Task TestTicket_ByPlatformAndChannel_ReturnsPayload()
     {
         FederationEndpointHost.Reset();
-        FederationEndpointHost.Ticket.RedeemResult = new FederatedIdentity(
-            UId: "u-100", ChannelId: "wechat-mp", ExternalUserId: "ext-100", ChannelType: "wechat_event");
+        FederationEndpointHost.Ticket.RedeemResult = FederatedTicketPayloadBuilder.Build(
+            provider: "wechat", protocolChannelType: "wechat_event", channelId: "wechat-mp",
+            externalUserId: "ext-100", platformUid: "u-100", assurance: "event");
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
@@ -627,10 +628,10 @@ public sealed class FederationWebExtensionTests
         Assert.Contains("text/html", resp.Content.Headers.ContentType?.ToString());
         var body = await resp.Content.ReadAsStringAsync();
         Assert.Contains("票据兑验成功", body);
-        Assert.Contains("u-100", body);                 // uid（签入载荷）
+        Assert.Contains("u-100", body);                 // uid（签入载荷 PlatformUid）
         Assert.Contains("wechat-mp", body);             // channel_id（签入载荷 ChannelId——选区无关）
         Assert.Contains("ext-100", body);               // external_user_id
-        Assert.Contains("wechat_event", body);          // channel_type
+        Assert.Contains("wechat_event", body);          // protocol_type（协议类型——测试端点展示字段）
         Assert.Equal("ticket-1", FederationEndpointHost.Ticket.LastTicket);   // RedeemAsync 收到 ticket
         Assert.Null(FederationEndpointHost.Ticket.LastContext);               // 测试端点 Redeem context=null（可转让语义）
     }
@@ -642,8 +643,9 @@ public sealed class FederationWebExtensionTests
     public async Task TestTicket_HtmlEscapesExternalInput()
     {
         FederationEndpointHost.Reset();
-        FederationEndpointHost.Ticket.RedeemResult = new FederatedIdentity(
-            UId: "u-100", ChannelId: "wechat-mp", ExternalUserId: "<script>alert(1)</script>", ChannelType: "wechat_event");
+        FederationEndpointHost.Ticket.RedeemResult = FederatedTicketPayloadBuilder.Build(
+            provider: "wechat", protocolChannelType: "wechat_event", channelId: "wechat-mp",
+            externalUserId: "<script>alert(1)</script>", platformUid: "u-100", assurance: "event");
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");

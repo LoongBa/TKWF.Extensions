@@ -61,7 +61,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
     protected override void ConfigureHost(IServiceCollection services)
     {
         // Fake 密封票据服务（面①——记录 payload/claimant）
-        services.AddScoped<ISealedTicketService<FederatedIdentity>>(_ => _codes);
+        services.AddScoped<ISealedTicketService<FederatedTicketPayload>>(_ => _codes);
 
         // Fake 通道注册表（channelId → PlatformType 反查——图文链接 {platformId} 段）
         services.AddScoped<IChannelRegistry>(_ => _registry);
@@ -103,12 +103,12 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
             Ctx(("external_user_id", "openid-1"), ("uid", "u-1"), ("channel_id", "probe-channel")),   // channel_id 基类入口预查 cfg 必需
             CancellationToken.None);
 
-        // 签密封票据被调用（FederatedIdentity 载荷反序列化 + ExpectedClaimant 透传）
+        // 签密封票据被调用（FederatedTicketPayload 载荷反序列化 + ExpectedClaimant 透传——D03 1.3）
         Assert.True(_codes.Issued);
-        Assert.NotNull(_codes.LastIssuedIdentity);
-        Assert.Equal("probe-uid", _codes.LastIssuedIdentity!.UId);
-        Assert.Equal("probe-channel", _codes.LastIssuedIdentity.ChannelId);
-        Assert.Equal("probe-ext", _codes.LastIssuedIdentity.ExternalUserId);
+        Assert.NotNull(_codes.LastIssuedPayload);
+        Assert.Equal("u-u", _codes.LastIssuedPayload.PlatformUid);       // payload.PlatformUid（探针载荷 UId 槽位）
+        Assert.Equal("probe-channel", _codes.LastIssuedPayload.ChannelId);
+        Assert.Equal("probe-ext", _codes.LastIssuedPayload.ExternalUserId);
         Assert.Equal("claimant-1", _codes.LastClaimant);
         // 图文（news）链接返回（platformId 经基类入口预查 cfg：probe-channel → probe）
         Assert.NotNull(reply);
@@ -215,30 +215,31 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
                 new EventReplyPayload(
                     Title: $"探针回复{extraSuffix}",
                     Description: "探针载荷",
-                    PayloadJson: """{"UId":"probe-uid","ChannelId":"probe-channel","ExternalUserId":"probe-ext"}""",
+                    // D03 1.3：PayloadJson = FederatedTicketPayload 序列化（字段语义：PlatformUid/ChannelId/ExternalUserId/ChannelType 形态/Extensions protocol_type）
+                    PayloadJson: """{"Provider":"probe","ChannelType":"mp_subscription","ChannelId":"probe-channel","ChannelAlias":null,"ExternalUserId":"probe-ext","UnionId":null,"PlatformUid":"u-u","Assurance":"event","Iat":0,"Exp":0,"Jti":"jti-1","Extensions":{"protocol_type":"probe_event"}}""",
                     Ttl: TimeSpan.FromMinutes(5),
                     ExpectedClaimant: "claimant-1"));
         }
     }
 
-    /// <summary>Fake 密封票据服务（ISealedTicketService&lt;FederatedIdentity&gt;——面① 记录 payload/claimant/ttl）。</summary>
-    private sealed class FakeSealedTicketService : ISealedTicketService<FederatedIdentity>
+    /// <summary>Fake 密封票据服务（ISealedTicketService&lt;FederatedTicketPayload&gt;——面① 记录 payload/claimant/ttl）。</summary>
+    private sealed class FakeSealedTicketService : ISealedTicketService<FederatedTicketPayload>
     {
         public bool Issued { get; private set; }
-        public FederatedIdentity? LastIssuedIdentity { get; private set; }
+        public FederatedTicketPayload? LastIssuedPayload { get; private set; }
         public string? LastClaimant { get; private set; }
         public int? LastTtlSeconds { get; private set; }
 
-        public Task<SealedTicketResult> IssueAsync(FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
+        public Task<SealedTicketResult> IssueAsync(FederatedTicketPayload payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
         {
             Issued = true;
-            LastIssuedIdentity = payload;
+            LastIssuedPayload = payload;
             LastClaimant = options?.ExpectedClaimant;
             LastTtlSeconds = (int)ttl.TotalSeconds;
             return Task.FromResult(new SealedTicketResult("ac-1", 120));
         }
 
-        public Task<FederatedIdentity?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
+        public Task<FederatedTicketPayload?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
             => throw new NotSupportedException();
 
         public Task<int> CleanupExpiredAsync(CancellationToken ct = default)

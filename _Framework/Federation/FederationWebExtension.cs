@@ -356,14 +356,14 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
         try
         {
-            var identity = await GetGuest(ctx).Use<ISealedTicketService<TKW.Framework.Domain.FederatedIdentity>>()
+            var payload = await GetGuest(ctx).Use<ISealedTicketService<FederatedTicketPayload>>()
                 .RedeemAsync(ticket, context: null, ct);
-            if (identity is null)
+            if (payload is null)
                 return Results.Json(new ErrorResponse("TICKET_NOT_FOUND", null),
                     statusCode: StatusCodes.Status404NotFound);
 
             // 200 HTML 展示页（微信内置浏览器渲染——裸 JSON 白屏无反应，2026-10-26 修复）
-            var html = BuildTestTicketHtml(identity);
+            var html = BuildTestTicketHtml(payload);
             return Results.Content(html, "text/html; charset=utf-8");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -375,16 +375,25 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     }
 
     /// <summary>测试端点 HTML 展示页（图文卡片点击落点——内联样式零依赖，微信内置浏览器可渲染；
-    /// 字段 HTML 转义防注入——externalUserId 来自微信回调外部输入）。</summary>
-    private static string BuildTestTicketHtml(TKW.Framework.Domain.FederatedIdentity identity)
+    /// 字段 HTML 转义防注入——externalUserId 来自微信回调外部输入；D03 1.3：载荷改
+    /// <see cref="FederatedTicketPayload"/>——channel_type 显示协议类型（Extensions["protocol_type"]，兼容回退
+    /// 形态映射），并附平台/通道形态字段）。</summary>
+    private static string BuildTestTicketHtml(FederatedTicketPayload payload)
     {
         static string Esc(string? v) => System.Net.WebUtility.HtmlEncode(v ?? "");
+        var protocolType = payload.Extensions?.TryGetValue(FederatedTicketPayloadExtensions.ProtocolTypeKey, out var pt) == true
+            && !string.IsNullOrEmpty(pt)
+            ? pt
+            : (FederatedTicketPayloadExtensions.ProtocolTypeFallback.TryGetValue(payload.ChannelType, out var fb) ? fb : payload.ChannelType);
         var rows = new[]
         {
-            ("uid", Esc(identity.UId)),
-            ("channel_id", Esc(identity.ChannelId)),
-            ("external_user_id", Esc(identity.ExternalUserId)),
-            ("channel_type", Esc(identity.ChannelType)),
+            ("uid", Esc(payload.PlatformUid)),
+            ("provider", Esc(payload.Provider)),
+            ("channel_id", Esc(payload.ChannelId)),
+            ("channel_alias", Esc(payload.ChannelAlias)),
+            ("external_user_id", Esc(payload.ExternalUserId)),
+            ("channel_type", Esc(payload.ChannelType)),
+            ("protocol_type", Esc(protocolType)),
         };
         var trs = string.Concat(rows.Select(r => $"<tr><th align=\"left\" style=\"padding:8px 16px 8px 0;color:#666\">{r.Item1}</th><td style=\"padding:8px 0\">{r.Item2}</td></tr>"));
         return $"""
@@ -402,8 +411,8 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     }
 
     /// <summary>免登落地端点（GET {prefix}/land/{ticket}，匿名游客帧，默认关——v0.12.0 排他单模型登录闭环）：
-    /// 兑换密封票据（<see cref="ISealedTicketService{T}.RedeemAsync"/> 原子取回 FederatedIdentity——复用
-    /// <see cref="HandleTestTicket"/> 同款验票语义）→ 302 到 <see cref="FederationEndpointOptions.LandRedirectUrl"/>
+    /// 兑换密封票据（<see cref="ISealedTicketService{T}.RedeemAsync"/> 原子取回 FederatedTicketPayload——复用
+    /// <see cref="HandleTestTicket"/> 同款验票语义；D03 1.3 载荷切换）→ 302 到 <see cref="FederationEndpointOptions.LandRedirectUrl"/>
     /// 携带 <c>?ticket=&amp;uid=</c>（两步登录闭环——Federation 主包不引 AuthCenter 实现库门面，建会话归消费方
     /// 落地页调自有 <c>POST /login/ticket</c>）；失败/过期/已用 → 404（契约语义对齐测试端点）。
     /// <para>防开放重定向：<see cref="FederationEndpointOptions.LandRedirectUrl"/> 空 → 302 本服务根路径 /；
@@ -415,9 +424,9 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
 
         try
         {
-            var identity = await GetGuest(ctx).Use<ISealedTicketService<TKW.Framework.Domain.FederatedIdentity>>()
+            var payload = await GetGuest(ctx).Use<ISealedTicketService<FederatedTicketPayload>>()
                 .RedeemAsync(ticket, context: null, ct);
-            if (identity is null)
+            if (payload is null)
                 return Results.Json(new ErrorResponse("TICKET_NOT_FOUND", null),
                     statusCode: StatusCodes.Status404NotFound);
 
@@ -425,7 +434,7 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             var redirectUrl = options.LandRedirectUrl;
             var target = string.IsNullOrWhiteSpace(redirectUrl)
                 ? "/"
-                : $"{redirectUrl}?ticket={Uri.EscapeDataString(ticket)}&uid={Uri.EscapeDataString(identity.UId ?? string.Empty)}";
+                : $"{redirectUrl}?ticket={Uri.EscapeDataString(ticket)}&uid={Uri.EscapeDataString(payload.PlatformUid ?? string.Empty)}";
             return Results.Redirect(target);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

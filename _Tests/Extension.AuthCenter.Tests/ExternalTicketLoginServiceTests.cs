@@ -9,17 +9,24 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Ticket;
 using TKW.Framework.Utility.RateLimitChecks;
+using TKWF.Ext.Federation;
 
 namespace TKWF.Ext.AuthCenter.Tests;
 
 /// <summary>
-/// V0.10.0 + B3b：外部 IdP 票据 SPA 兑现门面 <see cref="ExternalTicketLoginService"/> 测试——
+/// V0.10.0 + B3b + D03 1.3：外部 IdP 票据 SPA 兑现门面 <see cref="ExternalTicketLoginService"/> 测试——
 /// 频控（P2-4）→ 验票（P1-3 统一 TICKET_INVALID）→ 委托共享编排（P2-2）。
 /// <para>B3b（MapGenerated 生成化）：门面签名 <c>LoginAsync(ExternalTicketLoginRequest, ct)</c>（ipAddress 参数删除——
 /// 门面内经 <see cref="IHttpContextAccessor"/> 取服务端 RemoteIpAddress）；成功返回 <see cref="TokenResponse"/>，
 /// 失败抛类型化异常（频控 <see cref="RateLimitedException"/> 429 / 验票 <see cref="DomainException"/> TICKET_INVALID 400）。</para>
+/// <para>D03 1.3（载荷切换）：票载荷 = <see cref="FederatedTicketPayload"/>（record 直接构造——保留空 ChannelId
+/// 用例语义（f/g 兑付兜底路径）；<b>不经 <see cref="FederatedTicketPayloadBuilder"/></b>——Builder 是签票侧校验器
+/// （空 ChannelId 抛异常），测试需构造任意形态载荷含缺失场景）；兑付后门面经
+/// <see cref="FederatedTicketPayloadExtensions.ToFederatedIdentity"/> 适配传 Orchestrator（签名未变吃
+/// FederatedIdentity）——Orchestrator 断言方向：UId=payload.PlatformUid / ChannelId 透传 /
+/// ChannelType=Extensions["protocol_type"]（协议类型还原）。</para>
 /// <para>分层逻辑单测：StubDomainUser 直构门面（经基类 User 取上下文）+ Fake 依赖注册进桩 ServiceProvider
-/// （ISealedTicketService&lt;FederatedIdentity&gt;/IFederatedLoginOrchestrator Fake + 可配置 IRateLimitCheck +
+/// （ISealedTicketService&lt;FederatedTicketPayload&gt;/IFederatedLoginOrchestrator Fake + 可配置 IRateLimitCheck +
 /// Fake IHttpContextAccessor——IP 维度注入可测键值）。</para>
 /// </summary>
 public class ExternalTicketLoginServiceTests
@@ -41,7 +48,7 @@ public class ExternalTicketLoginServiceTests
 
         var stub = AuthenticationTestHost.CreateStub(fsql, register: (services, user) =>
         {
-            services.AddSingleton<ISealedTicketService<FederatedIdentity>>(ticketSvc);
+            services.AddSingleton<ISealedTicketService<FederatedTicketPayload>>(ticketSvc);
             services.AddSingleton<IFederatedLoginOrchestrator>(orchestrator);
             services.AddSingleton<IRateLimitCheck>(rateLimit);
             register?.Invoke(services, user);
@@ -59,15 +66,33 @@ public class ExternalTicketLoginServiceTests
     private static ExternalTicketLoginRequest Request(string ticket, string? channelId = null)
         => new(ticket, channelId);
 
-    private static FederatedIdentity Identity(string? uid = null, string? channelId = ChannelId)
-        => new(uid ?? string.Empty, channelId ?? string.Empty, ExternalUserId, "wechat_event", 2);
+    /// <summary>票载荷构造（D03 1.3——直接构造 record 保留空 ChannelId 用例语义；protocol_type 双写协议类型）。</summary>
+    private static FederatedTicketPayload Payload(string? uid = null, string? channelId = ChannelId)
+        => new(
+            Provider: "wechat",
+            ChannelType: "mp_subscription",   // 通道形态（协议类型走 Extensions）
+            ChannelId: channelId ?? string.Empty,   // 空 = 兑付侧 body channel_id 兜底路径（f/g 用例）
+            ChannelAlias: null,
+            ExternalUserId: ExternalUserId,
+            UnionId: null,
+            PlatformUid: uid,                 // null = null-claimant（编排映射/建号兜底）
+            Assurance: "event",
+            Iat: 0,
+            Exp: 0,
+            Jti: "jti-test")
+        {
+            Extensions = new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                [FederatedTicketPayloadExtensions.ProtocolTypeKey] = "wechat_event",
+            },
+        };
 
     /// <summary>(a) 成功路径：验票成功（identity 载荷）→ 委托 orchestrator → token1；频控被检查；channel_id 透传。</summary>
     [Fact]
     public async Task Login_TicketValid_DelegatesOrchestrator_ReturnsToken()
     {
         var (service, ticketSvc, orchestrator, rateLimit) = CreateService(remoteIp: "10.0.0.1");
-        ticketSvc.Identity = Identity(uid: "u-ticket-1");
+        ticketSvc.Payload = Payload(uid: "u-ticket-1");
         orchestrator.Result = new TokenResponse("at-t", "rt-t", "Bearer", 7200);
 
         var result = await service.LoginAsync(Request(Ticket));
@@ -87,7 +112,7 @@ public class ExternalTicketLoginServiceTests
     public async Task Login_RedeemNull_ReturnsTicketInvalid_NoDelegate()
     {
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.2");
-        ticketSvc.Identity = null;   // RedeemAsync null（无效/过期/已用/篡改统一）
+        ticketSvc.Payload = null;   // RedeemAsync null（无效/过期/已用/篡改统一）
 
         var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
 
@@ -116,7 +141,7 @@ public class ExternalTicketLoginServiceTests
     public async Task Login_NullIp_UsesUnknownKey()
     {
         var (service, ticketSvc, _, rateLimit) = CreateService(remoteIp: null);
-        ticketSvc.Identity = Identity();
+        ticketSvc.Payload = Payload();
 
         await service.LoginAsync(Request(Ticket));
 
@@ -128,7 +153,7 @@ public class ExternalTicketLoginServiceTests
     public async Task Login_ChannelIdMismatch_ReturnsTicketInvalid()
     {
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.4");
-        ticketSvc.Identity = Identity(uid: "u-ticket-2", channelId: ChannelId);
+        ticketSvc.Payload = Payload(uid: "u-ticket-2", channelId: ChannelId);
 
         var ex = await Assert.ThrowsAsync<DomainException>(() =>
             service.LoginAsync(Request(Ticket, "other-channel")));
@@ -142,7 +167,7 @@ public class ExternalTicketLoginServiceTests
     public async Task Login_EmptyTicketChannelId_UsesProvidedChannelId()
     {
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.5");
-        ticketSvc.Identity = Identity(uid: "u-ticket-3", channelId: null);   // 票载荷 ChannelId 空
+        ticketSvc.Payload = Payload(uid: "u-ticket-3", channelId: null);   // 票载荷 ChannelId 空
 
         var result = await service.LoginAsync(Request(Ticket, ChannelId));
 
@@ -155,7 +180,7 @@ public class ExternalTicketLoginServiceTests
     public async Task Login_NoChannelIdAtAll_ReturnsTicketInvalid()
     {
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.6");
-        ticketSvc.Identity = Identity(uid: "u-ticket-4", channelId: null);
+        ticketSvc.Payload = Payload(uid: "u-ticket-4", channelId: null);
 
         var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
 
@@ -171,7 +196,7 @@ public class ExternalTicketLoginServiceTests
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.7");
         // 模拟 TrustCenter SealedTicketService CAS：签发 ExpectedClaimant="app-1" + 兑换 context:null → 不 swap → null
         ticketSvc.RedeemBehavior = (ticket, context) =>
-            context?.ExpectedClaimant == "app-1" ? Identity() : null;
+            context?.ExpectedClaimant == "app-1" ? Payload() : null;
 
         var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
 
@@ -184,7 +209,7 @@ public class ExternalTicketLoginServiceTests
     public async Task Login_OrchestratorThrows_Propagates()
     {
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.8");
-        ticketSvc.Identity = Identity(uid: "u-ticket-5");
+        ticketSvc.Payload = Payload(uid: "u-ticket-5");
         orchestrator.Throw = new InvalidOperationException("DB 瞬时故障——建号失败");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(Request(Ticket)));
@@ -210,21 +235,21 @@ public class ExternalTicketLoginServiceTests
     /// Fake 密封票据服务——<see cref="Identity"/> 固定返回值（null = 验票失败）；
     /// <see cref="RedeemBehavior"/> 委托可模拟复杂 CAS 语义（claimant 校验等）。
     /// </summary>
-    internal sealed class FakeSealedTicketService : ISealedTicketService<FederatedIdentity>
+    internal sealed class FakeSealedTicketService : ISealedTicketService<FederatedTicketPayload>
     {
-        public FederatedIdentity? Identity { get; set; }
-        public Func<string, TicketRedeemContext?, FederatedIdentity?>? RedeemBehavior { get; set; }
+        public FederatedTicketPayload? Payload { get; set; }
+        public Func<string, TicketRedeemContext?, FederatedTicketPayload?>? RedeemBehavior { get; set; }
         public string? LastTicket { get; private set; }
         public TicketRedeemContext? LastContext { get; private set; }
 
-        public Task<SealedTicketResult> IssueAsync(FederatedIdentity payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
+        public Task<SealedTicketResult> IssueAsync(FederatedTicketPayload payload, TimeSpan ttl, SealedTicketOptions? options = null, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public Task<FederatedIdentity?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
+        public Task<FederatedTicketPayload?> RedeemAsync(string ticket, TicketRedeemContext? context = null, CancellationToken ct = default)
         {
             LastTicket = ticket;
             LastContext = context;
-            return Task.FromResult(RedeemBehavior is not null ? RedeemBehavior(ticket, context) : Identity);
+            return Task.FromResult(RedeemBehavior is not null ? RedeemBehavior(ticket, context) : Payload);
         }
 
         public Task<int> CleanupExpiredAsync(CancellationToken ct = default) => throw new NotSupportedException();

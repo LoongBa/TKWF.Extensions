@@ -25,7 +25,7 @@
 | 扩展                         | 版本            | 说明                                                                     | Tag                     | README                                   | 指南                                     |
 | ---------------------------- | --------------- | ------------------------------------------------------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------------- |
 | **Permissions**              | V0.9.5 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）/ **多用户批量权限检查（V0.9.0：`IPermissionBatchChecker`——单权限×多用户，按 ProviderKey 分组归因）** | $(System.Collections.Specialized.OrderedDictionary[Permissions]) | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
-| **Permissions.Abstractions** | V0.2.1 | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`） | —                       | —                                        | —（并入 Permissions）                    |
+| **Permissions.Abstractions** | V0.2.2 | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`；**V0.2.2 补标 `IDomainService`**——`IPermissionChecker`/`IPermissionBatchChecker` 对齐 `User.Use<T>()` 解析 + `AddConstructibleService` 注册形态，v4.10.53 领域自治整改补发） | —                       | —                                        | —（并入 Permissions）                    |
 | **Permissions.Validation**   | V0.8.0（规则集）／0.1.1（包线，未发布） | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）；`IsPackable=false` 从不发布独立包（源码 ProjectReference 接线），V0.8.0 为规则集功能线版本，0.1.x 为 MinVer 包线 tag | —                       | —                                        | —（并入 Permissions）                    |
 | **Identity**                 | V0.5.3 | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.3.0）+ **REST 直接暴露（V0.4.0：`UserRoleViewQueryService`——`GET /api/identity/user-roles` 仅本人，VEntity DTO 一等公民含 DisplayName/IsSystemRole）**| $(System.Collections.Specialized.OrderedDictionary[Identity]) | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
 | **Account**                  | V0.5.0 | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）+ **登录历史与异常检测（V0.3.0，消费 SecurityLog 查询）+ 依赖倒置（V0.4.0，SecurityLog 契约改引 Abstractions）** | $(System.Collections.Specialized.OrderedDictionary[Account]) | [README](./_Framework/Account/README.md)       | [指南](./docs/Account/账户管理扩展-使用指南.md) |
@@ -279,7 +279,7 @@ Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 版本一览表口径（2026-10-26 固化，转达登记）：
 - 发布事实源 = git tag（{Package}/vX.Y.Z 前缀，按包取最新）；本表"版本"列填已发布 tag 版本
 - 打 tag 后必须同步本表（+ _Framework/{扩展名}/README.md + docs/变更记录.md），防止展示层滞后
-- 功能线领先于已发布 → 双值写法：Vx.y.z（功能线）／已发布 vA.B.C（实例：AuthCenter V0.12.0（功能线）／已发布 v0.10.1）
+- 功能线领先于已发布 → 双值写法：Vx.y.z（功能线）／已发布 vA.B.C（当前 55 包无领先行，全部为已发布 tag；形态保留备后续迭代）
 - 发布检查清单与详细约定见 docs/目录结构与版本管理规则.md §3.2/§3.3
 ```
 

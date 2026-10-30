@@ -1,4 +1,4 @@
-# TKWF.Federation.Abstractions — 联邦通道编排契约包（已发布 **V0.5.0**，2026-10-26；功能线 V0.2.0 Iteration 2——通道契约归属收口 + 关注域契约，随 V0.2.0~V0.5.0 发布链落地）
+# TKWF.Federation.Abstractions — 联邦通道编排契约包（已发布 **V0.6.0**，2026-10-30；D03 阶段 3/4——`IOperationsConfigQuery` 运营配置查询契约 + `FederatedTicketPayload` 载荷契约 + 供给层契约收敛；V0.2.0~V0.5.0 为 Iteration 2 通道契约归属收口 + 关注域契约链）
 
 > **定位**：联邦对外连接层的**通道编排契约抽象**（对齐 TrustCenter.Abstractions 先例——契约继承 `IDomainService` + 引主框架 `TKWF.Domain`，非"零框架引用"）。**零实体、零 SG1 分析器、零 Initializer**——纯契约 + DTO。
 

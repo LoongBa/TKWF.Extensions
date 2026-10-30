@@ -65,8 +65,14 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ⚠️ 历史批次注记（当前 lockstep = **4.10.97**——nuget.org 4.10.97 已上架（flatcontainer 索引滞后时
-         可从 gallery v2 端点取包本体）；ADR117/ADR118 扩展门面
+         ⚠️ 历史批次注记（当前 lockstep = **4.10.99**——nuget.org 13 包 4.10.99 已上架；v4.10.99 为
+          **控制台/CLI 宿主移除 EventLog 默认注册**（DMP-Lite 转达——.NET 10 宿主无条件 `AddEventLog()`
+          致非管理员环境 Warning 门控日志触发 EventLog 写路径 Win32Exception 崩溃；`ConfigConsoleDomain`
+          开头按 `ImplementationType == typeof(EventLogLoggerProvider)` 过滤删除描述符——**不得用
+          `RemoveAll<T>`**（按 ServiceType 匹配对 ILoggerProvider 默认注册永不命中，一审 B1 陷阱）；
+          Web 宿主不动，非管理员 Web 隐患登记后续跟踪；扩展侧适配 = **CPM lockstep 即完成（零代码**
+          **改动——行为自动修复）**，测试宿主不走 ConfigConsoleDomain 不受影响；4.10.98 被并行迭代
+          《SG 测试项目内并行化》占用顺延）。前批 4.10.97（ADR117/ADR118 扩展门面
          不进消费方 ApiMetadata 结构性 bug 的框架侧修复收官：InterfaceNames 符号回填真名 + 扩展侧产契约接口 +
          手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）+ DataService 缺口根治 + TUSER001/EXTIFACE001
          零猜测守卫。扩展侧适配：CPM lockstep 即完成（门面保持 `: IDomainService`——用户裁定语义修正，ADR118
@@ -181,19 +187,29 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.97" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.97" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.97" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.97" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.97" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.97" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.97" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.97" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.97" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.99" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.99" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.99" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.97" />
-<!-- ✅ 全量 lockstep 4.10.97（2026-10-28——延续 4.10.92 ADR118 扩展端点暴露机制根治：扩展侧产契约接口
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.99" />
+<!-- ✅ 全量 lockstep 4.10.99（2026-10-30——**控制台/CLI 宿主移除 EventLog 默认注册**（DMP-Lite 转达，
+     非管理员崩溃根治）：.NET 10 `Host.CreateApplicationBuilder()` 在 Windows 无条件 `AddEventLog()` + 过滤器
+     默认 `>= Warning`，TKWF 域初始化 Warning 门控日志（SystemSetupRequired/GateWarning）恰好触发 → 非管理员对
+     事件日志源无写权限 `Win32Exception` → Logger 聚合崩溃；修法 = `ConfigConsoleDomain` 开头按
+     `ImplementationType == typeof(EventLogLoggerProvider)` 过滤删除描述符（**不得用 `RemoveAll<T>`**——按
+     ServiceType 匹配对 ILoggerProvider 默认注册永不命中，一审 B1 陷阱，ImplementationType 探针实证）；
+     Web 宿主不动（转达建议范围），非管理员 Web 同类隐患登记跟踪；消费方适配 = **零改动（行为自动修复）**，
+     已手工补 `Logging:EventLog:LogLevel=None` 者可留可删；确需事件日志者在 `ConfigConsoleDomain` 之后
+     显式 `AddEventLog()`（TryAddEnumerable 注册可重新添加）；验证 Domain.Core.Tests 356/356 + 双向有效性 +
+     Oracle 两审 + code-reviewer 附条件通过；**4.10.98 被并行迭代《SG 测试项目内并行化》占用顺延**；
+     扩展侧受影响面 = 零（测试宿主不走 ConfigConsoleDomain）。历史 lockstep 4.10.97（2026-10-28——延续 4.10.92 ADR118 扩展端点暴露机制根治：扩展侧产契约接口
      （`{扩展根Ns}.I{X} : IDomainService`——用户裁定语义修正 291ef43a）+ 消费方补生成控制器 + TUser 宿主声明
      单一权威（TUSER001/EXTIFACE001 Error）+ 手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）→
      扩展门面真名进消费方 ApiMetadata → SG3 客户端生成（手写客户端可退役）；+ **4.10.93 ControllerGenerator
@@ -211,7 +227,10 @@
      本仓转达根因③被证伪——扩展项目不生成空壳注册，`.Controllers` 文件为旧 SDK 遗留产物）+ **4.10.97 无手写门面三件套闭包**（catalog 新增 `ImplementationTypes`（与 InterfaceNames 索引对齐）+ 实现类 `MetaType.Service` 注册——控制器经 `user.Use<实现类>()` 取服务；旧包回退命名约定，不命中报 `EXTIMPL001`；ADR122 SG3 桩命名空间取元数据原值，`.Api` 类型等价）；
      桥接历史见 L67 注记（4.10.89 CS0534 跳过 / 4.10.90 RestTypeInfoRegistry 修复 / 4.10.91 门面判定未放宽不可锁 /
      4.10.92 ADR118 根治 / 4.10.93 CS8785 数组特性参数 / 4.10.94 CS0535 装饰器命名口径 / 4.10.95 假名+TUSER001 / 4.10.96 排除集 / 4.10.97 三件套+SG3 桩） -->
-    <!-- ✅ TKWF.CodeGeneration 4.10.97（历史沿革——4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
+    <!-- ✅ TKWF.CodeGeneration 4.10.99（历史沿革——**4.10.99（2026-10-30）**：与本批次 lockstep 同版发布——
+         v4.10.99 变更（控制台宿主 EventLog 移除）为运行时逻辑，CodeGeneration 无生成器变更，扩展侧
+         锁 4.10.99 即完成（Analyzer 版本对齐，重建即生效）；4.10.97（ADR121/ADR122——catalog
+         `ImplementationTypes` + SG3 桩命名空间原值）；前版 4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
          4.10.87 为 SG2 `IsExposed` 暴露面口径修正 ADR113，与 SG3 同包原子发布零偏斜；
          4.10.88（ADR112 让路守卫精细化——per-interface + 三关注点分离 + DataService 连带伤害修复 + 缺省守卫）；
          4.10.89（C-3 路由元数据 ADR115 + C-4 SG3 REST 传输分支 ADR116，**CS0534 阻塞版**——SG3 发射 partial
@@ -269,12 +288,12 @@
          仅 Web 扩展生成注册表 + dispatcher 空守卫 + IsDataService 跳过）+ 4.10.85（门控精化——
          referencesAspNetCore 从 StartsWith(Microsoft.AspNetCore) 改精确名单——TKWF.Domain 传递依赖
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.97" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.97" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.99" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.99" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.97" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.99" />
   </ItemGroup>
 </Project>
 

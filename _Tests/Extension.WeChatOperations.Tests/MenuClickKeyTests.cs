@@ -109,7 +109,7 @@ public class MenuClickKeyTests : WeChatOperationsTestHost
     private static async Task SeedConfigAsync(DomainUser<TestUserInfo> user)
     {
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new SaveChannelRequest(
+        await service.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: Ch, AppId: "wx-menu-key", DisplayName: "菜单键号", IsEnabled: true,
             ChannelType: "wechat_event", AppSecret: "menu-key-secret"), ct: TestContext.Current.CancellationToken);
     }

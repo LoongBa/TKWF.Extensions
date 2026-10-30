@@ -117,14 +117,14 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
         using var _ = this;
         var (provider, user) = BindScope();
 
-        // 经门面落库（SaveAsync 新列写路径）——服务号认证（full caps）+ 订阅号未认证
+        // 经门面落库（SaveChannelAsync 新列写路径）——服务号认证（full caps）+ 订阅号未认证
         var svc = user.Use<IChannelConfigService>();
-        await svc.SaveAsync(new SaveChannelRequest(
+        await svc.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: "d03-mp-1", AppId: "wx-d03-1", DisplayName: "服务号已认证",
             ChannelType: "wechat_event", ChannelForm: "mp_service", Verification: "verified",
             Alias: "merchant-d03", AppSecret: "s1", Token: "t1", EncodingAesKey: "e1"),
             ct: TestContext.Current.CancellationToken);
-        await svc.SaveAsync(new SaveChannelRequest(
+        await svc.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: "d03-mp-2", AppId: "wx-d03-2", DisplayName: "订阅号",
             ChannelType: "wechat_event", ChannelForm: "mp_subscription", Verification: "none",
             AppSecret: "s2"),
@@ -154,7 +154,7 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
 
         var svc = user.Use<IChannelConfigService>();
-        await svc.SaveAsync(new SaveChannelRequest(
+        await svc.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: "d03-disabled", AppId: "wx-d03-d", DisplayName: "停用号",
             ChannelType: "wechat_event", IsEnabled: false),
             ct: TestContext.Current.CancellationToken);
@@ -178,7 +178,7 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
 
         var svc = user.Use<IChannelConfigService>();
         var aesKey = WeChatOperationsTestSupport.GenerateEncodingAESKey();
-        await svc.SaveAsync(new SaveChannelRequest(
+        await svc.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: "d03-sec", AppId: "wx-d03-s", DisplayName: "安全号",
             ChannelType: "wechat_event", AppSecret: "secret-plain", Token: "token-plain", EncodingAesKey: aesKey),
             ct: TestContext.Current.CancellationToken);
@@ -219,7 +219,7 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
         using var _ = this;
         var (provider, user) = BindScope();
 
-        await user.Use<IChannelConfigService>().SaveAsync(new SaveChannelRequest(
+        await user.Use<IChannelConfigService>().SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: "d03-unbound", AppId: "wx-d03-u", DisplayName: "有行但未绑定",
             ChannelType: "wechat_event"),
             ct: TestContext.Current.CancellationToken);
@@ -238,7 +238,7 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
 
-        await user.Use<IChannelConfigService>().SaveAsync(new SaveChannelRequest(
+        await user.Use<IChannelConfigService>().SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: "d03-composite", AppId: "wx-d03-c", DisplayName: "组合路径",
             ChannelType: "wechat_event", ChannelForm: "mp_service", Verification: "verified", Token: "tok-composite"),
             ct: TestContext.Current.CancellationToken);

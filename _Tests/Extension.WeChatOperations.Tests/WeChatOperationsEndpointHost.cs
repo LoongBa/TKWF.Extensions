@@ -106,7 +106,7 @@ internal static class WeChatOperationsEndpointHost
         public Task<WeChatChannelConfigDto?> GetAsync(string appId, CancellationToken ct = default)
             => Task.FromResult<WeChatChannelConfigDto?>(null);
 
-        public Task<IReadOnlyList<WeChatChannelConfigDto>> ListAsync(CancellationToken ct = default)
+        public Task<IReadOnlyList<WeChatChannelConfigDto>> ListChannelsAsync(CancellationToken ct = default)
         {
             ListInvoked = true;
             return Task.FromResult<IReadOnlyList<WeChatChannelConfigDto>>(
@@ -116,14 +116,14 @@ internal static class WeChatOperationsEndpointHost
             ]);
         }
 
-        public Task<long> SaveAsync(SaveChannelRequest request, CancellationToken ct = default)
+        public Task<long> SaveChannelAsync(SaveChannelRequest request, CancellationToken ct = default)
         {
             SaveInvoked = true;
             LastRequest = request;
             return Task.FromResult(42L);
         }
 
-        public Task<bool> DeleteAsync(long id, CancellationToken ct = default)
+        public Task<bool> DeleteChannelAsync(long id, CancellationToken ct = default)
             => Task.FromResult(true);
     }
 
@@ -175,19 +175,19 @@ internal static class WeChatOperationsEndpointHost
         public bool ListInvoked { get; private set; }
         public bool SaveInvoked { get; private set; }
 
-        public Task<IReadOnlyList<ReplyRuleEntity>> ListRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default)
+        public Task<IReadOnlyList<ReplyRuleEntity>> ListReplyRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default)
         {
             ListInvoked = true;
             return Task.FromResult<IReadOnlyList<ReplyRuleEntity>>(Array.Empty<ReplyRuleEntity>());
         }
 
-        public Task<long> SaveRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default)
+        public Task<long> SaveReplyRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default)
         {
             SaveInvoked = true;
             return Task.FromResult(7L);
         }
 
-        public Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default)
+        public Task<bool> DeleteReplyRuleAsync(long ruleId, CancellationToken ct = default)
             => Task.FromResult(true);
 
         public Task<ReplyRuleEntity?> GetWelcomeAsync(string channelId, CancellationToken ct = default)
@@ -203,19 +203,19 @@ internal static class WeChatOperationsEndpointHost
         public bool ListInvoked { get; private set; }
         public bool SaveInvoked { get; private set; }
 
-        public Task<IReadOnlyList<MaterialEntity>> ListAsync(int? kind = null, CancellationToken ct = default)
+        public Task<IReadOnlyList<MaterialEntity>> ListMaterialsAsync(int? kind = null, CancellationToken ct = default)
         {
             ListInvoked = true;
             return Task.FromResult<IReadOnlyList<MaterialEntity>>(Array.Empty<MaterialEntity>());
         }
 
-        public Task<long> SaveAsync(MaterialEntity material, CancellationToken ct = default)
+        public Task<long> SaveMaterialAsync(MaterialEntity material, CancellationToken ct = default)
         {
             SaveInvoked = true;
             return Task.FromResult(9L);
         }
 
-        public Task<bool> DeleteAsync(long materialId, CancellationToken ct = default)
+        public Task<bool> DeleteMaterialAsync(long materialId, CancellationToken ct = default)
             => Task.FromResult(true);
 
         public Task<IReadOnlyList<MaterialReferenceDto>> GetReferencesAsync(long materialId, CancellationToken ct = default)
@@ -275,19 +275,19 @@ internal static class WeChatOperationsEndpointHost
         public bool SetEnabledInvoked { get; private set; }
         public bool ForwardLogsInvoked { get; private set; }
 
-        public Task<IReadOnlyList<MessageRouteRuleEntity>> ListRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default)
+        public Task<IReadOnlyList<MessageRouteRuleEntity>> ListRouteRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default)
         {
             ListRulesInvoked = true;
             return Task.FromResult<IReadOnlyList<MessageRouteRuleEntity>>(Array.Empty<MessageRouteRuleEntity>());
         }
 
-        public Task<long> SaveRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default)
+        public Task<long> SaveRouteRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default)
         {
             SaveRuleInvoked = true;
             return Task.FromResult(11L);
         }
 
-        public Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default)
+        public Task<bool> DeleteRouteRuleAsync(long ruleId, CancellationToken ct = default)
         {
             DeleteRuleInvoked = true;
             return Task.FromResult(true);

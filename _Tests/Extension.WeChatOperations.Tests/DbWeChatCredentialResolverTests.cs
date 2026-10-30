@@ -192,7 +192,7 @@ public class DbWeChatCredentialResolverTests : WeChatOperationsTestHost
         string? appSecretPlain, string? tokenPlain = null)
     {
         var service = user.Use<IChannelConfigService>();
-        await service.SaveAsync(new SaveChannelRequest(
+        await service.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: channelId, AppId: appId, DisplayName: "凭证测试", IsEnabled: true,
             ChannelType: "wechat_event", AppSecret: appSecretPlain, Token: tokenPlain), ct: TestContext.Current.CancellationToken);
     }

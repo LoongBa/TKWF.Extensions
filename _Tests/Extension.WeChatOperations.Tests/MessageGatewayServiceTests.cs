@@ -26,7 +26,7 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
 
     // ═══════════════════ 路由规则 CRUD ═══════════════════
 
-    /// <summary>SaveRuleAsync Name 必填——空白/缺省抛 ArgumentException（DMP-Lite 需求 5.5——每条规则含名称）。</summary>
+    /// <summary>SaveRouteRuleAsync Name 必填——空白/缺省抛 ArgumentException（DMP-Lite 需求 5.5——每条规则含名称）。</summary>
     [Fact]
     public async Task SaveRule_MissingName_Throws()
     {
@@ -36,7 +36,7 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         var svc = user.Use<IMessageGatewayService>();
 
         var ex = await Assert.ThrowsAsync<ArgumentException>(
-            () => svc.SaveRuleAsync(new MessageRouteRuleEntity
+            () => svc.SaveRouteRuleAsync(new MessageRouteRuleEntity
             {
                 ChannelId = ChA,
                 MsgType = "text",
@@ -45,17 +45,17 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         Assert.Contains("Name 必填", ex.Message);
         // 空白名同样拒绝
         await Assert.ThrowsAsync<ArgumentException>(
-            () => svc.SaveRuleAsync(new MessageRouteRuleEntity
+            () => svc.SaveRouteRuleAsync(new MessageRouteRuleEntity
             {
                 ChannelId = ChA, Name = "   ",
                 MsgType = "text",
                 ForwardMode = WeChatMessageForwardModes.LocalOnly,
             }, TestContext.Current.CancellationToken));
         // 未落库（校验前置拒绝）
-        Assert.Empty(await svc.ListRulesAsync(ChA, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await svc.ListRouteRulesAsync(ChA, ct: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>SaveRuleAsync（Id=0 新建）→ 返回新 Id + ListRulesAsync 可见。</summary>
+    /// <summary>SaveRouteRuleAsync（Id=0 新建）→ 返回新 Id + ListRouteRulesAsync 可见。</summary>
     [Fact]
     public async Task SaveRule_New_CreatesAndListReturns()
     {
@@ -74,17 +74,17 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
             ForwardMode = WeChatMessageForwardModes.LocalOnly,
             IsEnabled = true,
         };
-        var id = await svc.SaveRuleAsync(rule, TestContext.Current.CancellationToken);
+        var id = await svc.SaveRouteRuleAsync(rule, TestContext.Current.CancellationToken);
 
         Assert.True(id > 0);
-        var rules = await svc.ListRulesAsync(ChA, ct: TestContext.Current.CancellationToken);
+        var rules = await svc.ListRouteRulesAsync(ChA, ct: TestContext.Current.CancellationToken);
         Assert.Single(rules);
         Assert.Equal(id, rules[0].Id);
         Assert.Equal("text", rules[0].MsgType);
         Assert.Equal(WeChatMessageMatchModes.Exact, rules[0].MatchMode);
     }
 
-    /// <summary>SaveRuleAsync 完全重复同键检测——ChannelId+MsgType+Event+MatchMode+TriggerKey 全同 → 更新既有不新建。
+    /// <summary>SaveRouteRuleAsync 完全重复同键检测——ChannelId+MsgType+Event+MatchMode+TriggerKey 全同 → 更新既有不新建。
     /// 第二次仅改 IsEnabled → 返回同一 Id + 库中仅 1 行 + 字段已覆盖。</summary>
     [Fact]
     public async Task SaveRule_DuplicateKey_UpdatesExistingNotCreate()
@@ -94,14 +94,14 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        var first = await svc.SaveRuleAsync(new MessageRouteRuleEntity
+        var first = await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity
         {
             ChannelId = ChA, Name = "促销规则", MsgType = "text", Event = null,
             MatchMode = WeChatMessageMatchModes.Exact, TriggerKey = "促销",
             ForwardMode = WeChatMessageForwardModes.LocalOnly, IsEnabled = true,
         }, TestContext.Current.CancellationToken);
 
-        var second = await svc.SaveRuleAsync(new MessageRouteRuleEntity
+        var second = await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity
         {
             ChannelId = ChA, Name = "促销规则", MsgType = "text", Event = null,
             MatchMode = WeChatMessageMatchModes.Exact, TriggerKey = "促销",
@@ -109,7 +109,7 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         }, TestContext.Current.CancellationToken);
 
         Assert.Equal(first, second);   // 同键更新既有——返回原 Id
-        var rules = await svc.ListRulesAsync(ChA, ct: TestContext.Current.CancellationToken);
+        var rules = await svc.ListRouteRulesAsync(ChA, ct: TestContext.Current.CancellationToken);
         Assert.Single(rules);          // 不新建
         Assert.False(rules[0].IsEnabled);   // 字段已覆盖
         var count = await provider.GetRequiredService<IFreeSql>()
@@ -117,7 +117,7 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         Assert.Equal(1, count);
     }
 
-    /// <summary>ListRulesAsync channelId 过滤 + MsgType/Event 过滤（空 = 通配）。</summary>
+    /// <summary>ListRouteRulesAsync channelId 过滤 + MsgType/Event 过滤（空 = 通配）。</summary>
     [Fact]
     public async Task ListRules_ChannelAndMsgTypeEventFilter()
     {
@@ -126,24 +126,24 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "text规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
-        await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "image规则", MsgType = "image", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
-        await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "subscribe规则", MsgType = "event", Event = "subscribe", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
-        await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChB, Name = "text规则B", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
+        await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "text规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
+        await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "image规则", MsgType = "image", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
+        await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "subscribe规则", MsgType = "event", Event = "subscribe", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
+        await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity { ChannelId = ChB, Name = "text规则B", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
 
-        var allA = await svc.ListRulesAsync(ChA, ct: TestContext.Current.CancellationToken);
+        var allA = await svc.ListRouteRulesAsync(ChA, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, allA.Count);                       // channelId 过滤
-        var textA = await svc.ListRulesAsync(ChA, msgType: "text", ct: TestContext.Current.CancellationToken);
+        var textA = await svc.ListRouteRulesAsync(ChA, msgType: "text", ct: TestContext.Current.CancellationToken);
         Assert.Single(textA);
-        var subA = await svc.ListRulesAsync(ChA, msgType: "event", eventType: "subscribe", ct: TestContext.Current.CancellationToken);
+        var subA = await svc.ListRouteRulesAsync(ChA, msgType: "event", eventType: "subscribe", ct: TestContext.Current.CancellationToken);
         Assert.Single(subA);
-        var clickA = await svc.ListRulesAsync(ChA, msgType: "event", eventType: "click", ct: TestContext.Current.CancellationToken);
+        var clickA = await svc.ListRouteRulesAsync(ChA, msgType: "event", eventType: "click", ct: TestContext.Current.CancellationToken);
         Assert.Empty(clickA);
-        var allB = await svc.ListRulesAsync(ChB, ct: TestContext.Current.CancellationToken);
+        var allB = await svc.ListRouteRulesAsync(ChB, ct: TestContext.Current.CancellationToken);
         Assert.Single(allB);
     }
 
-    /// <summary>DeleteRuleAsync 物理删——删除后 ListRules 空；不存在删除返回 false。</summary>
+    /// <summary>DeleteRouteRuleAsync 物理删——删除后 ListRules 空；不存在删除返回 false。</summary>
     [Fact]
     public async Task DeleteRule_Removes()
     {
@@ -152,12 +152,12 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        var id = await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "删除测试规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
+        var id = await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "删除测试规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
 
-        var deleted = await svc.DeleteRuleAsync(id, TestContext.Current.CancellationToken);
+        var deleted = await svc.DeleteRouteRuleAsync(id, TestContext.Current.CancellationToken);
         Assert.True(deleted);
-        Assert.Empty(await svc.ListRulesAsync(ChA, ct: TestContext.Current.CancellationToken));
-        Assert.False(await svc.DeleteRuleAsync(id, TestContext.Current.CancellationToken));
+        Assert.Empty(await svc.ListRouteRulesAsync(ChA, ct: TestContext.Current.CancellationToken));
+        Assert.False(await svc.DeleteRouteRuleAsync(id, TestContext.Current.CancellationToken));
     }
 
     // ═══════════════════ 下游端点 CRUD（AuthToken 密文） ═══════════════════
@@ -227,7 +227,7 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         var epId = await svc.SaveEndpointAsync(new SaveEndpointRequest(
             Id: null, ChannelId: ChA, Name: "被引用端点", BaseUrl: "https://down.example.com", TimeoutSeconds: 2),
             TestContext.Current.CancellationToken);
-        await svc.SaveRuleAsync(new MessageRouteRuleEntity
+        await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity
         {
             ChannelId = ChA, Name = "引用端点规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.AsyncCopy, EndpointId = epId,
         }, TestContext.Current.CancellationToken);
@@ -270,7 +270,7 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var svc = user.Use<IMessageGatewayService>();
 
-        await svc.SaveRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "状态规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
+        await svc.SaveRouteRuleAsync(new MessageRouteRuleEntity { ChannelId = ChA, Name = "状态规则", MsgType = "text", ForwardMode = WeChatMessageForwardModes.LocalOnly }, TestContext.Current.CancellationToken);
         await svc.SaveEndpointAsync(new SaveEndpointRequest(
             Id: null, ChannelId: ChA, Name: "状态端点", BaseUrl: "https://down.example.com", TimeoutSeconds: 2),
             TestContext.Current.CancellationToken);

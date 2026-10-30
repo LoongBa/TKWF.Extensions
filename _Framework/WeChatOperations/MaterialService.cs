@@ -23,19 +23,19 @@ public interface IMaterialService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/materials?kind=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(RestRoute = "/materials", RestMethod = "GET")]
-    Task<IReadOnlyList<MaterialEntity>> ListAsync(int? kind = null, CancellationToken ct = default);
+    Task<IReadOnlyList<MaterialEntity>> ListMaterialsAsync(int? kind = null, CancellationToken ct = default);
 
     /// <summary>保存素材（Id=0 新建 / 已有更新）。
     /// <para>REST：<c>POST /api/wechat-ops/materials</c>（单复杂参数 MaterialEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(RestRoute = "/materials", RestMethod = "POST")]
-    Task<long> SaveAsync(MaterialEntity material, CancellationToken ct = default);
+    Task<long> SaveMaterialAsync(MaterialEntity material, CancellationToken ct = default);
 
     /// <summary>删除素材（被规则引用时抛 <see cref="InvalidOperationException"/>——先查引用）。
     /// <para><c>ExposeRest=false</c>：删除为高操作权限能力（引用保护——防误删），对齐既有 15 端点映射不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(ExposeRest = false)]
-    Task<bool> DeleteAsync(long materialId, CancellationToken ct = default);
+    Task<bool> DeleteMaterialAsync(long materialId, CancellationToken ct = default);
 
     /// <summary>素材引用清单（跨回复规则聚合——欢迎语/关键词/Click 映射/全消息类型/Default；返回引用位置 DTO
     /// 含 SceneType 语义 + 规则 Id——DMP-Lite 5.2 引用反查"引用 N 处"+清单）。
@@ -60,7 +60,7 @@ public sealed class MaterialService : DomainServiceBase, IMaterialService
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MaterialEntity>> ListAsync(int? kind = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<MaterialEntity>> ListMaterialsAsync(int? kind = null, CancellationToken ct = default)
         => await Ds.EntitySelectAsync(
             m => kind == null || m.Kind == kind.Value,
             0, 500,
@@ -68,7 +68,7 @@ public sealed class MaterialService : DomainServiceBase, IMaterialService
             ct);
 
     /// <inheritdoc />
-    public async Task<long> SaveAsync(MaterialEntity material, CancellationToken ct = default)
+    public async Task<long> SaveMaterialAsync(MaterialEntity material, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(material);
         if (string.IsNullOrWhiteSpace(material.Name)) throw new ArgumentException("素材名称必填", nameof(material));
@@ -101,7 +101,7 @@ public sealed class MaterialService : DomainServiceBase, IMaterialService
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteAsync(long materialId, CancellationToken ct = default)
+    public async Task<bool> DeleteMaterialAsync(long materialId, CancellationToken ct = default)
     {
         // 删除保护（Oracle P1）：先查规则引用——被引用禁止删除（防规则悬空）
         var referenced = await RuleDs.EntitySelectAsync(r => r.MaterialId == materialId, 0, 1, null, ct);

@@ -12,7 +12,7 @@ namespace TKWF.Ext.WeChatOperations.DTOs;
    ============================================================ */
 
 /// <summary>保存公众号配置请求（凭证明文可选——null = 保持库中既有密文不变；<b>不落服务端日志</b>——Oracle P1）。
-/// <para>V0.4.0 起为 <see cref="TKWF.Ext.WeChatOperations.IChannelConfigService.SaveAsync"/> 的 wire 契约参数（原 WebExtension 手写端点同名 DTO 上移）。</para>
+/// <para>V0.4.0 起为 <see cref="TKWF.Ext.WeChatOperations.IChannelConfigService.SaveChannelAsync"/> 的 wire 契约参数（原 WebExtension 手写端点同名 DTO 上移）。</para>
 /// <para>D03 1.2 新增：<see cref="ChannelForm"/>（mp_subscription/mp_service/mini_program/work_wechat——
 /// <c>ChannelTypeRegistry</c> 校验）/ <see cref="Verification"/>（none/verified）/ <see cref="Alias"/>
 /// （对外 slug'——1.6 规则：小写字母数字连字符；可空）。</para></summary>

@@ -36,7 +36,7 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
         Assert.Equal(0.0, status.ForwardSuccessRate);
     }
 
-    /// <summary>channel 配置存在且凭证已配置（SaveAsync 明文入 → AES-GCM 密文落库，HasCredentials=true）
+    /// <summary>channel 配置存在且凭证已配置（SaveChannelAsync 明文入 → AES-GCM 密文落库，HasCredentials=true）
     /// → Connected=true + detail="channel config found"。</summary>
     [Fact]
     public async Task GetStatusSummaryAsync_ChannelWithCredentials_Connected()
@@ -44,7 +44,7 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var channelService = user.Use<IChannelConfigService>();
-        await channelService.SaveAsync(new SaveChannelRequest(
+        await channelService.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: Ch, AppId: "wx-status-1", DisplayName: "状态测试号", IsEnabled: true,
             ChannelType: "wechat_event", AppSecret: "secret-status"), ct: TestContext.Current.CancellationToken);
 
@@ -63,7 +63,7 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var channelService = user.Use<IChannelConfigService>();
-        await channelService.SaveAsync(new SaveChannelRequest(
+        await channelService.SaveChannelAsync(new SaveChannelRequest(
             Id: null, ChannelId: Ch, AppId: "wx-status-2", DisplayName: "无凭证号", IsEnabled: true,
             ChannelType: "wechat_event"), ct: TestContext.Current.CancellationToken);
 

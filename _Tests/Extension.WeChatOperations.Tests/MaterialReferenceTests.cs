@@ -11,7 +11,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <see cref="IMaterialService.GetReferencesAsync"/> 素材引用反查测试（DMP-Lite 5.2——"引用 N 处" + 清单可跳转解绑）：
 /// 无引用空列表 / 多条规则跨 SceneType 聚合（MaterialId/ReplyRuleId/SceneType/TriggerKey/IsEnabled 逐行断言——
 /// 禁用规则仍计入引用，生效性由 IsEnabled 区分）/ 与删除保护联动（清单行含 ReplyRuleId——据此
-/// <see cref="IReplyRuleService.DeleteRuleAsync"/> 解绑后素材可删——清单行可跳转解绑语义）。
+/// <see cref="IReplyRuleService.DeleteReplyRuleAsync"/> 解绑后素材可删——清单行可跳转解绑语义）。
 /// <para>生产路径：<c>user.Use&lt;IMaterialService&gt;()</c> AOP（AddConstructibleService 守卫工厂）；
 /// 规则种子经 <c>user.Use&lt;ReplyRuleEntityDataService&gt;()</c> NoAop 直写（对齐 MaterialServiceTests 既有风格）。</para>
 /// </summary>
@@ -26,7 +26,7 @@ public class MaterialReferenceTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var service = user.Use<IMaterialService>();
-        var id = await service.SaveAsync(new MaterialEntity
+        var id = await service.SaveMaterialAsync(new MaterialEntity
         {
             Name = "无引用素材",
             Kind = 1,
@@ -47,7 +47,7 @@ public class MaterialReferenceTests : WeChatOperationsTestHost
         using var _ = this;
         var (_, user) = BindScope();
         var service = user.Use<IMaterialService>();
-        var id = await service.SaveAsync(new MaterialEntity
+        var id = await service.SaveMaterialAsync(new MaterialEntity
         {
             Name = "被多规则引用素材",
             Kind = 1,
@@ -84,8 +84,8 @@ public class MaterialReferenceTests : WeChatOperationsTestHost
         Assert.True(refs[2].IsEnabled);
     }
 
-    /// <summary>与删除保护联动：GetReferencesAsync 清单含 ReplyRuleId → 据此 DeleteRuleAsync 解绑
-    /// （清单行可跳转解绑语义——DMP-Lite 5.2）→ 全部解绑后 DeleteAsync 素材成功。</summary>
+    /// <summary>与删除保护联动：GetReferencesAsync 清单含 ReplyRuleId → 据此 DeleteReplyRuleAsync 解绑
+    /// （清单行可跳转解绑语义——DMP-Lite 5.2）→ 全部解绑后 DeleteMaterialAsync 素材成功。</summary>
     [Fact]
     public async Task GetReferencesAsync_UnbindViaRuleIds_ThenDeleteMaterialSucceeds()
     {
@@ -93,7 +93,7 @@ public class MaterialReferenceTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         var service = user.Use<IMaterialService>();
         var ruleService = user.Use<IReplyRuleService>();
-        var id = await service.SaveAsync(new MaterialEntity
+        var id = await service.SaveMaterialAsync(new MaterialEntity
         {
             Name = "待解绑素材",
             Kind = 1,
@@ -104,7 +104,7 @@ public class MaterialReferenceTests : WeChatOperationsTestHost
         await SeedRuleAsync(user, Ch, WeChatReplySceneTypes.Keyword, materialId: id, triggerKey: "优惠", matchMode: 1);
 
         // 解绑前删除被拒（删除保护——Oracle P1）
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAsync(id, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteMaterialAsync(id, TestContext.Current.CancellationToken));
         Assert.Contains("禁止删除", ex.Message);
 
         // 反查清单 → 逐行规则 Id 解绑（清单可跳转语义）
@@ -113,14 +113,14 @@ public class MaterialReferenceTests : WeChatOperationsTestHost
         foreach (var r in refs)
         {
             Assert.Equal(id, r.MaterialId);
-            var deleted = await ruleService.DeleteRuleAsync(r.ReplyRuleId, TestContext.Current.CancellationToken);
+            var deleted = await ruleService.DeleteReplyRuleAsync(r.ReplyRuleId, TestContext.Current.CancellationToken);
             Assert.True(deleted);
         }
 
         // 全部解绑后 → 删除成功
-        var ok = await service.DeleteAsync(id, TestContext.Current.CancellationToken);
+        var ok = await service.DeleteMaterialAsync(id, TestContext.Current.CancellationToken);
         Assert.True(ok);
-        Assert.Empty(await service.ListAsync(null, TestContext.Current.CancellationToken));
+        Assert.Empty(await service.ListMaterialsAsync(null, TestContext.Current.CancellationToken));
     }
 
     /// <summary>种子回复规则（ReplyRuleEntityDataService 生产路径直写——MaterialId 引用该素材）。</summary>

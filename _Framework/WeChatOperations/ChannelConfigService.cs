@@ -17,7 +17,7 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 公众号渠道配置门面（两源并存 DB 权威 + Options 降级——设计文档 §3.3.4）。
-/// <para><b>凭证安全（Oracle P1）</b>：<see cref="SaveAsync"/> 入参经 <see cref="SaveChannelRequest"/> wire DTO——
+/// <para><b>凭证安全（Oracle P1）</b>：<see cref="SaveChannelAsync"/> 入参经 <see cref="SaveChannelRequest"/> wire DTO——
 /// 三凭证字段（AppSecret/Token/EncodingAESKey）为<b>明文</b>经 body 传输（V0.4.0 起 GenerateController
 /// 端点 [FromBody] 绑定，防 query string URL 泄漏）；门面经 keyed
 /// <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> AES-GCM 加密落库
@@ -25,8 +25,8 @@ namespace TKWF.Ext.WeChatOperations;
 /// <b>不含凭证</b>——密文不回显，解密仅出站瞬时（DbWeChatCredentialResolver）。</para>
 /// <para>REST 端点（V0.4.0 生成控制器——消费方 SG1b 经 <c>[GenerateController]</c> 聚合 ADR47）：</para>
 /// <list type="bullet">
-/// <item><c>GET /api/wechat-ops/channels</c> → <see cref="ListAsync"/>（List 前缀推导 GET）</item>
-/// <item><c>POST /api/wechat-ops/channels</c> → <see cref="SaveAsync"/>（Create 前缀推导 POST；单复杂参数 SaveChannelRequest [FromBody]）</item>
+/// <item><c>GET /api/wechat-ops/channels</c> → <see cref="ListChannelsAsync"/>（List 前缀推导 GET）</item>
+/// <item><c>POST /api/wechat-ops/channels</c> → <see cref="SaveChannelAsync"/>（Create 前缀推导 POST；单复杂参数 SaveChannelRequest [FromBody]）</item>
 /// </list>
 /// <para>消费方：<c>User.Use&lt;IChannelConfigService&gt;()</c>（AddConstructibleService 守卫工厂，帧内解析）。</para>
 /// </summary>
@@ -41,20 +41,20 @@ public interface IChannelConfigService : IDomainService
     /// <summary>全部公众号配置列表（DTO 投影不含凭证密文）。<para>REST：<c>GET /api/wechat-ops/channels</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(RestRoute = "/channels", RestMethod = "GET")]
-    Task<IReadOnlyList<WeChatChannelConfigDto>> ListAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<WeChatChannelConfigDto>> ListChannelsAsync(CancellationToken ct = default);
 
     /// <summary>保存公众号配置——新（Id=0）创建 / 已有更新；<paramref name="request"/> 承载凭证明文
     /// （AppSecret/Token/EncodingAESKey 为<b>明文</b>，null = 保持库中既有密文不变）——门面加密落库。
     /// <para>REST：<c>POST /api/wechat-ops/channels</c>（单复杂参数 SaveChannelRequest → [FromBody] 防 URL 凭证泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(RestRoute = "/channels", RestMethod = "POST")]
-    Task<long> SaveAsync(SaveChannelRequest request, CancellationToken ct = default);
+    Task<long> SaveChannelAsync(SaveChannelRequest request, CancellationToken ct = default);
 
     /// <summary>删除公众号配置（物理删——配置删除后出站凭证经 Options 降级解析）。
     /// <para><c>ExposeRest=false</c>：删除为高操作权限能力，对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(ExposeRest = false)]
-    Task<bool> DeleteAsync(long id, CancellationToken ct = default);
+    Task<bool> DeleteChannelAsync(long id, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -93,7 +93,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<WeChatChannelConfigDto>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<WeChatChannelConfigDto>> ListChannelsAsync(CancellationToken ct = default)
     {
         var entities = await Ds.EntitySelectAsync(null, 0, 1000, q => q.OrderBy(e => e.ChannelId), ct);
         var list = new List<WeChatChannelConfigDto>(entities.Count);
@@ -102,7 +102,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     }
 
     /// <inheritdoc />
-    public async Task<long> SaveAsync(SaveChannelRequest request, CancellationToken ct = default)
+    public async Task<long> SaveChannelAsync(SaveChannelRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(request));
@@ -225,7 +225,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteAsync(long id, CancellationToken ct = default)
+    public async Task<bool> DeleteChannelAsync(long id, CancellationToken ct = default)
     {
         var db = await Ds.EntityGetAsync(e => e.Id == id, ct);
         var affected = await Ds.EntityDeleteBatchAsync(new[] { id }, ct);

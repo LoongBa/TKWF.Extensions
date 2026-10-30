@@ -42,19 +42,19 @@ public interface IMessageGatewayService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/gateway/rules?channel_id=&amp;msg_type=&amp;event_type=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(RestRoute = "/gateway/rules", RestMethod = "GET")]
-    Task<IReadOnlyList<MessageRouteRuleEntity>> ListRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default);
+    Task<IReadOnlyList<MessageRouteRuleEntity>> ListRouteRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default);
 
     /// <summary>保存路由规则（Id=0 新建 + <b>完全重复同键检测</b>——ChannelId+MsgType+Event+MatchMode+TriggerKey 全同 → 更新既有；已有更新）。
     /// <para>REST：<c>POST /api/wechat-ops/gateway/rules</c>（单复杂参数 MessageRouteRuleEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(RestRoute = "/gateway/rules", RestMethod = "POST")]
-    Task<long> SaveRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default);
+    Task<long> SaveRouteRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default);
 
     /// <summary>删除路由规则（物理删）。
     /// <para>REST：<c>DELETE /api/wechat-ops/gateway/rules/{ruleId}</c>。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(RestRoute = "/gateway/rules/{ruleId}", RestMethod = "DELETE")]
-    Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default);
+    Task<bool> DeleteRouteRuleAsync(long ruleId, CancellationToken ct = default);
 
     /// <summary>下游端点列表（按 ChannelId 过滤；DTO 投影<b>不含 AuthToken 密文</b>——Oracle P1 安全）。
     /// <para>REST：<c>GET /api/wechat-ops/gateway/endpoints?channel_id=</c>。</para></summary>
@@ -161,7 +161,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MessageRouteRuleEntity>> ListRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<MessageRouteRuleEntity>> ListRouteRulesAsync(string channelId, string? msgType = null, string? eventType = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(channelId))
             return Array.Empty<MessageRouteRuleEntity>();
@@ -175,7 +175,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
     }
 
     /// <inheritdoc />
-    public async Task<long> SaveRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default)
+    public async Task<long> SaveRouteRuleAsync(MessageRouteRuleEntity rule, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(rule);
         if (string.IsNullOrWhiteSpace(rule.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(rule));
@@ -236,7 +236,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default)
+    public async Task<bool> DeleteRouteRuleAsync(long ruleId, CancellationToken ct = default)
     {
         var affected = await RuleDs.EntityDeleteBatchAsync(new[] { ruleId }, ct);
         return affected > 0;

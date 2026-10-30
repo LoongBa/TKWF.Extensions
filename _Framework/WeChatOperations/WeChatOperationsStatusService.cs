@@ -14,7 +14,7 @@ namespace TKWF.Ext.WeChatOperations;
 /// 系统状态聚合门面（DMP-Lite 5.8 "系统状态"页四张状态卡聚合——公众号连接状态 / 今日消息量 /
 /// 自动回复命中率 / 转发成功率）。
 /// <para>职责：只读聚合查询（<see cref="GetStatusSummaryAsync"/> 一次返回四卡数据源）——
-/// ① <b>公众号连接状态</b>：channel 配置存在（<see cref="IChannelConfigService.ListAsync"/> 按 ChannelId 命中）
+/// ① <b>公众号连接状态</b>：channel 配置存在（<see cref="IChannelConfigService.ListChannelsAsync"/> 按 ChannelId 命中）
 /// 且凭证可解析（DTO <see cref="WeChatChannelConfigDto.HasCredentials"/>——AES-GCM 密文非空）→ Connected=true；
 /// ② <b>今日消息量 / 自动回复命中率</b>：<see cref="InteractionLogEntity"/> 当日（UTC 自然日半开区间）
 /// 消息计数 + 有回复记录（<see cref="InteractionLogEntity.ReplyContent"/> 非空 或
@@ -75,7 +75,7 @@ public sealed class WeChatOperationsStatusService : DomainServiceBase, IWeChatOp
         string? detail = "no channel config";
         if (!string.IsNullOrWhiteSpace(channelId))
         {
-            var channel = (await ChannelConfig.ListAsync(ct)).FirstOrDefault(c => c.ChannelId == channelId);
+            var channel = (await ChannelConfig.ListChannelsAsync(ct)).FirstOrDefault(c => c.ChannelId == channelId);
             if (channel is not null && channel.HasCredentials)
             {
                 connected = true;

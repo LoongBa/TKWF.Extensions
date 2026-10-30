@@ -24,21 +24,21 @@ public interface IReplyRuleService : IDomainService
     /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/rules?scene_type=</c>。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(RestRoute = "/channels/{channelId}/rules", RestMethod = "GET")]
-    Task<IReadOnlyList<ReplyRuleEntity>> ListRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default);
+    Task<IReadOnlyList<ReplyRuleEntity>> ListReplyRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default);
 
     /// <summary>保存规则（Id=0 新建 / 已有更新）——新建默认 SortOrder=同场景末尾 max+1。
     /// <para>REST：<c>POST /api/wechat-ops/channels/{channelId}/rules</c>（单复杂参数 ReplyRuleEntity → [FromBody]；无敏感字段直通）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(RestRoute = "/channels/{channelId}/rules", RestMethod = "POST")]
-    Task<long> SaveRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default);
+    Task<long> SaveReplyRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default);
 
     /// <summary>删除规则（物理删）。<para><c>ExposeRest=false</c>：对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(ExposeRest = false)]
-    Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default);
+    Task<bool> DeleteReplyRuleAsync(long ruleId, CancellationToken ct = default);
 
     /// <summary>关注欢迎语规则（SceneType=Subscribe——单条；风格最受欢迎的 SortOrder 最小）。
-    /// <para><c>ExposeRest=false</c>：欢迎语/默认兜底规则为规则列表内部语义（消费方经 ListRulesAsync 过滤获取），不生成 REST 端点。</para></summary>
+    /// <para><c>ExposeRest=false</c>：欢迎语/默认兜底规则为规则列表内部语义（消费方经 ListReplyRulesAsync 过滤获取），不生成 REST 端点。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(ExposeRest = false)]
     Task<ReplyRuleEntity?> GetWelcomeAsync(string channelId, CancellationToken ct = default);
@@ -63,7 +63,7 @@ public sealed class ReplyRuleService : DomainServiceBase, IReplyRuleService
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ReplyRuleEntity>> ListRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ReplyRuleEntity>> ListReplyRulesAsync(string channelId, int? sceneType = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(channelId))
             return Array.Empty<ReplyRuleEntity>();
@@ -75,7 +75,7 @@ public sealed class ReplyRuleService : DomainServiceBase, IReplyRuleService
     }
 
     /// <inheritdoc />
-    public async Task<long> SaveRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default)
+    public async Task<long> SaveReplyRuleAsync(ReplyRuleEntity rule, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(rule);
         if (string.IsNullOrWhiteSpace(rule.ChannelId)) throw new ArgumentException("ChannelId 必填", nameof(rule));
@@ -114,7 +114,7 @@ public sealed class ReplyRuleService : DomainServiceBase, IReplyRuleService
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteRuleAsync(long ruleId, CancellationToken ct = default)
+    public async Task<bool> DeleteReplyRuleAsync(long ruleId, CancellationToken ct = default)
     {
         var affected = await Ds.EntityDeleteBatchAsync(new[] { ruleId }, ct);
         return affected > 0;

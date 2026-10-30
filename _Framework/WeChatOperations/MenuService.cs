@@ -294,7 +294,7 @@ public sealed class MenuService : DomainServiceBase, IMenuService
     {
         var cfg = await CfgDs.EntityGetAsync(c => c.ChannelId == channelId, ct);
         if (cfg is null)
-            throw new InvalidOperationException($"公众号配置不存在：ChannelId={channelId}（请先经 IChannelConfigService.SaveAsync 配置）");
+            throw new InvalidOperationException($"公众号配置不存在：ChannelId={channelId}（请先经 IChannelConfigService.SaveChannelAsync 配置）");
         return cfg;
     }
 

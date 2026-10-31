@@ -65,8 +65,15 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ⚠️ 历史批次注记（当前 lockstep = **4.10.99**——nuget.org 13 包 4.10.99 已上架；v4.10.99 为
-          **控制台/CLI 宿主移除 EventLog 默认注册**（DMP-Lite 转达——.NET 10 宿主无条件 `AddEventLog()`
+         ⚠️ 历史批次注记（当前 lockstep = **4.10.100**——nuget.org 13 包 4.10.100 已上架；v4.10.100 为
+          **TABLE002 裸 [Table] 实体误报修复**（DMP-Lite 转达——`ExtractEntityTableNames` 对裸 `[Table]`
+          （无 Name）此前 GetTableName 返回 null 被「null=未声明」过滤，致 VEntity ViewSql 引用裸实体类名时
+          TABLE002（Sg1aViewBaseTableMissing）误报；修法 = 兜底 ClassName（实体默认表名约定，对齐 cshtml
+          `vw_{ClassName}` 先例——实体=类名 / VEntity=vw_ 前缀形态不同，不可在 `GetTableName` 层统一兜底，
+          分层正确）；不吞真缺失（无 [Table] 类/类不存在仍报 TABLE002——C2 防过宽用例）；
+          ADR100 决策 3 追加判据边界注记 + D18A 语义补注；框架侧验证 Domain.SG 306/306 + code-reviewer
+          闭环；扩展侧适配 = **CPM lockstep 即完成（零代码——裸 [Table] 实体 + VEntity 引用场景误报自动
+          消除）**）。前批 4.10.99（控制台/CLI 宿主移除 EventLog 默认注册——扩展侧零代码
           致非管理员环境 Warning 门控日志触发 EventLog 写路径 Win32Exception 崩溃；`ConfigConsoleDomain`
           开头按 `ImplementationType == typeof(EventLogLoggerProvider)` 过滤删除描述符——**不得用
           `RemoveAll<T>`**（按 ServiceType 匹配对 ILoggerProvider 默认注册永不命中，一审 B1 陷阱）；
@@ -187,19 +194,24 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.99" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.99" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.99" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.99" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.99" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.99" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.99" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.99" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.100" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.100" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.100" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.100" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.100" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.100" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.100" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.100" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.100" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.99" />
-<!-- ✅ 全量 lockstep 4.10.99（2026-10-30——**控制台/CLI 宿主移除 EventLog 默认注册**（DMP-Lite 转达，
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.100" />
+<!-- ✅ 全量 lockstep 4.10.100（2026-10-30——**TABLE002 裸 [Table] 实体误报修复**（DMP-Lite 转达
+     ——`ExtractEntityTableNames` 兜底 ClassName：裸 [Table]（无 Name）→ 类名（实体默认表名约定，
+     对齐 cshtml `vw_{ClassName}` 先例；实体=类名 / VEntity=vw_ 前缀形态不同，`GetTableName` 层不分层
+     不掺策略）；消除 VEntity ViewSql 引用裸实体时的 TABLE002 误报；不吞真缺失（C2 防过宽用例）；
+     ADR100 决策 3 注记 + D18A 补注；扩展侧适配 = **CPM lockstep 即完成（零代码）**）。
+     历史 lockstep 4.10.99（2026-10-30——**控制台/CLI 宿主移除 EventLog 默认注册**（DMP-Lite 转达，
      非管理员崩溃根治）：.NET 10 `Host.CreateApplicationBuilder()` 在 Windows 无条件 `AddEventLog()` + 过滤器
      默认 `>= Warning`，TKWF 域初始化 Warning 门控日志（SystemSetupRequired/GateWarning）恰好触发 → 非管理员对
      事件日志源无写权限 `Win32Exception` → Logger 聚合崩溃；修法 = `ConfigConsoleDomain` 开头按
@@ -227,7 +239,10 @@
      本仓转达根因③被证伪——扩展项目不生成空壳注册，`.Controllers` 文件为旧 SDK 遗留产物）+ **4.10.97 无手写门面三件套闭包**（catalog 新增 `ImplementationTypes`（与 InterfaceNames 索引对齐）+ 实现类 `MetaType.Service` 注册——控制器经 `user.Use<实现类>()` 取服务；旧包回退命名约定，不命中报 `EXTIMPL001`；ADR122 SG3 桩命名空间取元数据原值，`.Api` 类型等价）；
      桥接历史见 L67 注记（4.10.89 CS0534 跳过 / 4.10.90 RestTypeInfoRegistry 修复 / 4.10.91 门面判定未放宽不可锁 /
      4.10.92 ADR118 根治 / 4.10.93 CS8785 数组特性参数 / 4.10.94 CS0535 装饰器命名口径 / 4.10.95 假名+TUSER001 / 4.10.96 排除集 / 4.10.97 三件套+SG3 桩） -->
-    <!-- ✅ TKWF.CodeGeneration 4.10.99（历史沿革——**4.10.99（2026-10-30）**：与本批次 lockstep 同版发布——
+    <!-- ✅ TKWF.CodeGeneration 4.10.100（历史沿革——**4.10.100（2026-10-30）**：与本批次 lockstep 同版发布——
+         v4.10.100 变更（TABLE002 裸 [Table] 兜底 ClassName）为生成器判据修正（EntityMetadataGenerator
+         ExtractEntityTableNames），CodeGeneration 同版发布，扩展侧锁 4.10.100 即完成（Analyzer 版本对齐，
+         重建即生效）；**4.10.99（2026-10-30）**：与本批次 lockstep 同版发布——
          v4.10.99 变更（控制台宿主 EventLog 移除）为运行时逻辑，CodeGeneration 无生成器变更，扩展侧
          锁 4.10.99 即完成（Analyzer 版本对齐，重建即生效）；4.10.97（ADR121/ADR122——catalog
          `ImplementationTypes` + SG3 桩命名空间原值）；前版 4.10.85 为 2026-10-24 B3a/B3b lockstep 解除本地锁 + 门控精化正式版；
@@ -288,12 +303,12 @@
          仅 Web 扩展生成注册表 + dispatcher 空守卫 + IsDataService 跳过）+ 4.10.85（门控精化——
          referencesAspNetCore 从 StartsWith(Microsoft.AspNetCore) 改精确名单——TKWF.Domain 传递依赖
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.99" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.99" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.100" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.100" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.99" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.100" />
   </ItemGroup>
 </Project>
 

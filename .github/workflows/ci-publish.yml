@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "branch" ]]; then
-            CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
+            CHANGED=$(git -c core.quotepath=false diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
             # 所有变更均在 docs/ 或 *.md → docs-only；跳过全量构建
             if [[ -z "$(echo "$CHANGED" | grep -vE '^(docs/|.*\.md$)')" ]]; then
               echo "docs-only=true" >> "$GITHUB_OUTPUT"
@@ -91,9 +91,9 @@ jobs:
           TARGETS=""
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BASE="${{ github.event.pull_request.base.sha }}"
-            CHANGED=$(git diff --name-only "$BASE" "${{ github.sha }}" || true)
+            CHANGED=$(git -c core.quotepath=false diff --name-only "$BASE" "${{ github.sha }}" || true)
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
+            CHANGED=$(git -c core.quotepath=false diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
           else
             CHANGED=""   # workflow_dispatch：无 diff 基准 → fallback 全量
           fi

@@ -273,7 +273,7 @@ jobs:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
           DISPATCH_TAGS: ${{ github.event.inputs.tags }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [[ "${{ github.event_name }}" == "release" ]]; then
             TAGS=("${GITHUB_REF#refs/tags/}")
           elif [[ -n "$DISPATCH_TAGS" ]]; then
@@ -283,19 +283,37 @@ jobs:
             exit 1
           fi
 
+          # 逐 tag 失败隔离（2026-11-01 实证）：批内某 tag 自身不可编译（如源码引用新版框架 API
+          # 但 CPM 仍锁旧版）时，旧实现 `set -e` 直接中断整批，导致同批后续 tag 根本没被尝试。
+          # 现改为：单 tag 在子 shell 内 fail-fast，失败仅记录并继续；全部跑完后若有失败整体 exit 1。
+          FAILED=()
           for tag in "${TAGS[@]}"; do
             tag="$(echo "$tag" | xargs)"
             echo "=== Publishing $tag ==="
-            git checkout -q "$tag"
-            git clean -fdx -q
-            dotnet restore TKWF.Extensions.slnx --nologo
-            dotnet build TKWF.Extensions.slnx -c Release --no-restore --nologo
-            dotnet pack TKWF.Extensions.slnx -c Release --no-build -o ${{ env.NUGET_OUTPUT }} --nologo
-            dotnet nuget push ${{ env.NUGET_OUTPUT }}/*.nupkg \
-              --source https://api.nuget.org/v3/index.json \
-              --api-key "$NUGET_API_KEY" \
-              --skip-duplicate
+            if (
+              set -euo pipefail
+              git checkout -q "$tag"
+              git clean -fdx -q
+              dotnet restore TKWF.Extensions.slnx --nologo
+              dotnet build TKWF.Extensions.slnx -c Release --no-restore --nologo
+              dotnet pack TKWF.Extensions.slnx -c Release --no-build -o ${{ env.NUGET_OUTPUT }} --nologo
+              dotnet nuget push ${{ env.NUGET_OUTPUT }}/*.nupkg \
+                --source https://api.nuget.org/v3/index.json \
+                --api-key "$NUGET_API_KEY" \
+                --skip-duplicate
+            ); then
+              echo "=== OK: $tag ==="
+            else
+              echo "::error::Publish failed for tag: $tag" >&2
+              FAILED+=("$tag")
+            fi
           done
+
+          if (( ${#FAILED[@]} > 0 )); then
+            echo "::error::${#FAILED[@]} tag(s) failed: ${FAILED[*]}" >&2
+            exit 1
+          fi
+          echo "All ${#TAGS[@]} tag(s) published successfully."
 
   # 2026-10-17 Actions run 历史清理（对齐主框架 cleanup-runs + 用户裁定 OR 组合条件）：
   # 保留规则（任一命中即保留，删除需同时超出——时间窗与数量互补）：

@@ -3,9 +3,10 @@ name: CI & Publish (Extensions)
 # TKWF.Extensions 统一 CI + NuGet 发布（2026-09-15 独立构建模式 + Trusted Publishing）
 #
 # 触发：
-# - push main / PR：构建 + 全量测试回归
-# - push tag（{扩展名}/v*，如 Permissions/v0.9.1 / Account.Abstractions/v0.1.1）：构建 + 测试 + Pack + 推送 NuGet（--skip-duplicate）
-# - workflow_dispatch：手动触发
+# - push main / PR：构建 + 增量测试回归（只测受影响扩展项目；docs-only 跳过）
+# - workflow_dispatch（v4.10.101 起发布唯一入口）：tags 输入逗号分隔待发布 tag → 逐个 checkout/build/pack/push
+# - tag 推送（{扩展名}/v*）：v4.10.101 起不再触发 CI（版本确认与发布解耦，零 CI 消耗）
+# - release：保持发布（GitHub Release 创建即触发）
 #
 # 独立构建模式（2026-09-15 迁移：ProjectReference → PackageReference）：
 # 扩展经 PackageReference 引用主框架 NuGet 包（TKWF.Domain 4.10.24 等，版本集中 Directory.Packages.props），
@@ -20,15 +21,24 @@ name: CI & Publish (Extensions)
 on:
   push:
     branches: [main]
-    tags: ['**/v*']
   pull_request:
     branches: [main]
+  # v4.10.101 同步（对齐主框架阶段战略）：tag 推送不再触发 CI（版本确认与发布解耦——
+  # 每扩展独立 tag 照打照推，零 CI 消耗）；发布改为 workflow_dispatch 手动攒批触发。
   workflow_dispatch:
+    inputs:
+      # 攒批发布 tag 列表：逗号分隔（如 Permissions/v0.9.1,Account/v0.2.0）。
+      # 每个 tag 依次 checkout → build → pack → push（--skip-duplicate 幂等）。
+      tags:
+        description: 'Comma-separated tags to publish (e.g. Permissions/v0.9.1,Account/v0.2.0)'
+        required: true
 
 # 方案 2（2026-09-16，CI 负载治理）：concurrency 串行化——同 ref 连续 push 只保留最新 run，
 # 排队中的旧 run 立即取消（不浪费共享 runner slot）。
+# v4.10.101：group 追加 event_name——dispatch（ref=main）与 main push 同 ref 但语义不同，
+# 混用 group 会导致 dispatch 发布被后续 push 取消。
 concurrency:
-  group: ext-ci-${{ github.ref }}
+  group: ext-ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -223,31 +233,25 @@ jobs:
             done
           fi
 
-      - name: Pack
-        if: startsWith(github.ref, 'refs/tags/')
-        run: dotnet pack TKWF.Extensions.slnx -c Release --no-build -o ${{ env.NUGET_OUTPUT }} --nologo
-
-      - name: Upload artifacts
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
-        with:
-          name: nupkgs
-          path: ${{ env.NUGET_OUTPUT }}/*.nupkg
-          retention-days: 7
+      # v4.10.101：Pack/Upload artifacts 从 build-test 移除——tag 不再触发本 job；
+      # 发布由 publish job 对每个待发布 tag 自包含 build+pack（不依赖制品，跨 tag 复用制品会串版本）。
 
   publish:
     needs: build-test
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write          # Trusted Publishing：允许 GitHub 向该 job 签发 OIDC token（免 API key）
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: nupkgs
-          path: ${{ env.NUGET_OUTPUT }}
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
@@ -256,12 +260,37 @@ jobs:
           # nuget.org 用户名（profile name，非邮箱）——唯一需要配置的 secret（公开信息）
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Push NuGet packages
+      # v4.10.101（阶段战略·攒批发布）：release 事件取当前 tag；dispatch 取 tags 输入列表。
+      # 每个 tag 自包含 restore/build/pack/push（不同 tag 可能锁定不同主框架包版本）。
+      # 循环前 git clean -fdx 清前一个 tag 的构建残留（防 obj/bin 跨 tag 污染 MinVer 打包）。
+      - name: Publish (release event or batch tags from dispatch)
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          DISPATCH_TAGS: ${{ github.event.inputs.tags }}
         run: |
-          dotnet nuget push ${{ env.NUGET_OUTPUT }}/*.nupkg \
-            --source https://api.nuget.org/v3/index.json \
-            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
-            --skip-duplicate
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAGS=("${GITHUB_REF#refs/tags/}")
+          elif [[ -n "$DISPATCH_TAGS" ]]; then
+            IFS=',' read -ra TAGS <<< "$DISPATCH_TAGS"
+          else
+            echo "::error::No tags provided for workflow_dispatch" >&2
+            exit 1
+          fi
+
+          for tag in "${TAGS[@]}"; do
+            tag="$(echo "$tag" | xargs)"
+            echo "=== Publishing $tag ==="
+            git checkout -q "$tag"
+            git clean -fdx -q
+            dotnet restore TKWF.Extensions.slnx --nologo
+            dotnet build TKWF.Extensions.slnx -c Release --no-restore --nologo
+            dotnet pack TKWF.Extensions.slnx -c Release --no-build -o ${{ env.NUGET_OUTPUT }} --nologo
+            dotnet nuget push ${{ env.NUGET_OUTPUT }}/*.nupkg \
+              --source https://api.nuget.org/v3/index.json \
+              --api-key "$NUGET_API_KEY" \
+              --skip-duplicate
+          done
 
   # 2026-10-17 Actions run 历史清理（对齐主框架 cleanup-runs + 用户裁定 OR 组合条件）：
   # 保留规则（任一命中即保留，删除需同时超出——时间窗与数量互补）：

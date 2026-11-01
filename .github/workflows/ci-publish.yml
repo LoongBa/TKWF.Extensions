@@ -4,9 +4,9 @@ name: CI & Publish (Extensions)
 #
 # 触发：
 # - push main / PR：构建 + 增量测试回归（只测受影响扩展项目；docs-only 跳过）
-# - workflow_dispatch（v4.10.101 起发布唯一入口）：tags 输入逗号分隔待发布 tag → 逐个 checkout/build/pack/push
+# - workflow_dispatch（v4.10.101 起发布入口）：tags 输入逗号分隔待发布 tag → 全量测试一次 → 逐个 checkout/build/pack/push
+# - release（published，发布门禁）：全量测试一次 → 发布该 Release 对应 tag
 # - tag 推送（{扩展名}/v*）：v4.10.101 起不再触发 CI（版本确认与发布解耦，零 CI 消耗）
-# - release：保持发布（GitHub Release 创建即触发）
 #
 # 独立构建模式（2026-09-15 迁移：ProjectReference → PackageReference）：
 # 扩展经 PackageReference 引用主框架 NuGet 包（TKWF.Domain 4.10.24 等，版本集中 Directory.Packages.props），
@@ -23,6 +23,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # v4.10.101（对齐主框架）：release 与 workflow_dispatch 同为发布门禁——
+  # 全量测试一次（changes → __ALL__），随后发布（release 取该 tag；dispatch 取 tags 列表）。
+  release:
+    types: [published]
   # v4.10.101 同步（对齐主框架阶段战略）：tag 推送不再触发 CI（版本确认与发布解耦——
   # 每扩展独立 tag 照打照推，零 CI 消耗）；发布改为 workflow_dispatch 手动攒批触发。
   workflow_dispatch:
@@ -84,7 +88,8 @@ jobs:
           fi
 
           # ── 受影响测试项目推导（2026-10-17 定向测试）──
-          # 适用范围：tag push（diff=tag 引入变更）/PR（base..head）/分支 push（before..sha）
+          # 适用范围：PR（base..head）/分支 push（before..sha）按 diff 推导；
+          # release/workflow_dispatch（发布门禁）恒 __ALL__ 全量。
           # 契约包（*.Abstractions/）或 CPM（Directory.Packages.props）变更 → __ALL__（影响面不可静态穷举，纪律矩阵建议 L2）
           # 单扩展变更 → 反向图：受影响扩展自身测试项目 + ProjectReference 引用它的测试项目
           # 空 diff（tag 指向 main 已测 commit）→ 空（跳过 Test——main 已全量测过）
@@ -95,11 +100,11 @@ jobs:
           elif [[ "${{ github.event_name }}" == "push" ]]; then
             CHANGED=$(git -c core.quotepath=false diff --name-only "${{ github.event.before }}" "${{ github.sha }}" || true)
           else
-            CHANGED=""   # workflow_dispatch：无 diff 基准 → fallback 全量
+            CHANGED=""   # workflow_dispatch/release：无 diff 基准 → fallback 全量
           fi
           if [[ -z "$CHANGED" ]]; then
-            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-              TARGETS="__ALL__"   # manual：无法推导 → 全量（fallback 安全）
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "release" ]]; then
+              TARGETS="__ALL__"   # manual/release（发布门禁）：无 diff 基准 → 全量
             else
               TARGETS=""          # 空 diff（tag 指向已测 commit）→ 跳过 Test
             fi

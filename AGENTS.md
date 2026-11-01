@@ -94,6 +94,7 @@
 - **任何 `git tag` 操作（创建/推送）必须事先征求用户同意**。tag = 版本发布确认（触发 MinVer 版本号）。
 - 日常开发、迭代完成 → 只 `push` 提交，**不自动打 tag**。
 - 用户明确同意打 tag 后，使用 `v` 前缀（如 `v0.1.0`），版本号与开发方案目标一致。
+- **发布入口（v4.10.101 起，与主框架对齐）**：tag 推送**不触发 CI、不发布**；发布走 `workflow_dispatch`（`tags` 逗号分隔，可攒批）或创建 GitHub Release（单 tag，发布该 tag）。**默认只填最后一个 tag**（它包含前面所有变更）；仅当①被锁定版本需先行发布（如某扩展 CPM 锁定中间框架版本、消费方锁定某扩展版本）②补发/回滚时才填多个。全量测试在发布门禁跑一次，publish 循环各 tag 只 build/pack/push。权威发布纪律见主框架 `docs/AC-Kit/guides/迭代与发布纪律.md` §二（本仓库无独立副本）。
 - **发布后部署纪律（2026-10-09 用户裁定）**：tag push 后 **本地全量部署优先**（DLL 模式先验证，避免阻塞其它项目等 dll）；CI 发布后**不必等待 nuget.org 传播**（publish job success 即闭环——index 传播延迟是 nuget.org 侧特性，不阻塞后续工作）。
 - **扩展部署收口脚本（2026-10-26 新增，对偶框架 `_TKWF\build\build-deployment.ps1`）**：`build\build-ext-deployment.ps1`——扩展 DLL 日常由 `_PushToRefs` 构建后自动推送 `%TKWFDeployPath%\build\refs\`（与框架 DLL 混驻，消费方 DLL 模式统一引用），但**项目已删除/重命名 → refs 孤儿 DLL 永不被覆盖**（框架 -Cleanup 同型问题扩展侧无解），需脚本收口。使用场景：
   - **发布后/定期一致性收口**：`.\build\build-ext-deployment.ps1 -Cleanup`（清空 refs 扩展 DLL → 重建 slnx → 全量推送 → 孤儿清理）

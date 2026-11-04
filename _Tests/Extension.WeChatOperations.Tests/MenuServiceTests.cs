@@ -7,6 +7,7 @@ using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -184,6 +185,94 @@ public class MenuServiceTests : WeChatOperationsTestHost
         Assert.NotNull(log);   // Delete 审计
     }
 
+    /// <summary>v0.8.1 确认拉取失败（网络异常型）→ PublishAsync 不抛，提交结构落本地（快照 pocoo 兼容 +
+    /// 版本 AfterJson raw + 审计 Remark 标注——后续 GetCurrentAsync 自愈）。</summary>
+    [Fact]
+    public async Task PublishAsync_ConfirmFetchFails_BestEffortLocalCommit()
+    {
+        using var _ = this;
+        // WebApiClient 网络异常（HttpRequestException）→ best-effort 分支
+        Handler = WeChatOperationsTestSupport.CreateStubHandler(menuJson: """{"errcode":-1,"errmsg":"system error"}""");
+        var (provider, user) = BindScope();
+        await SeedConfigAsync(user);
+        var service = user.Use<IMenuService>();
+
+        var confirmed = await RunInFrameAsync(provider, user,
+            () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
+
+        Assert.NotNull(confirmed);   // 提交结构兜底（WrapSubmittedMenuJson——非 null）
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        // ① 快照已落（提交结构包装——pocoo 兼容形状，GetClickKeysAsync 可解析）
+        var snapshot = await fsql.Select<MenuSnapshotEntity>().Where(s => s.ChannelId == "ch-menu")
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(snapshot);
+        var snapMenu = System.Text.Json.JsonSerializer.Deserialize<TKWF.Federation.WeChat.WeChatSelfMenuInfoResult>(snapshot!.MenuJson);
+        Assert.NotNull(snapMenu);
+        Assert.NotNull(snapMenu!.SelfMenuInfo);
+        Assert.Equal("菜单一", snapMenu.SelfMenuInfo!.Button[0].Name);
+        // ② 版本已落（AfterJson raw 透传原样——回滚数据源不受污染）
+        var versions = await fsql.Select<MenuVersionEntity>().Where(v => v.ChannelId == "ch-menu")
+            .OrderBy(v => v.VersionNo).ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Single(versions);
+        Assert.Equal(MenuV1, versions[0].AfterJson);
+        // ③ 审计 Remark 标注 best-effort
+        var log = await fsql.Select<MenuPublishLogEntity>().Where(l => l.ChannelId == "ch-menu")
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(log);
+        Assert.Contains("确认拉取失败 best-effort", log!.Remark);
+    }
+
+    /// <summary>v0.8.1 确认拉取**超时**（TaskCanceledException 且 ct 未取消——HttpClient 超时形态；审核 P0-2）→
+    /// 同样 best-effort 落库不抛，半成功副作用在超时场景下也消除。</summary>
+    [Fact]
+    public async Task PublishAsync_ConfirmTimeout_BestEffortLocalCommit()
+    {
+        using var _ = this;
+        Handler = WeChatOperationsTestSupport.CreateStubHandler(currentMenuInfoTimeout: true);
+        var (provider, user) = BindScope();
+        await SeedConfigAsync(user);
+        var service = user.Use<IMenuService>();
+
+        var confirmed = await RunInFrameAsync(provider, user,
+            () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
+
+        Assert.NotNull(confirmed);   // 超时兜底（WrapSubmittedMenuJson——非 null）
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var snapshot = await fsql.Select<MenuSnapshotEntity>().Where(s => s.ChannelId == "ch-menu")
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(snapshot);
+        Assert.False(string.IsNullOrWhiteSpace(snapshot!.MenuJson));
+        var log = await fsql.Select<MenuPublishLogEntity>().Where(l => l.ChannelId == "ch-menu")
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(log);
+        Assert.Contains("确认拉取失败 best-effort", log!.Remark);
+    }
+
+    /// <summary>v0.8.1 RollbackAsync 复用 PublishAsync 全链——确认拉取失败下回滚同样 best-effort 落库不抛。</summary>
+    [Fact]
+    public async Task RollbackAsync_ConfirmFetchFails_BestEffort()
+    {
+        using var _ = this;
+        Handler = WeChatOperationsTestSupport.CreateStubHandler(menuJson: """{"errcode":-1,"errmsg":"system error"}""");
+        var (provider, user) = BindScope();
+        await SeedConfigAsync(user);
+        var service = user.Use<IMenuService>();
+
+        await RunInFrameAsync(provider, user, () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV1), ct: TestContext.Current.CancellationToken));
+        await RunInFrameAsync(provider, user, () => service.PublishAsync("ch-menu", new PublishMenuRequest(MenuV2), ct: TestContext.Current.CancellationToken));
+        var v1 = (await service.ListVersionsAsync("ch-menu", TestContext.Current.CancellationToken))[0];
+
+        var confirmed = await RunInFrameAsync(provider, user,
+            () => service.RollbackAsync("ch-menu", new RollbackMenuRequest(v1.Id), ct: TestContext.Current.CancellationToken));
+
+        Assert.NotNull(confirmed);   // 回滚 = 重新发布 v1 内容（best-effort 兜底）
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var versions = await fsql.Select<MenuVersionEntity>().Where(v => v.ChannelId == "ch-menu")
+            .OrderBy(v => v.VersionNo).ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(3, versions.Count);
+        Assert.Equal(MenuV1, versions[2].AfterJson);   // 回滚后新版本内容 = v1
+    }
+
     /// <summary>RollbackAsync 版本不存在 → InvalidOperationException。</summary>
     [Fact]
     public async Task RollbackAsync_UnknownVersion_Throws()
@@ -217,3 +306,4 @@ public class MenuServiceTests : WeChatOperationsTestHost
             ChannelType: "wechat_event", AppSecret: "menu-secret"), ct: TestContext.Current.CancellationToken);
     }
 }
+

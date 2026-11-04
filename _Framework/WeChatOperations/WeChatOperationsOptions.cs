@@ -8,9 +8,9 @@ namespace TKWF.Ext.WeChatOperations;
 /// <para>配置分层（AGENTS §8）：领域决策（默认兜底文案等）归本节；表现层暴露面（REST 路由）由 SG1b
 /// <c>[GenerateController]</c> 生成端点的 <c>[ApiExpose(RestRoute)]</c> 常量承载（V0.4.0 起替换手写
 /// WebExtension——路由编译期确定性 + 配置单一事实源）；领域行为无 Web 层镜像开关（防表现层绕过）。</para>
-/// <para><see cref="SecretEncryptionKeyPath"/>/<see cref="IsProduction"/>：凭证 AES-GCM 密钥文件路径/生产模式
-/// 标记（keyed <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> 键 WeChatOperations——
-/// 生产缺密钥 fail-fast / 开发随机兜底，对齐 AuthCenter E4）。</para>
+/// <para>V0.9.0 拆分（2026-11-05）：凭证 AES-GCM 密钥配置（SecretEncryptionKeyPath/IsProduction）已随通道面
+/// 下沉 <c>WeChatChannelsOptions</c>（<c>TKWF:WeChatChannels</c> 节）——本类仅保留运营侧字段，消费方
+/// appsettings 密钥相关配置迁移新节。</para>
 /// </summary>
 [Options("TKWF:WeChatOperations")]
 public class WeChatOperationsOptions
@@ -23,12 +23,6 @@ public class WeChatOperationsOptions
     /// 统一返回维护提示 <see cref="DefaultReplyText"/>——DMP-Lite 5.8"消息业务总开关"；<b>仅转发网关不受控</b>
     /// ——<see cref="WeChatOperationsReplyHandler"/> 网关 RouteAsync 先行执行仍转发生效）。</summary>
     public bool MessageBusinessEnabled { get; set; } = true;
-
-    /// <summary>凭证 AES-GCM 密钥文件路径（keyed ISymmetricKeyProvider——生产缺密钥 fail-fast / 开发随机兜底）。</summary>
-    public string? SecretEncryptionKeyPath { get; set; }
-
-    /// <summary>生产模式（true=缺密钥拒绝启动，禁 dev 随机兜底；开发置 false）。</summary>
-    public bool IsProduction { get; set; } = true;
 
     /// <summary>交互日志保留天数（0/负数 = 不清理；阶段一查询面够用，清理任务归后续迭代）。</summary>
     public int InteractionLogRetentionDays { get; set; }

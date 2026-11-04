@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TKWF.Ext.WeChatChannels.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="FreeSql" />
+    <PackageReference Include="FreeSql.Provider.Sqlite" />
+    <PackageReference Include="FreeSql.Extensions.Linq" />
+    <PackageReference Include="FreeSql.DbContext" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FreeSql" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.DependencyInjection.Extensions" />
+    <Using Include="Microsoft.Extensions.Options" />
+    <Using Include="TKW.Framework.Domain.Interfaces" />
+    <Using Include="TKW.Framework.Domain.Hosting" />
+    <Using Include="TKW.Framework.Core.Hosting" />
+    <Using Include="TKW.Framework.Domain.Session" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 被测扩展：通道底座（所引 Abstractions 由主包传递——契约 IChannelConfigService） -->
+    <ProjectReference Include="..\..\_Framework\WeChatChannels\TKWF.Ext.WeChatChannels.csproj" />
+    <!-- 平台网关库（WeChatOptions/WeChatChannelConfig/IWeChatCredentialResolver——凭证解析降级契约） -->
+    <ProjectReference Include="..\..\_Framework\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
+    <!-- 通道编排契约（IChannelSource/ChannelConfig/ChannelCapabilities——注册源投影断言） -->
+    <ProjectReference Include="..\..\_Framework\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
+    <!-- C 基座（TestHostBase/TestUserInfo/TestMetaContext/TestUserHelper） -->
+    <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+  </ItemGroup>
+
+</Project>

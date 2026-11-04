@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.WeChatChannels</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>WeChatChannels.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.WeChatChannels.Abstractions</PackageId>
+    <Description>TKWF 扩展：微信公众号通道底座契约抽象（WeChatChannels.Abstractions——IChannelConfigService / SaveChannelRequest / WeChatChannelConfigDto）——依赖倒置（ADR48 L2 / 2026-11-05 拆分裁定）：WeChatOperations 拆分后通道底座独立扩展，运营扩展与消费方经契约消费（零实体、零 SG1、零 Initializer；namespace TKWF.Ext.WeChatChannels——跨程序集同 namespace，对齐 Federation.Abstractions 模式）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 契约继承 IDomainService（User.Use 帧内解析准入）需要 TKWF.Domain——双模式条件化（对齐 Permissions.Abstractions/Federation.Abstractions 先例） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain" HintPath="$(_LocalFwRefsDir)TKWF.Domain.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.dll')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- [ApiExpose] 契约标注所在（TKW.Framework.CodeGeneration）——SG1 接线 ① 框架抽象引用（双模式条件化，对齐 WeChatOperations csproj） -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- [RequirePermission] 权限标注契约（Permissions.Abstractions——WeChatChannels.Query/Manage 权限键，S2 依赖修正） -->
+    <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

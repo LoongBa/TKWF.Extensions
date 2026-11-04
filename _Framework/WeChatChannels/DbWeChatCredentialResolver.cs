@@ -8,7 +8,7 @@ using TKW.Framework.Domain.Interception;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Federation.WeChat;
 
-namespace TKWF.Ext.WeChatOperations;
+namespace TKWF.Ext.WeChatChannels;
 
 /// <summary>
 /// DB 优先微信凭证解析器（两源并存接入点 ①——设计文档 §3.3.4：DB 命中 → AES-GCM 解密返回；
@@ -35,7 +35,7 @@ public sealed class DbWeChatCredentialResolver : IWeChatCredentialResolver
 
     public DbWeChatCredentialResolver(
         IOptions<WeChatOptions> options,
-        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)] ISymmetricKeyProvider keys,
+        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)] ISymmetricKeyProvider keys,
         ILogger<DbWeChatCredentialResolver> logger)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));

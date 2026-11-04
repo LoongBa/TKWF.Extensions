@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.WeChatChannels</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>WeChatChannels/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.WeChatChannels</PackageId>
+    <Description>TKWF 扩展：微信公众号通道底座（WeChatChannels——多通道接入管理：通道配置 CRUD（凭证 AES-GCM 密文落库）/ DB 凭证解析两源并存 / 通道注册源（IChannelSource Priority=100）/ 能力派生——2026-11-05 自 WeChatOperations 拆分下沉；平台模式装配，零运营依赖）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 自身契约包（L2：扩展间只引 Abstractions——IChannelConfigService 契约实现） -->
+    <ProjectReference Include="..\WeChatChannels.Abstractions\TKWF.Ext.WeChatChannels.Abstractions.csproj" />
+    <!-- 通道编排契约（ChannelConfig/IChannelSource/IUserBoundChannelSource/ChannelCapabilities/ChannelTypeRegistry/ChannelConfigChanged——namespace TKWF.Ext.Federation 跨程序集） -->
+    <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
+    <!-- 平台网关库（IWeChatCredentialResolver 契约 / WeChatOptions——DbWeChatCredentialResolver 两源并存降级契约） -->
+    <ProjectReference Include="..\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
+    <!-- 权限契约包（[RequirePermission]——契约接口标注在 Abstractions；实现经接口继承；S2 依赖修正） -->
+    <ProjectReference Include="..\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+
+    <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+
+    <!-- SG1 分析器：纯 Analyzer 包（analyzers/dotnet/cs/，Roslyn 自动加载）——恒用 NuGet 包（AGENTS §6 版本锁） -->
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->
+  <ItemGroup>
+    <PackageReference Include="FreeSql" />
+  </ItemGroup>
+
+  <!-- ⚠️ 非 Web 扩展形态（2026-11-05 BLOCKER 修复——对齐 Identity/Notifications/AuditLogging 先例）：
+       不引 AspNetCore FrameworkReference → SG1b referencesAspNetCore=false → 不生成 B4 端点注册表、
+       不发射 [assembly: ExtensionEndpointRegistrations] → 消费方 SG2 按 ADR47 能力清单生成控制器
+       （旧机制，端点 = RestBasePath + RestRoute 全段）。若引 AspNetCore 则进入 Web 形态
+       （MapGenerated 按 facadeType.Assembly 定位注册表/模块前缀——契约接口在 Abstractions 会
+       fail-closed，AuthCenter 形态必须接口与 ExtensionModule 同程序集）。 -->
+
+  <!-- SG1 化：SG1 生成文件排除物理编译（避免重复 Decorator 冲突） -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <!-- SG1 化：xCodeGen 配置路径 -->
+  <PropertyGroup>
+    <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\wechatchannels.xCodeGen.json</_XCG_ConfigPath>
+  </PropertyGroup>
+
+  <!-- 测试项目访问 internal -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.WeChatChannels.Tests" />
+    <!-- V0.9.0 拆分（2026-11-05）：运营扩展测试宿主注册通道 DataService 单例（镜像生产 ADR61），
+         通道 DataService 为 internal 分部类——授权运营测试访问 -->
+    <InternalsVisibleTo Include="TKWF.Ext.WeChatOperations.Tests" />
+  </ItemGroup>
+
+</Project>

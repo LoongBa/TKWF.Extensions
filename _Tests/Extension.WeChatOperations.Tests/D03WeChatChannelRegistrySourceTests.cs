@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
 using System.Threading.Tasks;
 using TKWF.Ext.Federation;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using Xunit;
 
@@ -254,6 +255,6 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
     private static WeChatChannelRegistrySource CreateSource(IServiceProvider provider)
         => new(
             provider.GetRequiredKeyedService<TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider>(
-                WeChatOperationsKeyProviderKeys.WeChatOperations),
+                WeChatChannelsKeyProviderKeys.WeChatChannels),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatChannelRegistrySource>.Instance);
 }

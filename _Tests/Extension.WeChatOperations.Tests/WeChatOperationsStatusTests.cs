@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -139,3 +140,4 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
         Assert.Equal(2.0 / 4.0, status.ForwardSuccessRate, 10);   // Success 2 ÷ (2+1+1)
     }
 }
+

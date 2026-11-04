@@ -26,7 +26,7 @@
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
   </PropertyGroup>
 
-  <ItemGroup>
+<ItemGroup>
     <!-- 平台网关库（库引——通讯走平台库，单向依赖无循环；设计文档 §3.3.4：DbWeChatCredentialResolver/WeChatChannelRegistrySource
          消费 Federation.WeChat 出站/验签/事件回复逻辑，此处仅声明库引用，凭证/事件能力由后续门面任务装配） -->
     <ProjectReference Include="..\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
@@ -45,6 +45,9 @@
     <!-- V0.4.0 ③ 消息业务总开关 DB 化：FeatureManagement 消费（IFeatureManager.IsEnabledAsync——运行时开关 DB 权威
          + 版本缓存失效 + 分布式事件；Options MessageBusinessEnabled 保留为启动默认值语义，FeatureDefinition DefaultValue 对齐） -->
     <ProjectReference Include="..\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
+    <!-- V0.9.0 拆分（2026-11-05）：通道底座契约包——运营门面经 IChannelConfigService 复用通道（L2 只引
+         Abstractions 不引主包——TKWF0022；[TKWFExtensionDependency] 补契约依赖门控，消费方双白名单） -->
+    <ProjectReference Include="..\WeChatChannels.Abstractions\TKWF.Ext.WeChatChannels.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

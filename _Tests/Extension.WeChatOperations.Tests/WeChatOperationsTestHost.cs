@@ -18,6 +18,7 @@ using TKW.Framework.Domain.Interception;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Federation.WeChat;
 using TKWF.Federation.WeChat.MessageGateway;
 
@@ -131,10 +132,11 @@ public class WeChatOperationsTestHost : IDisposable
     /// <summary>额外服务/基础设施注册（AddLogging + IFreeSql + UnitOfWorkManager 已在 BindScope 注册——见上）。</summary>
     protected void ConfigureHost(IServiceCollection services)
     {
-        // ① 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices：
-        //    6 门面 AddConstructibleService + handler TryAddEnumerableConstructible + keyed ISymmetricKeyProvider +
-        //    DbWeChatCredentialResolver（TryAddEnumerable Scoped）+ WeChatChannelRegistrySource（TryAddEnumerable——D03 1.7
-        //    Priority=100 高优先替代 Insert(0) 注册序）+ AddOptions）
+        // ① 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices；
+        //    V0.9.0 拆分（2026-11-05）双扩展装配：WeChatChannels（keyed 密钥/IChannelConfigService 门面/
+        //    DbWeChatCredentialResolver/WeChatChannelRegistrySource 两源并存——下沉注册方）+ WeChatOperations
+        //    （8 运营门面 + 网关 + handler——消费方）；顺序：底座先行（O4 依赖方向））
+        new WeChatChannelsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         new WeChatOperationsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         // ①b V0.4.0 ③ FeatureManagement 消费面（消息业务总开关 DB 化——生产路径最小等价面，对齐
@@ -254,12 +256,12 @@ public class WeChatOperationsTestHost : IDisposable
             services.Add(ServiceDescriptor.Scoped<IChannelSource>(_ => new DelegateChannelSource(ExtraChannels)));
 
         // ⑩ Options 兜底默认值（守卫工厂 ActivatorUtilities 解析剩余参数需 IOptions 可解析——Initializer 已 AddOptions；
-        //    此处编程覆盖测试专属值；⚠️ IsProduction 强制 false——测试环境开发模式（FileSymmetricKeyProvider
-        //    随机兜底密钥，生产模式缺密钥文件 fail-fast 会拒绝启动））
+        //    此处编程覆盖测试专属值；⚠️ WeChatChannelsOptions.IsProduction 强制 false——测试环境开发模式
+        //    （FileSymmetricKeyProvider 随机兜底密钥，生产模式缺密钥文件 fail-fast 会拒绝启动））
+        services.AddOptions<WeChatChannelsOptions>().Configure(o => o.IsProduction = false);
         services.AddOptions<WeChatOperationsOptions>().Configure(o =>
         {
             ConfigureOperationsOptions?.Invoke(o);
-            o.IsProduction = false;
         });
 
         // ⑩b V0.2.0 网关配置节（独立 Options——GatewayEnabled 默认 false fail-closed；测试编程覆盖入口）
@@ -433,12 +435,14 @@ internal static class WeChatOperationsTestSupport
     /// 微信 API 出站桩 HttpMessageHandler——按 URL 路径路由返回固定 JSON（不真打微信）。
     /// <para>路由 <c>cgi-bin/token</c>（access_token）、<c>cgi-bin/menu/create</c>（记录请求 body 供断言——
     /// 发布全链验证回显）、<c>cgi-bin/get_current_selfmenu_info</c>（菜单查询——<paramref name="menuJson"/>
-    /// 可配置）、<c>cgi-bin/menu/delete</c>（菜单删除）。其余路径 404。</para>
+    /// 可配置；<paramref name="currentMenuInfoTimeout"/> 注入超时形态 TaskCanceledException）、
+    /// <c>cgi-bin/menu/delete</c>（菜单删除）。其余路径 404。</para>
     /// </summary>
     public static HttpMessageHandler CreateStubHandler(
         string? menuJson = null,
-        List<string>? menuCreateBodies = null)
-        => new StubWeChatHandler(menuJson, menuCreateBodies);
+        List<string>? menuCreateBodies = null,
+        bool currentMenuInfoTimeout = false)
+        => new StubWeChatHandler(menuJson, menuCreateBodies, currentMenuInfoTimeout);
 
     /// <summary>构造语义事件派发（I2 语义层——handler 用例：微信参数包 → 语义 <see cref="ChannelEvent"/>；
     /// RawPayload 由 <c>__decrypted_xml</c> 键承载——handler <c>WechatEventContext.FromChannelEvent</c> 重建数据源）。</summary>
@@ -484,11 +488,13 @@ internal static class WeChatOperationsTestSupport
     {
         private readonly string? _menuJson;
         private readonly List<string>? _menuCreateBodies;
+        private readonly bool _currentMenuInfoTimeout;
 
-        public StubWeChatHandler(string? menuJson, List<string>? menuCreateBodies)
+        public StubWeChatHandler(string? menuJson, List<string>? menuCreateBodies, bool currentMenuInfoTimeout)
         {
             _menuJson = menuJson;
             _menuCreateBodies = menuCreateBodies;
+            _currentMenuInfoTimeout = currentMenuInfoTimeout;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -511,6 +517,8 @@ internal static class WeChatOperationsTestSupport
             }
             else if (path.EndsWith("/cgi-bin/get_current_selfmenu_info", StringComparison.Ordinal))
             {
+                if (_currentMenuInfoTimeout)
+                    return Task.FromException<HttpResponseMessage>(new TaskCanceledException("stub: current menu info timeout", new TimeoutException("stub: current menu info timeout")));
                 json = _menuJson
                     ?? "{\"is_menu_open\":1,\"selfmenu_info\":{\"button\":[{\"type\":\"click\",\"name\":\"测试菜单\",\"key\":\"test_key\"}]}}";
             }

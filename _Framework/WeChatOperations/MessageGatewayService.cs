@@ -11,6 +11,7 @@ using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat;
 using TKWF.Federation.WeChat.MessageGateway;
@@ -140,13 +141,15 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
 
     /// <summary>
     /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser；keys 经 keyed DI（复用
-    /// <see cref="WeChatOperationsKeyProviderKeys.WeChatOperations"/> 键——同扩展同信任边界，方案 §十·六 ③）；
+    /// <see cref="WeChatChannelsKeyProviderKeys.WeChatChannels"/> 键——2026-11-05 拆分 V0.9.0 起跨扩展同信任边界
+    /// （注册归 WeChatChannels Initializer，本扩展消费同一键——O4 依赖双白名单），下游端点令牌
+    /// AES-GCM 加解密；方案 §十·六 ③）；
     /// 熔断器（运行库 <see cref="WeChatCircuitBreaker"/>——进程内三态单例，每 EndpointId 独立）/ 出站客户端
     /// （typed client——<see cref="DownstreamForwardClient"/> DI 生命周期托管）/ options/logger 从 DI 解析——
     /// 非域基础设施，零 DataService 构造注入（DI004）。</summary>
     public MessageGatewayService(
         IDomainUser user,
-        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)]
+        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)]
         ISymmetricKeyProvider keys,
         WeChatCircuitBreaker breaker,
         DownstreamForwardClient client,

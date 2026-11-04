@@ -4,11 +4,13 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat;
 
@@ -35,6 +37,10 @@ public interface IMenuService : IDomainService
 
     /// <summary>发布/全量覆盖自定义菜单（menu/create raw JSON 透传 → 拉取确认 → 事务：MenuSnapshot 更新 +
     /// MenuVersion 追加 + MenuPublishLog Create）——返回发布后当前菜单结构（确认拉取）。
+    /// <para><b>best-effort 确认语义（v0.8.1，ADR-Federation.WeChat-菜单发布确认语义）</b>：确认拉取失败
+    /// （网络/超时/限流/微信 5xx——非形状缺陷）时仍以提交结构落本地（快照/版本/审计 Remark 标注），
+    /// 后续 <see cref="GetCurrentAsync"/> 拉取微信侧真实状态自愈——消除"微信侧已生效、本地未落"半成功副作用。
+    /// 失败时返回的为<b>提交结构包装的降级结果</b>（非微信侧真实结构）；极端（提交 JSON 非法）→ 返回 null 且快照置空。</para>
     /// <para>REST：<c>POST /api/wechat-ops/channels/{channelId}/menu</c>（单复杂参数 <see cref="PublishMenuRequest"/> → [FromBody]——menuJson 走 body 防 URL/日志泄漏）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
     [ApiExpose(RestRoute = "/channels/{channelId}/menu", RestMethod = "POST")]
@@ -80,9 +86,8 @@ public sealed class MenuService : DomainServiceBase, IMenuService
 {
     private readonly WeChatApiClient _apiClient;
     private readonly ITransactionManager _transactionManager;
+    private readonly ILogger? _logger;
 
-    private WeChatChannelConfigEntityDataService? _cfgDs;
-    private WeChatChannelConfigEntityDataService CfgDs => _cfgDs ??= User.Use<WeChatChannelConfigEntityDataService>();
     private MenuSnapshotEntityDataService? _snapDs;
     private MenuSnapshotEntityDataService SnapDs => _snapDs ??= User.Use<MenuSnapshotEntityDataService>();
     private MenuVersionEntityDataService? _verDs;
@@ -90,11 +95,12 @@ public sealed class MenuService : DomainServiceBase, IMenuService
     private MenuPublishLogEntityDataService? _logDs;
     private MenuPublishLogEntityDataService LogDs => _logDs ??= User.Use<MenuPublishLogEntityDataService>();
 
-    public MenuService(IDomainUser user, WeChatApiClient apiClient, ITransactionManager transactionManager)
+    public MenuService(IDomainUser user, WeChatApiClient apiClient, ITransactionManager transactionManager, ILogger? logger = null)
         : base(user)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -132,7 +138,21 @@ public sealed class MenuService : DomainServiceBase, IMenuService
         var beforeJson = await GetSnapshotAsync(channelId, ct);
 
         await _apiClient.CreateMenuAsync(token, menuJson, ct);
-        var confirmed = await _apiClient.GetCurrentSelfMenuInfoAsync(token, ct); // 拉取确认（发布成功语义）
+        // 拉取确认（发布成功语义）——best-effort：微信侧已生效、确认拉取失败（网络/超时/限流/微信 5xx）时
+        // 以提交结构 WrapSubmittedMenuJson 落本地（快照/版本/审计仍记），后续 GetCurrentAsync 拉取真实状态自愈
+        WeChatSelfMenuInfoResult? confirmed;
+        var confirmFailed = false;
+        try
+        {
+            confirmed = await _apiClient.GetCurrentSelfMenuInfoAsync(token, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // 含超时型（TaskCanceledException 且 ct 未取消——HttpClient 超时默认如此）；真取消（ct 已请求）传播
+            _logger?.LogWarning(ex, "菜单发布到微信成功，但确认拉取失败（best-effort 落库，下次 GetCurrentAsync 自愈）：channelId={ChannelId}", channelId);
+            confirmed = WrapSubmittedMenuJson(menuJson);
+            confirmFailed = true;
+        }
 
         // 事务：MenuSnapshot 更新 + MenuVersion 追加（VersionNo 递增）+ PublishLog Create 审计
         await using var scope = await BeginTxAsync(ct);
@@ -157,7 +177,7 @@ public sealed class MenuService : DomainServiceBase, IMenuService
             Operator = Operator(),
             OperateAt = DateTime.UtcNow,
             Action = 2,                    // Create（发布）
-            Remark = $"menu/create 发布（v{versionNo + 1}）",
+            Remark = $"menu/create 发布（v{versionNo + 1}）{(confirmFailed ? "（确认拉取失败 best-effort）" : string.Empty)}",
             CreateTime = DateTime.UtcNow,
             UpdateTime = DateTime.UtcNow,
         }, ct);
@@ -290,9 +310,26 @@ public sealed class MenuService : DomainServiceBase, IMenuService
     private static string SerializeForSnapshot(WeChatSelfMenuInfoResult? current)
         => current is null ? "" : System.Text.Json.JsonSerializer.Serialize(current);
 
-    private async Task<WeChatChannelConfigEntity> ResolveConfigAsync(string channelId, CancellationToken ct)
+    /// <summary>确认拉取失败时以提交结构构造快照承载（<c>{"is_menu_open":1,"selfmenu_info":&lt;raw&gt;}</c>——
+    /// pocoo 兼容形状，<see cref="GetClickKeysAsync"/> 可解析；raw 内 sub_button 数组形状由
+    /// <see cref="WeChatSubButtonListConverter"/> 接受；极端（raw 非合法 JSON 对象）→ null 空快照，
+    /// 版本 AfterJson 仍保 raw 可回滚）。</summary>
+    private static WeChatSelfMenuInfoResult? WrapSubmittedMenuJson(string menuJson)
     {
-        var cfg = await CfgDs.EntityGetAsync(c => c.ChannelId == channelId, ct);
+        try
+        {
+            return JsonSerializer.Deserialize<WeChatSelfMenuInfoResult>(
+                $"{{\"is_menu_open\":1,\"selfmenu_info\":{menuJson}}}");
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<WeChatChannelConfigDto> ResolveConfigAsync(string channelId, CancellationToken ct)
+    {
+        var cfg = await User.Use<IChannelConfigService>().GetByChannelIdAsync(channelId, ct);
         if (cfg is null)
             throw new InvalidOperationException($"公众号配置不存在：ChannelId={channelId}（请先经 IChannelConfigService.SaveChannelAsync 配置）");
         return cfg;

@@ -15,32 +15,31 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 微信公众号运营扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线（设计文档 §3.3/§5.11）。
-/// <para>ConfigureServices（V4.10.53 领域自治根治，ADR90 正确路线 + E4 密钥管理 + 两源并存装配）：</para>
+/// <para>ConfigureServices（2026-11-05 拆分改造——通道面下沉 WeChatChannels 后移除通道注册；V4.10.53 领域自治根治，ADR90 正确路线）：</para>
 /// <list type="bullet">
-/// <item><b>门面（AddConstructibleService）</b>——9 接口 : IDomainService
-///     （IChannelConfigService / IMenuService / IReplyRuleService / IMaterialService /
+/// <item><b>门面（AddConstructibleService）</b>——8 接口 : IDomainService
+///     （IMenuService / IReplyRuleService / IMaterialService /
 ///     ISubscriptionStatService / ILogQueryService + 网关 2 + <b>系统状态聚合
 ///     IWeChatOperationsStatusService（DMP-Lite 5.8 状态卡——只读聚合，V0.3.0 增）</b>）→
 ///     接口可构造守卫工厂 + 实现类 throw-factory；
-///     消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（帧内 CurrentAopUser 供给 ctor IDomainUser）。</item>
+///     消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（帧内 CurrentAopUser 供给 ctor IDomainUser）。
+///     <b>IChannelConfigService 已随 V0.9.0 拆分下沉 WeChatChannels（契约在 WeChatChannels.Abstractions，
+///     依赖双白名单：WeChatChannels + WeChatOperations——S1/O4）</b>。</item>
 /// <item><b>事件回复 handler（TryAddEnumerableConstructible）</b>——<see cref="WeChatOperationsReplyHandler"/>
 ///     （ADR92 集合版守卫工厂——继承平台 <see cref="TKWF.Federation.WeChat.WechatEventReplyHandlerBase"/>
 ///     二级分发 + 内部组合 template 兜底，Oracle P0 选项 A；消费方无需再注册
 ///     <see cref="TKWF.Federation.WeChat.WechatTemplateEventReplyHandler"/>）。</item>
-/// <item><b>两源并存（设计 §3.3.4）</b>——① <b>DB 凭证解析器</b>：<see cref="DbWeChatCredentialResolver"/>
-///     （契约 <see cref="TKWF.Federation.WeChat.IWeChatCredentialResolver"/> <b>非 IDomainService</b>——
-///     普通 DI TryAddEnumerable Scoped；追加在平台库 <c>AddWeChatFederationChannels()</c> 注册的缺省
-///     Options 实现（TryAddSingleton）<b>之后</b>——DI 单解析取最后注册 → DB 优先生效）；
-///     ② <b>DB 通道来源</b>：<see cref="WeChatChannelRegistrySource"/>（IChannelSource 普通 DI 集合——
-///     Priority=100 恒先于静态源 0，组合层按 Priority 降序首命中，<b>不依赖注册顺序</b>；
-///     取数经 <c>IUserBoundChannelSource</c> 由 Composite 构造时绑定域用户 + <c>User.Use&lt;DataService&gt;()</c>
-///     NoAop 直建——DataService 的 DI 注册为 throw-factory，不可 IServiceProvider 直取）。</item>
-/// <item><b>E4 密钥管理</b>——keyed <see cref="ISymmetricKeyProvider"/>（键
-///     <see cref="WeChatOperationsKeyProviderKeys.WeChatOperations"/>——C11 第 6 扩展边界自建常量，
-///     FileSymmetricKeyProvider 构造即加载：生产缺密钥 fail-fast / 开发随机兜底）——
-///     ChannelConfigService（加密落库）/ DbWeChatCredentialResolver（解密出站）ctor 经 [FromKeyedServices] 注入。</item>
+/// <item><b>E4 密钥管理（拆分改造）</b>——keyed <see cref="ISymmetricKeyProvider"/>（键
+///     <see cref="WeChatChannelsKeyProviderKeys.WeChatChannels"/>——<b>V0.9.0 起不在此注册</b>：
+///     注册归 WeChatChannels Initializer（过渡常量在 WeChatChannels.Abstractions，主框架
+///     <c>SymmetricKeyProviderKeys.WeChatChannels</c> 并入后切换）；本扩展 MessageGatewayService /
+///     WeChatMessageForwardJob（下游端点令牌加解密）经 [FromKeyedServices] <b>消费同一键</b>——
+///     跨扩展同一信任域（O4），依赖 WeChatChannels 已注册。</item>
+/// <item><b>网关装配</b>（不变）——DownstreamForwardClient typed client + WeChatCircuitBreaker 单例 +
+///     系统用户供给桥 + 异步抄送作业注册。</item>
 /// <item><b>Options</b>——WeChatOperationsOptions 标 [Options("TKWF:WeChatOperations")]——SG1 消费方自动绑定；
-///     此处 AddOptions 兜底默认值（守卫工厂 ActivatorUtilities 解析剩余参数需 IOptions 可解析）。</item>
+///     此处 AddOptions 兜底默认值（守卫工厂 ActivatorUtilities 解析剩余参数需 IOptions 可解析）。
+///     <b>密钥配置（SecretEncryptionKeyPath/IsProduction）已随拆分迁 WeChatChannelsOptions（TKWF:WeChatChannels 节）</b>。</item>
 /// </list>
 /// </summary>
 [TKWFExtension("WeChatOperations")]
@@ -52,6 +51,12 @@ namespace TKWF.Ext.WeChatOperations;
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelRegistry), MinVersion = "0.2.0")]
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IEventReplyHandler), MinVersion = "0.2.0")]
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelSource), MinVersion = "0.2.0")]
+// 2026-11-05 拆分（V0.9.0）：通道门面契约依赖 WeChatChannels.Abstractions（IChannelConfigService——
+//   运营门面经 User.Use<IChannelConfigService> 消费通道；依赖方须先白名单 WeChatChannels）。
+// ⚠️ MinVersion 0.0.0-preview.0：契约包首发 v0.1.0 tag 前为 preview 版本（DEP002 按引用程序集实际版本
+//   SemVer 比较——0.0.0-preview.x < 0.0.0 故不能用正式版下限），发布后提升为 0.1.0
+//   （对齐 Federation.Abstractions 首发先例：tag 后设正式版编译门）
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.WeChatChannels.IChannelConfigService), MinVersion = "0.0.0-preview.0")]
 public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {
@@ -60,10 +65,10 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
 
     /// <summary>扩展描述。</summary>
     public override string Description
-        => "微信公众号运营——公众号渠道配置（DB 权威 + Options 降级两源并存）/ 素材库 / 全消息类型回复规则（欢迎语/关键词/Click 映射/消息回复/Scan/Default）/ 菜单两阶段（拉取/发布/快照/版本/回滚）+ 订阅统计 + 交互/发布日志 + 事件回复 handler（内部组合 template 兜底）；通讯走平台库 Federation.WeChat";
+        => "微信公众号运营——素材库 / 全消息类型回复规则（欢迎语/关键词/Click 映射/消息回复/Scan/Default）/ 菜单两阶段（拉取/发布/快照/版本/回滚）+ 订阅统计 + 交互/发布日志 + 事件回复 handler + 消息转发网关；通道底座经依赖扩展 WeChatChannels（复用 IChannelConfigService，不重复实现）";
 
     /// <summary>
-    /// ConfigureServices（三态注册 + 两源并存装配——见类注释）。
+    /// ConfigureServices（V0.9.0 拆分改造——移除通道面注册；见类注释）。
     /// </summary>
     public override void ConfigureServices(IServiceCollection services)
     {
@@ -74,24 +79,8 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         //    ActivatorUtilities 解析剩余参数需 IOptions 可解析——handler ctor 增 gatewayOptions 后此兜底必需）
         services.AddOptions<WeChatMessageGatewayOptions>();
 
-        // E4 密钥管理（对齐 AuthCenter/AuthSurface 先例）：keyed ISymmetricKeyProvider 单例
-        // （FileSymmetricKeyProvider——构造即加载：生产缺密钥 fail-fast / 开发随机兜底；惰性构造首次解析门面触发）
-        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(WeChatOperationsKeyProviderKeys.WeChatOperations, (sp, _) =>
-        {
-            var o = sp.GetRequiredService<IOptions<WeChatOperationsOptions>>().Value;
-            return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());
-        });
-
-        // 两源并存 ①：DB 凭证解析器（契约非 IDomainService——普通 DI 集合追加；DI 单解析取最后注册 = DB 优先，
-        //   未命中内部降级 Options——设计 §3.2.2 Oracle P1）
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<TKWF.Federation.WeChat.IWeChatCredentialResolver, DbWeChatCredentialResolver>());
-
-        // 两源并存 ②：DB 通道来源（D03 1.7——WeChatChannelRegistrySource 优先权语义替代 Insert(0) 前置：
-        //   Priority=100 高优先（DB 权威恒先于静态源 0 / Federation 主包 SsoChannelRegistryEntity 系 0——
-        //   组合按 Priority 降序首命中，方案 §8.4 条件 5；含 disabled 全行投影——S3 降级判据）
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IChannelSource, WeChatChannelRegistrySource>());
-
-        // 事件回复 handler（ADR92 集合版守卫工厂——平台基类二级分发 + 内部 template 兜底）
+        // 事件回复 handler（ADR92 集合版守卫工厂——平台基类二级分发 + 内部 template 兜底；
+        //   V0.9.0 拆分保留——handler 为运营侧能力，不随通道面下沉）
         services.TryAddEnumerableConstructible<IEventReplyHandler, WeChatOperationsReplyHandler>();
 
         // V0.2.0 网关装配：
@@ -118,7 +107,7 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         services.AddTransient(typeof(IBackgroundJob), typeof(WeChatMessageForwardJob));
 
         // 门面（ADR90 正确路线——接口可构造守卫工厂 + 实现类 throw-factory；消费方 User.Use<接口>() 解析）
-        services.AddConstructibleService<IChannelConfigService, ChannelConfigService>();
+        // V0.9.0 拆分：IChannelConfigService 已下沉 WeChatChannels（本行删除——依赖双白名单）
         services.AddConstructibleService<IMenuService, MenuService>();
         services.AddConstructibleService<IReplyRuleService, ReplyRuleService>();
         services.AddConstructibleService<IMaterialService, MaterialService>();
@@ -131,7 +120,8 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         services.AddConstructibleService<IMessageForwardDispatcher, MessageForwardDispatcher>();
 
         // V0.3.0 系统状态聚合门面（DMP-Lite 5.8 "系统状态"页四卡——公众号连接状态/今日消息量/
-        //   自动回复命中率/转发成功率；只读聚合——ChannelConfig AOP 解析 + DataService Count 原语）
+        //   自动回复命中率/转发成功率；只读聚合——ChannelConfig AOP 解析（IChannelConfigService）+
+        //   DataService Count 原语）
         services.AddConstructibleService<IWeChatOperationsStatusService, WeChatOperationsStatusService>();
 
         // D03 1.10 运营配置面：管理门面（5 域 GET/PUT + 乐观并发）+ 只读查询（契约在 FA——Federation 编排链

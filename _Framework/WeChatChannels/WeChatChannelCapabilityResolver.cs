@@ -1,7 +1,7 @@
 using System;
 using TKWF.Ext.Federation;
 
-namespace TKWF.Ext.WeChatOperations;
+namespace TKWF.Ext.WeChatChannels;
 
 /// <summary>
 /// 微信通道能力派生（D03 §4.3——(ChannelForm, Verification) → <see cref="ChannelCapabilities"/>，派生不落库）。

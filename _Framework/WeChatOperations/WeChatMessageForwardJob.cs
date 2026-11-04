@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain.BackgroundJobs;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
+using TKWF.Ext.WeChatChannels;
 
 namespace TKWF.Ext.WeChatOperations;
 
@@ -46,7 +47,7 @@ public sealed class WeChatMessageForwardJob : IBackgroundJob
     public WeChatMessageForwardJob(
         IServiceProvider sp,
         DownstreamForwardClient client,
-        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)]
+        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)]
         ISymmetricKeyProvider keys,
         ILogger<WeChatMessageForwardJob>? logger = null)
     {

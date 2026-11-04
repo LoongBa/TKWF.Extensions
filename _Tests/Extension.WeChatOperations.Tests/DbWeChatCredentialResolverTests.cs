@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interception;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat;
 

@@ -7,6 +7,7 @@ using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.WeChatChannels;
 
 namespace TKWF.Ext.WeChatOperations;
 

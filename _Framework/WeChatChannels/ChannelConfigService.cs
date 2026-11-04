@@ -10,54 +10,25 @@ using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Transactions;
 using TKWF.Ext.Federation;
-using TKWF.Ext.Permissions.Abstractions;
-using TKWF.Ext.WeChatOperations.DTOs;
 
-namespace TKWF.Ext.WeChatOperations;
+namespace TKWF.Ext.WeChatChannels;
 
 /// <summary>
-/// 公众号渠道配置门面（两源并存 DB 权威 + Options 降级——设计文档 §3.3.4）。
+/// 公众号渠道配置门面实现（2026-11-05 拆分下沉——契约在 WeChatChannels.Abstractions，本类为主包实现）。
 /// <para><b>凭证安全（Oracle P1）</b>：<see cref="SaveChannelAsync"/> 入参经 <see cref="SaveChannelRequest"/> wire DTO——
 /// 三凭证字段（AppSecret/Token/EncodingAESKey）为<b>明文</b>经 body 传输（V0.4.0 起 GenerateController
 /// 端点 [FromBody] 绑定，防 query string URL 泄漏）；门面经 keyed
 /// <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> AES-GCM 加密落库
 /// （<c>AppSecretCipher/TokenCipher/EncodingAESKeyCipher</c>）；DTO 投影 (<see cref="WeChatChannelConfigDto"/>)
 /// <b>不含凭证</b>——密文不回显，解密仅出站瞬时（DbWeChatCredentialResolver）。</para>
-/// <para>REST 端点（V0.4.0 生成控制器——消费方 SG1b 经 <c>[GenerateController]</c> 聚合 ADR47）：</para>
+/// <para>REST 端点（生成控制器——消费方 SG1b 经 <c>[GenerateController]</c> 聚合 ADR47；
+/// 组路径 = <c>TKWF:Api:RestBasePath</c> + <c>[assembly: ExtensionModule("WeChatChannels","wechat-channels")]</c>）：</para>
 /// <list type="bullet">
-/// <item><c>GET /api/wechat-ops/channels</c> → <see cref="ListChannelsAsync"/>（List 前缀推导 GET）</item>
-/// <item><c>POST /api/wechat-ops/channels</c> → <see cref="SaveChannelAsync"/>（Create 前缀推导 POST；单复杂参数 SaveChannelRequest [FromBody]）</item>
+/// <item><c>GET /api/wechat-channels/channels</c> → <see cref="ListChannelsAsync"/>（List 前缀推导 GET）</item>
+/// <item><c>POST /api/wechat-channels/channels</c> → <see cref="SaveChannelAsync"/>（Create 前缀推导 POST；单复杂参数 SaveChannelRequest [FromBody]）</item>
 /// </list>
 /// <para>消费方：<c>User.Use&lt;IChannelConfigService&gt;()</c>（AddConstructibleService 守卫工厂，帧内解析）。</para>
 /// </summary>
-public interface IChannelConfigService : IDomainService
-{
-    /// <summary>按 AppId 查询公众号配置（DTO 投影不含凭证密文；未命中 → null）。
-    /// <para><c>ExposeRest=false</c>：单查为运营内部能力（列表已含全部配置），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
-    [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false)]
-    Task<WeChatChannelConfigDto?> GetAsync(string appId, CancellationToken ct = default);
-
-    /// <summary>全部公众号配置列表（DTO 投影不含凭证密文）。<para>REST：<c>GET /api/wechat-ops/channels</c>。</para></summary>
-    [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(RestRoute = "/channels", RestMethod = "GET")]
-    Task<IReadOnlyList<WeChatChannelConfigDto>> ListChannelsAsync(CancellationToken ct = default);
-
-    /// <summary>保存公众号配置——新（Id=0）创建 / 已有更新；<paramref name="request"/> 承载凭证明文
-    /// （AppSecret/Token/EncodingAESKey 为<b>明文</b>，null = 保持库中既有密文不变）——门面加密落库。
-    /// <para>REST：<c>POST /api/wechat-ops/channels</c>（单复杂参数 SaveChannelRequest → [FromBody] 防 URL 凭证泄漏）。</para></summary>
-    [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(RestRoute = "/channels", RestMethod = "POST")]
-    Task<long> SaveChannelAsync(SaveChannelRequest request, CancellationToken ct = default);
-
-    /// <summary>删除公众号配置（物理删——配置删除后出站凭证经 Options 降级解析）。
-    /// <para><c>ExposeRest=false</c>：删除为高操作权限能力，对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
-    [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(ExposeRest = false)]
-    Task<bool> DeleteChannelAsync(long id, CancellationToken ct = default);
-}
-
-/// <inheritdoc />
 [DiContractIgnore]
 [GenerateController]
 public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigService
@@ -77,7 +48,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
 
     public ChannelConfigService(
         IDomainUser user,
-        [Microsoft.Extensions.DependencyInjection.FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)]
+        [Microsoft.Extensions.DependencyInjection.FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)]
         TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider keys) : base(user)
     {
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));
@@ -89,6 +60,15 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         if (string.IsNullOrWhiteSpace(appId))
             return null;
         var entity = await Ds.EntityGetAsync(e => e.AppId == appId, ct);
+        return entity is null ? null : ToDto(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<WeChatChannelConfigDto?> GetByChannelIdAsync(string channelId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelId))
+            return null;
+        var entity = await Ds.EntityGetAsync(e => e.ChannelId == channelId, ct);
         return entity is null ? null : ToDto(entity);
     }
 
@@ -258,7 +238,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     private string EncryptOrEmpty(string? plain)
         => string.IsNullOrWhiteSpace(plain) ? string.Empty : _keys.Encrypt(plain);
 
-    /// <summary>DTO 投影——不含凭证密文（Oracle P1 安全：密文不回显）。</summary>
+    /// <summary>DTO 投影——不含凭证密文（Oracle P1 安全：密文不回显；契约 DTO 在 Abstractions）。</summary>
     private static WeChatChannelConfigDto ToDto(WeChatChannelConfigEntity e)
         => new(
             Id: e.Id,
@@ -273,30 +253,3 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             CreateTime: e.CreateTime,
             UpdateTime: e.UpdateTime);
 }
-
-/// <summary>
-/// 公众号配置投影 DTO（<b>不含凭证密文</b>——Oracle P1 DTO 投影安全：AppSecret/Token/EncodingAESKey
-/// 明文与密文均不回显；<see cref="HasCredentials"/> 仅指示是否已配置凭证）。</summary>
-/// <param name="Id">主键。</param>
-/// <param name="ChannelId">channel 实例 id。</param>
-/// <param name="AppId">公众号 AppId（出站凭证解析键）。</param>
-/// <param name="DisplayName">显示名称。</param>
-/// <param name="Remark">备注（可空）。</param>
-/// <param name="IsEnabled">启用。</param>
-/// <param name="ChannelType">通道类型（wechat_event / wechat_oauth 等）。</param>
-/// <param name="HasCredentials">是否已配置凭证（AppSecret/Token/EncodingAESKey 任一密文非空）。</param>
-/// <param name="CreateTime">创建时间（UTC）。</param>
-/// <param name="UpdateTime">更新时间（UTC）。</param>
-public sealed record WeChatChannelConfigDto(
-    long Id,
-    string ChannelId,
-    string AppId,
-    string DisplayName,
-    string? Remark,
-    bool IsEnabled,
-    string ChannelType,
-    /// <summary>对外别名（D03 1.6——审核 P2-1：管理读 API 可见别名，运维可确认是否已一次性设置）。</summary>
-    string? Alias,
-    bool HasCredentials,
-    DateTime CreateTime,
-    DateTime UpdateTime);

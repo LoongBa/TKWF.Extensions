@@ -50,6 +50,10 @@
   <ItemGroup>
     <!-- 被测扩展（DisableTransitiveProjectReferences=true——显式声明所需引用见下） -->
     <ProjectReference Include="..\..\_Framework\WeChatOperations\TKWF.Ext.WeChatOperations.csproj" />
+    <!-- V0.9.0 拆分（2026-11-05）：通道底座依赖扩展——测试宿主装配 WeChatChannels Initializer（keyed 密钥/
+         IChannelConfigService 门面/两源并存已下沉，运营门面消费；通道管理断言归 Extension.WeChatChannels.Tests） -->
+    <ProjectReference Include="..\..\_Framework\WeChatChannels\TKWF.Ext.WeChatChannels.csproj" />
+    <ProjectReference Include="..\..\_Framework\WeChatChannels.Abstractions\TKWF.Ext.WeChatChannels.Abstractions.csproj" />
     <!-- 平台网关库（WeChatOptions/WeChatChannelConfig/WeChatApiClient/IWeChatCredentialResolver/WechatEventReplyHandlerBase/WechatEventContext/WechatReplyPayload/NewsReplyTemplateV2/WeChatSelfMenuInfoResult——通讯/事件信封类型） -->
     <ProjectReference Include="..\..\_Framework\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
     <!-- 网关运行库（纯逻辑零持久化——V0.2.0 增网关模块：WeChatMessageRouteRuleMatcher/WeChatMessageIdempotencyKeyBuilder/WeChatMessageForwardDecider/WeChatMessageConstants（MatchModes/ForwardModes/EndpointAuthTypes）——门面集成测试断言 MatchedRule/降级链/幂等键/转发模式常量） -->

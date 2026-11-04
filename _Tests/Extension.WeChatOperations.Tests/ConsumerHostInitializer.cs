@@ -7,6 +7,7 @@ using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Session;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatChannels;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
 
@@ -17,8 +18,11 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 ///    从而为扩展的 <c>[GenerateController(FromDataService=true)]</c> DataService 在消费方生成控制器；
 /// ② 消费方侧启动接线（本测试不真正跑宿主，仅借其类型存在供 SG1 编译期识别）。</para>
 /// <para>ADR47 白名单：<see cref="TKWFEnabledExtensionAttribute"/> 声明后，SG1b 将 WeChatOperations 的能力清单
-/// 聚合进本消费方的领域权威注册（GeneratedControllerRegistrations），扩展服务接口才能在消费方暴露。</para>
+/// 聚合进本消费方的领域权威注册（GeneratedControllerRegistrations），扩展服务接口才能在消费方暴露。
+/// V0.9.0 拆分（2026-11-05）：双白名单——WeChatChannels（通道底座，keyed 密钥/门面/两源并存注册方）
+/// + WeChatOperations（消费方）——白名单无传递语义（S1/O4），漏声明 WeChatChannels → 运行时解析失败。</para>
 /// </summary>
+[TKWFEnabledExtension(typeof(WeChatChannelsExtensionInitializer<>))]
 [TKWFEnabledExtension(typeof(WeChatOperationsExtensionInitializer<>))]
 public sealed class ConsumerHostInitializer : DomainHostInitializerBase<TestUserInfo>
 {

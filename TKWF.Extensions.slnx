@@ -270,6 +270,16 @@
   <Folder Name="/_Tests/Extension.Federation.WeChat.Tests/">
     <Project Path="_Tests/Extension.Federation.WeChat.Tests/TKWF.Federation.WeChat.Tests.csproj" />
   </Folder>
+  <!-- WeChatChannels 微信通道底座扩展（2026-11-05 拆分下沉：契约包 + 主包 + 测试——依赖 Federation.Abstractions/Federation.WeChat/Permissions.Abstractions） -->
+  <Folder Name="/_Framework/WeChatChannels.Abstractions/">
+    <Project Path="_Framework/WeChatChannels.Abstractions/TKWF.Ext.WeChatChannels.Abstractions.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/WeChatChannels/">
+    <Project Path="_Framework/WeChatChannels/TKWF.Ext.WeChatChannels.csproj" />
+  </Folder>
+  <Folder Name="/_Tests/Extension.WeChatChannels.Tests/">
+    <Project Path="_Tests/Extension.WeChatChannels.Tests/TKWF.Ext.WeChatChannels.Tests.csproj" />
+  </Folder>
   <Folder Name="/_Tests/Extension.Federation.Oidc.Tests/">
     <Project Path="_Tests/Extension.Federation.Oidc.Tests/TKWF.Federation.Oidc.Tests.csproj" />
   </Folder>
@@ -300,4 +310,5 @@
     <Project Path="_Tests/Extension.TrustCenter.Tests/TKWF.Ext.TrustCenter.Tests.csproj" />
   </Folder>
 </Solution>
+
 

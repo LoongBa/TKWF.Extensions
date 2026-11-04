@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using Xunit;
 
@@ -26,31 +27,11 @@ public sealed class WeChatOperationsWebExtensionTests
     private const string ChannelId = "wechat-mp-main";
 
     // ═══════════════════ 运营端点（7 门面） ═══════════════════
+    // ⚠️ V0.9.0 拆分（2026-11-05）：GetChannels/PostChannels 端点随通道面下沉 WeChatChannels——
+    //    运营 WebExtension 不再挂载 IChannelConfigService（MapGenerated 行移除）；通道端点为**非 Web 形态**
+    //    （RestRoute 全段 `/wechat-channels/channels`——消费方 SG2 按 ADR47 生成控制器，URL = /api/wechat-channels/channels）。
 
-    [Fact]
-    public async Task GetChannels_ReturnsList_200()
-    {
-        var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/channels"));
-
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.True(WeChatOperationsEndpointHost.ChannelConfig.ListInvoked);
-    }
-
-    [Fact]
-    public async Task PostChannels_SaveRequest_BindsAndSaves_200()
-    {
-        var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url("/channels"),
-            new SaveChannelRequest(0, ChannelId, "wx_main", "主公众号", null, true, "wechat_event", "secret", "token", "aeskey"));
-
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.True(WeChatOperationsEndpointHost.ChannelConfig.SaveInvoked);
-        Assert.Equal("wechat-mp-main", WeChatOperationsEndpointHost.ChannelConfig.LastRequest?.ChannelId);
-        Assert.Equal("wx_main", WeChatOperationsEndpointHost.ChannelConfig.LastRequest?.AppId);
-    }
-
-    [Fact]
+[Fact]
     public async Task GetMenu_ReturnsCurrent_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();

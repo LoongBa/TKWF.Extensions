@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using TKW.Framework.CodeGeneration;
 
-namespace TKWF.Ext.WeChatOperations
+namespace TKWF.Ext.WeChatChannels
 {
     /// <summary>
     /// 公众号渠道配置实体（表 <c>TKWF_WeChatChannelConfig</c>）——基础配置（DB 权威，方案 §3.3.4 两源并存：DB 优先 → Options 降级）。

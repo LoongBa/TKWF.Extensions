@@ -14,6 +14,7 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Web.Extensions;
 using TKW.Framework.Domain.Web.Hosting;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using TKWF.Federation.WeChat;
 
@@ -104,6 +105,9 @@ internal static class WeChatOperationsEndpointHost
         public SaveChannelRequest? LastRequest { get; private set; }
 
         public Task<WeChatChannelConfigDto?> GetAsync(string appId, CancellationToken ct = default)
+            => Task.FromResult<WeChatChannelConfigDto?>(null);
+
+        public Task<WeChatChannelConfigDto?> GetByChannelIdAsync(string channelId, CancellationToken ct = default)
             => Task.FromResult<WeChatChannelConfigDto?>(null);
 
         public Task<IReadOnlyList<WeChatChannelConfigDto>> ListChannelsAsync(CancellationToken ct = default)

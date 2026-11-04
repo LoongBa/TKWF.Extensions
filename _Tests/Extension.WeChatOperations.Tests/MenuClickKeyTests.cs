@@ -2,8 +2,10 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FreeSql;
 using TKW.Framework.Domain;
 using TKWF.Ext.Testing.Shared;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -105,6 +107,53 @@ public class MenuClickKeyTests : WeChatOperationsTestHost
         Assert.Empty(keys);   // 非法 JSON → JsonException 捕获 → 空列表不抛
     }
 
+    /// <summary>v0.17.1 快照含 **sub_button 对象形状**（{"list":[...]}——官方 get_current_selfmenu_info 形态，直接种子
+    /// 快照行）→ GetClickKeysAsync 递归收集 click Key（WeChatSubButtonListConverter 属性级挂载自动归一——P0-3 / 方案测试 5）。</summary>
+    [Fact]
+    public async Task GetClickKeysAsync_ObjectShapeSnapshot_RecursiveCollect()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+        var ds = user.Use<MenuSnapshotEntityDataService>();
+        await ds.EntityCreateAsync(new MenuSnapshotEntity
+        {
+            ChannelId = "ch-objshape",
+            MenuJson = """{"is_menu_open":1,"selfmenu_info":{"button":[{"type":"click","name":"一级","key":"TOP_KEY"},{"name":"父菜单","sub_button":{"list":[{"type":"click","name":"子点击","key":"OBJ_KEY"},{"type":"view","name":"外链","url":"https://example.com"}]}}]}}""",
+            UpdatedAt = DateTime.UtcNow,
+            CreateTime = DateTime.UtcNow,
+            UpdateTime = DateTime.UtcNow,
+        }, TestContext.Current.CancellationToken);
+        var service = user.Use<IMenuService>();
+
+        var keys = await service.GetClickKeysAsync("ch-objshape", TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { "TOP_KEY", "OBJ_KEY" }, keys);   // 对象形状子按钮递归收集 + view 排除
+    }
+
+    /// <summary>v0.17.1 快照 Write 方向回归（P0-5 / 方案测试 8）：发布含子菜单的菜单（stub 返回官方对象形状确认）→
+    /// 快照原文的 sub_button 恒为**数组**形状（converter Write 保持数组——快照存储形状不随官方对象形状漂移）。</summary>
+    [Fact]
+    public async Task PublishAsync_SnapshotSubButtonPersistedAsArrayShape()
+    {
+        using var _ = this;
+        Handler = WeChatOperationsTestSupport.CreateStubHandler(menuJson:
+            """{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"父菜单","sub_button":{"list":[{"type":"click","name":"子点击","key":"SUB_KEY"}]}}]}}""");
+        var (provider, user) = BindScope();
+        await SeedConfigAsync(user);
+        var service = user.Use<IMenuService>();
+
+        await WeChatOperationsTestHost.RunInFrameAsync(provider, user, () =>
+            service.PublishAsync(Ch, new PublishMenuRequest("""{"button":[{"name":"父菜单","sub_button":[{"type":"click","name":"子点击","key":"SUB_KEY"}]}]}"""),
+                TestContext.Current.CancellationToken));
+
+        var fsql = provider.GetRequiredService<IFreeSql>();
+        var snap = await fsql.Select<MenuSnapshotEntity>().Where(s => s.ChannelId == Ch)
+            .FirstAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(snap);
+        Assert.Contains("\"sub_button\":[", snap!.MenuJson);   // 数组形状持久化
+        Assert.DoesNotContain("\"list\"", snap.MenuJson);      // 非对象形状（Write 方向不回归）
+    }
+
     /// <summary>种子公众号配置（经 IChannelConfigService 生产路径写入——PublishAsync 前置）。</summary>
     private static async Task SeedConfigAsync(DomainUser<TestUserInfo> user)
     {
@@ -114,3 +163,4 @@ public class MenuClickKeyTests : WeChatOperationsTestHost
             ChannelType: "wechat_event", AppSecret: "menu-key-secret"), ct: TestContext.Current.CancellationToken);
     }
 }
+

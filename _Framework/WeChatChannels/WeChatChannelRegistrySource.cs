@@ -6,10 +6,10 @@ using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.Federation;
 
-namespace TKWF.Ext.WeChatOperations;
+namespace TKWF.Ext.WeChatChannels;
 
 /// <summary>
-/// 微信通道 DB 注册表源（D03 §4.2 供给层——Priority=100 DB 权威）。
+/// 微信通道 DB 注册表源（D03 §4.2 供给层——Priority=100 DB 权威；2026-11-05 拆分下沉）。
 /// <para>投影（方案 §8.3）：<c>ChannelId/Alias/AppId/IsEnabled</c> 公共列 +
 /// <c>ChannelForm→Extra["channel_form"]</c>、<c>Verification→Extra["verification"]</c>、
 /// <b><c>Token/EncodingAESKey</c> 解密为明文进 Extra</b>（与静态源 <c>WeChatChannelSource</c> 同语义——
@@ -37,7 +37,7 @@ public sealed class WeChatChannelRegistrySource : IChannelSource, IUserBoundChan
         .Use<WeChatChannelConfigEntityDataService>();
 
     public WeChatChannelRegistrySource(
-        [FromKeyedServices(WeChatOperationsKeyProviderKeys.WeChatOperations)] ISymmetricKeyProvider keys,
+        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)] ISymmetricKeyProvider keys,
         ILogger<WeChatChannelRegistrySource> logger)
     {
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));

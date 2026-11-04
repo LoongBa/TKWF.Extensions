@@ -23,7 +23,7 @@ public sealed record WeChatSelfMenuInfo(
 /// 仅类型化公共字段 + <see cref="SubButton"/> 递归子菜单；字段命名对齐微信官方 JSON（snake_case））。
 /// </summary>
 public sealed record WeChatMenuButton(
-    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("type")] string? Type,
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("key")] string? Key,
     [property: JsonPropertyName("url")] string? Url,
@@ -31,4 +31,6 @@ public sealed record WeChatMenuButton(
     [property: JsonPropertyName("article_id")] string? ArticleId,
     [property: JsonPropertyName("app_id")] string? AppId,
     [property: JsonPropertyName("page_path")] string? PagePath,
-    [property: JsonPropertyName("sub_button")] WeChatMenuButton[]? SubButton);
+    [property: JsonPropertyName("sub_button")]
+    [property: JsonConverter(typeof(WeChatSubButtonListConverter))]
+    WeChatMenuButton[]? SubButton);

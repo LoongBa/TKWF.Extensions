@@ -84,10 +84,12 @@ public class WeChatMenuApiAndResolverTests : WeChatChannelTestHost
         Assert.NotNull(result);
         Assert.Equal(1, result!.IsMenuOpen);
         Assert.NotNull(result.SelfMenuInfo);
-        Assert.Single(result.SelfMenuInfo!.Button);
+        Assert.Equal(2, result.SelfMenuInfo!.Button.Length);
         Assert.Equal("click", result.SelfMenuInfo.Button[0].Type);
         Assert.Equal("测试菜单", result.SelfMenuInfo.Button[0].Name);
         Assert.Equal("test_key", result.SelfMenuInfo.Button[0].Key);
+        Assert.NotNull(result.SelfMenuInfo.Button[1].SubButton);
+        Assert.Single(result.SelfMenuInfo.Button[1].SubButton!);
     }
 
     /// <summary>查询当前菜单：未配置菜单（is_menu_open=0 / 字段缺失）→ null（调用方按"无菜单"处理）。</summary>
@@ -105,6 +107,107 @@ public class WeChatMenuApiAndResolverTests : WeChatChannelTestHost
         var result = await client.GetCurrentSelfMenuInfoAsync("stub-token", CancellationToken.None);
 
         Assert.Null(result);
+    }
+
+    /// <summary>v0.17.1 sub_button 官方对象形状（{"list":[...]}——get_current_selfmenu_info）→ 两层按钮正确反序列化。</summary>
+    [Fact]
+    public async Task GetCurrentSelfMenuInfo_SubButtonOfficialShape()
+    {
+        using var _ = this;
+        Handler = WeChatTestHost.CreateStubHandler(menuJson:
+            """{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":{"list":[{"type":"view","name":"搜索","url":"http://soso.com/"},{"type":"view","name":"视频","url":"http://v.qq.com/"}]}}]}}""");
+        var client = new WeChatApiClient(
+            new System.Net.Http.HttpClient(Handler),
+            new OptionsWeChatCredentialResolver(Options.Create(new WeChatOptions())),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatApiClient>());
+
+        var result = await client.GetCurrentSelfMenuInfoAsync("stub-token", CancellationToken.None);
+
+        var sub = Assert.IsType<WeChatMenuButton[]>(result!.SelfMenuInfo!.Button[0].SubButton);
+        Assert.Equal(2, sub.Length);
+        Assert.Equal("view", sub[0].Type);
+        Assert.Equal("搜索", sub[0].Name);
+        Assert.Equal("http://soso.com/", sub[0].Url);
+        Assert.Equal("http://v.qq.com/", sub[1].Url);
+    }
+
+    /// <summary>v0.17.1 sub_button 边界归一：缺失 / null / 空对象 {} / list:null（含尾随属性）→ 均 null 不抛异常。</summary>
+    [Theory]
+    [InlineData("""{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单"}]}}""")]
+    [InlineData("""{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":null}]}}""")]
+    [InlineData("""{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":{}}]}}""")]
+    [InlineData("""{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":{"list":null}}]}}""")]
+    [InlineData("""{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":{"count":0,"list":null}}]}}""")]
+    public async Task GetCurrentSelfMenuInfo_SubButtonMissingNullOrEmpty(string menuJson)
+    {
+        using var _ = this;
+        Handler = WeChatTestHost.CreateStubHandler(menuJson: menuJson);
+        var client = new WeChatApiClient(
+            new System.Net.Http.HttpClient(Handler),
+            new OptionsWeChatCredentialResolver(Options.Create(new WeChatOptions())),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatApiClient>());
+
+        var result = await client.GetCurrentSelfMenuInfoAsync("stub-token", CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.SelfMenuInfo!.Button[0].SubButton);
+    }
+
+    /// <summary>v0.17.1 sub_button 数组形状（menu/get 接口形状——converter 前向兼容）→ 正确反序列化。</summary>
+    [Fact]
+    public async Task GetCurrentSelfMenuInfo_SubButtonArrayShape()
+    {
+        using var _ = this;
+        Handler = WeChatTestHost.CreateStubHandler(menuJson:
+            """{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":[{"type":"view","name":"搜索","url":"http://soso.com/"},{"type":"view","name":"视频","url":"http://v.qq.com/"}]}]}}""");
+        var client = new WeChatApiClient(
+            new System.Net.Http.HttpClient(Handler),
+            new OptionsWeChatCredentialResolver(Options.Create(new WeChatOptions())),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatApiClient>());
+
+        var result = await client.GetCurrentSelfMenuInfoAsync("stub-token", CancellationToken.None);
+
+        var sub = Assert.IsType<WeChatMenuButton[]>(result!.SelfMenuInfo!.Button[0].SubButton);
+        Assert.Equal(2, sub.Length);
+        Assert.Equal("搜索", sub[0].Name);
+    }
+
+    /// <summary>v0.17.1 sub_button 递归三层（对象形状内嵌对象形状）→ 全深度正确（属性级 converter 自动递归）。</summary>
+    [Fact]
+    public async Task GetCurrentSelfMenuInfo_SubButtonRecursive()
+    {
+        using var _ = this;
+        Handler = WeChatTestHost.CreateStubHandler(menuJson:
+            """{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"一级","sub_button":{"list":[{"name":"二级","sub_button":{"list":[{"type":"click","name":"三级","key":"L3_KEY"}]}}]}}]}}""");
+        var client = new WeChatApiClient(
+            new System.Net.Http.HttpClient(Handler),
+            new OptionsWeChatCredentialResolver(Options.Create(new WeChatOptions())),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatApiClient>());
+
+        var result = await client.GetCurrentSelfMenuInfoAsync("stub-token", CancellationToken.None);
+
+        var level1 = Assert.IsType<WeChatMenuButton[]>(result!.SelfMenuInfo!.Button[0].SubButton);
+        var level2 = Assert.IsType<WeChatMenuButton[]>(level1[0].SubButton);
+        Assert.Single(level2);
+        Assert.Equal("二级", level1[0].Name);
+        Assert.Equal("L3_KEY", level2[0].Key);
+        Assert.Equal("click", level2[0].Type);
+    }
+
+    /// <summary>v0.17.1 sub_button 非预期形状（字符串）→ JsonException（数据错误不吞——非"空"语义）。</summary>
+    [Fact]
+    public async Task GetCurrentSelfMenuInfo_SubButtonInvalidShape_Throws()
+    {
+        using var _ = this;
+        Handler = WeChatTestHost.CreateStubHandler(menuJson:
+            """{"is_menu_open":1,"selfmenu_info":{"button":[{"name":"菜单","sub_button":"oops"}]}}""");
+        var client = new WeChatApiClient(
+            new System.Net.Http.HttpClient(Handler),
+            new OptionsWeChatCredentialResolver(Options.Create(new WeChatOptions())),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatApiClient>());
+
+        await Assert.ThrowsAsync<System.Text.Json.JsonException>(() =>
+            client.GetCurrentSelfMenuInfoAsync("stub-token", CancellationToken.None));
     }
 
     /// <summary>删除菜单：GET cgi-bin/menu/delete 成功无返回（errcode==0）。</summary>

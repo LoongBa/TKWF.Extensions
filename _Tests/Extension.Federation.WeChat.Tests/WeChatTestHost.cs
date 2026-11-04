@@ -127,8 +127,9 @@ internal static class WeChatTestHost
             }
             else if (path.EndsWith("/cgi-bin/get_current_selfmenu_info", StringComparison.Ordinal))
             {
+                // 默认返回含 sub_button 官方形状（{"list":[...]}——v0.17.1 修复后 stub 不再绕过子菜单形状缺陷）
                 json = _menuJson
-                    ?? "{\"is_menu_open\":1,\"selfmenu_info\":{\"button\":[{\"type\":\"click\",\"name\":\"测试菜单\",\"key\":\"test_key\"}]}}";
+                    ?? "{\"is_menu_open\":1,\"selfmenu_info\":{\"button\":[{\"type\":\"click\",\"name\":\"测试菜单\",\"key\":\"test_key\"},{\"name\":\"子菜单\",\"sub_button\":{\"list\":[{\"type\":\"view\",\"name\":\"搜索\",\"url\":\"http://soso.com/\"}]}}]}}";
             }
             else if (path.EndsWith("/cgi-bin/menu/delete", StringComparison.Ordinal))
             {

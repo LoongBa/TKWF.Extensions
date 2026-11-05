@@ -295,10 +295,25 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// <para><c>{ticket}</c> → <paramref name="ticket"/>（可空 → 空串——免登入口未启用/失败时其余文本照常渲染，
     /// 回复结构不变）；<c>{ticket}</c> 文本替换仅本重载一处（ILoginEntryService 只产出 URL，不做文本替换，§3.8）。
     /// 无签票场景（非事件回复链路）沿用 4 参重载——<c>{ticket}</c> 保留原样。</para>
+    /// <para>⚠️ <c>{ticket}</c> = <b>完整免登 URL</b>（扩展托管 URL 遗留形态）；需求 B 裸票注入用
+    /// 6 参重载（<see cref="ReplacePlaceholders(string, string?, string?, string?, string?, string?)"/>——
+    /// <c>{ticket_value}</c> 裸票占位符）。</para>
     /// </summary>
     protected static string ReplacePlaceholders(string text, string? uid, string? openId, string? channelId, string? ticket)
         => ReplacePlaceholders(text, uid, openId, channelId)
             .Replace("{ticket}", ticket ?? string.Empty);
+
+    /// <summary>
+    /// 占位符替换（<c>{uid}/{openid}/{channel_id}/{channel_type}/{ticket}/{ticket_value}</c>——需求 B 双占位符并立）。
+    /// <para><c>{ticket}</c> → <paramref name="ticketUrl"/>（完整免登 URL——存量语义不变）；
+    /// <c>{ticket_value}</c> → <paramref name="ticketValue"/>（裸票据串——落地 URL 由业务模板自拼；可空 → 空串）。
+    /// <b>双占位符并存 = 合法场景</b>：<paramref name="ticketUrl"/> 与 <paramref name="ticketValue"/> 同票
+    /// （<see cref="TicketIssueResult"/> 单次签票双形态——用户裁定"不是二选一"，不置空任何一方）。</para>
+    /// </summary>
+    protected static string ReplacePlaceholders(string text, string? uid, string? openId, string? channelId,
+        string? ticketUrl, string? ticketValue)
+        => ReplacePlaceholders(text, uid, openId, channelId, ticketUrl)
+            .Replace("{ticket_value}", ticketValue ?? string.Empty);
 
     /// <summary>占位符替换便捷重载（ctx 承载 uid/openid/channel_id——<c>{ticket}</c> 不替换语义同上）。</summary>
     protected static string ReplacePlaceholders(string text, WechatEventContext ctx)
@@ -317,21 +332,25 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
             .Replace("{channel_type}", "wechat_event");
 
     /// <summary>
-    /// 免登票据 URL 解析（I2-8 微信免登闭环 {ticket} 缺口——签票 + 组装免登链接）。
-    /// <para>经 <see cref="ILoginEntryService"/> 签密封票据（<c>ChannelType="wechat_event"</c>、<c>ctx.OpenId</c>
-    /// 来自编排富化【external_user_id ?? FromUserName】）→ 返回免登链接 URL；返回 null = 未启用/未配置基址/签票失败
-    /// （fail-closed——调用方将 <c>{ticket}</c> 替换为空串，其余文本照常渲染）。</para>
+    /// 免登票据双值解析（需求 B——一次签票取裸票 + 完整 URL，同票双形态）。<b>⚠️ 返回类型自
+    /// <c>string?</c>（URL）变更</b>为 <see cref="TicketIssueResult"/>?（裸票 + URL 双值，破坏性——链内消费方
+    /// 仅模板链路，见开发方案 §7）。
+    /// <para>经 <see cref="ILoginEntryService.IssueTicketAsync"/> 签密封票据（<c>ChannelType="wechat_event"</c>、
+    /// <c>ctx.OpenId</c> 来自编排富化【external_user_id ?? FromUserName】；<c>ctx.BaseUrl</c>（请求 Host 推导）
+    /// 透传为 URL 基址三级链第三级）→ 返回 <see cref="TicketIssueResult"/>（<c>Ticket</c>=裸票 / <c>Url</c>=完整 URL）；
+    /// 返回 null = 未启用/未配置基址/签票失败（fail-closed——调用方将占位符替换为空串，其余文本照常渲染）。</para>
     /// <para>DI004 零豁免：禁 ctor 注入 <see cref="ILoginEntryService"/>（契约在 Federation.Abstractions）——
     /// 经基类 <c>User</c> 帧内解析（守卫工厂门面）。</para>
     /// </summary>
     /// <param name="ttlSeconds">票据 TTL 秒（可空——调用方按模板 <see cref="NewsReplyTemplate.TtlSeconds"/> 传入，
     /// null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/> 缺省）。</param>
-    protected async Task<string?> ResolveTicketAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
+    protected async Task<TicketIssueResult?> ResolveTicketAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
     {
         if (ctx is null || string.IsNullOrWhiteSpace(ctx.ChannelId))
             return null;
         return await User.Use<ILoginEntryService>()
-            .BuildTicketUrlAsync(ctx.ChannelId, ChannelType, ctx.OpenId ?? string.Empty, ttlSeconds, ctx.BaseUrl, ct: ct, uId: ctx.UId);
+            .IssueTicketAsync(ctx.ChannelId, ChannelType, ctx.OpenId ?? string.Empty,
+                ttlSeconds, requestBaseUrl: ctx.BaseUrl, ct: ct, uId: ctx.UId);
     }
 
     /// <summary>

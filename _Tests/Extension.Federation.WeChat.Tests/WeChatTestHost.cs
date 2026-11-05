@@ -230,7 +230,9 @@ public class WeChatChannelTestHost : TestHostBase
         public HttpClient CreateClient(string name) => new(_handler);
     }
 
-    /// <summary>免登入口 Fake（返回 null = 未启用语义——平台库测试宿主免登签票断言归 Federation.Tests）。</summary>
+    /// <summary>免登入口 Fake（返回 null = 未启用语义——平台库测试宿主缺省；
+    /// 模板链路需求 B 用例经测试类 <c>ConfigureHost</c> 内 <c>AddScoped&lt;ILoginEntryService&gt;(...)</c>
+    /// 覆盖注册 <see cref="RecordingLoginEntryService"/>（last-registration wins）——断言一次一票/同票双形态）。</summary>
     private sealed class NullLoginEntryService : ILoginEntryService
     {
         public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
@@ -238,6 +240,36 @@ public class WeChatChannelTestHost : TestHostBase
 
         public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
             => Task.FromResult<string?>(null);
+
+        public Task<TicketIssueResult?> IssueTicketAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
+            => Task.FromResult<TicketIssueResult?>(null);
+
+        public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+    }
+
+    /// <summary>免登入口 Fake 计数版（模板链路需求 B 用例——配置返回值 + 断言 IssueTicketAsync 调用次数）。
+    /// <see cref="Result"/> 为调用返回值（null = 未启用/签票失败语义）；<see cref="IssueTicketCallCount"/> 记录
+    /// <see cref="IssueTicketAsync"/> 调用次数（一次回复只签一次票断言）；<see cref="RequestBaseUrlLast"/> 记录
+    /// 末次 requestBaseUrl 入参（ctx.BaseUrl 透传断言——C1 基址三级链第三级）。</summary>
+    internal sealed class RecordingLoginEntryService : ILoginEntryService
+    {
+        public TicketIssueResult? Result { get; set; }
+        public int IssueTicketCallCount { get; private set; }
+        public string? RequestBaseUrlLast { get; private set; }
+
+        public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
+            => Task.FromResult(Result?.Url);
+
+        public Task<string?> BuildTestTicketUrlAsync(string channelId, string platformId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
+            => Task.FromResult(Result?.Url);
+
+        public Task<TicketIssueResult?> IssueTicketAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
+        {
+            IssueTicketCallCount++;
+            RequestBaseUrlLast = requestBaseUrl;
+            return Task.FromResult(Result);
+        }
 
         public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
             => Task.FromResult<string?>(null);

@@ -21,7 +21,9 @@ namespace TKWF.Federation.WeChat;
 /// ② <see cref="WechatEventReplyOptions.DefaultNewsReplyTemplate"/>（全局默认）→
 /// ③ <see cref="WechatEventReplyOptions.EnableBuiltInTestTemplate"/> 内置测试卡片（开发期零 seed 冒烟）→
 /// ④ <c>null</c>（纯文本模式，不回复图文）。占位符 <c>{uid}/{openid}/{channel_id}/{channel_type}</c> 替换，
-/// <c>{ticket}</c> 经签票替换为免登链接。</para>
+/// <c>{ticket}</c> 经签票替换为免登链接（完整 URL）；<b>需求 B（2026-11-05）新增 <c>{ticket_value}</c> 占位符</b>
+/// ——替换为<b>裸票据串</b>（落地 URL 由消费方图文模板自拼）；双占位符并存 = 合法场景（一次签票同票双形态，
+/// 不置空任何一方）。</para>
 /// <para><b>多图文升级（V0.4.1，方案 WeChatOperations §3.2.3）</b>：<c>articles</c> 数组优先（多图文 1..8 篇，
 /// 占位符替换逐篇应用），缺省回退单图文字段（title/description/link/pic_url——存量兼容零破坏）。</para>
 /// <para><b>免登链接基址解析链（BuildTicketUrlAsync 内，三级）</b>：
@@ -60,9 +62,10 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// （不回复不拦截——业务 handler 正常流转）；<c>Channel</c> 未富化（registry 查不到）→ <c>Channel.Extra</c> 为
     /// null → 模板读取 null → 不回复。</para>
     /// <para><b>多图文（V0.4.1）</b>：<see cref="ReadMultiNewsTemplate"/> <c>articles</c> 数组优先（1..8 篇，
-    /// 占位符替换逐篇应用），缺省回退单图文字段（存量兼容）；<b>I2-8 {ticket} 支持</b>——模板含
-    /// <c>{ticket}</c> 时经 <see cref="WechatEventReplyHandlerBase.ResolveTicketAsync"/> 签免登票据
-    /// （<c>TtlSeconds</c> 模板 TTL 优先——票 URL 替换进 link/description）。</para>
+    /// 占位符替换逐篇应用），缺省回退单图文字段（存量兼容）；<b>I2-8 / 需求 B {ticket} 支持</b>——模板含
+    /// <c>{ticket}</c>（完整 URL）/ <c>{ticket_value}</c>（裸票）时经 <see cref="WechatEventReplyHandlerBase.ResolveTicketAsync"/>
+    /// 签免登票据（<c>TtlSeconds</c> 模板 TTL 优先——需求 B 起返回 <see cref="TicketIssueResult"/> 双值，
+    /// 两占位符同票同源，<b>双占位符并存不置空</b>）。</para>
     /// </summary>
     protected override async Task<WechatReplyPayload?> OnDefaultAsync(WechatEventContext ctx, CancellationToken ct)
     {
@@ -80,18 +83,27 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
         if (_replyOptions?.Value.RequireUidForTicket == true && string.IsNullOrEmpty(ctx.UId))
             return null;
 
-        // I2-8：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内；
+        // I2-8 / 需求 B：签一次免登票据（模板 TtlSeconds 优先 → FederationLoginEntryOptions.TicketTtlSeconds 缺省——ResolveTicketAsync 内；
         // 内置测试模板经 ctx.BaseUrl（请求 Host 推导）组装本站点免登链接——零配置链路）。
         // ⚠️ 缺口修复（2026-10-26 复审）：内置测试模板的目标是"点击卡片 → 显示解票信息"——该语义只有
         // 测试端点（HandleTestTicket GET 匿名兑票 → 200 JSON）满足；免登 URL（{TicketPath}?ticket=）走
         // 消费方 SPA 落地，Platform.Web 无前端 → 点击 404 死链。故内置模板分支走 ResolveTestTicketUrlAsync
         // （{baseUrl}{RoutePrefix}/wechat/test/{channelId}/{ticket}），业务模板（Extra/全局默认）保持免登 URL。
-        var ticketUrl = IsBuiltInTestTemplate(template)
-            ? await ResolveTestTicketUrlAsync(ctx, ct, template.TtlSeconds)
-            : await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
+        // 需求 B（2026-11-05）：业务模板分支改双值（裸票 + URL 同票）——{ticket_value}/{ticket} 双占位符并存合法
+        // （用户裁定"不是二选一"），一次签票同票同源。
+        TicketIssueResult? ticketResult = null;
+        string? testTicketUrl = null;
+        if (IsBuiltInTestTemplate(template))
+        {
+            testTicketUrl = await ResolveTestTicketUrlAsync(ctx, ct, template.TtlSeconds);
+        }
+        else
+        {
+            ticketResult = await ResolveTicketAsync(ctx, ct, template.TtlSeconds);
+        }
 
-        // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}/{ticket}——I2-8 5 参重载）
-        var articles = BuildArticles(template, ctx, ticketUrl);
+        // 占位符替换逐篇应用（{uid}/{openid}/{channel_id}/{channel_type}/{ticket}/{ticket_value}——需求 B 6 参重载）
+        var articles = BuildArticles(template, ctx, ticketResult?.Url ?? testTicketUrl, ticketResult?.Ticket);
 
         return new WechatReplyPayload(News: articles);
     }
@@ -137,10 +149,12 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// <summary>
     /// 图文条目构建——<see cref="NewsReplyTemplateV2.Articles"/> 数组优先（多图文，微信上限 8 篇——
     /// <c>Take(8)</c> 钳制；空数组视同缺省回退）；缺省回退单图文字段（Title/Description/Link/PicUrl——存量兼容）。
-    /// 占位符替换逐篇应用（I2-8：5 参重载含 <c>{ticket}</c>——<paramref name="ticketUrl"/> 可空 → 空串替换；
+    /// 占位符替换逐篇应用（需求 B 6 参重载：<c>{ticket}</c> → <paramref name="ticketUrl"/>（完整 URL）、
+    /// <c>{ticket_value}</c> → <paramref name="ticketValue"/>（裸票，同票双形态）；可空 → 空串替换；
     /// Q1 类型可区分（v0.16.0）：新增 <c>{msg_type}</c>/<c>{event}</c> 占位符 + 合并占位符 <c>{type}</c>（按 MsgType 分流——事件消息显示 Event（CLICK/VIEW 等），普通消息显示 MsgType（text/image 等））——内置"链路测试"卡片标题可体现触发源（如 <c>链路测试·CLICK</c>/<c>链路测试·text</c>），业务模板同受益）。
     /// </summary>
-    private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx, string? ticketUrl)
+    private static IReadOnlyList<EventReplyNewsArticle> BuildArticles(NewsReplyTemplateV2 template, WechatEventContext ctx,
+        string? ticketUrl, string? ticketValue)
     {
         // {text} 回退 {type}：事件类消息无用户正文，回退触发源值防空后缀（"链路测试·CLICK" 可读）
         string Render(string? text)
@@ -152,7 +166,7 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
                 ? typeValue
                 : ctx.Content.Trim();
 
-            return ReplacePlaceholders(text ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl)
+            return ReplacePlaceholders(text ?? string.Empty, ctx.UId, ctx.OpenId, ctx.ChannelId, ticketUrl, ticketValue)
                 .Replace("{msg_type}", ctx.MsgType ?? string.Empty)
                 .Replace("{event}", ctx.Event ?? string.Empty)
                 .Replace("{type}", typeValue)

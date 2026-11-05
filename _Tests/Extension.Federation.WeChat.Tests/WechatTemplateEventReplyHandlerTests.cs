@@ -427,6 +427,123 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.DoesNotContain("/test/wx-template/ticket-test", reply!.Content);
     }
 
+    // ── 需求 B（2026-11-05）：裸票注入——{ticket_value} 占位符（落地 URL 归业务模板，一次一票同票双形态）──
+
+    /// <summary>模板 link 含 <c>{ticket_value}</c> → 替换为<b>裸票据串</b>（Fake IssueTicketAsync 返回裸票
+    /// ticket-raw-{channelId}）——落地 URL 由业务模板自拼（wx-ticket-value：/m/yibalian/auth?ticket=）。</summary>
+    [Fact]
+    public async Task Template_TicketValue_ReplacesBareTicket()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.AddScoped<ILoginEntryService>(_ => recorded));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(TemplateEvent("wx-ticket-value"), CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("<Title><![CDATA[裸票注入 ticket-raw-wx-ticket-value]]></Title>", reply!.Content);
+        // link 直写业务落地 URL + 裸票注入（非扩展组装 URL——不含 /feberation）
+        Assert.Contains("https://m.loongba.cn/m/yibalian/auth?ticket=ticket-raw-wx-ticket-value", reply.Content);
+        Assert.DoesNotContain("/feberation", reply.Content);
+    }
+
+    /// <summary>一次回复只签一次票：模板含多处票占位符（title + link 双 <c>{ticket_value}</c>）→
+    /// IssueTicketAsync 恰 1 次 + 两处同票值（同票双形态同源）。</summary>
+    [Fact]
+    public async Task Template_DualTicketPlaceholders_SingleIssue_SameTicket()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<WechatEventReplyOptions>(o => o.EnableBuiltInTestTemplate = false);
+            services.AddScoped<ILoginEntryService>(_ => recorded);
+        });
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        // wx-ticket-value 模板 title 含 {ticket_value} + link 含 {ticket_value}——两处共用同一票值
+        var reply = await handler.HandleAsync(
+            WeChatTestHost.CreateEventDispatch(
+                ("msg_type", "event"),
+                ("event", "unknown_event"),
+                ("from_user_name", "openid-dual"),
+                ("external_user_id", "openid-dual"),
+                ("to_user_name", "gh_test"),
+                ("channel_id", "wx-ticket-value"),
+                ("__decrypted_xml", WxXml(("MsgType", "event"), ("Event", "unknown_event")))),
+            CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal(1, recorded.IssueTicketCallCount);   // 一次一票
+        Assert.Contains("裸票注入 ticket-raw-wx-ticket-value", reply!.Content);          // title 同票
+        Assert.Contains("https://m.loongba.cn/m/yibalian/auth?ticket=ticket-raw-wx-ticket-value", reply.Content);  // link 同票
+    }
+
+    /// <summary>双占位符并存（user 裁定"不是二选一"）：<c>{ticket}</c> → 完整 URL、<c>{ticket_value}</c> → 裸票、
+    /// <b>同票</b>——不置空任何一方（wx-ticket-both：link 两占位符并存）。</summary>
+    [Fact]
+    public async Task Template_BothPlaceholders_SameTicket_NeitherEmpty()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.AddScoped<ILoginEntryService>(_ => recorded));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(TemplateEvent("wx-ticket-both"), CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal(1, recorded.IssueTicketCallCount);   // 并存仍一次一票
+        // {ticket_value} → 裸票（wx-ticket-both link: ?ticket={ticket_value}&u={ticket}）
+        Assert.Contains("https://m.loongba.cn/m/yibalian/auth?ticket=ticket-raw-wx-ticket-both&u=", reply!.Content);
+        Assert.DoesNotContain("{ticket_value}", reply.Content);   // 无残留占位符——裸票已替换
+        Assert.DoesNotContain("{ticket}", reply.Content);         // 无残留占位符——URL 已替换
+        // {ticket} → 完整 URL（ticket.example.com/t?ch=...——Fake 的 Url 值）
+        Assert.Contains("https://ticket.example.com/t?ch=wx-ticket-both", reply.Content);
+        // 同票：URL query ticket == 裸票（Fake 双值同一 channelId 派生——同源同票）
+        Assert.Contains("&u=https://ticket.example.com/t?ch=wx-ticket-both", reply.Content);
+    }
+
+    /// <summary>仅 <c>{ticket}</c>（存量业务模板）→ 产出 URL 与 Fake IssueTicketAsync.Url 值一致
+    /// （内部核心回归——wx-template link 由 {ticket} 替换为完整 URL 而非裸票）。</summary>
+    [Fact]
+    public async Task Template_LegacyTicket_SameAsBuildTicketUrl()
+    {
+        var recorded = new RecordingLoginEntryService();
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+            services.AddScoped<ILoginEntryService>(_ => recorded));
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(TemplateEvent("wx-template"), CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Equal(1, recorded.IssueTicketCallCount);   // 存量 {ticket} 仍一次一票
+        // wx-template link: https://sso.example.com/login?ticket={ticket} → {ticket} 替换为完整 URL（非裸票）
+        Assert.Contains("https://sso.example.com/login?ticket=https://ticket.example.com/t?ch=wx-template", reply!.Content);
+        Assert.DoesNotContain("ticket_value", reply.Content);
+    }
+
+    /// <summary>fail-closed（Fake null = 未启用/签票失败等价）→ 两占位符均空串 + <b>link 残 URL 形态断言</b>
+    /// （P1-3：https://m.loongba.cn/m/yibalian/auth?ticket=——回复结构不变，其余文本照常渲染）。</summary>
+    [Fact]
+    public async Task Template_TicketValue_FailClosed_EmptyTicket_RemainingTextRenders()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();   // 宿主默认 NullLoginEntryService（IssueTicketAsync → null）
+        var handler = user.Use<WechatTemplateEventReplyHandler>();
+
+        var reply = await handler.HandleAsync(TemplateEvent("wx-ticket-value"), CancellationToken.None);
+
+        Assert.NotNull(reply);
+        // link 残 URL 形态（裸票空串——业务 URL 骨架保留，错误态由落地页兜底）
+        Assert.Contains("https://m.loongba.cn/m/yibalian/auth?ticket=", reply!.Content);
+        // 其余文本照常渲染（title 含 {ticket_value} → 空串）
+        Assert.Contains("<Title><![CDATA[裸票注入 ]]></Title>", reply.Content);
+    }
+
     /// <summary>模板解析链第三级 fail-safe：EnableBuiltInTestTemplate 默认 false（未开启）→ 模板缺失仍 null
     /// （不自动回退内置卡片——生产防护：绝不发"链路测试"给真实用户）。</summary>
     [Fact]
@@ -475,12 +592,14 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
     }
 
     /// <summary>满足 <see cref="WechatEventReplyHandlerBase.ResolveTicketAsync"/> 签票调用（记录参数供断言；
-    /// 返回固定 URL——占位符替换验证透传链）。</summary>
+    /// 返回固定 URL——占位符替换验证透传链）。<see cref="IssueTicketCallCount"/> 记录裸票签票次数
+    /// （需求 B"一次回复只签一次票"断言）。</summary>
     private sealed class RecordingLoginEntryService : ILoginEntryService
     {
         public string? RequestBaseUrl { get; private set; }
         public string? ExternalUserId { get; private set; }
         public string? UId { get; private set; }   // v0.16.0 Q2：测试端点签票透传 uid 记录（断言已绑定体现）
+        public int IssueTicketCallCount { get; private set; }
 
         public Task<string?> BuildTicketUrlAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
         {
@@ -496,6 +615,19 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
             ExternalUserId = externalUserId;
             UId = uId;
             return Task.FromResult<string?>($"https://ticket.example.com/{platformId}/test/{channelId}/ticket-test");
+        }
+
+        // 需求 B：模板链路一次签票双形态（裸票 + 完整 URL 同票）——与 BuildTicketUrlAsync 同 param 记录 +
+        // Ticket/Url 双值返回（{ticket_value} 裸票占位 / {ticket} 完整 URL 占位共用）
+        public Task<TicketIssueResult?> IssueTicketAsync(string channelId, string channelType, string externalUserId, int? ttlSeconds = null, string? requestBaseUrl = null, CancellationToken ct = default, string? uId = null)
+        {
+            IssueTicketCallCount++;
+            RequestBaseUrl = requestBaseUrl;
+            ExternalUserId = externalUserId;
+            UId = uId;
+            return Task.FromResult<TicketIssueResult?>(new TicketIssueResult(
+                Ticket: $"ticket-raw-{channelId}",
+                Url: $"https://ticket.example.com/t?ch={channelId}"));
         }
 
         public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)
@@ -605,6 +737,28 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
                 {
                     ["news_reply"] =
                         """{"enabled":true,"articles":[{"title":"第1篇","link":"https://example.com/1","pic_url":"https://img.example.com/1.png"},{"title":"第2篇","link":"https://example.com/2","pic_url":"https://img.example.com/2.png"},{"title":"第3篇","link":"https://example.com/3","pic_url":"https://img.example.com/3.png"},{"title":"第4篇","link":"https://example.com/4","pic_url":"https://img.example.com/4.png"},{"title":"第5篇","link":"https://example.com/5","pic_url":"https://img.example.com/5.png"},{"title":"第6篇","link":"https://example.com/6","pic_url":"https://img.example.com/6.png"},{"title":"第7篇","link":"https://example.com/7","pic_url":"https://img.example.com/7.png"},{"title":"第8篇","link":"https://example.com/8","pic_url":"https://img.example.com/8.png"},{"title":"第9篇","link":"https://example.com/9","pic_url":"https://img.example.com/9.png"}]}""",
+                },
+            },
+            new()
+            {
+                ChannelId = "wx-ticket-value",
+                PlatformType = "wechat",
+                IsEnabled = true,
+                Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["news_reply"] =
+                        """{"title":"裸票注入 {ticket_value}","description":"业务直写落地链路","link":"https://m.loongba.cn/m/yibalian/auth?ticket={ticket_value}","pic_url":"","ttl_seconds":300,"enabled":true}""",
+                },
+            },
+            new()
+            {
+                ChannelId = "wx-ticket-both",
+                PlatformType = "wechat",
+                IsEnabled = true,
+                Extra = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["news_reply"] =
+                        """{"title":"双占位符 {ticket_value}","description":"并存不置空","link":"https://m.loongba.cn/m/yibalian/auth?ticket={ticket_value}&u={ticket}","pic_url":"","ttl_seconds":300,"enabled":true}""",
                 },
             },
         };

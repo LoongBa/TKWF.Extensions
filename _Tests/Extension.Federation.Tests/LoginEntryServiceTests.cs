@@ -217,6 +217,174 @@ public sealed class LoginEntryServiceTests : TestHostBase
         Assert.False(options.Enabled);
     }
 
+    // ── 8. IssueTicketAsync（需求 B——裸票 + 同票 URL 双形态，一次签票零日志出口）──
+
+    /// <summary>默认未启用（Enabled=false）→ IssueTicketAsync null（fail-closed——与 BuildTicketUrlAsync 同门控）。</summary>
+    [Fact]
+    public async Task IssueTicket_Disabled_ReturnsNull()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope();
+
+        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Empty(_ticket.Issued);   // 未启用 → 不签票
+    }
+
+    /// <summary>正常路径：一次签票 → 裸票（Ticket，非 URL）+ 完整 URL（Url）同票双形态——URL query ticket == 裸票
+    /// （用户裁定"不是二选一"——{ticket_value}/{ticket} 占位符共用同一票值）。</summary>
+    [Fact]
+    public async Task IssueTicket_Enabled_ReturnsBareTicket_WithSameTicketUrl()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.Enabled = true;
+                o.ChannelBaseUrls["mp-1"] = "https://sso.example.com/";
+            });
+        });
+        _ticket.IssueResult = "ticket-abc-123";
+
+        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
+
+        Assert.NotNull(result);
+        // 裸票（非 URL 形态——不含 /feberation、不含 ?ticket=）
+        Assert.Equal("ticket-abc-123", result!.Ticket);
+        Assert.DoesNotContain("/feberation", result.Ticket);
+        Assert.DoesNotContain("?ticket=", result.Ticket);
+        // 完整 URL 同票（扩展托管 URL 遗留形态 + 同一票值）
+        Assert.Equal("https://sso.example.com/feberation/login/ticket?ticket=ticket-abc-123", result.Url);
+        Assert.Single(_ticket.Issued);   // 一次一票——双形态同源同票
+    }
+
+    /// <summary>URL 逐字节等价（C1 必闭回归）：同参数同基址下 IssueTicketAsync().Url ≡ BuildTicketUrlAsync()
+    /// ——两形态委托同一组装核心；requestBaseUrl=null 与传值两形态均断言（基址三级链完整）。</summary>
+    [Theory]
+    [InlineData("https://host.example.com")]   // requestBaseUrl 传值（请求 Host 推导——三级链第三级）
+    [InlineData(null)]                          // requestBaseUrl 空（前两级兜底/相对路径）
+    public async Task IssueTicket_Url_ByteIdenticalToBuildTicketUrl(string? requestBaseUrl)
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.Enabled = true;
+                o.ChannelBaseUrls["mp-1"] = "https://sso.example.com";
+            });
+        });
+        _ticket.IssueResult = "ticket-byted";
+
+        var fromIssue = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", requestBaseUrl: requestBaseUrl, ct: CancellationToken.None);
+        _ticket.Issued.Clear();
+        var fromBuild = await user.Use<ILoginEntryService>().BuildTicketUrlAsync("mp-1", "wechat_event", "openid-1", requestBaseUrl: requestBaseUrl, ct: CancellationToken.None);
+
+        Assert.Equal(fromBuild, fromIssue!.Url);          // 逐字节等价
+        Assert.Contains(fromIssue.Ticket!, fromIssue.Url!); // 同票（URL query ticket == 裸票）
+    }
+
+    /// <summary>C1 基址三级链第三级真正执行（审核 #10 必闭）：<b>不配置</b> ChannelBaseUrls / TestTicketEndpointBaseUrl，
+    /// 仅传 requestBaseUrl → Url 以其开头（若实现回归为丢弃 requestBaseUrl → 产相对路径 → 本用例失败）。
+    /// <seealso cref="BuildTicketUrl_NoBaseUrl_ReturnsRelativeUrl"/> 对照：requestBaseUrl 空 → 相对路径兜底。</summary>
+    [Fact]
+    public async Task IssueTicket_RequestBaseUrl_UsedAsThirdTierBase()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);   // ⚠️ 不配 ChannelBaseUrls/TestTicketEndpointBaseUrl
+        });
+        _ticket.IssueResult = "ticket-tier3";
+
+        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1",
+            requestBaseUrl: "https://wx.loongba.cn", ct: CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.StartsWith("https://wx.loongba.cn/feberation/login/ticket?ticket=ticket-tier3", result!.Url);
+    }
+
+    /// <summary>TTL 安全钳制（审核 #22 裁决——用户裁定实施 clamp）：显式 ttlSeconds 超 MaxTicketTtlSeconds
+    /// → 钳到上限（默认 120），不再透传超限 TTL——裸票/URL 进图文 link 的票据曝光面受上限约束。</summary>
+    [Fact]
+    public async Task IssueTicket_TtlExceedsMax_ClampedToMax()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
+        });
+        _ticket.IssueResult = "ticket-clamp";
+
+        await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ttlSeconds: 9999, ct: CancellationToken.None);
+
+        var issued = Assert.Single(_ticket.Issued);
+        Assert.Equal(120, issued.Ttl.TotalSeconds);   // 钳到 MaxTicketTtlSeconds 默认 120
+    }
+
+    /// <summary>ttlSeconds 显式传入 → 覆盖 Options.TicketTtlSeconds（模板 TTL 优先语义——与 BuildTicketUrlAsync 同款）。</summary>
+    [Fact]
+    public async Task IssueTicket_TtlOverride_UsesExplicit()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.Enabled = true;
+                o.ChannelBaseUrls["mp-1"] = "https://sso.example.com";
+                o.TicketTtlSeconds = 120;
+            });
+        });
+        _ticket.IssueResult = "ticket-ttl";
+
+        await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ttlSeconds: 42, ct: CancellationToken.None);
+
+        var issued = Assert.Single(_ticket.Issued);
+        Assert.Equal(42, issued.Ttl.TotalSeconds);
+    }
+
+    /// <summary>uid 透传：已绑定用户 uId 入签票载荷（PlatformUid == 入参——落地端 UId 直读复用）。</summary>
+    [Fact]
+    public async Task IssueTicket_UidForwardedToPayload()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
+        });
+        _ticket.IssueResult = "ticket-uid";
+
+        await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None, uId: "u-100");
+
+        var issued = Assert.Single(_ticket.Issued);
+        Assert.Equal("u-100", issued.Payload.PlatformUid);
+    }
+
+    /// <summary>签票失败（票据后端不可用）→ null + 不抛（fail-closed——裸票零出口：异常 Warning 只记 channelId +
+    /// externalUserId 前 6 位，不含票据全串）。</summary>
+    [Fact]
+    public async Task IssueTicket_IssueThrows_ReturnsNull()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.Enabled = true;
+                o.ChannelBaseUrls["mp-1"] = "https://sso.example.com";
+            });
+        });
+        _ticket.ThrowOnIssue = true;
+        _ticket.IssueResult = "ticket-SECRET-full";
+
+        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
     // ── 测试设施 ──
 
     /// <summary>可签发票务服务（Fake ISealedTicketService&lt;FederatedIdentity&gt;——返回固定 ticket + 记录签发载荷）。</summary>

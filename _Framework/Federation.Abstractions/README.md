@@ -24,7 +24,7 @@ DMP-Lite 消费方反馈 §四（P2）：`TKWF.Ext.Federation` 主包承载通�
 | `IFollowChannelQuery` + `FollowStateSnapshot`（I2-2） | 平台关注状态反查（`QueryFollowStateAsync`——实现方如 `WeChatEventChannel`；状态修复/对账用，**不在事件路径调用**） | `TKWF.Domain` |
 | `IFollowStateService : IDomainService` + `FollowRecordResult`/`FollowStateDto`/`FollowDailyStatDto`（I2-2） | 关注域门面（`RecordAsync` 幂等/`GetAsync`/`GetByExternalUserIdAsync`/`GetDailyStatsAsync`/`RebuildAsync`/`PurgeEventsAsync`）——实现留 Federation 主包 `FollowStateService` | `TKWF.Domain` |
 | `FollowChangedEvent`（I2-2） | 关注域事件（仅 `StateChanged==true` 发布——经 `User.GetService<ILocalEventBus>()` 提交后派发；`[DomainEventHandler]` 消费） | 纯 BCL |
-| `ILoginEntryService : IDomainService` + `FederationLoginEntryOptions`（I2-2） | 免登入口（`BuildTicketUrlAsync`/`BuildSilentAuthorizeUrlAsync`——建立在框架 `ISealedTicketService<FederatedIdentity>` 之上，不新造票据原语；`Enabled` 默认 false fail-closed） | `TKWF.Domain` |
+| `ILoginEntryService : IDomainService` + `FederationLoginEntryOptions`（I2-2；V0.7.0 需求 B 裸票注入） | 免登入口（`BuildTicketUrlAsync`（存量 URL 形态——扩展托管 URL 遗留）/`BuildSilentAuthorizeUrlAsync`/**`IssueTicketAsync`（V0.7.0——`TicketIssueResult(Ticket, Url)` 同票双形态：裸票 + 完整 URL 一次签票，`{ticket_value}` 占位符/消费方自拼 URL 原语，裸票零日志出口）**——建立在框架 `ISealedTicketService<FederatedIdentity>` 之上，不新造票据原语；`Enabled` 默认 false fail-closed） | `TKWF.Domain` |
 
 > **依赖核实（2026-10-18 ④ / 2026-10-20 I2-1 修订）**：V0.1.0 首发时 `SsoChannelEventContext`/`EventReplyResult` 定义于 `TrustCenter.Abstractions\ISsoChannel.cs`（纯 BCL 契约包）；**I2-1 已将 `ISsoChannel.cs` 整文件迁入本包**（namespace 改 `TKWF.Ext.Federation`），csproj **删除** `ProjectReference → TrustCenter.Abstractions`——本契约包最小引用集收敛为 **`TKWF.Domain`** 单依赖（对齐 Permissions.Abstractions 先例；依赖图单向：TrustCenter（内核）⟂ Federation（连接层））。
 

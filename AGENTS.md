@@ -321,6 +321,7 @@ _Tests/Extension.{扩展名}.Tests/
 ### 构建/编译操作纪律
 
 - **dll 被占用（`CS2012`/`file in use by another process`）时，用 `dotnet build-server shutdown` 优雅关闭 MSBuild/VBCSCompiler 编译服务器**，而非强杀进程——编译服务器是常驻进程（MSBuild node + Roslyn compiler server），强杀会留下孤儿进程/状态损坏；shutdown 后重试构建即可。若 shutdown 后仍占用，再检查是否残留 dotnet 测试宿主进程。
+- **批量改写既有文件（脚本/正则替换）必须保留原文件换行与 BOM**：先 `ReadAllBytes` 探测 `CRLF vs LF` 与 BOM，再以相同格式写回；禁止固定用 `` `r`n `` 拼接或无 BOM 全量重写——否则产生整文件伪 diff（2026-11-05 实证：42 个 csproj 被写成 CRLF 而仓库为 LF → 1163 行伪 diff，需二次修复）；改完用 `git diff --stat` + `git ls-files --eol` 自查。全局同款规则见 `~/.config/opencode/opencode.jsonc` instructions。
 
 ### 测试纪律（受影响面定向测试——2026-10-11 用户裁定）
 

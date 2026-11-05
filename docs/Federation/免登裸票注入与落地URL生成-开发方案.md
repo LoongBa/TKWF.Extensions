@@ -136,11 +136,14 @@ private async Task<string?> IssueTicketCoreAsync(string channelId, string channe
     int? ttlSeconds, CancellationToken ct, string? uId)
 {
     if (!_loginEntry.Value.Enabled) return null;              // Enabled 门控（fail-closed ①）
+    var effectiveTtl = ttlSeconds is null                       // TTL 安全钳制（审核 #22 裁决）：
+        ? _loginEntry.Value.TicketTtlSeconds                    //   null → Options 缺省（启动期校验 ≤ Max）
+        : Math.Min(ttlSeconds.Value, _loginEntry.Value.MaxTicketTtlSeconds);  // 显式超上限 → 钳制
     var payload = FederatedTicketPayloadBuilder.Build(provider:"wechat", protocolChannelType: channelType,
         channelId: channelId, externalUserId: externalUserId, platformUid: uId, assurance:"event",
-        ttl: TimeSpan.FromSeconds(ttlSeconds ?? _loginEntry.Value.TicketTtlSeconds), resolver: ResolveChannelForm);
+        ttl: TimeSpan.FromSeconds(effectiveTtl), resolver: ResolveChannelForm);
     try { return (await TicketService().IssueAsync(payload,
-        TimeSpan.FromSeconds(ttlSeconds ?? _loginEntry.Value.TicketTtlSeconds), new SealedTicketOptions(), ct)).Ticket; }
+        TimeSpan.FromSeconds(effectiveTtl), new SealedTicketOptions(), ct)).Ticket; }
     catch (Exception ex) when (ex is not OperationCanceledException)
     { _logger.LogWarning(ex, "免登票据签票失败（票据后端不可用）——不生成票据：ChannelId={ChannelId} ExternalUserId={ExternalUserIdPrefix}",
         channelId, externalUserId.Length <= 6 ? externalUserId : externalUserId[..6]); return null; }
@@ -301,7 +304,7 @@ grep 基线（2026-11-05）：现占位符集 `{uid}/{openid}/{channel_id}/{chan
 | `_Framework/Federation/LoginEntryService.cs` | 抽 `IssueTicketCoreAsync` + `BuildTicketUrlCore` → `IssueTicketAsync`（双值，零日志，URL 组装传 `requestBaseUrl`——C1）+ `BuildTicketUrlAsync`（存量委托 `.Url`，dev 日志回归）+ `BuildTestTicketUrlAsync`（零变化） |
 | `_Framework/Federation.WeChat/WechatEventReplyHandlerBase.cs` | 占位符 6 参重载（`{ticket_value}`）+ `ResolveTicketAsync` 返回 `TicketIssueResult?`（破坏性登记）+ **透传 `ctx.BaseUrl` 为 requestBaseUrl（C1）**+ `ResolveTestTicketUrlAsync` 零变化 |
 | `_Framework/Federation.WeChat/WechatTemplateEventReplyHandler.cs` | `OnDefaultAsync` 业务模板分支改双值取用（`.Url`/`.Ticket`）+ `BuildArticles` 传双值（6 参重载） |
-| `_Framework/WeChatOperations/WeChatOperationsReplyHandler.cs` | **ctor 零变化**（BLOCKER-5 消除——不新增 Options）；内部 `base.OnDefaultAsync` 调用点适配返回形态（`:219,400`）|
+| `_Framework/WeChatOperations/WeChatOperationsReplyHandler.cs` | **零改动（实测确认）**——`OnDefaultAsync` 签名不变（变化的是 `ResolveTicketAsync` 返回类型，非 `OnDefaultAsync`）；子类调用点 `var tpl = await base.OnDefaultAsync(ctx, ct); if (tpl is not null) return tpl;`（`:219,400`）只判 null 后整返回 `WechatReplyPayload?`，不读 `.Ticket`/`.Url`——天然零适配（BLOCKER-5 消除：不新增 Options，ctor 零变化）；实施 diff 未含该文件 |
 | `_Tests/Extension.Federation.Tests/LoginEntryServiceTests.cs` | IssueTicketAsync 用例（门控/TTL/uid/null/零日志/同票双值） |
 | `_Tests/Extension.Federation.WeChat.Tests/WechatTemplateEventReplyHandlerTests.cs` | `{ticket_value}` + 并存 + 同票断言 + 存量 URL 逐字节回归 |
 | 测试宿主 `WeChatTestHost.cs` / `WeChatOperationsTestHost.cs` | Fake `ILoginEntryService` 补 `IssueTicketAsync`（record）+ 计数版 |
@@ -388,3 +391,4 @@ grep 基线（2026-11-05）：现占位符集 `{uid}/{openid}/{channel_id}/{chan
 | 2026-11-05 | v0.2 | 按用户裁定（不是二选一）修订：形态①②独立交付 + 双占位符并存合法 |
 | 2026-11-05 | v0.3 | **按 Oracle3 评审 FAIL(BLOCKER) 全面修订——B1-B6 全吸收**：① BLOCKER-1/2 根治（平台库零主包依赖——`IssueTicketAsync` 返回 `TicketIssueResult(Ticket, Url)` 双值 record，契约收口；不引 `FederationEventReplyOptions`/`LoginEntryService`）；② 遗漏-1 衔接（链路 A/B 双 handler 链路差异分析——D03 1.5 裸票仅链路 A 有，本期为链路 B 补齐）；③ dev URL 日志出口变化处置（存量出口仅存于 BuildTicketUrlAsync，开发期走测试端点）；④ WeChatOperations 子类回归测试（B5）+ 裸票零日志任何级别断言（B6）+ 破坏性变更登记（ResolveTicketAsync 返回形态） |
 | 2026-11-05 | v0.4 | **按 Oracle2 复审 PASS WITH CONDITIONS 修订——C1-C3 闭环**：① **C1（BLOCKER）消除**——`IssueTicketAsync` 契约增 `string? requestBaseUrl = null` 尾部参数（对齐 BuildTicketUrlAsync 签名形态），`ResolveTicketAsync` 透传 `ctx.BaseUrl`——URL 基址三级链第三级（请求 Host 推导）不丢失，`{ticket}` 存量路径 URL 与现状逐字节等价；② **C2** §3.1.2 注释矛盾修正（"无 requestBaseUrl 不组 URL" → "requestBaseUrl 供 Url 基址第三级"）；③ **C3** §3.2 行号引用修正（L83-98 → L64-98 门控+签票段 / L72-77 基址解析）；测试 5.1#8/5.2#4 补基址完整等价断言 |
+| 2026-11-05 | v0.5 | **按 Oracle6 实施后复审 PASS WITH CONDITIONS 闭环（C1-C3）**：① **C1** §3.2 代码示例更新为实际 `Math.Min(ttlSeconds ?? TicketTtlSeconds, MaxTicketTtlSeconds)` 钳制形态（审核 #22 裁决——Options 启动期校验 + 运行时钳制双层护栏，测试 `IssueTicket_TtlExceedsMax_ClampedToMax` 锁定）；② **C2 实存确认**——裸票零日志 TestLogger 断言已在实施提交（`IssueTicket_IssueThrows_ReturnsNull` 失败路径 Warning 脱敏断言 + `IssueTicket_NonProduction_WritesNoTicketToLog` 成功签票全级别零票断言），Oracle 陈述为漏读，无新增动作；③ **C3** §4 `WeChatOperationsReplyHandler` 行修订为"零改动（实测确认）——OnDefaultAsync 签名不变，子类只判 null 整返回不读 .Ticket/.Url"（原文误述为"调用点适配"）+ 指南 §九 破坏性变更表补 ResolveTicketAsync 返回类型行 |

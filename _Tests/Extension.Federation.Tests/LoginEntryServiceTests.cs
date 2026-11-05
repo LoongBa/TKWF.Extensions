@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Ticket;
@@ -369,6 +370,7 @@ public sealed class LoginEntryServiceTests : TestHostBase
     public async Task IssueTicket_IssueThrows_ReturnsNull()
     {
         using var _ = this;
+        var logs = new List<string>();
         var (_, user) = BindTestScope(services =>
         {
             services.Configure<FederationLoginEntryOptions>(o =>
@@ -376,16 +378,69 @@ public sealed class LoginEntryServiceTests : TestHostBase
                 o.Enabled = true;
                 o.ChannelBaseUrls["mp-1"] = "https://sso.example.com";
             });
+            services.AddLogging(b => b.AddProvider(new CollectingLoggerProvider(logs)));
         });
         _ticket.ThrowOnIssue = true;
         _ticket.IssueResult = "ticket-SECRET-full";
 
-        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
+        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1234567890", ct: CancellationToken.None);
 
         Assert.Null(result);
+        // 审核 #9 必闭：Warning 只含 channelId + externalUserId 前 6 位——票据全串与完整 openid 均不入日志
+        Assert.Contains(logs, entry => entry.Contains("ChannelId=mp-1") && entry.Contains("ExternalUserId=openid"));
+        Assert.DoesNotContain(logs, entry => entry.Contains("ticket-SECRET-full"));
+        Assert.DoesNotContain(logs, entry => entry.Contains("openid-1234567890"));
+    }
+
+    /// <summary>裸票零日志出口（审核 #9 必闭——方案 §5.1 #6 B6 强化）：非生产模式（IsProduction 默认 false）
+    /// 下 <see cref="ILoginEntryService.IssueTicketAsync"/> <b>任何级别</b>均不打印裸票/完整 URL
+    /// （与 <c>BuildTicketUrlAsync</c> 的 dev URL 日志出口不同——裸票只能经返回值出口）。</summary>
+    [Fact]
+    public async Task IssueTicket_NonProduction_WritesNoTicketToLog()
+    {
+        using var _ = this;
+        var logs = new List<string>();
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.Enabled = true;
+                o.ChannelBaseUrls["mp-1"] = "https://sso.example.com";
+            });
+            services.AddLogging(b => b.AddProvider(new CollectingLoggerProvider(logs)));
+        });
+        _ticket.IssueResult = "ticket-NOLOG-9f3a-SECRET";
+
+        var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("ticket-NOLOG-9f3a-SECRET", result!.Ticket);
+        Assert.DoesNotContain(logs, entry => entry.Contains("ticket-NOLOG-9f3a-SECRET"));
+        Assert.DoesNotContain(logs, entry => entry.Contains("ticket="));
     }
 
     // ── 测试设施 ──
+
+    /// <summary>日志收集器（裸票零日志断言设施——捕获全部级别格式化消息 + 异常文本，供"不含票据串"断言）。</summary>
+    private sealed class CollectingLoggerProvider(List<string> entries) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new CollectingLogger(entries);
+
+        public void Dispose() { }
+
+        private sealed class CollectingLogger(List<string> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+                => entries.Add(exception is null
+                    ? formatter(state, exception)
+                    : $"{exception.GetType().Name}: {exception.Message} | {formatter(state, exception)}");
+        }
+    }
 
     /// <summary>可签发票务服务（Fake ISealedTicketService&lt;FederatedIdentity&gt;——返回固定 ticket + 记录签发载荷）。</summary>
     private sealed class IssuingTicketService : ISealedTicketService<FederatedTicketPayload>

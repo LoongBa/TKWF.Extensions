@@ -344,6 +344,8 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// <para>DI004 零豁免：禁 ctor 注入 <see cref="ILoginEntryService"/>（契约在 Federation.Abstractions）——
     /// 经基类 <c>User</c> 帧内解析（守卫工厂门面）。</para>
     /// </summary>
+    /// <param name="ctx">事件上下文（编排富化——ChannelId 选区 + OpenId + BaseUrl 透传基址第三级）。</param>
+    /// <param name="ct">取消令牌。</param>
     /// <param name="ttlSeconds">票据 TTL 秒（可空——调用方按模板 <see cref="NewsReplyTemplate.TtlSeconds"/> 传入，
     /// null = <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/> 缺省）。</param>
     protected async Task<TicketIssueResult?> ResolveTicketAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
@@ -365,6 +367,8 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// <para>uid 透传（v0.16.0）：编排层 uid 命中时 <c>ctx.UId</c> 入签票载荷——测试端点展示页体现
     /// 已绑定用户（未绑定 null → 签空串，零配置冒烟不依赖绑定）。</para>
     /// </summary>
+    /// <param name="ctx">事件上下文（编排富化——ChannelId 选区 + OpenId + BaseUrl 透传基址第三级）。</param>
+    /// <param name="ct">取消令牌。</param>
     /// <param name="ttlSeconds">票据 TTL 秒（可空——调用方按模板 TtlSeconds 传入，null = 缺省）。</param>
     protected async Task<string?> ResolveTestTicketUrlAsync(WechatEventContext ctx, CancellationToken ct = default, int? ttlSeconds = null)
     {

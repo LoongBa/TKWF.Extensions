@@ -85,6 +85,7 @@ partial class SecurityLogEntityDataService(IDomainUser user, IEntityDAC<Security
     /// </summary>
     /// <param name="cutoffUtc">截止时间（UTC）——仅删 <c>CreateTime &lt; cutoffUtc</c> 的记录。</param>
     /// <param name="batchSize">单批最大删除条数（&gt; 0）。</param>
+    /// <param name="ct">取消令牌。</param>
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct = default)
     {
         var query = QueryForUser().Where(e => e.CreateTime < cutoffUtc).Take(batchSize);

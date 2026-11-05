@@ -20,11 +20,13 @@ namespace TKWF.Ext.WeChatOperations;
 /// </summary>
 public sealed class WeChatOperationsWebExtension : IWebExtension
 {
-    /// <summary>端点声明（B1-c 破坏性替换 ConfigureEndpoints）——挂载 8 个 [GenerateController] 门面全部
-    /// [ApiExpose] 端点（MapGenerated<T> 经 SG2 生成的 Map{Facade}Endpoints 助手挂载）。
+    /// <summary>
+    /// <para>端点声明（B1-c 破坏性替换 ConfigureEndpoints）——挂载 8 个 [GenerateController] 门面全部
+    /// [ApiExpose] 端点（MapGenerated&lt;T&gt; 经 SG2 生成的 Map{Facade}Endpoints 助手挂载）。</para>
     /// <para>宿主注册（ConfigureServices）走 IWebExtension 默认空实现——本扩展无 Options 绑定
     /// （配置节 TKWF:WeChatOperations 由 <see cref="WeChatOperationsExtensionInitializer{TUserInfo}"/>
-    /// 经 SG1 [Options] 绑定；门面已由 Initializer AddConstructibleService 注册）。</para></summary>
+    /// 经 SG1 [Options] 绑定；门面已由 Initializer AddConstructibleService 注册）。</para>
+    /// </summary>
     public void DeclareEndpoints(IExtensionEndpointRegistry registry)
     {
         registry.MapGenerated<IMenuService>();

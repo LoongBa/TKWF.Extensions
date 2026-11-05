@@ -16,7 +16,7 @@ using TKWF.Ext.Federation;
 namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
-/// 微信公众号运营事件回复 handler（v0.6.0 继承 <see cref="WechatTemplateEventReplyHandler"/>——排他单模型
+/// <para>微信公众号运营事件回复 handler（v0.6.0 继承 <see cref="WechatTemplateEventReplyHandler"/>——排他单模型
 /// T2 自定义业务 handler：规则驱动层叠加在模板基座之上，未覆盖分支天然走模板兜底
 /// （<see cref="WechatTemplateEventReplyHandler.OnDefaultAsync"/> 继承——原重复的
 /// <c>TemplateFallbackAsync</c>/<c>ReadNewsTemplateFromChannel</c> 删除，消除双 owner 歧义）。
@@ -104,13 +104,13 @@ public class WeChatOperationsReplyHandler : WechatTemplateEventReplyHandler
     /// 消费方前端逐行渲染"为什么命中/未命中"）。每步记录：规则 id + 规则名（如有）、场景类型、匹配模式、触发键、
     /// 命中与否（bool）、简短原因（如 "TriggerKey==content"/"content contains key"/"无 Default 规则"/"template fallback"）。
     /// </summary>
-    /// <param name="ruleId">命中/评估的规则主键（无规则分支为 null）。</param>
-    /// <param name="ruleName">规则显示名（<see cref="ReplyRuleEntity"/> 暂无 Name——恒 null，字段保留供前端渲染）。</param>
-    /// <param name="sceneType">规则场景类型（<see cref="WeChatReplySceneTypes"/>；template 兜底/无规则分支为 null）。</param>
-    /// <param name="matchMode">匹配模式（1=Exact 完全 / 2=Contains 包含；场景型规则 null）。</param>
-    /// <param name="triggerKey">本次评估的触发键（规则 TriggerKey，或 Exact 分支的内容/Scan 场景值）。</param>
-    /// <param name="hit">是否命中。</param>
-    /// <param name="reason">简短原因（展示文案）。</param>
+    /// <param name="RuleId">命中/评估的规则主键（无规则分支为 null）。</param>
+    /// <param name="RuleName">规则显示名（<see cref="ReplyRuleEntity"/> 暂无 Name——恒 null，字段保留供前端渲染）。</param>
+    /// <param name="SceneType">规则场景类型（<see cref="WeChatReplySceneTypes"/>；template 兜底/无规则分支为 null）。</param>
+    /// <param name="MatchMode">匹配模式（1=Exact 完全 / 2=Contains 包含；场景型规则 null）。</param>
+    /// <param name="TriggerKey">本次评估的触发键（规则 TriggerKey，或 Exact 分支的内容/Scan 场景值）。</param>
+    /// <param name="Hit">是否命中。</param>
+    /// <param name="Reason">简短原因（展示文案）。</param>
     private sealed record MatchTraceStep(
         long? RuleId,
         string? RuleName,

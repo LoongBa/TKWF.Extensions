@@ -67,6 +67,7 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel, IFollow
 
     /// <summary>关注状态反查（I2 §3.5——经 cgi-bin/user/info；对账路径，不在事件路径调用）。</summary>
     /// <param name="externalUserId">openid。</param>
+    /// <param name="ct">取消令牌。</param>
     /// <returns>关注状态快照；API 失败/未装配 ApiClient → null（调用方自行处置）。</returns>
     public async Task<FollowStateSnapshot?> QueryFollowStateAsync(string externalUserId, CancellationToken ct = default)
     {
@@ -213,6 +214,7 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel, IFollow
     /// <see cref="AuthenticateAsync"/> 同款纵深防御——本方法可被直连调用，验签信任根须自持）。</para>
     /// </summary>
     /// <param name="context">入站报文上下文——query 透传参数（msg_signature/signature/timestamp/nonce/echostr）。</param>
+    /// <param name="ct">取消令牌。</param>
     /// <returns>回显明文 echostr（text/plain）；失败 null。</returns>
     public Task<string?> VerifyUrlAsync(ChannelInboundContext context, CancellationToken ct = default)
     {

@@ -508,7 +508,7 @@ public sealed class FollowStateServiceTests : TestHostBase
 
     // ── 8. 清理（PurgeEventsAsync——保留期清理，消费方定时任务驱动）──
 
-    /// <summary>清理早于保留线的事件（按 OccurredAt < beforeUtc 批量删）。</summary>
+    /// <summary>清理早于保留线的事件（按 OccurredAt &lt; beforeUtc 批量删）。</summary>
     [Fact]
     public async Task PurgeEvents_DeletesExpiredOnly()
     {

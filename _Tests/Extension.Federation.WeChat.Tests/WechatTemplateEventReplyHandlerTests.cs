@@ -504,6 +504,8 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
         Assert.Contains("https://ticket.example.com/t?ch=wx-ticket-both", reply.Content);
         // 同票：URL query ticket == 裸票（Fake 双值同一 channelId 派生——同源同票）
         Assert.Contains("&u=https://ticket.example.com/t?ch=wx-ticket-both", reply.Content);
+        // m9 强化：{ticket} 完整 URL 自身携带同一票值（Fake Url 含 ticket= 参数——URL 无票回归即失败）
+        Assert.Contains("&ticket=ticket-raw-wx-ticket-both", reply.Content);
     }
 
     /// <summary>仅 <c>{ticket}</c>（存量业务模板）→ 产出 URL 与 Fake IssueTicketAsync.Url 值一致
@@ -627,7 +629,7 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
             UId = uId;
             return Task.FromResult<TicketIssueResult?>(new TicketIssueResult(
                 Ticket: $"ticket-raw-{channelId}",
-                Url: $"https://ticket.example.com/t?ch={channelId}"));
+                Url: $"https://ticket.example.com/t?ch={channelId}&ticket=ticket-raw-{channelId}"));
         }
 
         public Task<string?> BuildSilentAuthorizeUrlAsync(string channelId, string returnUrl, CancellationToken ct = default)

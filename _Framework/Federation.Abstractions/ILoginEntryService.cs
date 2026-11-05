@@ -23,9 +23,11 @@ public interface ILoginEntryService : IDomainService
     /// <see cref="IssueTicketAsync"/> 裸票（<c>.Ticket</c>）+ 消费方业务自拼落地 URL</b>（图文模板 <c>{ticket_value}</c> 占位符），
     /// 落地 URL 形态（业务 mid/路径）属消费方业务编排，扩展不再独占拼接（需求 B）。</para>
     /// fail-closed（三层）：① <see cref="FederationLoginEntryOptions.Enabled"/> 默认 false → null；
-    /// ② 三级基址（ChannelBaseUrls / TestTicketEndpointBaseUrl / requestBaseUrl）均空 → 交 <c>CombineUrl</c>
+    /// ② 三级基址（ChannelBaseUrls（空白视同未配置）/ TestTicketEndpointBaseUrl / requestBaseUrl）均空 → 交 <c>CombineUrl</c>
     /// 产<b>相对路径</b>（本站点同源——微信图文 link 须完整 URL，故实际链路恒有 requestBaseUrl）；
-    /// ③ <c>IssueAsync</c> 抛异常（票据后端不可用）→ null（不阻断回复）。
+    /// ③ <c>IssueAsync</c> 抛异常（票据后端不可用）/ URL 组装异常 → null（不阻断回复）。
+    /// <para>TTL 钳制：显式 <paramref name="ttlSeconds"/> 运行时钳到 [1, MaxTicketTtlSeconds]
+    /// （Options 启动期校验 + 运行时钳制双层护栏）。</para>
     /// <para>票据不落日志红线（§6.4）：本方法 dev 模式（IsProduction != true）输出完整 URL 日志（测试方受控访问）；
     /// <see cref="IssueTicketAsync"/> 裸票零出口（任何模式不落日志）。</para>
     /// </summary>
@@ -47,7 +49,9 @@ public interface ILoginEntryService : IDomainService
     /// ticket 闭环验证（内置测试图文卡片的点击落点——用户点卡片直达解票信息展示）。
     /// <para><b>与 <see cref="BuildTicketUrlAsync"/> 的差异</b>：① 路径为测试端点（<c>/test/...</c>）而非免登落地
     /// （<c>{TicketPath}?ticket=</c>）；② <b>不受 <see cref="FederationLoginEntryOptions.Enabled"/> 门控</b>——
-    /// 测试端点匿名兑票（不经免登入口），故签票能力独立可用（密钥/DB 就绪即可——零配置冒烟目标）。</para>
+    /// 测试端点匿名兑票（不经免登入口），故签票能力独立可用（密钥/DB 就绪即可——零配置冒烟目标）。
+    /// ③ 基址三级同 <see cref="BuildTicketUrlAsync"/>（tier1 空白视同未配置，全空 → 相对路径兜底）；
+    /// 显式 TTL 运行时钳到 [1, <see cref="FederationLoginEntryOptions.MaxTicketTtlSeconds"/>]。</para>
     /// </summary>
     /// <param name="channelId">渠道实例 id（URL 路径段 + 签入 identity.ChannelId）。</param>
     /// <param name="platformId">平台段（<c>{PlatformType}</c>——微信 <c>wechat</c>；测试端点路由段）。</param>
@@ -85,8 +89,8 @@ public interface ILoginEntryService : IDomainService
     /// <para><b>基址兜底与 TTL 钳制（与 <see cref="BuildTicketUrlAsync"/> 同源对齐）</b>：三级基址
     /// （ChannelBaseUrls → TestTicketEndpointBaseUrl → <paramref name="requestBaseUrl"/>）全空 → <c>CombineUrl</c>
     /// 产<b>相对路径</b>（本站点同源兜底——与 <see cref="BuildTicketUrlAsync"/> 逐字节一致）；显式
-    /// <paramref name="ttlSeconds"/> 运行时钳到 <see cref="FederationLoginEntryOptions.MaxTicketTtlSeconds"/> 上限
-    /// （默认 120——Options 启动期校验 + 运行时钳制双层护栏）。</para>
+    /// <paramref name="ttlSeconds"/> 运行时钳到 [1, <see cref="FederationLoginEntryOptions.MaxTicketTtlSeconds"/>] 区间
+    /// （默认上限 120、下限 1——Options 启动期校验 + 运行时钳制双层护栏）。</para>
     /// <para><b>裸票零日志出口</b>：本方法（含 dev 模式）不输出任何含票据的日志——完整 URL dev 日志出口
     /// 仅存于 <see cref="BuildTicketUrlAsync"/>（票据不落日志红线 §6.4 的强化形态）。</para>
     /// <para>fail-closed：未启用 / 签票失败 → null（调用方将占位符替换为空串，其余文本照常渲染）。</para>

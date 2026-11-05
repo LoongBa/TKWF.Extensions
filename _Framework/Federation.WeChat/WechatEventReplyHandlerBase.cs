@@ -293,7 +293,8 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// 占位符替换（<c>{uid}/{openid}/{channel_id}/{channel_type}/{ticket}</c>——方案 §3.2 图文工具表；
     /// I2-8 {ticket} 缺口闭环）。
     /// <para><c>{ticket}</c> → <paramref name="ticket"/>（可空 → 空串——免登入口未启用/失败时其余文本照常渲染，
-    /// 回复结构不变）；<c>{ticket}</c> 文本替换仅本重载一处（ILoginEntryService 只产出 URL，不做文本替换，§3.8）。
+    /// 回复结构不变；非空时通常为完整 URL，三级基址全空时为本站点相对路径——与 BuildTicketUrlAsync 同语义）；
+    /// <c>{ticket}</c> 文本替换仅本重载一处（ILoginEntryService 只产出 URL，不做文本替换，§3.8）。
     /// 无签票场景（非事件回复链路）沿用 4 参重载——<c>{ticket}</c> 保留原样。</para>
     /// <para>⚠️ <c>{ticket}</c> = <b>完整免登 URL</b>（扩展托管 URL 遗留形态）；需求 B 裸票注入用
     /// 6 参重载（<see cref="ReplacePlaceholders(string, string?, string?, string?, string?, string?)"/>——
@@ -338,7 +339,8 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// <para>经 <see cref="ILoginEntryService.IssueTicketAsync"/> 签密封票据（<c>ChannelType="wechat_event"</c>、
     /// <c>ctx.OpenId</c> 来自编排富化【external_user_id ?? FromUserName】；<c>ctx.BaseUrl</c>（请求 Host 推导）
     /// 透传为 URL 基址三级链第三级）→ 返回 <see cref="TicketIssueResult"/>（<c>Ticket</c>=裸票 / <c>Url</c>=完整 URL）；
-    /// 返回 null = 未启用/未配置基址/签票失败（fail-closed——调用方将占位符替换为空串，其余文本照常渲染）。</para>
+    /// 返回 null = 未启用 / 签票失败（fail-closed——调用方将占位符替换为空串，其余文本照常渲染）；
+    /// 基址三级全空 → <b>相对路径</b>兜底（本站点同源，与 <see cref="ILoginEntryService.BuildTicketUrlAsync"/> 同语义，非 null）。</para>
     /// <para>DI004 零豁免：禁 ctor 注入 <see cref="ILoginEntryService"/>（契约在 Federation.Abstractions）——
     /// 经基类 <c>User</c> 帧内解析（守卫工厂门面）。</para>
     /// </summary>

@@ -75,8 +75,10 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
             return null;
 
         // ③ URL 组装（{baseUrl}{RoutePrefix}{TicketPath}?ticket={ticket}——RoutePrefix 复用 eventReply，单一事实源）
-        //    委托共享组装核心（同 IssueTicketAsync——逐字节等价，测试锁定）
-        var url = BuildTicketUrlCore(channelId, ticket, requestBaseUrl);
+        //    委托共享组装核心（同 IssueTicketAsync——逐字节等价，测试锁定）；组装异常 → null（fail-closed，M1）
+        var url = TryBuildTicketUrl(channelId, ticket, requestBaseUrl);
+        if (url is null)
+            return null;
         // 衔接测试机制（v0.16.0）：非生产模式输出完整 URL 到日志——扩展模块/消费方测试可复制日志
         // URL 直接访问（微信图文卡片链接无法从客户端复制）；生产（IsProduction=true）零输出——
         // §6.4 红线"ticket 全串不落日志"生产恒定（仅 dev 出口，测试方受控访问）
@@ -105,7 +107,9 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
         // ③ URL 同票组装（{ticket_value} 与 {ticket} 双占位符共用同一票值——用户裁定"不是二选一"；
         //    requestBaseUrl 为基址三级链第三级（请求 Host 推导）；URL 输出仅经返回值，
         //    裸票零日志出口（含 dev——比 BuildTicketUrlAsync 的 dev URL 日志更严，§6.4 红线强化））
-        var url = BuildTicketUrlCore(channelId, ticket, requestBaseUrl);
+        var url = TryBuildTicketUrl(channelId, ticket, requestBaseUrl);
+        if (url is null)
+            return null;
         return new TicketIssueResult(ticket, url);
     }
 
@@ -119,7 +123,8 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
         //    ⚠️ 不经 Enabled 门控——测试端点匿名兑票（HandleTestTicket 直兑 ISetaledTicketService），
         //    签票能力与免登入口独立（零配置冒烟：密钥/DB 就绪即可产测试链接）
         var options = _loginEntry.Value;
-        if (!options.ChannelBaseUrls.TryGetValue(channelId, out var baseUrl))
+        // tier1 仅非空白才采纳（空白值不阻断 tier2 回退——m5）
+        if (!options.ChannelBaseUrls.TryGetValue(channelId, out var baseUrl) || string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = _eventReply.Value.TestTicketEndpointBaseUrl;
         if (string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = requestBaseUrl;
@@ -157,9 +162,11 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
     /// 内部 URL 组装 helper（单一组装点——基址 + RoutePrefix 合并 + 路径拼装；<see cref="EventReplyHandlerBase"/>
     /// 测试端点 URL 拼装委托复用——逐字节等价，测试锁定）。<c>baseUrl</c> 空 → 相对路径（以 / 开头指向本服务同源）。
     /// </summary>
-    internal static string CombineUrl(string? baseUrl, string routePrefix, string path)
+    internal static string CombineUrl(string? baseUrl, string? routePrefix, string path)
     {
-        var relative = $"{routePrefix.Trim('/')}/{path.TrimStart('/')}";
+        var prefix = routePrefix?.Trim('/') ?? string.Empty;
+        var trimmedPath = path.TrimStart('/');
+        var relative = prefix.Length == 0 ? trimmedPath : $"{prefix}/{trimmedPath}";
         var clean = baseUrl?.TrimEnd('/');
         return string.IsNullOrEmpty(clean) ? $"/{relative}" : $"{clean}/{relative}";
     }
@@ -172,7 +179,7 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
     /// 落地端 <c>FederatedLoginOrchestrator</c> UId 直读复用，免二次映射；D03 1.3：channelType 入参为协议类型——
     /// 经 Builder 形态回退/Registry 反查双写）。</para>
     /// <para><b>TTL 安全钳制（审核 #22 裁决——用户裁定实施 clamp）</b>：显式 <paramref name="ttlSeconds"/>
-    /// 一律 <c>Math.Min(ttl, MaxTicketTtlSeconds)</c>（默认上限 120）——模板 <c>ttl_seconds</c> 超限不再透传
+    /// 一律 <c>Math.Clamp(ttl, 1, MaxTicketTtlSeconds)</c>（默认上限 120、下限 1）——模板 <c>ttl_seconds</c> 超限/非正不再透传
     /// （裸票/URL 进图文 link 的票据曝光面受 TTL 上限约束；Options 启动期校验 + 运行时钳制双层护栏）。</para>
     /// <para>fail-closed：<c>IssueAsync</c> 抛异常（票据后端不可用）→ null + Warning（ticket 全串不落日志——
     /// 只记 channelId + externalUserId 前 6 位，§6.4）。⚠️ <b>不打印任何含票日志</b>（含 dev——裸票零出口）。</para>
@@ -181,24 +188,24 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
         string channelId, string channelType, string externalUserId,
         int? ttlSeconds, CancellationToken ct, string? uId)
     {
-        // TTL 安全钳制（审核 #22 裁决）：显式 ttl 超 MaxTicketTtlSeconds → 钳到上限（Options 启动期校验 + 运行时钳制双层）
+        // TTL 安全钳制（审核 #22 裁决）：显式 ttl 钳到 [1, MaxTicketTtlSeconds]（Options 启动期校验 + 运行时钳制双层）
         var effectiveTtl = ttlSeconds is null
             ? _loginEntry.Value.TicketTtlSeconds
-            : Math.Min(ttlSeconds.Value, _loginEntry.Value.MaxTicketTtlSeconds);
+            : Math.Clamp(ttlSeconds.Value, 1, _loginEntry.Value.MaxTicketTtlSeconds);
 
-        // D03 1.3：载荷 = FederatedTicketPayload（channelType 入参为协议类型——经 Builder 形态回退/Registry 反查双写）
-        var options = _loginEntry.Value;
-        var payload = FederatedTicketPayloadBuilder.Build(
-            provider: "wechat",
-            protocolChannelType: channelType,
-            channelId: channelId,
-            externalUserId: externalUserId,
-            platformUid: uId,
-            assurance: "event",
-            ttl: TimeSpan.FromSeconds(effectiveTtl),
-            resolver: ResolveChannelForm);
         try
         {
+            // D03 1.3：载荷 = FederatedTicketPayload（channelType 入参为协议类型——经 Builder 形态回退/Registry 反查双写）
+            // m4：载荷组装纳入 fail-closed（空 channelId/externalUserId → Builder 内部抛 ArgumentException）
+            var payload = FederatedTicketPayloadBuilder.Build(
+                provider: "wechat",
+                protocolChannelType: channelType,
+                channelId: channelId,
+                externalUserId: externalUserId,
+                platformUid: uId,
+                assurance: "event",
+                ttl: TimeSpan.FromSeconds(effectiveTtl),
+                resolver: ResolveChannelForm);
             var issued = await TicketService().IssueAsync(
                 payload,
                 TimeSpan.FromSeconds(effectiveTtl),
@@ -217,20 +224,38 @@ internal sealed class LoginEntryService : DomainServiceBase, ILoginEntryService
 
     /// <summary>
     /// 免登（非测试端点）URL 组装核心（单一组装点——<see cref="BuildTicketUrlAsync"/> / <see cref="IssueTicketAsync"/>
-    /// 共享，逐字节等价测试锁定）。基址三级：<c>ChannelBaseUrls[channelId]</c> → <c>TestTicketEndpointBaseUrl</c> →
+    /// 共享，逐字节等价测试锁定）。基址三级：<c>ChannelBaseUrls[channelId]</c>（空白视同未配置）→ <c>TestTicketEndpointBaseUrl</c> →
     /// <paramref name="requestBaseUrl"/>（请求 Host 推导）；全空 → <see cref="CombineUrl"/> 相对路径兜底——
     /// 本站点同源（微信图文 link 恒有 requestBaseUrl 实际可用）。
     /// </summary>
     private string BuildTicketUrlCore(string channelId, string ticket, string? requestBaseUrl)
     {
         var options = _loginEntry.Value;
-        if (!options.ChannelBaseUrls.TryGetValue(channelId, out var baseUrl))
+        // tier1 仅非空白才采纳（空白值不阻断 tier2 回退——m5）
+        if (!options.ChannelBaseUrls.TryGetValue(channelId, out var baseUrl) || string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = _eventReply.Value.TestTicketEndpointBaseUrl;
         if (string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = requestBaseUrl;
 
         // URL 组装（{baseUrl}{RoutePrefix}{TicketPath}?ticket={ticket}——RoutePrefix 复用 eventReply，单一事实源）
         return CombineUrl(baseUrl, _eventReply.Value.RoutePrefix, $"{options.TicketPath}?ticket={ticket}");
+    }
+
+    /// <summary>
+    /// URL 组装 fail-closed 包装（M1）：组装异常（如 RoutePrefix 不可用）→ null + Warning 不向上抛——
+    /// 票已签发时不整条吞掉事件回复（调用方按"无链接"降级）。
+    /// </summary>
+    private string? TryBuildTicketUrl(string channelId, string ticket, string? requestBaseUrl)
+    {
+        try
+        {
+            return BuildTicketUrlCore(channelId, ticket, requestBaseUrl);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "免登 URL 组装失败——不输出链接：ChannelId={ChannelId}", channelId);
+            return null;
+        }
     }
 
     private ISealedTicketService<FederatedTicketPayload> TicketService()

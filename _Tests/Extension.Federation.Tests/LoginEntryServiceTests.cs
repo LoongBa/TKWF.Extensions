@@ -386,6 +386,7 @@ public sealed class LoginEntryServiceTests : TestHostBase
         var result = await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1234567890", ct: CancellationToken.None);
 
         Assert.Null(result);
+        Assert.NotEmpty(logs);   // 正向对照（m8d）：收集器确已捕获 Warning，后续零票断言非空转
         // 审核 #9 必闭：Warning 只含 channelId + externalUserId 前 6 位——票据全串与完整 openid 均不入日志
         Assert.Contains(logs, entry => entry.Contains("ChannelId=mp-1") && entry.Contains("ExternalUserId=openid"));
         Assert.DoesNotContain(logs, entry => entry.Contains("ticket-SECRET-full"));
@@ -417,6 +418,93 @@ public sealed class LoginEntryServiceTests : TestHostBase
         Assert.Equal("ticket-NOLOG-9f3a-SECRET", result!.Ticket);
         Assert.DoesNotContain(logs, entry => entry.Contains("ticket-NOLOG-9f3a-SECRET"));
         Assert.DoesNotContain(logs, entry => entry.Contains("ticket="));
+    }
+
+    // ── 9. 审核整改回归锁（m3 TTL 下限 / m5 tier1 空白跳过 / m8c 第三级基址与钳制对称 / M1 CombineUrl 归一）──
+
+    /// <summary>TTL 下限钳制（m3）：显式 ttlSeconds 非正 → 钳到 1（防跨票据后端分叉——DB 后端回落默认 /
+    /// InMemory 后端抛异常）。</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task IssueTicket_TtlNonPositive_ClampedToLowerBound(int ttl)
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
+        });
+        _ticket.IssueResult = "ticket-lower";
+
+        await user.Use<ILoginEntryService>().IssueTicketAsync("mp-1", "wechat_event", "openid-1", ttlSeconds: ttl, ct: CancellationToken.None);
+
+        var issued = Assert.Single(_ticket.Issued);
+        Assert.Equal(1, issued.Ttl.TotalSeconds);
+    }
+
+    /// <summary>tier1 空白跳过（m5）：ChannelBaseUrls["mp-1"] 为空白 → 回退 tier2
+    /// TestTicketEndpointBaseUrl（不被空串短路为相对路径）。</summary>
+    [Fact]
+    public async Task BuildTicketUrl_ChannelBaseUrlBlank_FallsThroughToTier2()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o =>
+            {
+                o.Enabled = true;
+                o.ChannelBaseUrls["mp-1"] = "   ";
+            });
+            services.Configure<FederationEventReplyOptions>(o => o.TestTicketEndpointBaseUrl = "https://tier2.example.com");
+        });
+        _ticket.IssueResult = "ticket-blank";
+
+        var url = await user.Use<ILoginEntryService>().BuildTicketUrlAsync("mp-1", "wechat_event", "openid-1", ct: CancellationToken.None);
+
+        Assert.Equal("https://tier2.example.com/feberation/login/ticket?ticket=ticket-blank", url);
+    }
+
+    /// <summary>BuildTicketUrlAsync 第三级基址（m8c——与 IssueTicketAsync 对称）：仅传 requestBaseUrl →
+    /// URL 以其开头（不回归为相对路径）。</summary>
+    [Fact]
+    public async Task BuildTicketUrl_RequestBaseUrl_UsedAsThirdTierBase()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
+        });
+        _ticket.IssueResult = "ticket-tier3b";
+
+        var url = await user.Use<ILoginEntryService>().BuildTicketUrlAsync("mp-1", "wechat_event", "openid-1",
+            requestBaseUrl: "https://wx.loongba.cn", ct: CancellationToken.None);
+
+        Assert.Equal("https://wx.loongba.cn/feberation/login/ticket?ticket=ticket-tier3b", url);
+    }
+
+    /// <summary>BuildTicketUrlAsync TTL 上限钳制（m8c——与 IssueTicketAsync 对称）。</summary>
+    [Fact]
+    public async Task BuildTicketUrl_TtlExceedsMax_ClampedToMax()
+    {
+        using var _ = this;
+        var (_, user) = BindTestScope(services =>
+        {
+            services.Configure<FederationLoginEntryOptions>(o => o.Enabled = true);
+        });
+        _ticket.IssueResult = "ticket-clampb";
+
+        await user.Use<ILoginEntryService>().BuildTicketUrlAsync("mp-1", "wechat_event", "openid-1", ttlSeconds: 9999, ct: CancellationToken.None);
+
+        var issued = Assert.Single(_ticket.Issued);
+        Assert.Equal(120, issued.Ttl.TotalSeconds);
+    }
+
+    /// <summary>CombineUrl null routePrefix 安全归一（M1 纵深防御）：null → 视同空串，不抛 NullReferenceException。</summary>
+    [Fact]
+    public void CombineUrl_NullRoutePrefix_NormalizedToEmpty()
+    {
+        Assert.Equal("https://x.example.com/login/ticket?ticket=t",
+            LoginEntryService.CombineUrl("https://x.example.com", null, "/login/ticket?ticket=t"));
     }
 
     // ── 测试设施 ──

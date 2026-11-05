@@ -16,7 +16,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="FreeSql" />
   <PackageReference Include="FreeSql.Extensions.Linq" />
   <PackageReference Include="FreeSql.DbContext" />

@@ -15,7 +15,8 @@
     <!-- 输出 XML 文档文件（NuGet 包需要、IDE 智能提示需要） -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- 抑制"公共成员缺少 XML 注释"警告，不强迫为全量 API 写注释 -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- NU1510：DLL 模式集中注入的 6 个运行时传递依赖包（L85-90）与 ProjectReference 传递重叠 → NuGet 提示"冗余可移除"；此处为刻意补齐（DLL 不传递 NuGet 依赖），故静默 -->
+    <NoWarn>$(NoWarn);CS1591;NU1510</NoWarn>
 
     <!-- NuGet 打包公共属性 -->
     <RepositoryUrl>https://github.com/LoongBa/TKWF.Extensions</RepositoryUrl>

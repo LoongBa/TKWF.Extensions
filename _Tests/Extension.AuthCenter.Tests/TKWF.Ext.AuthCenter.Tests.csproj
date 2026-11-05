@@ -16,9 +16,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <!-- v4.10.45 冒烟测试（Web 装配钩子全链宿主）：UseWebSession 运行时依赖 AddHybridCache
          （DLL 模式 Reference 不传递 NuGet 依赖——测试项目须显式包；对齐主框架 CPM 10.8.0） -->

@@ -16,9 +16,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- T0（v0.2.0）：测试宿主内定义 [DomainGenerateCode] 实体（模拟消费方）——FreeSql 包接线 -->
     <PackageReference Include="FreeSql" />
   <PackageReference Include="FreeSql.Extensions.Linq" />

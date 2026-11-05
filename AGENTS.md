@@ -94,7 +94,18 @@
 - **任何 `git tag` 操作（创建/推送）必须事先征求用户同意**。tag = 版本发布确认（触发 MinVer 版本号）。
 - 日常开发、迭代完成 → 只 `push` 提交，**不自动打 tag**。
 - 用户明确同意打 tag 后，使用 `v` 前缀（如 `v0.1.0`），版本号与开发方案目标一致。
-- **发布入口（v4.10.101 起，与主框架对齐）**：tag 推送**不触发 CI、不发布**；发布走 `workflow_dispatch`（`tags` 逗号分隔，可攒批）或创建 GitHub Release（单 tag，发布该 tag）。**默认只填最后一个 tag**（它包含前面所有变更）；仅当①被锁定版本需先行发布（如某扩展 CPM 锁定中间框架版本、消费方锁定某扩展版本）②补发/回滚时才填多个。全量测试在发布门禁跑一次，publish 循环各 tag 只 build/pack/push。权威发布纪律见主框架 `docs/AC-Kit/guides/迭代与发布纪律.md` §二（本仓库无独立副本）。
+- **发布入口（v4.10.101 起，与主框架对齐）**：tag 推送**不触发 CI、不发布**；发布走 `workflow_dispatch`（`tags` 逗号分隔，可攒批）或创建 GitHub Release（单 tag，发布该 tag）。**默认只填最后一个 tag**（它包含前面所有变更）；仅当①被锁定版本需先行发布（如某扩展 CPM 锁定中间框架版本、消费方锁定某扩展版本）②补发/回滚时才填多个。全量测试在发布门禁跑一次，publish 循环各 tag 只 build/pack/push（CI publish 已带 `--skip-duplicate` 幂等补版本缺口）。
+- **双轨发布节奏（2026-11-05 用户裁定，对齐框架组规则全景）**——tag 照打、本地部署即时，在线部署只随「发布」动作：
+  | 动作 | 触发 | 何时做 |
+  |------|------|--------|
+  | 打 tag（MinVer 版本确认） | 每次迭代完成，用户同意 | **立即**（tag 推送不触发 CI，零消耗） |
+  | 本地全量部署 | tag 后硬性 | **立即**（分钟级：`build-ext-deployment.ps1 -Cleanup` → 部署根 refs DLL 即时可见，消费方 DLL 模式零等待） |
+  | 在线部署（nuget.org） | 仅「发布」动作（对外期开启 / 里程碑 / 用户裁定） | `workflow_dispatch` 攒批（tags 逗号分隔，`--skip-duplicate` 幂等补版本缺口） |
+  | CI 质量门禁（build+test） | master push 自动 | **不因降频放松**（全局面变更 → `__ALL__` 全量；单扩展 → 反向图受影响面） |
+  **铁律**：不得因「还没在线发布」而压 tag/压版本——版本号连续性是独立价值，本地部署不依赖在线发布。
+- **扩展在线发布依赖框架组先行发布（2026-11-05 确认）**：扩展 CI 发布门禁走 **NuGet 模式**（`UseLocalFw=false`），restore 的是 nuget.org 上的 `TKWF.*` 包——**框架最新包未上架 → 扩展发布 NU1102 失败**（4.10.105 桥接期实证）。因此：
+  - **跟随发布**：扩展在线发布只可在框架最新包已上架之后（框架组 dispatch publish job success 即视为已上架，不必等 nuget 索引传播）；
+  - **提前申请**：扩展需要在线发布时，**先申请/提醒框架组发布当前框架最新**（转达文档或口头，给出期望的框架 tag 版本），框架组发布后再走扩展 `workflow_dispatch`。权威发布纪律见主框架 `docs/AC-Kit/guides/迭代与发布纪律.md` §二（本仓库无独立副本）。
 - **发布后部署纪律（2026-10-09 用户裁定）**：tag push 后 **本地全量部署优先**（DLL 模式先验证，避免阻塞其它项目等 dll）；CI 发布后**不必等待 nuget.org 传播**（publish job success 即闭环——index 传播延迟是 nuget.org 侧特性，不阻塞后续工作）。
 - **扩展部署收口脚本（2026-10-26 新增，对偶框架 `_TKWF\build\build-deployment.ps1`）**：`build\build-ext-deployment.ps1`——扩展 DLL 日常由 `_PushToRefs` 构建后自动推送 `%TKWFDeployPath%\build\refs\`（与框架 DLL 混驻，消费方 DLL 模式统一引用），但**项目已删除/重命名 → refs 孤儿 DLL 永不被覆盖**（框架 -Cleanup 同型问题扩展侧无解），需脚本收口。使用场景：
   - **发布后/定期一致性收口**：`.\build\build-ext-deployment.ps1 -Cleanup`（清空 refs 扩展 DLL → 重建 slnx → 全量推送 → 孤儿清理）
@@ -336,7 +347,7 @@ _Tests/Extension.{扩展名}.Tests/
 
 | 日期 | 版本 | 变更内容 |
 |------|------|---------|
+| 2026-11-05 | — | **✅ 双轨发布节奏固化（对齐框架组规则全景，2026-11-05 用户裁定）**：tag 照打（迭代完成即打、零 CI 消耗）→ `build-ext-deployment.ps1 -Cleanup` 本地全量部署硬性（分钟级，消费方 DLL 模式即时可见）→ 在线部署仅随「发布」动作（`workflow_dispatch` 攒批，`--skip-duplicate` 幂等补版本缺口）；**铁律**：不得因未在线发布而压 tag/压版本；**扩展在线发布依赖框架组先行发布**（NuGet 模式 restore 需框架包已上架）——跟随发布 + 提前申请转达；CI 质量门禁（master push 自动 build+test）不因降频放松。框架 v4.10.106 已本地部署（refs + local-feed），扩展 CPM 暂锁 4.10.105 待框架在线发布后 lockstep |
 | 2026-11-05 | — | **✅ 免登裸票注入与落地 URL 生成（Federation.Abstractions 0.7.0 / Federation 0.18.0 / Federation.WeChat 0.18.0）+ CPM lockstep 4.10.105 + 密钥键收口（WeChatChannels 0.1.1 / WeChatChannels.Abstractions 0.1.1 / WeChatOperations 0.9.1）**：**① 契约**——`ILoginEntryService.IssueTicketAsync` 返回 `TicketIssueResult(Ticket, Url)`（同票双形态，`ToString` 脱敏）；**② 实现**——基址三级链全空产相对路径、TTL 钳制 `[1, MaxTicketTtlSeconds]`、URL 组装 fail-closed、`CombineUrl` null 归一；**③ 平台库（破坏性）**——`{ticket}`/`{ticket_value}` 双占位符并存同票，`ResolveTicketAsync` 返回 `TicketIssueResult?`；**④ 评审**——Oracle6 PASS WITH CONDITIONS（C1/C2/C3）+ code-reviewer 附条件通过（M1 + m1~m11）；**⑤ 构建**——12 包 4.10.104→4.10.105 + `TKWF.CodeGeneration` 解除 4.10.100 桥接；NuGet 模式 slnx **0 错误**（无 WARN009）+ WeChatChannels 15 / WeChatOperations 206 / Federation 183 / Federation.WeChat 141 全绿；**⑥ 发布** run `41975112066` success（六包 Created） |
 | 2026-10-30 | — | **✅ CPM lockstep 4.10.99 → 4.10.100（TABLE002 裸 [Table] 实体误报修复——零代码适配）**：`ExtractEntityTableNames` 对裸 `[Table]`（无 Name）兜底 ClassName（实体默认表名约定，对齐 cshtml `vw_{ClassName}` 先例——实体=类名 / VEntity=vw_ 前缀形态不同，`GetTableName` 层不掺策略分层正确）；消除 VEntity ViewSql 引用裸实体时的 TABLE002 误报；不吞真缺失（C2 防过宽用例）；ADR100 决策 3 注记 + D18A 补注；13 处 PackageVersion 4.10.99→4.10.100 + props 注记三处同步；双模式 slnx 构建 0 错误 + **L2 全量回归 44 项目 2519 用例全绿**；扩展侧零代码（裸 [Table] 实体 + VEntity 引用场景误报自动消除） |
-| 2026-10-30 | — | **✅ WeChatOperations V0.8.0 门面方法语义化改名——WARN004 扩展侧根除 + tag 发布闭环（v0.8.0，CI 41076382961 success）**：DMP-Lite 转达 SG2 跨服务 resolver 字段名冲突消歧警示（`List/Save/Delete` ChannelConfig vs Material；`ListRules/SaveRule/DeleteRule` Gateway vs ReplyRule）→ 四门面 12 方法改名（`ListChannels/SaveChannel/DeleteChannel`·`ListMaterials/SaveMaterial/DeleteMaterial`·`ListRouteRules/SaveRouteRule/DeleteRouteRule`·`ListReplyRules/SaveReplyRule/DeleteReplyRule`）——**REST 零变化**（`[ApiExpose(RestRoute=...)]` 显式常量解耦）+ GraphQL/SG3 字段名消歧前缀消除变回方法名（12 处）+ C# 门面签名破坏（SemVer minor）；同步面：实现 4 文件 + Fake 宿主 12 行 + 测试 11 文件 + 指南现行示例 + MenuService.DeleteAsync 保留；验证 **201 用例全绿** + slnx 0 错误；tag 发布待用户同意 |
 

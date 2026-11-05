@@ -25,7 +25,7 @@ public class FederationChannelRegistryOptions
     /// <para>缓存内容 = 解密后明文 <see cref="ChannelConfig"/>（进程内信任边界，不落盘不进日志）；
     /// 键 = <c>ch:{ChannelId}</c> + <c>ch:all</c> + <c>ch:default</c>（方案 §8.2）。
     /// 显式失效（<c>InvalidateAsync</c>）/ 事件失效（<c>ChannelConfigChanged</c>）/ TTL 过期三机制并存，
-    /// TTL 为兜底——静态源零装配场景配置进程生命周期恒定，TTL 仅兜底 DB 源变更未发布事件的情形。</param>
+    /// TTL 为兜底——静态源零装配场景配置进程生命周期恒定，TTL 仅兜底 DB 源变更未发布事件的情形。</para>
     /// </summary>
     public int CacheTtlSeconds { get; set; } = 120;
 }

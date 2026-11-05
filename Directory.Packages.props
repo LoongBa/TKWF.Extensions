@@ -248,7 +248,10 @@
      本仓转达根因③被证伪——扩展项目不生成空壳注册，`.Controllers` 文件为旧 SDK 遗留产物）+ **4.10.97 无手写门面三件套闭包**（catalog 新增 `ImplementationTypes`（与 InterfaceNames 索引对齐）+ 实现类 `MetaType.Service` 注册——控制器经 `user.Use<实现类>()` 取服务；旧包回退命名约定，不命中报 `EXTIMPL001`；ADR122 SG3 桩命名空间取元数据原值，`.Api` 类型等价）；
      桥接历史见 L67 注记（4.10.89 CS0534 跳过 / 4.10.90 RestTypeInfoRegistry 修复 / 4.10.91 门面判定未放宽不可锁 /
      4.10.92 ADR118 根治 / 4.10.93 CS8785 数组特性参数 / 4.10.94 CS0535 装饰器命名口径 / 4.10.95 假名+TUSER001 / 4.10.96 排除集 / 4.10.97 三件套+SG3 桩） -->
-    <!-- ✅ TKWF.CodeGeneration 4.10.105（历史沿革——**4.10.105（2026-11-05）**：与本批次 lockstep 同版发布（32 包同批推送）
+    <!-- ✅ TKWF.CodeGeneration 本地引用（2026-11-05——**4.10.106-local**：框架 v4.10.106 已 tag 但未在线发布，
+     本仓按 AGENTS §6 本地 feed 机制锁 `4.10.106-local`（TKWF Deploy Local Feed 源已启用）——Analyzer 走
+     本机部署产物与 DLL 模式 refs（4.10.106）基线一致；框架在线发布 4.10.106 后切正式号并删本地源）。
+     历史沿革——**4.10.105（2026-11-05）**：与本批次 lockstep 同版发布（32 包同批推送）
      ——变更 = SG2 WARN009 诊断 + xCodeGen 裸 [Table] 类名兜底 + SG3 死参数清理，均为生成器/模板判据修正，
      扩展侧锁 4.10.105 即完成（Analyzer 版本对齐，`dotnet clean` + 重建生效）；**4.10.100（2026-10-30）**：与本批次 lockstep 同版发布——
          v4.10.100 变更（TABLE002 裸 [Table] 兜底 ClassName）为生成器判据修正（EntityMetadataGenerator
@@ -314,7 +317,7 @@
          仅 Web 扩展生成注册表 + dispatcher 空守卫 + IsDataService 跳过）+ 4.10.85（门控精化——
          referencesAspNetCore 从 StartsWith(Microsoft.AspNetCore) 改精确名单——TKWF.Domain 传递依赖
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.105" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.106-local" />
     <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.105" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义

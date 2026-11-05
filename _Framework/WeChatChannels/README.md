@@ -17,7 +17,7 @@
 | **凭证两源并存** | `DbWeChatCredentialResolver`（`IWeChatCredentialResolver` 实现——DB 命中解密返回，未命中回退 `WeChatOptions.Channels`；非 AOP 帧自动降级 Options + Warning） |
 | **通道注册源** | `WeChatChannelRegistrySource`（`IChannelSource` + `IUserBoundChannelSource`，Priority=100 恒先于静态源；含 disabled 全行投影；Token/EncodingAESKey 投影期解密进 Extra，AppSecret 不进公共列） |
 | **能力派生** | `WeChatChannelCapabilityResolver`（ChannelForm × Verification → `ChannelCapabilities`，未知形态 fail-closed None） |
-| **密钥** | keyed `ISymmetricKeyProvider`（键 `WeChatChannelsKeyProviderKeys.WeChatChannels`——过渡常量，主框架 `SymmetricKeyProviderKeys.WeChatChannels` 并入后切换） |
+| **密钥** | keyed `ISymmetricKeyProvider`（键 **`SymmetricKeyProviderKeys.WeChatChannels`**——主框架常量（v4.10.104 并入，C11 第 6 扩展边界），跨扩展同信任域；过渡常量已删除收口） |
 | **权限** | `WeChatChannels.Query`（读）/ `WeChatChannels.Manage`（写）——与运营扩展 `WeChatOperations.*` 独立授权 |
 
 ## 二、安装与接线

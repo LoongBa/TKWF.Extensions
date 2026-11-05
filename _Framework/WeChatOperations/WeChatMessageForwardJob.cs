@@ -47,7 +47,7 @@ public sealed class WeChatMessageForwardJob : IBackgroundJob
     public WeChatMessageForwardJob(
         IServiceProvider sp,
         DownstreamForwardClient client,
-        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)]
+        [FromKeyedServices(SymmetricKeyProviderKeys.WeChatChannels)]
         ISymmetricKeyProvider keys,
         ILogger<WeChatMessageForwardJob>? logger = null)
     {

@@ -13,7 +13,6 @@
 | `IChannelConfigService : IDomainService` | 通道配置门面契约——`GetAsync(appId)` / `GetByChannelIdAsync(channelId)` / `ListChannelsAsync()` / `SaveChannelAsync(SaveChannelRequest)` / `DeleteChannelAsync(id)`；`[RequirePermission("WeChatChannels.Query/Manage")]` + `[ApiExpose]`（RestRoute 全段 `/wechat-channels/channels`） |
 | `SaveChannelRequest` / `SaveChannelResponse` | wire DTO（AppSecret/Token/EncodingAESKey 明文可选，null = 保持既有密文；经 body 传输） |
 | `WeChatChannelConfigDto` | 投影 DTO（**不含凭证**——密文不回显；`HasCredentials` 布尔） |
-| `WeChatChannelsKeyProviderKeys` | keyed 注册键过渡常量（`"WeChatChannels"`——主框架 `SymmetricKeyProviderKeys.WeChatChannels` 并入后切换） |
 
 namespace：`TKWF.Ext.WeChatChannels`（跨程序集同 namespace——契约包与主包共享，消费方零歧义）。
 

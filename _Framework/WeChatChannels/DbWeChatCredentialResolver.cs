@@ -35,7 +35,7 @@ public sealed class DbWeChatCredentialResolver : IWeChatCredentialResolver
 
     public DbWeChatCredentialResolver(
         IOptions<WeChatOptions> options,
-        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)] ISymmetricKeyProvider keys,
+        [FromKeyedServices(SymmetricKeyProviderKeys.WeChatChannels)] ISymmetricKeyProvider keys,
         ILogger<DbWeChatCredentialResolver> logger)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));

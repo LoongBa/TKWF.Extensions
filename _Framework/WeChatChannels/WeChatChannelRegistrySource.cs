@@ -37,7 +37,7 @@ public sealed class WeChatChannelRegistrySource : IChannelSource, IUserBoundChan
         .Use<WeChatChannelConfigEntityDataService>();
 
     public WeChatChannelRegistrySource(
-        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)] ISymmetricKeyProvider keys,
+        [FromKeyedServices(SymmetricKeyProviderKeys.WeChatChannels)] ISymmetricKeyProvider keys,
         ILogger<WeChatChannelRegistrySource> logger)
     {
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));

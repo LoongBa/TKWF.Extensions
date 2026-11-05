@@ -141,7 +141,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
 
     /// <summary>
     /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser；keys 经 keyed DI（复用
-    /// <see cref="WeChatChannelsKeyProviderKeys.WeChatChannels"/> 键——2026-11-05 拆分 V0.9.0 起跨扩展同信任边界
+    /// <see cref="SymmetricKeyProviderKeys.WeChatChannels"/> 键——2026-11-05 拆分 V0.9.0 起跨扩展同信任边界
     /// （注册归 WeChatChannels Initializer，本扩展消费同一键——O4 依赖双白名单），下游端点令牌
     /// AES-GCM 加解密；方案 §十·六 ③）；
     /// 熔断器（运行库 <see cref="WeChatCircuitBreaker"/>——进程内三态单例，每 EndpointId 独立）/ 出站客户端
@@ -149,7 +149,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
     /// 非域基础设施，零 DataService 构造注入（DI004）。</summary>
     public MessageGatewayService(
         IDomainUser user,
-        [FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)]
+        [FromKeyedServices(SymmetricKeyProviderKeys.WeChatChannels)]
         ISymmetricKeyProvider keys,
         WeChatCircuitBreaker breaker,
         DownstreamForwardClient client,

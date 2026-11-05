@@ -20,7 +20,7 @@ namespace TKWF.Ext.WeChatChannels;
 ///     WeChatChannels.Abstractions，实现 <see cref="ChannelConfigService"/>）→ 接口可构造守卫工厂 +
 ///     实现类 throw-factory；消费方统一经 <c>User.Use&lt;接口&gt;()</c> 解析（帧内 CurrentAopUser 供给 ctor IDomainUser）。</item>
 /// <item><b>E4 密钥管理</b>——keyed <see cref="ISymmetricKeyProvider"/>（键
-///     <see cref="WeChatChannelsKeyProviderKeys.WeChatChannels"/>——过渡常量，主框架
+///     <see cref="SymmetricKeyProviderKeys.WeChatChannels"/>——过渡常量，主框架
 ///     <c>SymmetricKeyProviderKeys.WeChatChannels</c> 并入后切换；FileSymmetricKeyProvider 构造即加载：
 ///     生产缺密钥 fail-fast / 开发随机兜底）——ChannelConfigService（加密落库）/ DbWeChatCredentialResolver
 ///     （解密出站）/ WeChatChannelRegistrySource（投影解密）ctor 经 [FromKeyedServices] 注入；
@@ -61,7 +61,7 @@ public class WeChatChannelsExtensionInitializer<TUserInfo> : ExtensionInitialize
 
         // E4 密钥管理（对齐 AuthCenter/AuthSurface/WeChatOperations 先例）：keyed ISymmetricKeyProvider 单例
         // （FileSymmetricKeyProvider——构造即加载：生产缺密钥 fail-fast / 开发随机兜底；惰性构造首次解析门面触发）
-        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(WeChatChannelsKeyProviderKeys.WeChatChannels, (sp, _) =>
+        services.AddKeyedSingleton<ISymmetricKeyProvider, FileSymmetricKeyProvider>(SymmetricKeyProviderKeys.WeChatChannels, (sp, _) =>
         {
             var o = sp.GetRequiredService<IOptions<WeChatChannelsOptions>>().Value;
             return new FileSymmetricKeyProvider(o.SecretEncryptionKeyPath, o.IsProduction, sp.GetService<ILogger<FileSymmetricKeyProvider>>());

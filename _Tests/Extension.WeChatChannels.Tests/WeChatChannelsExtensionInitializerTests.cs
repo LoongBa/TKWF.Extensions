@@ -92,7 +92,7 @@ public class WeChatChannelsExtensionInitializerTests
         services.AddOptions<WeChatChannelsOptions>().Configure(o => o.IsProduction = false);
         var provider = services.BuildServiceProvider();
 
-        var keys = provider.GetRequiredKeyedService<ISymmetricKeyProvider>(WeChatChannelsKeyProviderKeys.WeChatChannels);
+        var keys = provider.GetRequiredKeyedService<ISymmetricKeyProvider>(SymmetricKeyProviderKeys.WeChatChannels);
         Assert.NotNull(keys);
 
         // 开发模式随机兜底密钥可用（IsProduction=false 默认——测试不配密钥文件）

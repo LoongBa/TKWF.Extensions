@@ -48,7 +48,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
 
     public ChannelConfigService(
         IDomainUser user,
-        [Microsoft.Extensions.DependencyInjection.FromKeyedServices(WeChatChannelsKeyProviderKeys.WeChatChannels)]
+        [Microsoft.Extensions.DependencyInjection.FromKeyedServices(TKW.Framework.Domain.KeyManagement.SymmetricKeyProviderKeys.WeChatChannels)]
         TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider keys) : base(user)
     {
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));

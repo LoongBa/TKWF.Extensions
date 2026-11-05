@@ -49,7 +49,7 @@ public class ChannelConfigServiceTests : WeChatOperationsTestHost
         Assert.False(string.IsNullOrWhiteSpace(saved.EncodingAESKeyCipher));
 
         // keyed provider 解密回明文（解密仅出站瞬时——凭证可恢复；V0.9.0 拆分：键下沉 WeChatChannels）
-        var keys = provider.GetRequiredKeyedService<ISymmetricKeyProvider>(WeChatChannelsKeyProviderKeys.WeChatChannels);
+        var keys = provider.GetRequiredKeyedService<ISymmetricKeyProvider>(SymmetricKeyProviderKeys.WeChatChannels);
         Assert.Equal("secret-plain-1", keys.Decrypt(saved.AppSecretCipher));
         Assert.Equal("token-plain-1", keys.Decrypt(saved.TokenCipher));
         Assert.Equal(aesKey, keys.Decrypt(saved.EncodingAESKeyCipher));

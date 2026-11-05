@@ -255,6 +255,6 @@ public class WeChatChannelRegistrySourceTests : WeChatOperationsTestHost
     private static WeChatChannelRegistrySource CreateSource(IServiceProvider provider)
         => new(
             provider.GetRequiredKeyedService<TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider>(
-                WeChatChannelsKeyProviderKeys.WeChatChannels),
+                TKW.Framework.Domain.KeyManagement.SymmetricKeyProviderKeys.WeChatChannels),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WeChatChannelRegistrySource>.Instance);
 }

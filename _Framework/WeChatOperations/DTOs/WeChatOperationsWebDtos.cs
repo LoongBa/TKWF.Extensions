@@ -22,7 +22,7 @@ public sealed record RollbackMenuRequest(long VersionId);
 /// 保存下游端点请求（<see cref="TKWF.Ext.WeChatOperations.IMessageGatewayService.SaveEndpointAsync"/> 的 wire 契约参数——V0.4.0 引入；
 /// 鉴权令牌 <see cref="AuthTokenPlain"/> 为<b>明文</b>可选（null = 保持库中既有密文不变）——门面经 keyed
 /// <see cref="TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider"/> AES-GCM 加密落库（明文不落库不进日志；
-/// V0.9.0 起密钥键 = WeChatChannelsKeyProviderKeys.WeChatChannels——跨扩展同信任域）。
+/// V0.9.0 起密钥键 = TKW.Framework.Domain.KeyManagement.SymmetricKeyProviderKeys.WeChatChannels——跨扩展同信任域）。
 /// </summary>
 public sealed record SaveEndpointRequest(
     long? Id,

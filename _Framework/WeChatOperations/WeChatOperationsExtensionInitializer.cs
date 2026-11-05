@@ -30,7 +30,7 @@ namespace TKWF.Ext.WeChatOperations;
 ///     二级分发 + 内部组合 template 兜底，Oracle P0 选项 A；消费方无需再注册
 ///     <see cref="TKWF.Federation.WeChat.WechatTemplateEventReplyHandler"/>）。</item>
 /// <item><b>E4 密钥管理（拆分改造）</b>——keyed <see cref="ISymmetricKeyProvider"/>（键
-///     <see cref="WeChatChannelsKeyProviderKeys.WeChatChannels"/>——<b>V0.9.0 起不在此注册</b>：
+///     <see cref="SymmetricKeyProviderKeys.WeChatChannels"/>——<b>V0.9.0 起不在此注册</b>：
 ///     注册归 WeChatChannels Initializer（过渡常量在 WeChatChannels.Abstractions，主框架
 ///     <c>SymmetricKeyProviderKeys.WeChatChannels</c> 并入后切换）；本扩展 MessageGatewayService /
 ///     WeChatMessageForwardJob（下游端点令牌加解密）经 [FromKeyedServices] <b>消费同一键</b>——

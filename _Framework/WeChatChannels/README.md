@@ -75,7 +75,7 @@ RestRoute 为**全段**（含模块段，不含 RestBasePath）——URL = `Rest
 
 | 版本 | 内容 |
 |------|------|
-| V0.1.1（2026-11-05，待发布） | **密钥键收口（C11 第 6 扩展边界闭环）**——删除过渡常量 `WeChatChannelsKeyProviderKeys`，6 生产文件统一改引主框架 `SymmetricKeyProviderKeys.WeChatChannels`（v4.10.104 并入）；CPM lockstep 4.10.105；行为零变化（键名与密钥派生路径不变）；测试 **15** 用例全绿 |
+| V0.1.1（2026-11-05 发布） | **密钥键收口（C11 第 6 扩展边界闭环）**——删除过渡常量 `WeChatChannelsKeyProviderKeys`，6 生产文件统一改引主框架 `SymmetricKeyProviderKeys.WeChatChannels`（v4.10.104 并入）；CPM lockstep 4.10.105；行为零变化（键名与密钥派生路径不变）；测试 **15** 用例全绿 |
 | V0.1.0（2026-11-05 发布） | 拆分下沉首发：通道实体 + `IChannelConfigService` + 凭证两源并存 + 注册源（Priority=100）+ 能力派生 + keyed 密钥 + 非 Web 形态端点（`/api/wechat-channels/channels`）+ 权限键 `WeChatChannels.Query/Manage`；测试 15 用例全绿（契约 8 + Initializer 形态 6 + 特性 1） |
 
 <!-- EOF -->

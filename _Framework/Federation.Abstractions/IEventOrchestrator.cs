@@ -27,5 +27,6 @@ public interface IEventOrchestrator : IDomainService
     /// <param name="channelId">通道实例键（registry 选区）。</param>
     /// <param name="channelType">目标通道类型（如 <c>wechat_event</c>——平台段推导 <c>{PlatformType}_event</c>）。</param>
     /// <param name="context">入站报文上下文（传输层——原始 body/query/channel_id；业务语义已在 ChannelEvent 内）。</param>
+    /// <param name="ct">取消令牌。</param>
     Task<EventReplyResult?> OrchestrateAsync(string channelId, string channelType, ChannelInboundContext context, CancellationToken ct = default);
 }

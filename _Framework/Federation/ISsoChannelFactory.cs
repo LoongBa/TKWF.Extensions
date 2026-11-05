@@ -20,6 +20,7 @@ public interface ISsoChannelFactory : IDomainService
     /// </summary>
     /// <param name="channelId">通道实例键（registry 选区）。</param>
     /// <param name="channelType">目标通道类型（wechat_oauth / wechat_event / ...）；<c>null</c> → 自动推导 OAuth 通道
+    /// <param name="ct">取消令牌。</param>
     /// （按 ChannelConfig.PlatformType 匹配集合内 ChannelType，优先 *_oauth/*_oidc——登录场景）。</param>
     /// <returns>构造的通道实例；channelId 不存在 / 平台库未注册对应类型 → null（装配层转映射错误）。</returns>
     Task<ISsoChannel?> CreateAsync(string channelId, string? channelType = null, CancellationToken ct = default);

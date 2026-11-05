@@ -8,7 +8,7 @@ namespace TKWF.Ext.Federation;
 /// （WeChatChannelConfig/QQChannelConfig...）翻译为统一模型（公共列归一 + 扩展字典承载平台特有字段）
 /// ——平台库凭证自持（Oracle P2-4）不失效，只是投影形态统一。</para>
 /// <para>注册：普通 DI 集合（<c>TryAddEnumerable</c>——非 IDomainService，无守卫工厂语义）；
-/// <see cref="StaticChannelRegistry"/> 聚合全部来源。DB 层（第二迭代）由
+/// <c>StaticChannelRegistry</c> 聚合全部来源。DB 层（第二迭代）由
 /// <c>SsoChannelRegistryEntity</c> 承载，不实现本接口。</para>
 /// </summary>
 public interface IChannelSource

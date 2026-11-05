@@ -6,7 +6,7 @@ namespace TKWF.Ext.Federation;
 
 /// <summary>
 /// 通道工厂门面（多通道联邦 v0.3.0——按需构造通道实例，Oracle M8 定案）。
-/// <para>语义：按 <see cref="ChannelConfig.ChannelId"/> 精确定位 + 按 <paramref name="channelType"/>
+/// <para>语义：按 <see cref="ChannelConfig.ChannelId"/> 精确定位 + 按 <c>channelType</c>
 /// 构造目标通道实例（凭证运行时经 <see cref="IChannelRegistry"/> 懒加载，通道不再单例枚举）。</para>
 /// <para>注册：<c>AddConstructibleService&lt;ISsoChannelFactory, SsoChannelFactory&gt;()</c>——Singleton
 /// 守卫工厂形态；<c>CreateAsync</c> 须在 <b>AOP 帧内</b>（门面 <c>ISsoLogin</c> 调用链）——帧内经

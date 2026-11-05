@@ -232,7 +232,7 @@ public class ExternalTicketLoginServiceTests
     }
 
     /// <summary>
-    /// Fake 密封票据服务——<see cref="Identity"/> 固定返回值（null = 验票失败）；
+    /// Fake 密封票据服务——<c>Identity</c> 固定返回值（null = 验票失败）；
     /// <see cref="RedeemBehavior"/> 委托可模拟复杂 CAS 语义（claimant 校验等）。
     /// </summary>
     internal sealed class FakeSealedTicketService : ISealedTicketService<FederatedTicketPayload>

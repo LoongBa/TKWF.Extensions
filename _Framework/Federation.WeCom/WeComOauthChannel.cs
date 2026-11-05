@@ -22,7 +22,7 @@ namespace TKWF.Federation.WeCom;
 /// 条件性透出 <c>UserTicket</c>（自建 96442 + 三方 98179 返回；扫码 98177 不返回降级仅身份）——<b>channel 内不拉取
 /// 敏感信息</b>（数据流闭环归装配层：编排层按需 <see cref="WeComApiClient.GetSensitiveInfoAsync"/> 即用即弃不落库）；
 /// 启用且 AgentId 缺 → ctor fail-fast（P1-5，构造即失败不静默降级）。</para>
-/// <para>多通道联邦（v0.3.0）：channel 由 <see cref="ChannelConfig"/>（<see cref="ISsoChannelFactory"/> 按 channelId
+/// <para>多通道联邦（v0.3.0）：channel 由 <see cref="ChannelConfig"/>（<c>ISsoChannelFactory</c> 按 channelId
 /// 经 <see cref="IChannelRegistry"/> 预取传入，POCO 非域服务）——<c>null</c> = 集合模板实例（工厂类型索引源，
 /// 不直接认证——v0.3.0 多通道）。凭证（CorpId/CorpSecret 法人级标识，方案 M7：WeCom 无标准 AppId——进
 /// <see cref="ChannelConfig.Extra"/>，不挤占公共列 <c>AppId</c>）在 <c>AuthenticateAsync</c> 从 cfg.Extra 使用。

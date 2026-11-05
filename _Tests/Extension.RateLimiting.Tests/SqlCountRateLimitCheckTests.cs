@@ -8,7 +8,7 @@ namespace TKWF.Ext.RateLimiting.Tests;
 /// <para>方案 v0.3.0 §六验证清单：SqlCount 原子性（Oracle7 C9——进程内并发 Task：两并发 TryAcquire 同 key 同窗口 →
 /// 恰一成功一失败，验证 ADR89 UpdateWhereAsync CAS 逻辑；跨实例正确性属 ORM/DB 契约，非测试可验证属性）。</para>
 /// <para>测试走生产路径：真实 DI（Initializer + FreeSql SQLite）→ BindScope → <c>user.Use&lt;ITestRateLimitProbe&gt;()</c>
-/// 帧内调用（守卫工厂经 CurrentAopUser 供给）；帧外解析抛守卫由 <see cref="Probe_OutsideFrame_ThrowsGuard"/> 锁定。</para>
+/// 帧内调用（守卫工厂经 CurrentAopUser 供给）；帧外解析抛守卫由 <c>Probe_OutsideFrame_ThrowsGuard</c> 锁定。</para>
 /// </summary>
 public class SqlCountRateLimitCheckTests
 {

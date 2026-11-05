@@ -26,7 +26,7 @@ namespace TKWF.Ext.Federation;
 /// Web 装配钩子 ADR87/D22/G18）——自描述 Web 装配需求，消费方 <c>UseWebExtensions</c> 一次声明。
 /// <para>锚点：默认 <see cref="MiddlewareAnchor.AfterRouting"/>（纯端点装配，无中间件——<see cref="ConfigureMiddleware"/>
 /// 空实现）。端点均为匿名（<c>AllowAnonymous</c>）——对外连接面（平台回调/公共 JWKS），
-/// 不经 HttpAuthentication 认证（<b>v4.10.76 起框架自动排除</b>：<see cref="HttpAuthenticationMiddleware{TUserInfo}"/>
+/// 不经 HttpAuthentication 认证（<b>v4.10.76 起框架自动排除</b>：<c>HttpAuthenticationMiddleware&lt;TUserInfo&gt;</c>
 /// 锚点后移 AfterRouting 读端点 <c>IAllowAnonymous</c> 元数据——本扩展所有端点
 /// <c>AllowAnonymous</c>（除 trust/issue）自动免 HttpAuth 认证，<b>消费方零配置</b>，不再需要
 /// <c>HttpAuth.ExcludedPathPrefixes.Add(...)</c>；详见 <c>docs/HttpAuth匿名端点排除机制-开发方案.md</c>）。</para>

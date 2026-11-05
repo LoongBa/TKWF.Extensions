@@ -438,7 +438,7 @@ public class WeChatOperationsReplyHandler : WechatTemplateEventReplyHandler
         return null;
     }
 
-    /// <summary>文本回复载荷（包 text XML 信封——经平台基类 <see cref="BuildTextReply"/>）+ 交互日志。</summary>
+    /// <summary>文本回复载荷（包 text XML 信封——经平台基类 <c>BuildTextReply</c>）+ 交互日志。</summary>
     private async Task<WechatReplyPayload?> ReplyTextPayloadAsync(WechatEventContext ctx, string content, int triggerType, long? materialId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(content)) return null;

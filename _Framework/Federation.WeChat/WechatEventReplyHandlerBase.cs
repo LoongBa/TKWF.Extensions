@@ -15,7 +15,7 @@ namespace TKWF.Federation.WeChat;
 
 /// <summary>
 /// 微信事件回复 handler 平台基类（方案 docs/Federation/Wechat事件回复Handler基类与二级分发-开发方案.md §3.2）。
-/// <para>⚠️ <b>不继承</b> <see cref="EventReplyHandlerBase"/>（Oracle P1-1——两个基类<b>并列</b>：
+/// <para>⚠️ <b>不继承</b> <c>EventReplyHandlerBase</c>（Oracle P1-1——两个基类<b>并列</b>：
 /// 主包签票基类 vs 平台二级分发基类，职责分离）。</para>
 /// <para><b>HandleAsync 模板方法</b>：① <see cref="WechatEventContext.Parse"/> 解析
 /// （Parameters 基础字段 + <c>__decrypted_xml</c> 未富化字段——Oracle P1-4）
@@ -33,11 +33,11 @@ namespace TKWF.Federation.WeChat;
 /// <see cref="WeChatEventChannel"/> 上移）/ <see cref="BuildReplyResult"/>（RawXml 原始 XML 透传优先 →
 /// News 优先 text 回退——包 <see cref="EventReplyResult"/>(Content: xml, "text/xml")）/ <see cref="ReadNewsTemplate"/>
 /// （<c>Channel.Extra["news_reply"]</c> JSON 模板——<b>缺失/损坏 → null</b>，Oracle P0-2）/
-/// <see cref="ReplacePlaceholders"/>（占位符替换 <c>{uid}/{openid}/{channel_id}/{channel_type}</c>；
+/// <c>ReplacePlaceholders</c>（占位符替换 <c>{uid}/{openid}/{channel_id}/{channel_type}</c>；
 /// <c>{ticket}</c> 不替换——本基类无签票耦合，方案 §3.3）。</para>
-/// <para><b>签票能力边界</b>（方案 §3.2）：签票（<see cref="ISealedTicketService{T}"/> 图文链接）不再经继承
+/// <para><b>签票能力边界</b>（方案 §3.2）：签票（<c>ISealedTicketService&lt;T&gt;</c> 图文链接）不再经继承
 /// 获得——业务 handler 需要签票时经 <c>User.Use&lt;ISealedTicketService&lt;FederatedTicketPayload&gt;&gt;()（D03 1.3 载荷切换——联邦免登域专用载荷；框架通用 FederatedIdentity 经子应用委托面保留）</c>
-/// 懒加载直接调（DI004 合规），或选用主包 <see cref="EventReplyHandlerBase"/>（签票专用基类）。</para>
+/// 懒加载直接调（DI004 合规），或选用主包 <c>EventReplyHandlerBase</c>（签票专用基类）。</para>
 /// <para>注册：消费方 <c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, X&gt;()</c>
 /// （ADR92 集合版守卫工厂——帧内供给 IDomainUser；ctor 仅 IDomainUser + 可空 ILogger）。</para>
 /// </summary>
@@ -383,7 +383,7 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// 图文模板 DTO（<c>Channel.Extra["news_reply"]</c> JSON——Title/Description/Link 占位符模板；
     /// I2-8 起 <see cref="TtlSeconds"/> 供 <see cref="ResolveTicketAsync"/> 作票据 TTL 来源——
     /// 模板 TtlSeconds 优先，缺省 <see cref="FederationLoginEntryOptions.TicketTtlSeconds"/>）。
-    /// <para>⚠️ <see cref="JsonPropertyName"/> 显式映射对齐方案文档化 snake_case 键
+    /// <para>⚠️ <c>JsonPropertyName</c> 显式映射对齐方案文档化 snake_case 键
     /// （<c>title/description/link/pic_url/ttl_seconds/enabled</c>——2026-10-17 缺陷修复：
     /// STJ 默认反序列化大小写敏感 + snake_case 不匹配致模板恒绑定失败，潜伏缺陷自
     /// <c>TestEventReplyHandler.ReadTemplate</c> 迁移源携入，模板功能从未被真实配置验证）。</para>

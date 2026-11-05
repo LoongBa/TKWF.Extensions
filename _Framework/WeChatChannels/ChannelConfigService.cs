@@ -215,7 +215,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     }
 
     /// <summary>
-    /// 落库后发布 <see cref="ChannelConfigChanged"/> 域事件（D03 §4.2.3 事件失效——<see cref="ChannelConfigChangedHandler"/>
+    /// 落库后发布 <see cref="ChannelConfigChanged"/> 域事件（D03 §4.2.3 事件失效——<c>ChannelConfigChangedHandler</c>
     /// 订阅失效缓存命中通道；对齐 <see cref="FollowChangedEvent"/> 发布形态——经 <c>User.GetService&lt;ILocalEventBus&gt;()</c>
     /// AOP 帧内收集，UoW 提交后派发）。<paramref name="dataVersion"/> = 数据版本快照（UpdateTime.Ticks——Obs5 定稿）。
     /// </summary>

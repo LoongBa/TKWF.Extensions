@@ -27,7 +27,7 @@ namespace TKWF.Federation.WeChat;
 /// <para><b>多图文升级（V0.4.1，方案 WeChatOperations §3.2.3）</b>：<c>articles</c> 数组优先（多图文 1..8 篇，
 /// 占位符替换逐篇应用），缺省回退单图文字段（title/description/link/pic_url——存量兼容零破坏）。</para>
 /// <para><b>免登链接基址解析链（BuildTicketUrlAsync 内，三级）</b>：
-/// <c>FederationLoginEntryOptions.ChannelBaseUrls[channelId]</c> → <see cref="FederationEventReplyOptions.TestTicketEndpointBaseUrl"/>
+/// <c>FederationLoginEntryOptions.ChannelBaseUrls[channelId]</c> → <c>FederationEventReplyOptions.TestTicketEndpointBaseUrl</c>
 /// → <c>ctx.BaseUrl</c>（装配层请求 Host 注入 <c>scheme://host</c>——本站点落地，零配置直觉）；
 /// 三级均空 → <c>CombineUrl</c> 相对路径兜底（微信图文 link 实际链路恒有 <c>ctx.BaseUrl</c>）。</para>
 /// <para>注册（消费方）：<c>services.TryAddEnumerableConstructible&lt;IEventReplyHandler, WechatTemplateEventReplyHandler&gt;()</c>；
@@ -44,7 +44,7 @@ public class WechatTemplateEventReplyHandler : WechatEventReplyHandlerBase
     /// <summary>
     /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser——logger/options 从 DI 解析（可空
     /// 容错，对齐 <see cref="WechatEventReplyHandlerBase"/> 形态）；<see cref="WechatEventReplyOptions"/>
-    /// 供 <see cref="RequireUidForTicket"/> 门控读取）。
+    /// 供 <c>RequireUidForTicket</c> 门控读取）。
     /// </summary>
     public WechatTemplateEventReplyHandler(
         IDomainUser user,

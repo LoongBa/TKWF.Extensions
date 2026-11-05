@@ -9,7 +9,7 @@ namespace TKWF.Ext.Federation;
 /// 通道注册表门面（多通道联邦 v0.3.0——替代平台库硬编码 <c>Channels.FirstOrDefault()</c>）。
 /// <para>选区内核：<see cref="IChannelRegistry"/> 按 <see cref="ChannelConfig.ChannelId"/> 精确定位通道配置
 /// （凭证 + 平台扩展负载），平台库通道只负责"解析自身凭证"不感知选区（方案 §3.4）。两层存储：
-/// <see cref="StaticChannelRegistry"/>（静态 Options.Channels 投影——第一迭代立即落地）+
+/// <c>StaticChannelRegistry</c>（静态 Options.Channels 投影——第一迭代立即落地）+
 /// 第二迭代 <c>SsoChannelRegistryEntity</c>（DB 动态权威）；<c>CompositeChannelRegistry</c>
 /// 承担组合语义（DB 命中优先 → 静态回退）。</para>
 /// <para>注册：<c>AddConstructibleService</c>（门面标准形态——消费方经 <c>User.Use&lt;IChannelRegistry&gt;()</c>

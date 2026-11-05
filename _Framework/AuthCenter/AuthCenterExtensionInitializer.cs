@@ -181,7 +181,7 @@ namespace TKWF.Ext.AuthCenter;
     /// <para>V0.3.1 修复（A' 裁定）：<c>ITokenService</c> 构造注入 3 个 *EntityDataService（经
     /// <c>AddConstructibleDataService</c> 可构造工厂注册，解析需 <c>DomainUserContext.CurrentAopUser</c> 域作用域）——
     /// 启动期 <c>InitializeExtensionsAsync(sp)</c> 无 <c>Use&lt;T&gt;()</c> 上下文，裸 <c>sp.GetService</c> 会抛守卫异常
-    /// （ADR61 Oracle B4）。改为经 <see cref="BeginSystemScopeAsync"/> 进入系统作用域 + <c>scope.System.Use&lt;ITokenService&gt;()</c>
+    /// （ADR61 Oracle B4）。改为经 <c>BeginSystemScopeAsync</c> 进入系统作用域 + <c>scope.System.Use&lt;ITokenService&gt;()</c>
     /// 解析——<c>Use&lt;T&gt;()</c> 内设 <c>CurrentAopUser=SystemUser</c>（领域自治铁律零妥协，Oracle 方案 A' 裁决；
     /// <c>ITokenService : IDomainService</c> 空标记准入）。fail-fast 语义不变（同一 <c>LoadKeysCore</c> 单一真相源）。</para>
     /// <para><b>V0.5.4 修复（Development 模式启动崩溃——框架组转达 2026-10-05）</b>：

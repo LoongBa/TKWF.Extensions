@@ -263,7 +263,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
     // ═══════════════════ 探针子类（模板方法测试） ═══════════════════
 
     /// <summary>模板方法探针子类——context.Parameters 含 "skip" → null；否则返回固定载荷；
-    /// 读 <see cref="ReplyContext.Channel.Extra"/>（W2 方案 B 断言——Extra["probe_flag"]="1" → title 追加 [extra]）。</summary>
+    /// 读 <c>ReplyContext.Channel.Extra</c>（W2 方案 B 断言——Extra["probe_flag"]="1" → title 追加 [extra]）。</summary>
     private sealed class ProbeEventReplyHandler : EventReplyHandlerBase
     {
         public override string ChannelType => "probe_event";

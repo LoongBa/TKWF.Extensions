@@ -10,7 +10,7 @@ namespace TKWF.Ext.PrintTemplates.Tests;
 /// <summary>
 /// FreeSqlTemplateStore 测试（V0.3.0 领域自治根治重写——走生产路径）——
 /// 使用 SQLite 内存库验证真实 CRUD / 版本查询 / Active 查询 / 版本倒序列表。
-/// <para>生产路径：真实 DI + <see cref="DomainUser{TUserInfo}"/> BindScope → <c>User.Use&lt;ITemplateStore&gt;()</c>
+/// <para>生产路径：真实 DI + <c>DomainUser{TUserInfo}</c> BindScope → <c>User.Use&lt;ITemplateStore&gt;()</c>
 /// AOP 路径解析（AddConstructibleService 接口守卫工厂）；TemplateStore 经两个 DataService（SG1/xCodeGen 生成，
 /// FreeSqlEntityDAC + UnitOfWorkManager 驱动）委托持久化——数据访问红线不直接注入 IFreeSql。</para>
 /// <para>存储层异常传播（审计关键，不静默）：唯一约束冲突（同 TemplateId+Version 并发直插）显式抛异常——"并发发布败者"语义（C1）。</para>

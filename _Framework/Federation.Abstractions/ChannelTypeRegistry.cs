@@ -7,8 +7,8 @@ namespace TKWF.Ext.Federation;
 /// <summary>
 /// provider × channelType 取值矩阵（D03 §6.1 评审 P2/缺陷 2 补充——契约合法组合防非法，
 /// 如 <c>provider=wechat + channelType=alipay_mini_program</c> 须被拒绝）。
-/// <para><b>开放注册表语义</b>：<see cref="Provider"/> 开放（wechat/alipay/douyin/...——新 provider 零 DDL，
-/// 与 <see cref="ChannelConfig.PlatformType"/> 同构）；<see cref="ChannelType"/> 合法值由各 provider 定义，
+/// <para><b>开放注册表语义</b>：<c>Provider</c> 开放（wechat/alipay/douyin/...——新 provider 零 DDL，
+/// 与 <see cref="ChannelConfig.PlatformType"/> 同构）；<c>ChannelType</c> 合法值由各 provider 定义，
 /// 扩展为注册表字典条目（新 provider 新增条目）。</para>
 /// <para><b>校验位置决策</b>（1.1 契约 §3.2）：<b>签票入口</b>（组装 payload 前）调用
 /// <see cref="AssertLegal"/>——fail-fast 早暴露配置错误；兑付侧（Redeem 还原后）<b>不校验</b>

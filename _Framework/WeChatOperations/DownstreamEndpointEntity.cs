@@ -10,7 +10,7 @@ namespace TKWF.Ext.WeChatOperations
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。</para>
     /// <para><see cref="BaseUrl"/> + <see cref="Path"/>（可空）拼接出站目标；<see cref="HttpMethod"/> 默认 "POST"（微信被动回复/转发语义）。</para>
     /// <para><see cref="AuthType"/>（int）：0=None 无鉴权 / 1=Bearer 头携带 / 2=Header 自定义头携带。
-    /// <see cref="AuthTokenCipher"/>：AES-GCM 单段密文（base64(nonce‖cipher‖tag)，对齐 <see cref="WeChatChannelConfigEntity"/> 凭证密文列）——
+    /// <see cref="AuthTokenCipher"/>：AES-GCM 单段密文（base64(nonce‖cipher‖tag)，对齐 <c>WeChatChannelConfigEntity</c> 凭证密文列）——
     /// <b>明文永不落库</b>；解密仅出站瞬时。</para>
     /// <para>唯一索引：<see cref="ChannelId"/> + <see cref="Name"/>（channel 内端点名唯一——按名选区/去重）。</para>
     /// </summary>

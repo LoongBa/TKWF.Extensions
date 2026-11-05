@@ -28,7 +28,7 @@ public static class WeChatFederationServiceCollectionExtensions
     /// <para><paramref name="configure"/>：编程式覆盖 WeChatOptions（优先于配置节；测试/动态装配用）。
     /// 默认 <c>null</c>——配置节 <c>TKWF:Federation:WeChat</c> 由 SG1 [Options] 在消费方自动绑定 + 此处 AddOptions 兜底。</para>
     /// <para>WeChatApiClient 注册：<c>AddHttpClient&lt;WeChatApiClient&gt;()</c>（typed client——ctor 收
-    /// <see cref="HttpClient"/> + IOptions + ILogger，对齐 Microsoft.Extensions.Http 惯例；DI 生命周期托管防 socket 悬挂）。</para>
+    /// <c>HttpClient</c> + IOptions + ILogger，对齐 Microsoft.Extensions.Http 惯例；DI 生命周期托管防 socket 悬挂）。</para>
     /// </summary>
     public static IServiceCollection AddWeChatFederationChannels(
         this IServiceCollection services,

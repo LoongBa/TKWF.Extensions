@@ -14,7 +14,7 @@ namespace TKWF.Ext.Federation;
 /// <summary>
 /// 通道工厂实现（多通道联邦 v0.3.0——Oracle M8 定案）。
 /// <para>按 <see cref="ChannelConfig.ChannelId"/> 经 <see cref="IChannelRegistry"/> 定位配置 → 按
-/// <paramref name="channelType"/> 从注入的 <see cref="ISsoChannel"/> 集合（ADR92 集合版守卫工厂——
+/// <c>channelType</c> 从注入的 <see cref="ISsoChannel"/> 集合（ADR92 集合版守卫工厂——
 /// 现状保留为<b>工厂内部索引源</b>，Oracle M2 定案）匹配模板类型 → <c>ActivatorUtilities.CreateInstance</c>
 /// 构造带 channelId 的真实实例。</para>
 /// <para><b>IDomainUser 供给（Oracle M8）</b>：本工厂继承 <see cref="DomainServiceBase"/>——<c>CreateAsync</c>

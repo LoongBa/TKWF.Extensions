@@ -17,9 +17,9 @@ namespace TKWF.Federation.QQ;
 /// 返回 <see cref="SsoChannelAuthResult"/>（ExternalUserId=openid，**始终 = openid 稳定映射键——N3 P1-2**），
 /// 归一 <c>(channel_id, openid) → uid</c>（编排层/装配层）。AuthLevel=2。</para>
 /// <para><b>多通道联邦（v0.3.0 选区机制，Oracle M1/M2/M8）</b>：ctor 收 <see cref="ChannelConfig"/>
-/// （<see cref="ISsoChannelFactory"/> 预取传入——POCO 非域服务规避 DI004 与 DomainHost 依赖）；凭证
+/// （<c>ISsoChannelFactory</c> 预取传入——POCO 非域服务规避 DI004 与 DomainHost 依赖）；凭证
 /// （AppId/AppSecret/EnableUnionId）在 <c>AuthenticateAsync</c> 从 <see cref="ChannelConfig"/> 使用
-/// （EnableUnionId 经 Extra 承载——QQ 特有开关，N3 §3.3）。<paramref name="channel"/> 为 null = 集合模板实例
+/// （EnableUnionId 经 Extra 承载——QQ 特有开关，N3 §3.3）。<c>channel</c> 为 null = 集合模板实例
 /// （工厂类型索引源，不直接认证）。</para>
 /// <para>注册：库扩展方法 <c>AddQqFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92 集合版守卫工厂）+
 /// <see cref="QqChannelSource"/>（IChannelSource——静态配置投影统一 ChannelConfig）。</para>

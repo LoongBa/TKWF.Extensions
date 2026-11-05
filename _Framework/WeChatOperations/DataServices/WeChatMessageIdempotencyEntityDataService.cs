@@ -21,7 +21,7 @@ namespace TKWF.Ext.WeChatOperations;
         : DomainDataServiceBase<WeChatMessageIdempotencyEntity, WeChatMessageIdempotencyEntityDto>(user, dac, hasSoftDelete:false) 
 {
     /// <summary>按规范化幂等键查询（RouteAsync 幂等判决入口——键存在即重复，不依赖状态精确值；方案 §十·四 ③）。</summary>
-    /// <param name="idempotencyKey">规范化幂等键（msg:/evt: 前缀 + ChannelId 入键——<see cref="TKW.Federation.WeChat.MessageGateway.WeChatMessageIdempotencyKeyBuilder"/>）。</param>
+    /// <param name="idempotencyKey">规范化幂等键（msg:/evt: 前缀 + ChannelId 入键——<c>WeChatMessageIdempotencyKeyBuilder</c>）。</param>
     /// <param name="ct">取消令牌。</param>
     public async Task<WeChatMessageIdempotencyEntity?> GetByKeyAsync(string idempotencyKey, CancellationToken ct = default)
         => await EntityGetAsync(e => e.IdempotencyKey == idempotencyKey, ct);

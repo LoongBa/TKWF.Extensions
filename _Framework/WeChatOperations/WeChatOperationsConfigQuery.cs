@@ -10,7 +10,7 @@ namespace TKWF.Ext.WeChatOperations;
 /// <summary>
 /// 运营配置只读查询（<see cref="IOperationsConfigQuery"/> 的 WeChatOperations DB 实现——D03 1.10 方案 §10.3）。
 /// <para>DB 权威：每域单行配置表（Id=1）读取，无行 = 未配置 → 返回 null（消费方 Options 静态降级兜底）。</para>
-/// <para>注册：<see cref="WeChatOperationsExtensionInitializer"/> <c>AddConstructibleService</c>——
+/// <para>注册：<c>WeChatOperationsExtensionInitializer</c> <c>AddConstructibleService</c>——
 /// 契约在 FA（<c>TKWF.Ext.Federation</c> 命名空间）、实现在本扩展（di-constructible 守卫工厂）。
 /// 消费方（Federation 编排链等）经 <c>User.Use&lt;IOperationsConfigQuery&gt;()</c> 帧内解析——未装配本扩展 → 守卫失败 → 消费方先行 GetService 判空降级。</para>
 /// </summary>

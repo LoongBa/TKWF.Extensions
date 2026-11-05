@@ -22,7 +22,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <para>⚠️ DB 读取的 ambient 用户入口（2026-10-30 框架组转达确认）：<c>StaticDomainInterceptor.CurrentContext
 /// ?.DomainUser</c>——仅在 AOP 帧内（门面/事件 handler 执行期）非空。本测试宿主（<see cref="WeChatOperationsTestHost"/>）
 /// 的守卫工厂<b>不产生装饰器帧</b>（AddConstructibleService 直建实现），故 DB 命中场景经
-/// <see cref="RunInFrameAsync"/> 驱动<b>真实生产拦截器</b>（<see cref="StaticDomainInterceptor.InterceptAsync"/>——
+/// <c>RunInFrameAsync</c> 驱动<b>真实生产拦截器</b>（<see cref="StaticDomainInterceptor.InterceptAsync"/>——
 /// 消费方装饰器同款入口）构造帧；帧外场景（降级测试）验证 <see cref="StaticDomainInterceptor.CurrentContext"/>
 /// 为 null 的行为（生产对应非 AOP 帧直调，fail-safe 降级 Options 不抛出）。</para>
 /// <para>注册形态：扩展 Initializer <c>TryAddEnumerable(Scoped&lt;IWeChatCredentialResolver,

@@ -6,7 +6,7 @@ namespace TKWF.Ext.Account
 {
     /// <summary>
     /// 密码重置码存储抽象——重置码的读取、保存与标记已用。
-    /// <para>由扩展默认 FreeSql 实现（<see cref="FreeSqlPasswordResetStore"/>），消费方可自定义（TryAdd 语义）。</para>
+    /// <para>由扩展默认 FreeSql 实现（<c>FreeSqlPasswordResetStore</c>），消费方可自定义（TryAdd 语义）。</para>
     /// </summary>
     public interface IPasswordResetStore : IDomainService
     {

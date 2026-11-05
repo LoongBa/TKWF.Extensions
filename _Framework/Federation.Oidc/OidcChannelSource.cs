@@ -10,7 +10,7 @@ namespace TKWF.Federation.Oidc;
 /// <summary>
 /// OIDC 直配通道静态来源（多通道联邦 v0.3.0 Phase 1——把 <see cref="OidcOptions.Channels"/>
 /// （<see cref="OidcPlatformConfig"/> 列表）投影为统一 <see cref="ChannelConfig"/>，供
-/// <see cref="StaticChannelRegistry"/> 聚合选区）。
+/// <c>StaticChannelRegistry</c> 聚合选区）。
 /// <para>投影映射（方案 §3.1 公共列 + Extra）：<c>ChannelId→ChannelId</c> / <c>ClientId→AppId</c> /
 /// <c>ClientSecret→AppSecret</c>（公共列——OIDC 系 client_id/client_secret 按 M7 映射约束归一）；
 /// 平台特有字段（Platform/AuthorizeUri/TokenUri/UserInfoUri/JwksUri/DiscoveryUri/Scopes/UsePkce/

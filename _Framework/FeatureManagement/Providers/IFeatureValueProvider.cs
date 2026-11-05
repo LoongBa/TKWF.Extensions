@@ -9,7 +9,7 @@ namespace TKWF.Ext.FeatureManagement;
 /// <see cref="FeatureOptions.ProviderOrder"/> 有序链。内置四层（User/Role/Tenant/Global）已实现；
 /// 消费方实现本接口 + DI 注册（AddScoped）即追加新层。
 /// <para>用户上下文约定（评审 C1）：Provider 自行注入 <c>IDomainUser</c>（Scoped）等上下文；
-/// <paramref name="providerKey"/> 由 Manager 按 Provider.Name 约定传入（内置四层已解析）——
+/// <c>providerKey</c> 由 Manager 按 Provider.Name 约定传入（内置四层已解析）——
 /// 自定义 Provider 如需特殊 key 提取（Edition/Device 等），注入上下文自行处理。</para>
 /// </summary>
 public interface IFeatureValueProvider : IDomainService

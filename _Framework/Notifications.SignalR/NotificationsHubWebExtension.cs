@@ -10,7 +10,7 @@ namespace TKWF.Ext.Notifications.SignalR;
 /// 自描述 Web 装配需求，消费方 <c>UseWebExtensions</c> 一次声明。
 /// <para>D6 边界内聚（2026-10-01 语义推移：消费方 → 扩展）：<see cref="ConfigureServices"/> 内 <c>AddSignalR()</c>
 /// ——消费方零宿主注册负担（<c>AddSignalR</c> 幂等，既有消费方自调无碍）。</para>
-/// <para>无中间件（不实现 <see cref="ConfigureMiddleware"/>——接口默认空实现）。</para>
+/// <para>无中间件（不实现 <c>ConfigureMiddleware</c>——接口默认空实现）。</para>
 /// <para>端点声明（F13/Oracle C+E 2026-10-24）：<see cref="DeclareEndpoints"/> 经框架注册表
 /// <c>MapHub&lt;NotificationsHub&gt;(path, auth)</c> 挂载（type-bearing 基础设施，不进 EndpointKind 枚举；无 builder
 /// 门禁保持，R2-3）——默认 <c>/hubs/notifications</c> + <b>RequireAuthorization</b>（通知负载敏感须登录，D7）；

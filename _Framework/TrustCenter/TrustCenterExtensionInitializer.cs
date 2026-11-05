@@ -18,7 +18,7 @@ namespace TKWF.Ext.TrustCenter;
 /// <b>门面（AddConstructibleService）</b>——IToken2Service / ISsoClientService / ISealedTicketService&lt;T&gt; /
 /// IAuthorizationCodeService（接口 : IDomainService → 接口可构造守卫工厂 + 实现类 throw-factory，消费方经
 /// <c>User.Use&lt;接口&gt;()</c> 解析）；<b>多实现集合（TryAddEnumerableConstructible）</b>——
-/// <see cref="ISsoChannel"/>（契约在 TrustCenter.Abstractions——Oracle P1-1；<b>集合注册责任归平台网关库扩展方法</b>
+/// <c>ISsoChannel</c>（契约在 TrustCenter.Abstractions——Oracle P1-1；<b>集合注册责任归平台网关库扩展方法</b>
 /// <c>AddXxxFederationChannels()</c> 内部 <c>TryAddEnumerableConstructible&lt;ISsoChannel, X&gt;()</c>，
 /// TrustCenter 初始器零 ISsoChannel 具体实现故<b>不注册任何集合元素</b>——未装配库时
 /// <c>IEnumerable&lt;ISsoChannel&gt;</c> 帧内解析为空（"未注册通道自然跳过" F5）；

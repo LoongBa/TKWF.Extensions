@@ -32,8 +32,8 @@ public sealed record WechatReplyPayload(
 /// <summary>
 /// 图文模板条目（<c>Channel.Extra["news_reply"]</c> JSON <c>articles</c> 数组元素——微信图文条目，
 /// 占位符可替换；V0.4.1 多图文模板结构）。
-/// <para>双绑定：<see cref="JsonPropertyName"/>（JSON 序列化/反序列化——Extra 存储面）+
-/// <see cref="ConfigurationKeyName"/>（Options 绑定面——appsettings 全局/通道模板配置，snake_case 一致）。</para>
+/// <para>双绑定：<c>JsonPropertyName</c>（JSON 序列化/反序列化——Extra 存储面）+
+/// <c>ConfigurationKeyName</c>（Options 绑定面——appsettings 全局/通道模板配置，snake_case 一致）。</para>
 /// </summary>
 public sealed record NewsReplyArticle(
     [property: JsonPropertyName("title"), ConfigurationKeyName("title")] string? Title,
@@ -53,7 +53,7 @@ public sealed record NewsReplyArticle(
 /// </code>
 /// <para><see cref="TtlSeconds"/> 保留字段一致性（无签票时无业务语义，忽略——对齐平台基类
 /// <see cref="WechatEventReplyHandlerBase.NewsReplyTemplate"/>）。</para>
-/// <para>双绑定：<see cref="JsonPropertyName"/>（JSON 存储面）+ <see cref="ConfigurationKeyName"/>
+/// <para>双绑定：<c>JsonPropertyName</c>（JSON 存储面）+ <c>ConfigurationKeyName</c>
 /// （Options 绑定面——<see cref="WechatEventReplyOptions.DefaultNewsReplyTemplate"/> 与
 /// <see cref="WeChatChannelConfig.NewsReplyTemplate"/> 的 appsettings snake_case 配置键一致）。</para>
 /// </summary>

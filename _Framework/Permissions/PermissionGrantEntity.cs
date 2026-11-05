@@ -8,7 +8,7 @@ namespace TKWF.Ext.Permissions
     /// 权限授予表实体——(PermissionName, ProviderName, ProviderKey) 业务唯一。
     /// <para>V0.2.0（SG1 化）：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>（<b>不指定 UserType</b>，
     /// ADR42 D4 扩展实体不自建 UserInfo，DataService 用非泛型 <c>DomainDataServiceBase&lt;TEntity,TDto&gt;</c>
-    /// 接受消费方上下文）。SG1 自动生成 <see cref="IDomainEntity"/> 部分（含 <c>IsFromPersistentSource</c>
+    /// 接受消费方上下文）。SG1 自动生成 <c>IDomainEntity</c> 部分（含 <c>IsFromPersistentSource</c>
     /// 默认实现覆盖）与 DTO/DataService。</para>
     /// <para>保留 BCL <c>[Table("TKWF_PermissionGrant")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表，
     /// V4.9.57+ 仅发现 BCL <c>[Table]</c>）；列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，

@@ -5,7 +5,7 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 微信公众号运营 Web 装配扩展（v0.6.0 重建——修复 B1-c 端点契约化后的悬空端点；V0.9.0 拆分——
-/// <see cref="IChannelConfigService"/> 端点随通道面下沉 WeChatChannels WebExtension——本行移除）。
+/// <c>IChannelConfigService</c> 端点随通道面下沉 WeChatChannels WebExtension——本行移除）。
 /// <para><b>背景</b>：V0.4.0 曾删除本扩展（当时依赖消费方 SG1b 生成控制器路径）；框架 B4 门控精化
 /// （v4.10.84 <c>referencesAspNetCore</c>）后，WeChatOperations 因含 <c>Microsoft.AspNetCore.App</c>
 /// FrameworkReference 落入"发射 <c>[assembly: ExtensionEndpointRegistrations]</c> 注册表"分支，

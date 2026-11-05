@@ -8,7 +8,7 @@ namespace TKWF.Federation.QQ;
 
 /// <summary>
 /// QQ 静态通道来源（多通道联邦 v0.3.0 Phase 1——把 <see cref="QqOptions.Channels"/> 投影为统一
-/// <see cref="ChannelConfig"/>，供 <see cref="StaticChannelRegistry"/> 聚合选区）。
+/// <see cref="ChannelConfig"/>，供 <c>StaticChannelRegistry</c> 聚合选区）。
 /// <para>投影映射（方案 §3.1 公共列 + Extra）：<c>ChannelId→ChannelId</c> / <c>AppId→AppId</c> /
 /// <c>AppSecret→AppSecret</c>（公共列）；<c>EnableUnionId→Extra</c>（QQ 特有开关——N3 P1-2 unionid 可选增强）。
 /// QqApiClient 凭证解析机制保留（Options 按 AppId 精确匹配），通道只传 AppId。</para>

@@ -20,7 +20,7 @@ namespace TKWF.Ext.TrustCenter.Tests;
 /// 面① ISealedTicketService 见 SealedTicketServiceTests、面② IAuthorizationCodeService 见
 /// AuthorizationCodeServiceTests，旧 IAccessCodeService 已删）完整链路。
 /// <para><b>TrustCenter 剥离（2026-10-09）</b>：自 Federation.Tests SsoProductionPathTests 拆分迁入——
-/// token2/client 用例（信任内核）；<see cref="ISsoProfileService"/> 跨扩展用例（连接层）留 Federation.Tests。</para>
+/// token2/client 用例（信任内核）；<c>ISsoProfileService</c> 跨扩展用例（连接层）留 Federation.Tests。</para>
 /// <para>对齐 AuthenticationProductionPathTests 范式。DataService 不手动注册——测试经 <c>Use&lt;具体类&gt;()</c>
 /// NoAop 路径直建（IEntityDAC 从 DI 解析，红线合规）。</para>
 /// </summary>

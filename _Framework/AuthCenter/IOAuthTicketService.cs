@@ -82,7 +82,7 @@ public interface IOAuthTicketService : IDomainService
 
     /// <summary>
     /// 登录后补绑——第三方回调先授权后登录绑定（authorize 签发 → 登录 → 绑定 → 换取）。
-    /// <para>⚠️ V0.8.0（Oracle P0-1 安全模型）：<b>已认证帧</b>调用——userId 取 <see cref="DomainServiceBase.User"/>
+    /// <para>⚠️ V0.8.0（Oracle P0-1 安全模型）：<b>已认证帧</b>调用——userId 取 <c>DomainServiceBase.User</c>
     /// （当前认证用户），<b>不接受请求体 userId 参数</b>——防票据泄漏后攻击者绑定任意 userId 实现账号接管。
     /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（TICKET_NOT_FOUND / TICKET_CONSUMED / TICKET_EXPIRED / TICKET_ALREADY_BOUND）。
     /// <c>ExposeRest=false</c>：绑定为已认证内部补绑入口，不生成端点。</para>

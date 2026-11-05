@@ -22,28 +22,28 @@ namespace TKWF.Ext.Federation;
 /// <para>不可变性：sealed record + <see cref="StringComparer.Ordinal"/> 扩展字典（Oracle6 条件 E——构造后不可改，
 /// 兑付侧直接 Redeem 还原，无 TOCTOU）。</para>
 /// </summary>
+/// <param name="Provider">开放注册表 provider（wechat / alipay / douyin / ...——开放注册表不枚举死，新 provider 零 DDL）。</param>
+/// <param name="ChannelType">通道形态（mp_subscription / mp_service / mini_program / work_wechat...——D03 §6.1 channelType 语义；合法值见 <see cref="ChannelTypeRegistry"/>；<b>非协议通道类型</b>）。</param>
+/// <param name="ChannelId">不变键（正式 = 微信唯一 ID gh_xxx；业务绑定只用 (Provider, ChannelId) 不变键——A4）。</param>
+/// <param name="ChannelAlias">不可变对外名（slug 语义——A14 定稿；可空 = 未配置；DisplayName 可变不入票）。</param>
+/// <param name="ExternalUserId">外部用户标识（openid——外部身份 L1 键之一）。</param>
+/// <param name="UnionId">跨通道归并键（可空——同 provider 有 UnionId 时跨 channel 归并同人，A1）。</param>
+/// <param name="PlatformUid">L2 平台身份（AB 阶段已分配——A11 事件预置；可空 = 未分配，C 侧映射/建号兜底）。</param>
+/// <param name="Assurance">档案可信等级（event | base | userinfo——开放字符串，出票方声明；D03 §5.2 AssuranceLevel）。</param>
+/// <param name="Iat">签发 Unix 秒（DateTimeOffset.UtcNow.ToUnixTimeSeconds()）。</param>
+/// <param name="Exp">过期 Unix 秒（签票方组装时 = Iat + TTL）。</param>
+/// <param name="Jti">单次标识（签发方生成，≥16 字节随机——防重放判据）。</param>
 public sealed record FederatedTicketPayload(
-    /// <summary>开放注册表 provider（wechat / alipay / douyin / ...——开放注册表不枚举死，新 provider 零 DDL）。</summary>
     string Provider,
-    /// <summary>通道形态（mp_subscription / mp_service / mini_program / work_wechat...——D03 §6.1 channelType 语义；合法值见 <see cref="ChannelTypeRegistry"/>；<b>非协议通道类型</b>）。</summary>
     string ChannelType,
-    /// <summary>不变键（正式 = 微信唯一 ID gh_xxx；业务绑定只用 (Provider, ChannelId) 不变键——A4）。</summary>
     string ChannelId,
-    /// <summary>不可变对外名（slug 语义——A14 定稿；可空 = 未配置；DisplayName 可变不入票）。</summary>
     string? ChannelAlias,
-    /// <summary>外部用户标识（openid——外部身份 L1 键之一）。</summary>
     string ExternalUserId,
-    /// <summary>跨通道归并键（可空——同 provider 有 UnionId 时跨 channel 归并同人，A1）。</summary>
     string? UnionId,
-    /// <summary>L2 平台身份（AB 阶段已分配——A11 事件预置；可空 = 未分配，C 侧映射/建号兜底）。</summary>
     string? PlatformUid,
-    /// <summary>档案可信等级（event | base | userinfo——开放字符串，出票方声明；D03 §5.2 AssuranceLevel）。</summary>
     string Assurance,
-    /// <summary>签发 Unix 秒（DateTimeOffset.UtcNow.ToUnixTimeSeconds()）。</summary>
     long Iat,
-    /// <summary>过期 Unix 秒（签票方组装时 = Iat + TTL）。</summary>
     long Exp,
-    /// <summary>单次标识（签发方生成，≥16 字节随机——防重放判据）。</summary>
     string Jti)
 {
     /// <summary>

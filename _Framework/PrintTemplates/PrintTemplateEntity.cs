@@ -8,7 +8,7 @@ namespace TKWF.Ext.PrintTemplates
     /// <summary>
     /// 打印模板表实体——定义模板键（如 "Invoice.Standard"）+ 显示名 + 描述。
     /// <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。
-    /// SG1 自动生成 <see cref="TKW.Framework.Domain.IDomainEntity"/> 部分与 DTO/DataService。</para>
+    /// SG1 自动生成 <c>TKW.Framework.Domain.IDomainEntity</c> 部分与 DTO/DataService。</para>
     /// <para>保留 BCL <c>[Table("TKWF_PrintTemplate")]</c>（<c>FreeSqlTableStructureSynchronizer</c> 靠它发现实体建表）；
     /// 列映射用 FreeSql <c>[Column]</c>（IsPrimary/IsIdentity/Position，全限定避免与 BCL Schema 特性名冲突）。</para>
     /// </summary>

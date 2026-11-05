@@ -11,7 +11,7 @@ namespace TKWF.Federation.Microsoft;
 /// <summary>
 /// Microsoft 静态通道来源（多通道联邦 v0.3.0 Phase 1——把 <see cref="MicrosoftOptions.Channels"/>
 /// （<see cref="MicrosoftChannelConfig"/> 列表）投影为统一 <see cref="ChannelConfig"/>，供
-/// <see cref="StaticChannelRegistry"/> 聚合选区）。
+/// <c>StaticChannelRegistry</c> 聚合选区）。
 /// <para>投影映射（方案 §3.1 公共列 + Extra）：<c>ChannelId→ChannelId</c> / <c>ClientId→AppId</c> /
 /// <c>ClientSecret→AppSecret</c>（公共列——OIDC 系 client_id/client_secret 按 M7 映射约束归一）；
 /// <c>Tenant/TokenIssuers→Extra</c>（Tenant 为端点模板维度；TokenIssuers JSON 数组——iss 白名单正则防分隔符歧义）。

@@ -22,9 +22,9 @@ namespace TKWF.Federation.Alipay;
 /// **应用维度唯一稳定映射键——open_id 灰度过渡兼容，N4 §二**），归一 <c>(channel_id, user_id) → uid</c>
 /// （编排层/装配层）。AuthLevel=2。</para>
 /// <para><b>多通道联邦（v0.3.0 选区机制，Oracle M1/M2/M8）</b>：ctor 收 <see cref="ChannelConfig"/>
-/// （<see cref="ISsoChannelFactory"/> 预取传入——POCO 非域服务规避 DI004 与 DomainHost 依赖）；凭证
+/// （<c>ISsoChannelFactory</c> 预取传入——POCO 非域服务规避 DI004 与 DomainHost 依赖）；凭证
 /// （AppId 公共列 + Extra 承载 PrivateKeyPath/AlipayPublicKeyPath/EnableMobile——RSA 私钥路径进 Extra 非
-/// AppSecret 列，非对称/对称分离，方案 F5 零表结构变更）。<paramref name="channel"/> 为 null = 集合模板实例
+/// AppSecret 列，非对称/对称分离，方案 F5 零表结构变更）。<c>channel</c> 为 null = 集合模板实例
 /// （工厂类型索引源，不直接认证）。</para>
 /// <para>注册：库扩展方法 <c>AddAlipayFederationChannels()</c> 内 TryAddEnumerableConstructible（ADR92 集合版守卫工厂）+
 /// <see cref="AlipayChannelSource"/>（IChannelSource——静态配置投影统一 ChannelConfig）。</para>

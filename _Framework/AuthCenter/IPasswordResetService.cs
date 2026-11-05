@@ -8,11 +8,11 @@ namespace TKWF.Ext.AuthCenter;
 /// 找回密码服务（V0.9.0 B.10/B.11——AuthCenter 自建多通道链路，UId-keyed，**不实现 <c>IAccountPasswordManager</c> 第二实现**）。
 /// <para>ADR B.10 边界：<c>IAccountPasswordManager</c>（TKWF.Ext.Account.Abstractions）按 userName 写 IdentityUser，
 /// 与 AuthAccount UId/Phone 模型平行不互认——本服务面向 AuthAccount 凭据（UId-keyed + 多通道 + 自带投递）。</para>
-/// <para>三通道层级（B.10）：SMS = 通道可达证明（<see cref="SmsScenes.Reset"/> 现成）；Email = 通道可达（<see cref="IEmailSender"/> 可空降级）；
+/// <para>三通道层级（B.10）：SMS = 通道可达证明（<see cref="SmsScenes.Reset"/> 现成）；Email = 通道可达（<c>IEmailSender</c> 可空降级）；
 /// 扫码 = 身份持有证明（前置条件，改密前证明持有微信——OAuthTicket 链路设计，通道编排归消费方/装配层）。</para>
 /// <para>自带投递（B.11）：InitiateResetAsync 生成码后**自行投递**（SMS 经 <see cref="ISmsVerificationService.SendCodeAsync"/> Reset 场景；
 /// Email 经 Emailing 投递；修复 Account <c>DefaultPasswordResetFlow</c> 生成码不投递缺口）。</para>
-/// <para>落地：<see cref="SetPasswordAsync"/> 委托 <see cref="IAuthAccountService.SetPasswordAsync"/>（PasswordHasher + TokenVersion++）。</para>
+/// <para>落地：<c>SetPasswordAsync</c> 委托 <see cref="IAuthAccountService.SetPasswordAsync"/>（PasswordHasher + TokenVersion++）。</para>
 /// </summary>
 public interface IPasswordResetService : IDomainService
 {

@@ -11,7 +11,7 @@ namespace TKWF.Ext.Federation;
 /// CHANNEL_REGISTRY_UNAVAILABLE / 事件验签失败）由领域门面经 SsoChannelAuthResult.FailReason 机器可读返回，
 /// Web 层按映射表转 HTTP 状态码——安全由领域控制。</para>
 /// <para>配置节：<c>TKWF:Federation:Web</c>——<c>[Options]</c> 由 SG1 消费方自动绑定（对齐
-/// <see cref="AuthCenterEndpointOptions"/> 先例）。</para>
+/// <c>AuthCenterEndpointOptions</c> 先例）。</para>
 /// </summary>
 [Options("TKWF:Federation:Web")]
 public class FederationEndpointOptions
@@ -56,7 +56,7 @@ public class FederationEndpointOptions
     /// <summary>
     /// <b>免登落地端点开关（默认 false——v0.12.0 排他单模型登录闭环）</b>：
     /// GET {prefix}/land/{ticket}——匿名兑现密封票据 → 经
-    /// <see cref="TKWF.Ext.AuthCenter.IExternalTicketLoginService"/> 免登登录
+    /// <c>TKWF.Ext.AuthCenter.IExternalTicketLoginService</c> 免登登录
     /// （openid 级票据实时回查 uid → 建会话）→ 302 到落地页；失败 → 4xx 机器可读错误码。
     /// 与 <see cref="TestTicketEndpointEnabled"/> 区别：本端点建立真实会话（生产可用），
     /// 测试端点仅显示载荷（调试面）。</summary>

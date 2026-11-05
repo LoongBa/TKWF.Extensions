@@ -20,7 +20,7 @@ public static class SealedTicketRegistrationExtensions
 {
     /// <summary>
     /// 注册 <see cref="SealedTicketService{T}"/> DB CAS 后端（表 <c>TKWF_SealedTicket</c>——多 T 共用一张表、行独立）。
-    /// <paramref name="ttl"/> 等行为配置归 <c>TKWF:TrustCenter</c> 节（SealedTicketExpirationSeconds/RetentionDays）。
+    /// <c>ttl</c> 等行为配置归 <c>TKWF:TrustCenter</c> 节（SealedTicketExpirationSeconds/RetentionDays）。
     /// 幂等（内部 AddConstructibleService——TryAdd 语义，重复注册无害）。
     /// </summary>
     public static IServiceCollection AddSealedTicketFor<T>(this IServiceCollection services)

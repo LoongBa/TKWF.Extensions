@@ -8,7 +8,7 @@ namespace TKWF.Federation.Alipay;
 
 /// <summary>
 /// 支付宝静态通道来源（多通道联邦 v0.3.0 Phase 1——把 <see cref="AlipayOptions.Channels"/> 投影为统一
-/// <see cref="ChannelConfig"/>，供 <see cref="StaticChannelRegistry"/> 聚合选区，组件 8.5）。
+/// <see cref="ChannelConfig"/>，供 <c>StaticChannelRegistry</c> 聚合选区，组件 8.5）。
 /// <para>投影映射（方案 §3.1 公共列 + Extra）：<c>ChannelId→ChannelId</c> / <c>AppId→AppId</c>（公共列）；
 /// <c>AppSecret = null</c>（⚠️ 支付宝无对称应用密钥——RSA2 双向签名，非对称/对称分离）；
 /// 平台特有凭证进 Extra：<c>PrivateKeyPath / AlipayPublicKeyPath / EnableMobile</c>（RSA 私钥路径进 Extra 非

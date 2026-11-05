@@ -8,7 +8,7 @@ namespace TKWF.Federation.WeCom;
 
 /// <summary>
 /// 企业微信静态通道来源（多通道联邦 v0.3.0 Phase 1——把 <see cref="WeComOptions.Channels"/> 投影为统一
-/// <see cref="ChannelConfig"/>，供 <see cref="StaticChannelRegistry"/> 聚合选区）。
+/// <see cref="ChannelConfig"/>，供 <c>StaticChannelRegistry</c> 聚合选区）。
 /// <para>投影映射（方案 §3.1 公共列 + Extra + M7 约束）：<c>ChannelId→ChannelId</c>（公共列）；<b>全部平台特有
 /// 字段进 Extra</b>——<c>CorpId</c>（法人级标识——WeCom 无标准 AppId，公共列 <c>AppId</c> 不承载；M7：法人级
 /// 标识一律进 Extra 不挤占 AppId）/ <c>CorpSecret</c>（WeComApiClient 不自持凭证解析——gettoken 缓存键

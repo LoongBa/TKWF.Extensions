@@ -69,7 +69,7 @@ internal static class MfaTestSupport
 /// 桩仅供未整改方法经 DI 解析）；其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价
 /// （<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，IEntityDAC 从 DI 解析）。</para>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库（用例隔离）。
-/// <paramref name="configure"/> 回调在初始化器之后执行。</para>
+/// <c>configure</c> 回调在初始化器之后执行。</para>
 /// </summary>
 internal sealed class MfaTestHost : IDisposable
 {

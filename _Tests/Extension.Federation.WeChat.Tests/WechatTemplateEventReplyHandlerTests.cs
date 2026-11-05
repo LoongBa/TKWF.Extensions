@@ -392,7 +392,7 @@ public class WechatTemplateEventReplyHandlerTests : WeChatChannelTestHost
     }
 
     /// <summary>免登链路 uid 透传（v0.16.0 对称补齐——与测试端点 Q2 同构）：业务模板（wx-template，非内置）
-    /// 走 <see cref="ResolveTicketAsync"/> → <c>BuildTicketUrlAsync</c> 透传 <c>ctx.UId</c>——免登落地端
+    /// 走 <c>ResolveTicketAsync</c> → <c>BuildTicketUrlAsync</c> 透传 <c>ctx.UId</c>——免登落地端
     /// （AuthCenter POST /login/ticket）兑换后 <c>FederatedLoginOrchestrator</c> UId 直读复用既有账号，
     /// 已绑定用户免登不再走映射反查（生产免登闭环完整承载 uid）。</summary>
     [Fact]

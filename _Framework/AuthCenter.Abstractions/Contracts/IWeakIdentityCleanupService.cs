@@ -9,7 +9,7 @@ namespace TKWF.Ext.AuthCenter;
 /// 弱身份清理能力门面（D03 1.4 §6.3 O2 定稿——能力归 AuthCenter，策略归业务）。
 /// <para>判据（白名单制，fail-safe）：账号**至少有一个**认证因素且**全部为 Federated**（联邦路径建号只产 Federated）；
 /// 零因素账号（无联邦建号证据，含消费方影子管理员）不判弱；任何非 Federated 因素（Password/Sms/Email/Totp/Passkey）
-/// = 强身份不清。另需：无 UserProfile 档案、未冻结、<c>CreateTime</c> 不晚于 <paramref name="criteria"/> 推导的截止
+/// = 强身份不清。另需：无 UserProfile 档案、未冻结、<c>CreateTime</c> 不晚于 <c>criteria</c> 推导的截止
 /// （<c>inactiveDays</c> 由调用方传入——能力层不存策略；当前以建号时刻近似「无交互」，非活动证据探测）。</para>
 /// <para>权责边界（A17）：WeChatOperations 只做策略存储/UI（<c>weakIdentityRetention</c> 配置域）；语义校验
 /// 走本契约（WeakIdentityCriteria/Page/Stats 全封闭 DTO）。注册：<c>AddConstructibleService</c> 门面标准形态。</para>

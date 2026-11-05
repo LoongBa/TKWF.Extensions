@@ -63,7 +63,7 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
     /// <para>数据流（W2 方案 B——机制归基类、决策归子类）：入口经 <c>dispatch.Event.ChannelId</c> 反查
     /// <see cref="ChannelConfig"/>（一次查询）→ 组装 <see cref="ReplyContext"/> 传子类 <see cref="BuildReplyAsync"/>
     /// （子类零 registry 查询，可读 <c>Channel.Extra</c> 配置）→ 签密封票据 → 图文链接拼装。
-    /// （I2 语义层——handler 输入由 <see cref="SsoChannelEventContext"/> 改为 <see cref="ChannelEventDispatch"/>：
+    /// （I2 语义层——handler 输入由 <c>SsoChannelEventContext</c> 改为 <see cref="ChannelEventDispatch"/>：
     /// channelId 从语义事件取，不再翻 Parameters 魔法键。）</para>
     /// </summary>
     public async Task<EventReplyResult?> HandleAsync(ChannelEventDispatch dispatch, CancellationToken ct = default)

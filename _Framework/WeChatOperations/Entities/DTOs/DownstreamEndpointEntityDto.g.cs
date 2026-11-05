@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 0533654db1eae431f0482d70d7f2314f611ec233aba02ae9c8b6579bcb15ce25]
 // 模型: DownstreamEndpointEntity (TKWF.Ext.WeChatOperations.DownstreamEndpointEntity)
-// 生成时间: 2026-10-18 04:42:42
+// 生成时间: 2026-11-05 23:25:17
 // </auto-generated>
 #nullable enable
 using System;
@@ -19,7 +19,7 @@ using TKW.Framework.Domain.xCodeGen;
 using TKWF.Ext.WeChatOperations;
 
 namespace TKWF.Ext.WeChatOperations.DTOs;
-/// <summary>下游转发端点实体（表 <c>TKWF_WeChatDownstreamEndpoint</c>）——网关消息转发下游端点（HTTP 出站目标，V0.2.0 增网关模块）。      <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。</para>      <para><see cref="BaseUrl"/> + <see cref="Path"/>（可空）拼接出站目标；<see cref="HttpMethod"/> 默认 "POST"（微信被动回复/转发语义）。</para>      <para><see cref="AuthType"/>（int）：0=None 无鉴权 / 1=Bearer 头携带 / 2=Header 自定义头携带。      <see cref="AuthTokenCipher"/>：AES-GCM 单段密文（base64(nonce‖cipher‖tag)，对齐 <see cref="WeChatChannelConfigEntity"/> 凭证密文列）——      <b>明文永不落库</b>；解密仅出站瞬时。</para>      <para>唯一索引：<see cref="ChannelId"/> + <see cref="Name"/>（channel 内端点名唯一——按名选区/去重）。</para></summary>
+/// <summary>下游转发端点实体（表 <c>TKWF_WeChatDownstreamEndpoint</c>）——网关消息转发下游端点（HTTP 出站目标，V0.2.0 增网关模块）。      <para>SG1 化：声明式实体——<c>partial</c> + <c>[DomainGenerateCode]</c>。</para>      <para><see cref="BaseUrl"/> + <see cref="Path"/>（可空）拼接出站目标；<see cref="HttpMethod"/> 默认 "POST"（微信被动回复/转发语义）。</para>      <para><see cref="AuthType"/>（int）：0=None 无鉴权 / 1=Bearer 头携带 / 2=Header 自定义头携带。      <see cref="AuthTokenCipher"/>：AES-GCM 单段密文（base64(nonce‖cipher‖tag)，对齐 <c>WeChatChannelConfigEntity</c> 凭证密文列）——      <b>明文永不落库</b>；解密仅出站瞬时。</para>      <para>唯一索引：<see cref="ChannelId"/> + <see cref="Name"/>（channel 内端点名唯一——按名选区/去重）。</para></summary>
 public partial record DownstreamEndpointEntityDto : IDomainDto<DownstreamEndpointEntity>
 {
     [System.Text.Json.Serialization.JsonIgnore]

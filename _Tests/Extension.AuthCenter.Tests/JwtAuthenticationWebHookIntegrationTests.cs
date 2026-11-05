@@ -20,13 +20,13 @@ namespace TKWF.Ext.AuthCenter.Tests;
 /// <summary>
 /// v4.10.45 Web 装配钩子（ADR87/D22/G18）集成冒烟——黑盒哨兵中间件法：
 /// TestServer 内经消费方全链（ConfigWebAppDomain → UseWebSession → UseWebExtensions）装配
-/// <see cref="JwtAuthenticationWebExtension{TUserInfo}"/>，哨兵 Web 扩展在 ConfigureMiddleware 注入
+/// <c>JwtAuthenticationWebExtension{TUserInfo}</c>，哨兵 Web 扩展在 ConfigureMiddleware 注入
 /// 记录 <c>HttpContext.Items["__order"]</c> 的中间件，发请求断言顺序字符串
 /// <b>ContextExtraction → JwtAuth 验签 → HttpAuthentication</b>。
 /// <para><b>核心验收（P0-1 锚点分桶设计目标）</b>：JwtAuth 验签必须在框架认证判定（HttpAuthentication）
 /// 之前——锚点桶在 ContextExtraction 之后、HttpAuthentication 之前排空。</para>
-/// <para>黑盒观测：<see cref="ContextExtractionProbeWebExtension"/> 断言 ContextExtraction 阶段 2
-/// （UseWebSession 会话解析）已写游客 DomainUser；<see cref="JwtAuthVerifyProbeWebExtension"/> 断言
+/// <para>黑盒观测：<c>ContextExtractionProbeWebExtension</c> 断言 ContextExtraction 阶段 2
+/// （UseWebSession 会话解析）已写游客 DomainUser；<c>JwtAuthVerifyProbeWebExtension</c> 断言
 /// JwtAuth 中间件真实执行验签 + 恢复（Items 中用户 UserId 变为恢复委托产物）；HttpAuthentication 标记
 /// 经消费方 <c>BeforeRouting</c> 回调（管道序在 HttpAuthentication 之后）追加。</para>
 /// <para>⚠️ <b>V0.5.4 回归哨兵增强</b>：宿主恒走 <b>Development</b> 环境（ValidateScopes=true）——认证

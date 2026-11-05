@@ -8,7 +8,7 @@ namespace TKWF.Federation.DingTalk;
 
 /// <summary>
 /// 钉钉静态通道来源（多通道联邦 v0.3.0 Phase 1——把 <see cref="DingTalkOptions.Channels"/> 投影为统一
-/// <see cref="ChannelConfig"/>，供 <see cref="StaticChannelRegistry"/> 聚合选区）。
+/// <see cref="ChannelConfig"/>，供 <c>StaticChannelRegistry</c> 聚合选区）。
 /// <para>投影映射（方案 §3.1 公共列 + Extra）：<c>ChannelId→ChannelId</c> / <c>AppSecret→AppSecret</c>
 /// （公共列）/ <c>CorpId/AppKey/Token/EncodingAESKey→Extra</c>（平台特定——CorpId 法人级标识 + 事件验签
 /// 三道闸门信任根负载 + AppKey 钉钉凭证解析键，进 Extra 不挤占 AppId——映射规则约束 M7）。

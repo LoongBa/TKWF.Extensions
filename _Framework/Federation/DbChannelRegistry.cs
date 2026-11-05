@@ -22,7 +22,7 @@ namespace TKWF.Ext.Federation;
 /// <para>加密语义（方案 M6/M12）：<see cref="SsoChannelRegistryEntity.AppSecretEncrypted"/>/<see cref="SsoChannelRegistryEntity.ExtraJsonEncrypted"/>
 /// 均为 AES-GCM 密文列——本实现读行后经 keyed <see cref="ISymmetricKeyProvider"/>（键
 /// <see cref="SymmetricKeyProviderKeys.Federation"/>，<c>FederationOptions.SecretEncryptionKeyPath</c> 密钥——
-/// FileSymmetricKeyProvider，对齐 <see cref="SsoClientService"/> 既有模式）解密映射 <see cref="ChannelConfig"/>：
+/// FileSymmetricKeyProvider，对齐 <c>SsoClientService</c> 既有模式）解密映射 <see cref="ChannelConfig"/>：
 /// AppSecret=Decrypt(AppSecretEncrypted)，Extra=JsonSerializer.Deserialize&lt;Dictionary&gt;(Decrypt(ExtraJsonEncrypted))
 /// （空串/解密失败 → 空字典容错）；明文不落库。</para>
 /// <para>注册偏置：<c>AddScoped&lt;DbChannelRegistry&gt;()</c>（普通 DI——<see cref="CompositeChannelRegistry"/>

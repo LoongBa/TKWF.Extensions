@@ -58,7 +58,7 @@ public class LoginProtectionOptions
     public int PasswordPerHourPerIp { get; set; } = 20;
 
     /// <summary>票据 SPA 兑换每分钟每 IP 尝试上限（默认 10——V0.10.0 P2-4 强制频控，<c>ext:ticket:{ip}</c> key——
-    /// <see cref="IRateLimitCheck"/> 点检查；票 32B 高熵不可枚举，IP 维度纵深防御）。</summary>
+    /// <c>IRateLimitCheck</c> 点检查；票 32B 高熵不可枚举，IP 维度纵深防御）。</summary>
     public int TicketRedeemPerMinutePerIp { get; set; } = 10;
 }
 

@@ -24,7 +24,7 @@ namespace TKWF.Ext.Federation;
     /// <see cref="SsoChannelRegistryEntity.ChannelAlias"/> 列（可空——缺省 null = 对外用 ChannelId 零迁移）；
     /// alias 非空时校验同 alias 冲突（fail-closed，含 Update 排除本行）。</para>
 /// <para>加密：AppSecret/ExtraJson AES-GCM 加密（keyed <see cref="ISymmetricKeyProvider"/>
-/// <see cref="SymmetricKeyProviderKeys.Federation"/>），密文落库明文不落库——对齐 <see cref="SsoClientService"/>
+/// <see cref="SymmetricKeyProviderKeys.Federation"/>），密文落库明文不落库——对齐 <c>SsoClientService</c>
 /// 既有模式（读取侧 <see cref="DbChannelRegistry"/> 解密映射，本门面只写不读）。</para>
 /// <para>数据访问红线：零 Store 伪层/零 IEntityDAC 注入——全部经 <see cref="SsoChannelRegistryEntityDataService"/>
 /// 内部转发访问器（Entity*）委托；DataService 经基类 <c>User.Use&lt;具体类&gt;()</c> NoAop 懒加载。

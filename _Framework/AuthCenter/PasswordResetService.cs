@@ -21,7 +21,7 @@ namespace TKWF.Ext.AuthCenter;
 /// 可空依赖降级（<c>GetService</c> null → EMAIL_SENDER_NOT_CONFIGURED；未接 Emailing 时仅 Email 通道禁用，SMS/扫码不受影响）。</para>
 /// <para>扫码通道：**身份持有证明前置**（B.10/C.13 层级：改密前证明持有微信）——走 OAuthTicket 链路（一次性 TTL+state），
 /// 编排归装配层；本服务提供 <see cref="CompleteResetVerifiedAsync"/>（已证明后直接设密）。</para>
-/// <para>凭证标识解析：<paramref name="identifier"/> 为 UId 或 Phone（凭据角色——与登录门面一致）；SMS 走 Phone 校验，
+/// <para>凭证标识解析：<c>identifier</c> 为 UId 或 Phone（凭据角色——与登录门面一致）；SMS 走 Phone 校验，
 /// Email 需 UId 定位 UserProfile（Phone → UId 反向经 AuthAccount 查询）。</para>
 /// <para>铁律：继承 <see cref="DomainServiceBase"/>（IDomainUser 永不注册 DI）；依赖经 <c>User.Use&lt;T&gt;()</c> 懒加载
 /// （DI004）；注册 <c>AddConstructibleService&lt;IPasswordResetService, PasswordResetService&gt;</c>。

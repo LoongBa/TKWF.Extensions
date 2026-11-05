@@ -28,7 +28,7 @@ namespace TKWF.Ext.WeChatOperations;
 /// 仅经 SG1 生成 DataService 的 <c>CountAsync</c>/<c>EntitySelectAsync</c> 原语，零裸 ORM/IEntityDAC。</para>
 /// <para>安全边界：DTO（<see cref="WeChatOperationsStatusDto"/>）只含状态布尔/计数/比率——<b>不含任何凭证
 /// 明文/密文</b>（Oracle P1 DTO 投影安全；连接判定经 <see cref="WeChatChannelConfigDto.HasCredentials"/>
-/// 布尔投影，解密仅出站瞬时归 <see cref="DbWeChatCredentialResolver"/>）。</para>
+/// 布尔投影，解密仅出站瞬时归 <c>DbWeChatCredentialResolver</c>）。</para>
 /// </summary>
 public interface IWeChatOperationsStatusService : IDomainService
 {
@@ -61,7 +61,7 @@ public sealed class WeChatOperationsStatusService : DomainServiceBase, IWeChatOp
 
     /// <summary>
     /// 构造（守卫工厂 ActivatorUtilities 帧内供给 IDomainUser；logger 可空——非域基础设施，
-    /// 零 DataService/门面构造注入（DI004）——ChannelConfig 经 <see cref="User"/> 懒加载 AOP 解析）。
+    /// 零 DataService/门面构造注入（DI004）——ChannelConfig 经 <c>User</c> 懒加载 AOP 解析）。
     /// </summary>
     public WeChatOperationsStatusService(IDomainUser user, ILogger? logger = null) : base(user)
     {

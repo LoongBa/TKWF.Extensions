@@ -7,7 +7,7 @@ namespace TKWF.Ext.Federation;
 /// <summary>
 /// 签票侧 payload 组装器（1.3 载荷切换——LoginEntryService / EventReplyHandlerBase 共用单点，测试锁定字段映射）。
 /// <para>组装语义（D03 §5.1a/条件 4）：<c>provider</c> 取自通道平台（wechat）；<c>channelType</c> 为<b>通道形态</b>
-/// （mp_service/mp_subscription...——Caller 传入或经 <see cref="Resolver"/> 从协议类型回退）；<b>协议通道类型</b>
+/// （mp_service/mp_subscription...——Caller 传入或经 <c>Resolver</c> 从协议类型回退）；<b>协议通道类型</b>
 /// （wechat_oauth/wechat_event）经 <see cref="FederatedTicketPayloadExtensions.ProtocolTypeKey"/> 双写进 Extensions——
 /// 兑付侧 <see cref="FederatedTicketPayloadExtensions.ToFederatedIdentity"/> 优先取回，缺失按形态回退表推断。</para>
 /// <para>⚠️ 命名碰撞红线（Oracle6 条件 4）：<c>channelForm</c> 参数是通道形态；协议类型应经

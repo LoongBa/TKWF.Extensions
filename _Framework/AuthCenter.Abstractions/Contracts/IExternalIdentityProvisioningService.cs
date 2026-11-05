@@ -7,7 +7,7 @@ namespace TKWF.Ext.AuthCenter;
 
 /// <summary>
 /// 外部身份 L2 预置 + 档案合并门面（D03 1.4 §6.1/§6.2 定稿）——事件路径专用。
-/// <para>与登录路径 <see cref="IFederatedLoginOrchestrator"/> 共享映射/建号内核（<c>PlatformAccountMapService</c> 映射 +
+/// <para>与登录路径 <c>IFederatedLoginOrchestrator</c> 共享映射/建号内核（<c>PlatformAccountMapService</c> 映射 +
 /// AuthFactor 唯一约束兜底），不新造。契约依赖 FA 的 <see cref="FederatedTicketPayload"/>（事件路径吃免登票据载荷——
 /// AuthCenter.Abstractions → Federation.Abstractions 契约包间引用，对齐 Navigation.Abstractions 先例）。</para>
 /// <para>注册：<c>AddConstructibleService&lt;IExternalIdentityProvisioningService, ExternalIdentityProvisioningService&gt;()</c>——

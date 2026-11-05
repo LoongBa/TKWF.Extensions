@@ -9,7 +9,7 @@ namespace TKWF.Ext.DataDictionary.Tests;
 /// <summary>
 /// FreeSqlDictionaryStore 测试（V0.3.0 领域自治根治重写——走生产路径）——
 /// 定义/项 CRUD、按编码查询、Upsert 幂等、异常静默。
-/// <para>生产路径：真实 DI（扩展 ConfigureServices + FreeSql 基础设施）+ <see cref="DomainUser{TUserInfo}"/> BindScope
+/// <para>生产路径：真实 DI（扩展 ConfigureServices + FreeSql 基础设施）+ <c>DomainUser&lt;TUserInfo&gt;</c> BindScope
 /// → <c>User.Use&lt;IDictionaryStore&gt;()</c> AOP 路径解析（AddConstructibleService 接口守卫工厂）。</para>
 /// </summary>
 public class FreeSqlDictionaryStoreTests

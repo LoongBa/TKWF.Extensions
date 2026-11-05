@@ -65,7 +65,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ✅ 当前 lockstep = **4.10.108**（2026-11-06——框架最新批次已推送 nuget.org，部署根 refs 已同步 4.10.108 全量 DLL）：扩展侧适配 = **CPM lockstep 即完成（零代码）**——13 包 4.10.105 -> 4.10.108（含 CodeGeneration 解除 4.10.107-local 本地锁切正式版，Analyzer 重建生效）；P3 客户端注解级告警属预期（框架侧可空性注解细化，客户端生成代码注解级告警不阻塞）。
+         ✅ 当前 lockstep = **4.10.108**（2026-11-06——框架最新批次已本地部署，部署根 refs 已同步 4.10.108 全量 DLL；nuget.org 在线索引传播中）：扩展侧适配 = **CPM lockstep 即完成（零代码）**——12 包 4.10.105 -> 4.10.108 正式版 + **CodeGeneration 临时锁 `4.10.108-local`**（AGENTS §6 本地 feed 机制——在线索引未传播前恒 NuGet 分析器走本地包，传播后切正式号并删本地源；注：本地模式下 CodeGeneration 恒用本地 nuget 包，与 DLL refs 保持一致）；P3 客户端注解级告警属预期（框架侧可空性注解细化，客户端生成代码注解级告警不阻塞）。
          ⚠️ 历史批次注记（历史 lockstep = **4.10.105**——nuget.org 32 包 4.10.105 已推送（dispatch run
           41968215380 publish job 实证 `=== OK: v4.10.105 ===`；flatcontainer 索引传播延迟不阻塞，publish
           job success 即闭环）；v4.10.105 为**遗留清理批次**：① SG2 新增 `TKWF_SG2a_WARN009` 显式诊断

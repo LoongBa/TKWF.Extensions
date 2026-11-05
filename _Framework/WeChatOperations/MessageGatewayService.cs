@@ -424,7 +424,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
                 await IdemDs.EntityCreateAsync(new WeChatMessageIdempotencyEntity
                 {
                     IdempotencyKey = key,
-                    ChannelId = ctx.ChannelId,
+                    ChannelId = ctx.ChannelId ?? string.Empty,
                     MsgId = ctx.MsgId,
                     FromUserName = fromUserName,
                     CreateTime = ToDateTime(ctx.CreateTime),
@@ -445,8 +445,8 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
         }
 
         // ③ 路由规则匹配（运行库 matcher——实体投影 descriptor + RouteRuleCriteria）
-        var rules = await RuleDs.GetEnabledRulesAsync(ctx.ChannelId, ct);
-        var criteria = new RouteRuleCriteria(ctx.ChannelId, ctx.MsgType, ctx.Event, ctx.Content);
+        var rules = await RuleDs.GetEnabledRulesAsync(ctx.ChannelId ?? string.Empty, ct);
+        var criteria = new RouteRuleCriteria(ctx.ChannelId ?? string.Empty, ctx.MsgType, ctx.Event, ctx.Content);
         var matched = WeChatMessageRouteRuleMatcher.Match(rules.Select(ToDescriptor), criteria);
 
         if (matched is null)
@@ -475,7 +475,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
                 try
                 {
                     logId = await User.Use<IMessageForwardDispatcher>().EnqueueAsync(
-                        ctx.ChannelId, matched.EndpointId ?? 0, ctx.RawXml ?? string.Empty,
+                        ctx.ChannelId ?? string.Empty, matched.EndpointId ?? 0, ctx.RawXml ?? string.Empty,
                         ctx.MsgId, fromUserName, ctx.MsgType, matched.Id, matched.ForwardMode, key, ct);
                 }
                 catch (Exception ex) when (ct.IsCancellationRequested is false)
@@ -640,7 +640,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
         WechatEventContext ctx, int status, long? matchRuleId, int forwardMode, long? endpointId, string? errorMsg, DateTime now)
         => new()
         {
-            ChannelId = ctx.ChannelId,
+            ChannelId = ctx.ChannelId ?? string.Empty,
             MsgId = ctx.MsgId,
             FromUserName = ctx.FromUserName ?? ctx.OpenId ?? string.Empty,
             MessageType = ctx.MsgType ?? string.Empty,

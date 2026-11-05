@@ -91,7 +91,7 @@ public sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginServ
         }
 
         // 取持久化账号（签发需账号锚点；AuthLevel 由 AuthFactor 派生——V0.11.0 T9）
-        var account = await AccountQueryService.GetByUIdAsync(result.UserId, ct);
+        var account = await AccountQueryService.GetByUIdAsync(result.UserId!, ct);
         if (account is null)
         {
             _logger.LogWarning("密码登录编排失败——账号查询返回 null（UserId={UserId}）", result.UserId);

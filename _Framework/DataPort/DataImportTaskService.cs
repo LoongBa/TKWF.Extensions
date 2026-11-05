@@ -76,7 +76,7 @@ namespace TKWF.Ext.DataPort
 
             // 3. 新记录：创建 Processing 状态
             var batchNo = Guid.NewGuid().ToString("N");
-            DataImportRecordEntity record;
+            DataImportRecordEntity? record;
             try
             {
                 record = new DataImportRecordEntity
@@ -93,6 +93,7 @@ namespace TKWF.Ext.DataPort
 
                 await DataService.CreateAsync(record, ct);
                 record = await DataService.GetByBatchNoAsync(batchNo, ct);
+                if (record is null) throw new InvalidOperationException("导入批次创建后查询失败");
             }
             catch (Exception)
             {

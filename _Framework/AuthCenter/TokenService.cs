@@ -189,7 +189,7 @@ public sealed class TokenService : DomainServiceBase, ITokenService
             throw new AuthenticationException("TOKEN_REVOKED");
         }
 
-        var authType = root.TryGetProperty("authType", out var atEl) ? atEl.GetString() : AuthTypes.Sms;
+        var authType = root.TryGetProperty("authType", out var atEl) ? (atEl.GetString() ?? AuthTypes.Sms) : AuthTypes.Sms;
         var authLevel = root.TryGetProperty("auth_level", out var alEl) && alEl.TryGetInt32(out var alVal) ? alVal : (int)AuthLevel.Phone;
         // T5（2026-10-09 三层边界）：回读 channel_type claim（外部 IdP 登录 token 非空）
         var channelType = root.TryGetProperty("channel_type", out var ctEl) ? ctEl.GetString() : null;

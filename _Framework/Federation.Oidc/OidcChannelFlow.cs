@@ -171,7 +171,7 @@ public sealed class OidcChannelFlow : IDisposable
         var tokenUri = Resolve(config.TokenUri, discovery?.TokenUri, null) ?? "https://invalid.local/token";
         var engine = new OAuthClient(_httpClient, BuildEngineOptions(config, authorizeUri, tokenUri, userInfoUri, ""));
 
-        OAuthUserInfoResult result;
+        OAuthUserInfoResult? result;
         try
         {
             result = await engine.FetchUserInfoAsync(
@@ -182,6 +182,8 @@ public sealed class OidcChannelFlow : IDisposable
             _logger.LogWarning("OIDC userinfo 获取失败（懒加载降级 null）：{Msg}", ex.Message);
             return null;
         }
+
+        if (result is null) return null; // 引擎空结果（非异常）— 与异常分支同语义：降级 null
 
         // 引擎结构化字段（sub/email/name/picture）+ 方言字段经 Raw 透传口提取（email_verified/preferred_username）
         var raw = result.Raw;

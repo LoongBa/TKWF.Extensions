@@ -19,10 +19,10 @@ public interface IFeatureManager : IDomainService
     Task<bool> IsEnabledAsync(string name, IDomainUser? user, CancellationToken ct = default);
 
     /// <summary>设置 Feature 值（管理写路径——Global 层应用层唯一性保证 + 缓存失效；写异常传播）。</summary>
-    Task SetValueAsync(string name, string value, string providerName, string providerKey, CancellationToken ct = default);
+    Task SetValueAsync(string name, string value, string providerName, string? providerKey, CancellationToken ct = default);
 
     /// <summary>删除 Feature 值（缓存失效；写异常传播）。</summary>
-    Task DeleteValueAsync(string name, string providerName, string providerKey, CancellationToken ct = default);
+    Task DeleteValueAsync(string name, string providerName, string? providerKey, CancellationToken ct = default);
 
     /// <summary>全部定义（管理/展示）。</summary>
     Task<IReadOnlyList<FeatureDefinition>> GetDefinitionsAsync(CancellationToken ct = default);
@@ -44,5 +44,5 @@ public interface IFeatureManager : IDomainService
     /// <summary>类型化写入（v0.3.0）——value 序列化为规范字符串后走 <see cref="SetValueAsync(string, string, string, string, CancellationToken)"/>（含写时校验）。
     /// <para>映射：bool → "true"/"false"（规范小写）；int/long/decimal/double → InvariantCulture；
     /// DateTime → ISO8601（"O"）；string 原样；其他（含 Json 对象/数组/record）→ <c>JsonSerializer.Serialize</c>。</para></summary>
-    Task SetValueAsync<T>(string name, T value, string providerName, string providerKey, CancellationToken ct = default);
+    Task SetValueAsync<T>(string name, T value, string providerName, string? providerKey, CancellationToken ct = default);
 }

@@ -27,12 +27,12 @@ public partial class FeatureManagementApiService : DomainServiceBase
     }
 
     /// <summary>设置 Feature 值（管理写路径——经 Manager：Global 唯一性 + 缓存失效 + 写异常传播）。</summary>
-    public Task SetFeatureValueAsync(string name, string value, string providerName, string providerKey,
+    public Task SetFeatureValueAsync(string name, string value, string providerName, string? providerKey,
         CancellationToken ct = default)
         => Manager.SetValueAsync(name, value, providerName, providerKey, ct);
 
     /// <summary>删除 Feature 值（经 Manager：缓存失效）。</summary>
-    public Task DeleteFeatureValueAsync(string name, string providerName, string providerKey,
+    public Task DeleteFeatureValueAsync(string name, string providerName, string? providerKey,
         CancellationToken ct = default)
         => Manager.DeleteValueAsync(name, providerName, providerKey, ct);
 

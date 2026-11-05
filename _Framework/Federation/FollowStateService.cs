@@ -130,7 +130,7 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
         // P1（DMP-Lite 反馈）：EntitySelectAsync 默认 limit=100 静默截断——分批循环全量取（跨渠道反查语义）
         var list = await SelectAllAsync(
             (s, l, c) => States.EntitySelectAsync(x => x.ExternalUserId == externalUserId, s, l, ct: c), ct: ct);
-        return list.Select(ToDto).ToList();
+        return list.Select(ToDto).OfType<FollowStateDto>().ToList();
     }
 
     /// <inheritdoc />
@@ -183,7 +183,7 @@ internal sealed class FollowStateService : DomainServiceBase, IFollowStateServic
             else
             {
                 var expect = ToDto(ReplayState(channelId, group.Key, group));
-                if (state.IsFollowing != expect.IsFollowing
+                if (state.IsFollowing != expect!.IsFollowing
                     || state.SubscribedAt != expect.SubscribedAt
                     || state.UnsubscribedAt != expect.UnsubscribedAt)
                 {

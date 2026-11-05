@@ -71,7 +71,7 @@ public abstract class EventReplyHandlerBase : DomainServiceBase, IEventReplyHand
         // 反查通道配置（dispatch.Event.ChannelId → ChannelConfig——入口一次查询，供子类 ReplyContext + 平台段 URL 共用；
         // 查不到 → 不回复，对齐"无法构造有效图文链接则不拦截业务 handler"语义）
         var channelId = dispatch?.Event?.ChannelId;
-        if (string.IsNullOrWhiteSpace(channelId))
+        if (dispatch is null || string.IsNullOrWhiteSpace(channelId))
             return null;
         var channelCfg = await User.Use<IChannelRegistry>().GetByAliasOrIdAsync(channelId, ct);
         if (channelCfg is null)

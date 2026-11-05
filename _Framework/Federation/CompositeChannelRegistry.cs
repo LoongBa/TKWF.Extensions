@@ -75,7 +75,7 @@ public sealed class CompositeChannelRegistry : DomainServiceBase, IChannelRegist
 
         var key = ChannelCacheKeys.Channel(channelId);
         if (_cache.TryGetValue(key, out ChannelConfig? cached) && cached != null)
-            return Task.FromResult(cached);
+            return Task.FromResult<ChannelConfig?>(cached);
 
         var cfg = FirstMatch(src => src.ChannelId == channelId);
         if (cfg != null)
@@ -109,7 +109,7 @@ public sealed class CompositeChannelRegistry : DomainServiceBase, IChannelRegist
     {
         var key = ChannelCacheKeys.Default;
         if (_cache.TryGetValue(key, out ChannelConfig? cached) && cached != null)
-            return Task.FromResult(cached);
+            return Task.FromResult<ChannelConfig?>(cached);
 
         // 选区语义：IsDefault 且启用 → 首个启用（全停用 → null，fail-closed）；
         // 取自已去重的合并列表，保证与 GetAsync/GetAllAsync 同源（避免低优先重复项与高优先停用项取向不一致）

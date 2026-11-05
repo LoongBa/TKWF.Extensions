@@ -144,7 +144,7 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
     /// </summary>
     protected void LogProbeBranch(WechatEventContext ctx)
     {
-        _logger.LogInformation(
+        _logger?.LogInformation(
             "PROBE branch=gated swallowed：MsgType={MsgType} Event={Event} ChannelId={ChannelId} OpenId={OpenId}",
             ctx.MsgType, ctx.Event, ctx.ChannelId, ctx.OpenId);
     }

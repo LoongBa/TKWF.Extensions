@@ -107,7 +107,7 @@ public sealed class FeatureManager : DomainServiceBase, IFeatureManager
     }
 
     /// <inheritdoc />
-    public async Task SetValueAsync(string name, string value, string providerName, string providerKey,
+    public async Task SetValueAsync(string name, string value, string providerName, string? providerKey,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -183,7 +183,7 @@ public sealed class FeatureManager : DomainServiceBase, IFeatureManager
     }
 
     /// <inheritdoc />
-    public async Task DeleteValueAsync(string name, string providerName, string providerKey,
+    public async Task DeleteValueAsync(string name, string providerName, string? providerKey,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -232,7 +232,7 @@ public sealed class FeatureManager : DomainServiceBase, IFeatureManager
     }
 
     /// <inheritdoc />
-    public async Task SetValueAsync<T>(string name, T value, string providerName, string providerKey,
+    public async Task SetValueAsync<T>(string name, T value, string providerName, string? providerKey,
         CancellationToken ct = default)
         => await SetValueAsync(name, SerializeValue(value), providerName, providerKey, ct);
 

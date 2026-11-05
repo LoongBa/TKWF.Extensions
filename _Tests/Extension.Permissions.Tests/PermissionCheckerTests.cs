@@ -101,7 +101,7 @@ public class PermissionCheckerTests
 
         var user = new DomainUser<SimpleUserInfo>
         {
-            UserInfo = anonymous ? null : (userInfo ?? new SimpleUserInfo(UserId, $"用户-{UserId}"))
+            UserInfo = anonymous ? null! : (userInfo ?? new SimpleUserInfo(UserId, $"用户-{UserId}"))
         };
         return new PermissionChecker<SimpleUserInfo>(user, repository, roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }

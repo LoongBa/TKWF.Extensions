@@ -492,7 +492,7 @@ internal static class FederationEndpointHost
                 {
                     var reply = handler.HandleAsync(dispatch, ct).GetAwaiter().GetResult();
                     if (reply is not null)
-                        return Task.FromResult(reply);
+                        return Task.FromResult<EventReplyResult?>(reply);
                 }
             }
             foreach (var handler in new[] { EventHandler1, EventHandler2 })
@@ -501,7 +501,7 @@ internal static class FederationEndpointHost
                     continue;
                 var reply = handler.HandleAsync(dispatch, ct).GetAwaiter().GetResult();
                 if (reply is not null)
-                    return Task.FromResult(reply);
+                    return Task.FromResult<EventReplyResult?>(reply);
             }
 
             return Task.FromResult<EventReplyResult?>(null);

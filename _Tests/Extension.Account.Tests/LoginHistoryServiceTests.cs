@@ -269,7 +269,7 @@ public class LoginHistoryServiceTests
             Login("alice", 1, "10.0.0.1", "Failed"),
             Login("bob", 2, "10.0.0.1", "Failed"),
             Login("carol", 3, "10.0.0.2", "Failed"),
-            Login("dave", 4, null, "Failed"),            // IP null 不计入
+            Login("dave", 4, null!, "Failed"),            // IP null 不计入
             Login("erin", 5, "", "Failed"));             // IP 空串不计入
 
         var service = user.Use<ILoginHistoryService>();

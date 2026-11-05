@@ -127,7 +127,7 @@ public class SecurityLogAnalyticsServiceTests
         await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null));   // IP 1: 2 次
         await store.SaveAsync(Login("bob", 2, "10.0.0.1", "Failed", null));
         await store.SaveAsync(Login("carol", 3, "10.0.0.2", "Failed", null));   // IP 2: 1 次
-        await store.SaveAsync(Login("dave", 4, null, "Failed", null));          // IP null: 不应计入
+        await store.SaveAsync(Login("dave", 4, null!, "Failed", null));          // IP null: 不应计入
         await store.SaveAsync(Login("erin", 5, "", "Failed", null));            // IP 空串: 不应计入
 
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();

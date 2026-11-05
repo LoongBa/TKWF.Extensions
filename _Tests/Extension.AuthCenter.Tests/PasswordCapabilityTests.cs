@@ -502,7 +502,7 @@ public class PasswordCapabilityTests
         var msg = FakeEmailSender.LastMessage!;
         Assert.NotNull(msg);
         Assert.Equal("tpl@test.dev", msg.To);
-        var code = System.Text.RegularExpressions.Regex.Match(msg.Body, @"(\d{8})").Groups[1].Value;
+        var code = System.Text.RegularExpressions.Regex.Match(msg.Body!, @"(\d{8})").Groups[1].Value;
         Assert.Contains(code, msg.Subject);                       // ① Subject 模板 {code} 替换
         Assert.Contains(code, msg.Body);                          // ① Body 模板 {code} 替换
         Assert.Contains("15 分钟内有效", msg.Body);               // ③ 占位符 {expiresInMinutes} 替换 = Options TTL

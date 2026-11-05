@@ -14,7 +14,7 @@ public class RepurchaseRateCalculatorTests
         if (orderTimeField is { } timeField)
             parameters.Add(("orderTimeField", timeField));
         if (windowDays is not null)
-            parameters.Add(("windowDays", windowDays.ToString()));
+            parameters.Add(("windowDays", windowDays.ToString()!));
         var definition = TestHelper.Def("repurchase-rate", "repurchase-rate", parameters.ToArray());
         return _calculator.Calculate(rows.Select(r => new MetricRow(r, Accessor)).ToList(), definition);
     }

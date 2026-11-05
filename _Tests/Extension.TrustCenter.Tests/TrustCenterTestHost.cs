@@ -81,7 +81,7 @@ internal static class TrustCenterTestHost
     /// <summary>构造测试用 TrustCenterOptions（生产模式 + EC 密钥 + AES-GCM 密钥文件【实际写入】）。</summary>
     public static TrustCenterOptions CreateOptions(string? kid = "sso-test-key-1")
     {
-        var (privatePath, publicPath) = CreateEcKeyFiles(kid);
+        var (privatePath, publicPath) = CreateEcKeyFiles(kid ?? "sso-test-key-1");
         var aesKeyPath = Path.Combine(Path.GetTempPath(), "tkwf-trustcenter-tests-aes-" + Guid.NewGuid().ToString("N") + ".key");
         // 生产模式（IsProduction=true）要求密钥文件已预置——测试宿主实际写入 32 字节
         if (!File.Exists(aesKeyPath))
@@ -90,8 +90,8 @@ internal static class TrustCenterTestHost
         {
             Issuer = "https://sso.test.local",
             SigningKeyPath = privatePath,
-            CurrentKid = kid,
-            SigningKeys = [new FederationSigningKeyConfig { Kid = kid, PrivateKeyPath = privatePath, PublicKeyPath = publicPath }],
+            CurrentKid = kid ?? "sso-test-key-1",
+            SigningKeys = [new FederationSigningKeyConfig { Kid = kid ?? "sso-test-key-1", PrivateKeyPath = privatePath, PublicKeyPath = publicPath }],
             SecretEncryptionKeyPath = aesKeyPath,
             IsProduction = true,
         };

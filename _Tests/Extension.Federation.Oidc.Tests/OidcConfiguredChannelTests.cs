@@ -93,7 +93,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
 
         Assert.False(result.Success);
         Assert.Null(result.ExternalUserId);
-        Assert.NotEmpty(result.FailReason);   // 签名验签失败（不静默放行）
+        Assert.NotEmpty(result.FailReason!);   // 签名验签失败（不静默放行）
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
         var result = await channel.AuthenticateAsync(CreateCode(), CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.NotEmpty(result.FailReason);
+        Assert.NotEmpty(result.FailReason!);
     }
 
     [Fact]

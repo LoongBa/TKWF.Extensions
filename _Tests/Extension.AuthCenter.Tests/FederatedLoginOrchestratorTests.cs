@@ -314,9 +314,9 @@ public class FederatedLoginOrchestratorTests
         {
             GetByUidCalls++;
             LastGetByUidArg = uid;
-            if (Account is not null) return Task.FromResult(Account);                                  // 直读命中（恒配置场景）
+            if (Account is not null) return Task.FromResult<AuthAccountEntity?>(Account);                                  // 直读命中（恒配置场景）
             if (_createdAccounts.TryGetValue(uid, out var created)) return Task.FromResult<AuthAccountEntity?>(created);  // 建号回读
-            if (MappedAccount is not null && uid == MappedAccount.UId) return Task.FromResult(MappedAccount);  // 映射回读
+            if (MappedAccount is not null && uid == MappedAccount.UId) return Task.FromResult<AuthAccountEntity?>(MappedAccount);  // 映射回读
             return Task.FromResult<AuthAccountEntity?>(null);                                           // 直读未命中
         }
         public Task<AuthAccountEntity?> GetByPhoneAsync(string phone, CancellationToken ct = default) => Task.FromResult<AuthAccountEntity?>(null);

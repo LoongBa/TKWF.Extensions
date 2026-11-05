@@ -144,7 +144,7 @@ public class MicrosoftOidcChannelTests : MicrosoftChannelTestHost
 
         Assert.False(result.Success);
         Assert.Null(result.ExternalUserId);
-        Assert.NotEmpty(result.FailReason);
+        Assert.NotEmpty(result.FailReason!);
     }
 
     [Fact]

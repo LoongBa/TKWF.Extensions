@@ -48,7 +48,7 @@ public sealed class EventReplyHandlerBaseTests : TestHostBase
         return new ChannelEventDispatch(
             new ChannelEvent
             {
-                ChannelId = dict.TryGetValue("channel_id", out var cid) ? cid : "",
+                ChannelId = dict.TryGetValue("channel_id", out var cid) ? cid ?? "" : "",
                 ChannelType = "probe_event",
                 ExternalUserId = dict.TryGetValue("external_user_id", out var ext) ? ext ?? "" : "",
                 EventType = "probe",

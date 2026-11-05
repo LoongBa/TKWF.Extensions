@@ -96,7 +96,7 @@ public class PermissionCheckerRoleTests
 
         var user = new DomainUser<SimpleUserInfo>
         {
-            UserInfo = anonymous ? null : userInfo
+            UserInfo = anonymous ? null! : userInfo!
         };
         return new PermissionChecker<SimpleUserInfo>(user, repository, roleProvider ?? new DefaultRoleProvider<SimpleUserInfo>());
     }

@@ -96,11 +96,11 @@ public class FeatureValueTypeTests
         var config = new GrayConfig { Percent = 20, Groups = ["beta", "gamma"] };
         await host.Manager.SetValueAsync(GrayConfigFeature, config, FeatureProviders.Global, null, CancellationToken.None);
 
-        var result = await host.Manager.GetValueAsync<GrayConfig>(GrayConfigFeature, null, null, CancellationToken.None);
+        var result = await host.Manager.GetValueAsync<GrayConfig>(GrayConfigFeature, null, null!, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(20, result!.Percent);
-        Assert.Equal(["beta", "gamma"], result.Groups);
+        Assert.Equal(["beta", "gamma"], result!.Groups!);
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class FeatureValueTypeTests
         using var host = FeatureManagementTestHost.Create();
         await host.Manager.SetValueAsync(Theme, "dark", FeatureProviders.Global, null, CancellationToken.None);
 
-        var result = await host.Manager.GetValueAsync<string>(Theme, null, null, CancellationToken.None);
+        var result = await host.Manager.GetValueAsync<string>(Theme, null, null!, CancellationToken.None);
 
         Assert.Equal("dark", result);
     }
@@ -162,7 +162,7 @@ public class FeatureValueTypeTests
             UpdateTime = DateTime.UtcNow
         }, CancellationToken.None);
 
-        var result = await host.Manager.GetValueAsync<GrayConfig>(GrayConfigFeature, null, null, CancellationToken.None);
+        var result = await host.Manager.GetValueAsync<GrayConfig>(GrayConfigFeature, null, null!, CancellationToken.None);
 
         Assert.Null(result);
     }

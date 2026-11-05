@@ -99,7 +99,7 @@ public class GoogleOidcChannelTests : GoogleChannelTestHost
 
         Assert.False(result.Success);
         Assert.Null(result.ExternalUserId);
-        Assert.NotEmpty(result.FailReason);   // 签名验签失败（信任根负路径）
+        Assert.NotEmpty(result.FailReason!);   // 签名验签失败（信任根负路径）
     }
 
     [Fact]

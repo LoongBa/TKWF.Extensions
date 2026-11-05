@@ -232,7 +232,7 @@ public class FileManagerTests
 
         await host.Manager.RenameFileAsync(file.Id, "b.txt", CancellationToken.None);
 
-        var renamed = await host.Manager.GetFileAsync(file.Id, CancellationToken.None);
+        var renamed = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
         Assert.Equal("b.txt", renamed.Name);
         Assert.Equal(".txt", renamed.Extension);
     }
@@ -261,13 +261,13 @@ public class FileManagerTests
 
         // 同扩展名重命名 → 派生列不变（回归）
         await host.Manager.RenameFileAsync(file.Id, "b.txt", CancellationToken.None);
-        var sameExt = await host.Manager.GetFileAsync(file.Id, CancellationToken.None);
+        var sameExt = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
         Assert.Equal(".txt", sameExt.Extension);
         Assert.Equal("text/plain", sameExt.ContentType);
 
         // 跨扩展名重命名 → Extension/ContentType 由新扩展名服务端推导（C5 不变量）
         await host.Manager.RenameFileAsync(file.Id, "b.jpg", CancellationToken.None);
-        var crossExt = await host.Manager.GetFileAsync(file.Id, CancellationToken.None);
+        var crossExt = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
         Assert.Equal("b.jpg", crossExt.Name);
         Assert.Equal(".jpg", crossExt.Extension);
         Assert.Equal("image/jpeg", crossExt.ContentType);
@@ -336,7 +336,7 @@ public class FileManagerTests
 
         await host.Manager.MoveFileAsync(file.Id, dst.Id, CancellationToken.None);
 
-        var moved = await host.Manager.GetFileAsync(file.Id, CancellationToken.None);
+        var moved = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
         Assert.Equal(dst.Id, moved.FolderId);
     }
 

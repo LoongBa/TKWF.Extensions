@@ -76,7 +76,7 @@ public class FeatureValueEntityTests
         Assert.Equal(longJson, stored.Value);
 
         // 读回一致（字符串 + 类型化 Json 两条路径）
-        var readBack = await host.Manager.GetValueAsync<string>(GrayConfigFeature, null, null, CancellationToken.None);
+        var readBack = await host.Manager.GetValueAsync<string>(GrayConfigFeature, null, null!, CancellationToken.None);
         Assert.Equal(longJson, readBack);
 
         var typed = await host.Manager.GetValueAsync<JsonElement>(GrayConfigFeature, null, default, CancellationToken.None);

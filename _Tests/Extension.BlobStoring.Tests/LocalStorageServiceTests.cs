@@ -42,7 +42,7 @@ public class LocalStorageServiceTests : IDisposable
         var content = new MemoryStream(Encoding.UTF8.GetBytes("Hello, Blob!"));
 
         // Act
-        var result = await service.UploadAsync("test.txt", content, "text/plain");
+        var result = (await service.UploadAsync("test.txt", content, "text/plain"))!;
 
         // Assert
         Assert.Equal("test.txt", result.Name);
@@ -60,7 +60,7 @@ public class LocalStorageServiceTests : IDisposable
         using var uploadStream = new MemoryStream(original);
 
         // Act
-        var blobInfo = await service.UploadAsync("download.txt", uploadStream, "text/plain");
+        var blobInfo = (await service.UploadAsync("download.txt", uploadStream, "text/plain"))!;
         using var downloadStream = await service.DownloadAsync(blobInfo.Path);
 
         // Assert
@@ -76,7 +76,7 @@ public class LocalStorageServiceTests : IDisposable
         // Arrange
         var service = CreateService();
         using var uploadStream = new MemoryStream(Encoding.UTF8.GetBytes("Delete me"));
-        var blobInfo = await service.UploadAsync("delete.txt", uploadStream, "text/plain");
+        var blobInfo = (await service.UploadAsync("delete.txt", uploadStream, "text/plain"))!;
 
         // Act
         var result = await service.DeleteAsync(blobInfo.Path);
@@ -95,7 +95,7 @@ public class LocalStorageServiceTests : IDisposable
         // Arrange
         var service = CreateService();
         using var uploadStream = new MemoryStream(Encoding.UTF8.GetBytes("Exist check"));
-        var blobInfo = await service.UploadAsync("exists.txt", uploadStream, "text/plain");
+        var blobInfo = (await service.UploadAsync("exists.txt", uploadStream, "text/plain"))!;
 
         // Act
         var result = await service.ExistsAsync(blobInfo.Path);
@@ -118,7 +118,7 @@ public class LocalStorageServiceTests : IDisposable
         var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
 
         // Act — should not throw
-        var result = await service.UploadAsync("test.txt", content, "text/plain");
+        var result = (await service.UploadAsync("test.txt", content, "text/plain"))!;
 
         // Assert — V0.1.1 评审修复：失败返回 null（区分成功/失败）
         Assert.Null(result);
@@ -146,7 +146,7 @@ public class LocalStorageServiceTests : IDisposable
         var service = CreateService();
         var original = Encoding.UTF8.GetBytes("Streaming download content");
         using var uploadStream = new MemoryStream(original);
-        var blobInfo = await service.UploadAsync("stream.txt", uploadStream, "text/plain");
+        var blobInfo = (await service.UploadAsync("stream.txt", uploadStream, "text/plain"))!;
 
         // Act
         var stream = await service.DownloadAsync(blobInfo.Path);

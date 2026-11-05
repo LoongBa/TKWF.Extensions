@@ -81,7 +81,12 @@ public interface ILoginEntryService : IDomainService
     /// <para><see cref="TicketIssueResult.Ticket"/> = 裸票据串（<c>{ticket_value}</c> 替换值 / 消费方自拼 URL 原语）；
     /// <see cref="TicketIssueResult.Url"/> = 完整免登 URL（<c>{ticket}</c> 占位符替换值——<c>{baseUrl}{RoutePrefix}{TicketPath}?ticket={Ticket}</c>，
     /// 与 <see cref="BuildTicketUrlAsync"/> 逐字节等价）。<b>两值同票同源</b>——一次签票双形态（用户裁定：双占位符并存
-    /// 为合法场景，一次回复只签一次票，不置空任何一方）。</para>
+/// 为合法场景，一次回复只签一次票，不置空任何一方）。</para>
+    /// <para><b>基址兜底与 TTL 钳制（与 <see cref="BuildTicketUrlAsync"/> 同源对齐）</b>：三级基址
+    /// （ChannelBaseUrls → TestTicketEndpointBaseUrl → <paramref name="requestBaseUrl"/>）全空 → <c>CombineUrl</c>
+    /// 产<b>相对路径</b>（本站点同源兜底——与 <see cref="BuildTicketUrlAsync"/> 逐字节一致）；显式
+    /// <paramref name="ttlSeconds"/> 运行时钳到 <see cref="FederationLoginEntryOptions.MaxTicketTtlSeconds"/> 上限
+    /// （默认 120——Options 启动期校验 + 运行时钳制双层护栏）。</para>
     /// <para><b>裸票零日志出口</b>：本方法（含 dev 模式）不输出任何含票据的日志——完整 URL dev 日志出口
     /// 仅存于 <see cref="BuildTicketUrlAsync"/>（票据不落日志红线 §6.4 的强化形态）。</para>
     /// <para>fail-closed：未启用 / 签票失败 → null（调用方将占位符替换为空串，其余文本照常渲染）。</para>
@@ -103,9 +108,17 @@ public interface ILoginEntryService : IDomainService
 /// 签票结果（同票双形态——需求 B 双占位符并存共用同一票值）。
 /// <para><see cref="Ticket"/> = 裸票据串（<c>{ticket_value}</c> 占位符替换值 / 消费方自拼 URL 原语）；
 /// <see cref="Url"/> = 完整免登 URL（<c>{ticket}</c> 占位符替换值——扩展托管 URL 遗留形态）。
-/// 两值**同一张票**（一次签票双形态）；fail-closed 时整体 null。</para>
+/// <b>两值恒双非空</b>（同一张票的两个形态——构造即完整，不存在部分成功）；<b>任何失败路径
+/// 整体返回 null</b>（由 <see cref="ILoginEntryService.IssueTicketAsync"/> 的 <c>Task&lt;TicketIssueResult?&gt;</c> 外层 null 表达）。</para>
+/// <para>⚠️ <see cref="object.ToString"/> 已脱敏——<c>Ticket</c> 全串永不进入字符串输出/结构化日志
+/// （§6.4 票据不落日志红线的类型层诱导防护）。</para>
 /// </summary>
-public sealed record TicketIssueResult(string? Ticket, string? Url);
+public sealed record TicketIssueResult(string Ticket, string Url)
+{
+    /// <summary>脱敏覆盖（安全红线 §6.4——防 <c>$"{result}"</c>/结构化日志把票据全串带出：不含任何票值，
+    /// <c>Url</c> 亦仅作"含票 URL"占位省略）。</summary>
+    public override string ToString() => "TicketIssueResult { Ticket=***, Url=<含票URL省略> }";
+}
 
 /// <summary>
 /// 免登入口领域配置（<c>TKWF:Federation:LoginEntry</c> 节——配置分层 AGENTS §8：领域行为开关归领域节）。

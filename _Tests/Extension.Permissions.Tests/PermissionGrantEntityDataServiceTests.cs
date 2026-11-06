@@ -21,11 +21,15 @@ public class PermissionGrantEntityDataServiceTests
     private const string Provider = "User";
     private const string Key = "u-1001";
 
-    /// <summary>越权授权面守卫（2026-10-15 遗留登记⑥(a)——随 tag 发布验证）：<c>[GenerateController(FromDataService=true,
-    /// ExcludeMethods=Create/Update/Delete)]</c>——标准写 CRUD 不暴露 REST（防已认证用户自授 Admin.All），
-    /// 写入口收敛到 <see cref="PermissionGrantEntityDataService.SetGrantAsync"/>（upsert）/RevokeGrantAsync（撤销）。</summary>
+    /// <summary>越权授权面守卫：<c>[GenerateController(FromDataService=true, ExcludeMethods=...)]</c>——
+    /// 标准写 CRUD 不暴露 REST（防已认证用户自授 Admin.All），写入口收敛到
+    /// <see cref="PermissionGrantEntityDataService.SetGrantAsync"/>（upsert）/RevokeGrantAsync（撤销）。
+    /// <para>V0.9.7+：<c>GetGrantedNamesByProviderKeyAsync</c>（内部归因批量查询，GraphQL 不可映射）亦排除；
+    /// V0.9.9（DMP 裁定）：<c>GetGrantedNamesByProviderAsync</c>（HashSet 返回，同型）一并排除；
+    /// v4.10.113（ADR129）SG1b fallback 过滤链单源修复后，纯 ExcludeMethods 即生效
+    /// （此前该路径只认 [GenerateIgnore]，曾以双保险标注）。</para></summary>
     [Fact]
-    public void GenerateController_ExcludesStandardCrudWrites()
+    public void GenerateController_ExcludesStandardCrudWritesAndKeyMethods()
     {
         var attr = typeof(PermissionGrantEntityDataService).GetCustomAttributes(
             typeof(TKW.Framework.CodeGeneration.GenerateControllerAttribute), inherit: false)
@@ -36,6 +40,10 @@ public class PermissionGrantEntityDataServiceTests
         Assert.Contains("CreateAsync", attr.ExcludeMethods);                      // 标准写 CRUD 全部排除
         Assert.Contains("UpdateAsync", attr.ExcludeMethods);
         Assert.Contains("DeleteAsync", attr.ExcludeMethods);
+        Assert.Contains("GetGrantedNamesByProviderKeyAsync", attr.ExcludeMethods); // V0.9.7+：归因查询（字典）排除
+        Assert.Contains("GetGrantedNamesByProviderAsync", attr.ExcludeMethods);   // V0.9.9：归因查询（集合）排除
+        Assert.DoesNotContain("SetGrantAsync", attr.ExcludeMethods);              // upsert 写入口保留
+        Assert.DoesNotContain("RevokeGrantAsync", attr.ExcludeMethods);           // 撤销写入口保留
     }
 
     [Fact]

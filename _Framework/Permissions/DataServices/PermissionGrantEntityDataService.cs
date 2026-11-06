@@ -32,23 +32,24 @@ namespace TKWF.Ext.Permissions;
 // - 只读查询保留（GetByIdAsync/SelectAsync/SelectPageAsync/CountAsync）——只读无越权授权能力；
 //   业务读另有 GetByPermissionNameAsync/GetByProviderAsync/GetGrantAsync 覆盖主要查询模式。
 //
-// 【GEN007 修复（2026-11-06，DMP-Lite 转达方案 A）】
-// - ExcludeMethods 增 "GetGrantedNamesByProviderKeyAsync"——该方法为消费方 IPermissionStore
-//   批量归因的内部查询能力（返回 Dictionary<string, HashSet<string>>，GraphQL 不可映射；
-//   消费方 SG2a 经 FromDataService 扫描暴露面 → GEN007 error 编译阻塞）。
+// 【GEN007 修复（2026-11-06，DMP-Lite 转达方案 A；V0.9.9 扩展收敛 Provider 版）】
+// - ExcludeMethods 增 "GetGrantedNamesByProviderKeyAsync"（V0.9.7）+ "GetGrantedNamesByProviderAsync"（V0.9.9）——
+//   消费方 IPermissionStore 批量归因的内部查询能力（返回 Dictionary<string, HashSet<string>> / HashSet<string>，
+//   GraphQL 不可映射；消费方 SG2a 经 FromDataService 扫描暴露面 → GEN007 error 编译阻塞）。
 //   排除后：接口/实现保持 public（消费方 Store 经 User.Use<PermissionGrantEntityDataService>() 直调不受影响），
 //   仅控制器/REST/GraphQL 暴露面排除 → 消费方 WARN007（WebApi 看不到 Permissions 契约时）+ GEN007 双归零。
 // - v4.10.113（ADR129）已根治：SG1b fallback 过滤链单源修复——ExcludeMethods/IncludeMethods/[GenerateControllerMethod]
 //   在非泛型扩展 DataService 上生效（本仓 2026-11-06 转达的 fallback 缺陷）；本方法已移除 [GenerateIgnore]
-//   回退为纯 ExcludeMethods（实证：ExtI 6 方法/消费方控制器 0 命中）。
+//   回退为纯 ExcludeMethods（实证：ExtI 6 方法/消费方控制器 0 命中；V0.9.9 后 ExtI 5 方法）。
 [GenerateController(FromDataService = true,
     ExcludeMethods = new[]
     {
         "CreateAsync", "UpdateAsync", "DeleteAsync",
-        // GEN007 修复（2026-11-06，DMP-Lite 转达方案 A）：内部批量归因查询返回
-        // Dictionary<string, HashSet<string>>——GraphQL 不支持该返回类型（消费方 SG2a GEN007 编译阻塞）；
+        // GEN007 修复（2026-11-06，DMP-Lite 转达方案 A；V0.9.9 DMP 裁定扩展）：内部批量归因查询返回
+        // Dictionary<string, HashSet<string>> / HashSet<string>——GraphQL 不支持该返回类型（消费方 SG2a GEN007 编译阻塞）；
         // 本就不应暴露为 REST/GraphQL 管理 API（消费方 Store 经 User.Use<PermissionGrantEntityDataService>() 内部直调）。
         "GetGrantedNamesByProviderKeyAsync",
+        "GetGrantedNamesByProviderAsync",
     })]
 public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityDAC<PermissionGrantEntity> dac)
         : DomainDataServiceBase<PermissionGrantEntity, PermissionGrantEntityDto>(user, dac, hasSoftDelete: false)

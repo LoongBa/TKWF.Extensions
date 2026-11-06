@@ -115,7 +115,9 @@ public interface ILoginEntryService : IDomainService
 /// <b>两值恒双非空</b>（同一张票的两个形态——构造即完整，不存在部分成功）；<b>任何失败路径
 /// 整体返回 null</b>（由 <see cref="ILoginEntryService.IssueTicketAsync"/> 的 <c>Task&lt;TicketIssueResult?&gt;</c> 外层 null 表达）。</para>
 /// <para>⚠️ <see cref="object.ToString"/> 已脱敏——<c>Ticket</c> 全串永不进入字符串输出/结构化日志
-/// （§6.4 票据不落日志红线的类型层诱导防护）。</para>
+/// （§6.4 票据不落日志红线的类型层诱导防护）。<b>边界</b>：<c>ToString</c> 脱敏不覆盖结构化日志
+/// <c>@</c> 序列化（<c>Log("{@Result}", result)</c> 反射属性直出票值）——调用方不得对
+/// <see cref="TicketIssueResult"/> 做 <c>@</c> 结构化记录（零日志纪律在出口层 + 类型层双防护）。</para>
 /// </summary>
 public sealed record TicketIssueResult(string Ticket, string Url)
 {

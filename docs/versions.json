@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06",
+  "generatedAt": "2026-11-07",
   "repo": "TKWF.Extensions",
   "note": "发布事实源 = git tag（{Package}/vX.Y.Z）；README 版本一览表为展示层，打 tag 后须同步。生成：build/gen-versions.ps1",
   "commonTags": [
@@ -221,9 +221,9 @@
       "created": "2026-10-04"
     },
     "Permissions": {
-      "version": "0.9.7",
-      "tag": "Permissions/v0.9.7",
-      "created": "2026-11-06"
+      "version": "0.9.8",
+      "tag": "Permissions/v0.9.8",
+      "created": "2026-11-07"
     },
     "Permissions.Abstractions": {
       "version": "0.2.2",

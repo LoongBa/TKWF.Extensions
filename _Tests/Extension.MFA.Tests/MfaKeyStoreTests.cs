@@ -119,10 +119,10 @@ public class MfaKeyStoreTests
         using var host = MfaTestHost.Create();
         var userId = Guid.NewGuid().ToString("N");
 
-        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext());
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(), ct: TestContext.Current.CancellationToken);
         var plaintextSecret = ExtractSecret(enroll.ProvisioningUri!);
 
-        var row = (await host.Secrets.GetByUserAsync(userId)).Single();
+        var row = (await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken)).Single();
         Assert.NotNull(row.SecretEncrypted);
         // 明文不落库——DB 密文 ≠ 明文 Base32 secret
         Assert.NotEqual(plaintextSecret, row.SecretEncrypted);

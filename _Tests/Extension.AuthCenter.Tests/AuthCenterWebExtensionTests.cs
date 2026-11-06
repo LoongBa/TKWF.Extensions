@@ -49,10 +49,10 @@ public sealed class AuthCenterWebExtensionTests
     {
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("13800138000", "123456"));
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("13800138000", "123456"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("at-1", body!.AccessToken);
         Assert.Equal("Bearer", body.TokenType);
@@ -66,7 +66,7 @@ public sealed class AuthCenterWebExtensionTests
         // 400 已证明 handler 参数校验拦截（若门面被调会走 Fake 成功 200——无需断言 Invoked，共享 Fake 状态跨用例残留）
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("", ""));
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("", ""), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -80,7 +80,7 @@ public sealed class AuthCenterWebExtensionTests
         try
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
-            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("13800138000", "000000"));
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("13800138000", "000000"), cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
             Assert.Equal("SMS_CODE_MISMATCH", await ReadErrorCodeAsync(resp.Content));
@@ -96,7 +96,7 @@ public sealed class AuthCenterWebExtensionTests
     {
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/send-code", new SendSmsCodeRequest("13800138000", SmsScenes.Login));
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/send-code", new SendSmsCodeRequest("13800138000", SmsScenes.Login), cancellationToken: TestContext.Current.CancellationToken);
 
         // B3b：生成端点对 Task（void）默认 200（原 hand-written minimal API 显式 Results.NoContent → 204）
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -109,7 +109,7 @@ public sealed class AuthCenterWebExtensionTests
         AuthCenterEndpointHost.SmsVerification.Reset(); // 共享宿主——负向断言前置重置（V0.8.0）
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/send-code", new SendSmsCodeRequest("13800138000", "hack"));
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/send-code", new SendSmsCodeRequest("13800138000", "hack"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         Assert.Equal("INVALID_SCENE", await ReadErrorCodeAsync(resp.Content));
@@ -124,10 +124,10 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/wechat_oauth",
-            new Dictionary<string, string?> { ["code"] = "wx-code", ["channel_id"] = "fake-mp" });
+            new Dictionary<string, string?> { ["code"] = "wx-code", ["channel_id"] = "fake-mp" }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("at-1", body!.AccessToken);
         Assert.True(AuthCenterEndpointHost.ExternalLogin.Invoked);
@@ -144,7 +144,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
             var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/wechat_oauth",
-                new Dictionary<string, string?> { ["code"] = "wx-code", ["channel_id"] = "fake-mp" });
+                new Dictionary<string, string?> { ["code"] = "wx-code", ["channel_id"] = "fake-mp" }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
             Assert.Equal("EXTERNAL_IDP_NOT_CONFIGURED", await ReadErrorCodeAsync(resp.Content));
@@ -162,7 +162,7 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/wechat_oauth",
-            new Dictionary<string, string?> { ["channel_id"] = "fake-mp" });
+            new Dictionary<string, string?> { ["channel_id"] = "fake-mp" }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         Assert.Equal("INVALID_ARGUMENT", await ReadErrorCodeAsync(resp.Content));
@@ -178,7 +178,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
             var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/external/qq_oauth",
-                new Dictionary<string, string?> { ["code"] = "qq-code", ["channel_id"] = "qq-mp" });
+                new Dictionary<string, string?> { ["code"] = "qq-code", ["channel_id"] = "qq-mp" }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
             Assert.Equal("EXTERNAL_AUTH_FAILED", await ReadErrorCodeAsync(resp.Content));
@@ -194,10 +194,10 @@ public sealed class AuthCenterWebExtensionTests
     {
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/refresh", new RefreshRequest("rt-1"));
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/refresh", new RefreshRequest("rt-1"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("at-2", body!.AccessToken);
         Assert.True(AuthCenterEndpointHost.Token.RefreshInvoked);
@@ -211,7 +211,7 @@ public sealed class AuthCenterWebExtensionTests
         using var content = new StringContent(
             """{"refresh_token":"rt-2"}""",
             System.Text.Encoding.UTF8, "application/json");
-        var resp = await client.PostAsync($"{DefaultPrefix}/refresh", content);
+        var resp = await client.PostAsync($"{DefaultPrefix}/refresh", content, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("rt-2", AuthCenterEndpointHost.Token.LastRefreshToken);
@@ -224,8 +224,8 @@ public sealed class AuthCenterWebExtensionTests
         // 实现此前仅 camelCase）——V0.10.1 双发：snake_case 键 + camelCase 键并存，两类消费方零破坏
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/refresh", new RefreshRequest("rt-1"));
-        var raw = await resp.Content.ReadAsStringAsync();
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/refresh", new RefreshRequest("rt-1"), cancellationToken: TestContext.Current.CancellationToken);
+        var raw = await resp.Content.ReadAsStringAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains("\"access_token\":\"at-2\"", raw);
         Assert.Contains("\"accessToken\":\"at-2\"", raw);
@@ -246,7 +246,7 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", "valid-token");
 
-        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/logout", new { });
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/logout", new { }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("jti-test", AuthCenterEndpointHost.Token.RevokedJti);
@@ -258,10 +258,10 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/ticket/exchange",
-            new TicketExchangeRequest("t-1", "verifier", "app-1", "state-1"));
+            new TicketExchangeRequest("t-1", "verifier", "app-1", "state-1"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("at-3", body!.AccessToken);
         Assert.True(AuthCenterEndpointHost.Ticket.ExchangeInvoked);
@@ -275,7 +275,7 @@ public sealed class AuthCenterWebExtensionTests
         using var content = new StringContent(
             """{"ticket":"t-3","code_verifier":"pkce-3","app_id":"app-3","state":"st-3"}""",
             System.Text.Encoding.UTF8, "application/json");
-        var resp = await client.PostAsync($"{DefaultPrefix}/ticket/exchange", content);
+        var resp = await client.PostAsync($"{DefaultPrefix}/ticket/exchange", content, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.NotNull(AuthCenterEndpointHost.Ticket.LastRequest);
@@ -295,10 +295,10 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", "valid-token");
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/verify");
+        var resp = await client.GetAsync($"{DefaultPrefix}/verify", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<VerifyResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<VerifyResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.True(body!.Valid);
         Assert.Equal("u-100", body.UserId);                     // FakeTokenVerifier 载荷
@@ -319,7 +319,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
 
-            var resp = await client.GetAsync($"{DefaultPrefix}/verify");
+            var resp = await client.GetAsync($"{DefaultPrefix}/verify", cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
         }
@@ -337,10 +337,10 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", "valid-token");
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/grants?appId=app-1");
+        var resp = await client.GetAsync($"{DefaultPrefix}/grants?appId=app-1", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<GrantsResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<GrantsResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         var grant = Assert.Single(body!.Grants);
         Assert.Equal("app-1", grant.AppId);
@@ -363,7 +363,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
 
-            var resp = await client.GetAsync($"{DefaultPrefix}/grants?appId=app-1");
+            var resp = await client.GetAsync($"{DefaultPrefix}/grants?appId=app-1", cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
             Assert.False(AuthCenterEndpointHost.Grants.Invoked);   // 认证守卫先于查询——门面未执行查询
@@ -382,10 +382,10 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/verify",
-            new SmsVerifyRequest("13800138000", "123456", SmsScenes.Bind));
+            new SmsVerifyRequest("13800138000", "123456", SmsScenes.Bind), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<SmsVerifyResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<SmsVerifyResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.True(body!.Verified);
         Assert.True(AuthCenterEndpointHost.SmsVerification.SendCodeInvoked is false); // 独立校验不触发发送
@@ -397,7 +397,7 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/sms/verify",
-            new SmsVerifyRequest("13800138000", "123456", "hack"));
+            new SmsVerifyRequest("13800138000", "123456", "hack"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         Assert.Equal("INVALID_SCENE", await ReadErrorCodeAsync(resp.Content));
@@ -414,10 +414,10 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
-            new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", "wechat-event-1"));
+            new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", "wechat-event-1"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("at-t", body!.AccessToken);
         Assert.Equal("Bearer", body.TokenType);
@@ -436,7 +436,7 @@ public sealed class AuthCenterWebExtensionTests
         using var content = new StringContent(
             """{"ticket":"ticket-32B-base64url-abcdefghijklmnop","channel_id":"wechat-event-1"}""",
             System.Text.Encoding.UTF8, "application/json");
-        var resp = await client.PostAsync($"{DefaultPrefix}/login/ticket", content);
+        var resp = await client.PostAsync($"{DefaultPrefix}/login/ticket", content, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("wechat-event-1", AuthCenterEndpointHost.TicketLogin.LastChannelId);
@@ -448,7 +448,7 @@ public sealed class AuthCenterWebExtensionTests
         var client = AuthCenterEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
-            new ExternalTicketLoginRequest("", null));
+            new ExternalTicketLoginRequest("", null), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         Assert.Equal("INVALID_ARGUMENT", await ReadErrorCodeAsync(resp.Content));
@@ -463,7 +463,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
             var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
-                new ExternalTicketLoginRequest("ticket-expired-xxx", null));
+                new ExternalTicketLoginRequest("ticket-expired-xxx", null), cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
             Assert.Equal("TICKET_INVALID", await ReadErrorCodeAsync(resp.Content));
@@ -483,7 +483,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
             var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
-                new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", null));
+                new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", null), cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.TooManyRequests, resp.StatusCode);
             Assert.Equal("TICKET_RATE_LIMITED", await ReadErrorCodeAsync(resp.Content));
@@ -503,7 +503,7 @@ public sealed class AuthCenterWebExtensionTests
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
             var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket",
-                new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", null));
+                new ExternalTicketLoginRequest("ticket-32B-base64url-abcdefghijklmnop", null), cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
             Assert.Equal("TICKET_SERVICE_NOT_CONFIGURED", await ReadErrorCodeAsync(resp.Content));
@@ -580,10 +580,10 @@ public sealed class AuthCenterWebExtensionTests
         try
         {
             var client = AuthCenterEndpointHost.Server.CreateClient();
-            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("13800138000", "999999"));
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/sms", new SmsLoginRequest("13800138000", "999999"), cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-            var raw = await resp.Content.ReadAsStringAsync();
+            var raw = await resp.Content.ReadAsStringAsync(cancellationToken: TestContext.Current.CancellationToken);
             using var doc = JsonDocument.Parse(raw);
             var root = doc.RootElement;
             Assert.Equal("https://httpstatuses.io/400", root.GetProperty("Type").GetString());

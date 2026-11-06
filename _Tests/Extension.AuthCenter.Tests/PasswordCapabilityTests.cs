@@ -102,11 +102,11 @@ public class PasswordCapabilityTests
         await SeedAccountAsync(stub, "u-pp-1", "13800000001");
         var write = CreateAuthAccountService(stub);
         // 同盐：先算 clientHash 存库（SecurePassword 只存不算）——测试内先生成盐，用同盐算 clientHash 存 + 验证
-        await write.SetPasswordAsync("u-pp-1", ClientHash("Secret123!", Convert.FromHexString(storeSalt)), storeSalt);
+        await write.SetPasswordAsync("u-pp-1", ClientHash("Secret123!", Convert.FromHexString(storeSalt)), storeSalt, ct: TestContext.Current.CancellationToken);
 
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
         var result = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "13800000001", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt));
+            Identifier: "13800000001", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt), ct: TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         Assert.Equal("u-pp-1", result.UserId);
@@ -122,7 +122,7 @@ public class PasswordCapabilityTests
 
         var salt = NewSalt();   // 错密码 + 不同盐 → clientHash 段必然不匹配
         var result = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "13800000002", ClientHash: ClientHash("wrong", Convert.FromHexString(salt)), Salt: salt));
+            Identifier: "13800000002", ClientHash: ClientHash("wrong", Convert.FromHexString(salt)), Salt: salt), ct: TestContext.Current.CancellationToken);
 
         Assert.False(result.Success);
         Assert.Equal("PASSWORD_MISMATCH", result.FailReason);
@@ -137,7 +137,7 @@ public class PasswordCapabilityTests
 
         var salt = NewSalt();
         var result = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "u-pp-3", ClientHash: ClientHash("anything", Convert.FromHexString(salt)), Salt: salt));
+            Identifier: "u-pp-3", ClientHash: ClientHash("anything", Convert.FromHexString(salt)), Salt: salt), ct: TestContext.Current.CancellationToken);
 
         Assert.False(result.Success);
         Assert.Equal("PASSWORD_NOT_SET", result.FailReason);
@@ -160,7 +160,7 @@ public class PasswordCapabilityTests
         var salt = NewSalt();
         // B3b：门面抛 DomainException（PASSWORD_PROVIDER_NOT_ENABLED——EnabledAuthTypes fail-closed）
         var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
-            service.LoginAsync(new PasswordLoginRequest("u-anything", ClientHash("x", Convert.FromHexString(salt)), salt)));
+            service.LoginAsync(new PasswordLoginRequest("u-anything", ClientHash("x", Convert.FromHexString(salt)), salt), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("PASSWORD_PROVIDER_NOT_ENABLED", ex.ErrorCode);
     }
@@ -175,10 +175,10 @@ public class PasswordCapabilityTests
         var write = CreateAuthAccountService(stub);
 
         var salt = NewSalt();
-        var affected = await write.SetPasswordAsync("u-sp-1", ClientHash("NewSecret456!", Convert.FromHexString(salt)), salt);
+        var affected = await write.SetPasswordAsync("u-sp-1", ClientHash("NewSecret456!", Convert.FromHexString(salt)), salt, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, affected);
-        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-1");
+        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-1", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(reloaded);
         var factor = await GetPasswordFactorAsync(stub, "u-sp-1");
         Assert.False(string.IsNullOrEmpty(factor!.SecretHash));   // protected blob（AES-GCM 密文——非明文可读）
@@ -202,9 +202,9 @@ public class PasswordCapabilityTests
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => write.ChangePasswordAsync(
             "u-sp-2",
             ClientHash("wrong-old", Convert.FromHexString(wrongOldSalt)), wrongOldSalt,
-            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt));
+            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt, ct: TestContext.Current.CancellationToken));
         Assert.Equal("PASSWORD_MISMATCH", ex.Message);
-        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-2");
+        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-2", ct: TestContext.Current.CancellationToken);
         Assert.Equal(0, reloaded!.TokenVersion);   // 验旧失败不改写（直种 0 + 失败 0）
     }
 
@@ -221,15 +221,15 @@ public class PasswordCapabilityTests
         var newSalt = NewSalt();
         await write.ChangePasswordAsync("u-sp-3",
             ClientHash("OldSecret123!", Convert.FromHexString(storeSalt)), storeSalt,
-            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt);
+            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt, ct: TestContext.Current.CancellationToken);
 
-        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-3");
+        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sp-3", ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, reloaded!.TokenVersion);   // 直种 0 → 改密成功 TokenVersion++ = 1
 
         // 新密码可登录（SecurePassword 验证经 Unprotect 比对——新 clientHash 匹配）
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
         var login = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "13800000103", ClientHash: ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), Salt: newSalt));
+            Identifier: "13800000103", ClientHash: ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), Salt: newSalt), ct: TestContext.Current.CancellationToken);
         Assert.True(login.Success);
     }
 
@@ -243,13 +243,13 @@ public class PasswordCapabilityTests
         var write = CreateAuthAccountService(stub);
 
         var salt1 = NewSalt();
-        await write.SetPasswordAsync("u-pol-1", ClientHash("FirstPass1!", Convert.FromHexString(salt1)), salt1);
+        await write.SetPasswordAsync("u-pol-1", ClientHash("FirstPass1!", Convert.FromHexString(salt1)), salt1, ct: TestContext.Current.CancellationToken);
         var salt2 = NewSalt();
-        await write.SetPasswordAsync("u-pol-1", ClientHash("SecondPass2!", Convert.FromHexString(salt2)), salt2);
+        await write.SetPasswordAsync("u-pol-1", ClientHash("SecondPass2!", Convert.FromHexString(salt2)), salt2, ct: TestContext.Current.CancellationToken);
 
         // 历史防重用（EnforcePolicy=true 默认；HistoryRetentionCount=3 默认）：复用第 1 代密码 → PASSWORD_REUSE_REJECTED
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => write.SetPasswordAsync(
-            "u-pol-1", ClientHash("FirstPass1!", Convert.FromHexString(salt1)), salt1));
+            "u-pol-1", ClientHash("FirstPass1!", Convert.FromHexString(salt1)), salt1, ct: TestContext.Current.CancellationToken));
         Assert.Equal("PASSWORD_REUSE_REJECTED", ex.Message);
     }
 
@@ -262,21 +262,21 @@ public class PasswordCapabilityTests
         var (_, storeSalt) = await SeedAccountWithPasswordAsync(stub, "u-frz-1", "Secret123!", "13800000701");
 
         // 冻结（永久——无到期）
-        await stub.Use<IFreezeService>().FreezeAsync("u-frz-1", "manual", null, null);
-        Assert.True(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-1"));
+        await stub.Use<IFreezeService>().FreezeAsync("u-frz-1", "manual", null, null, ct: TestContext.Current.CancellationToken);
+        Assert.True(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-1", ct: TestContext.Current.CancellationToken));
 
         // 冻结拦截新签发（Provider 认证路径——ACCOUNT_FROZEN 先于 hash 比对；用存储盐算 clientHash 保证语义真实）
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
         var blocked = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "13800000701", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt));
+            Identifier: "13800000701", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt), ct: TestContext.Current.CancellationToken);
         Assert.False(blocked.Success);
         Assert.Equal("ACCOUNT_FROZEN", blocked.FailReason);
 
         // 解冻 → 恢复（同盐验证——正密码可登录）
-        await stub.Use<IFreezeService>().ReleaseAllFreezesAsync("u-frz-1", "admin-op");
-        Assert.False(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-1"));
+        await stub.Use<IFreezeService>().ReleaseAllFreezesAsync("u-frz-1", "admin-op", ct: TestContext.Current.CancellationToken);
+        Assert.False(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-1", ct: TestContext.Current.CancellationToken));
         var restored = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "13800000701", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt));
+            Identifier: "13800000701", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt), ct: TestContext.Current.CancellationToken);
         Assert.True(restored.Success);
     }
 
@@ -289,13 +289,13 @@ public class PasswordCapabilityTests
         // 冻结 + 已过期到期时间 → 活跃判定立即 false（到期自动失效）
         // ⚠️ 用 -30h 而非 -1min：SQLite 内存库 DateTime 按本地时区存取（FreeSql SQLite 无时区列），
         //    UTC 值落库/回读会整体偏移 ±14h 内——-30h 余量保证任何时区下回读仍为过去（到期判定稳）。
-        await stub.Use<IFreezeService>().FreezeAsync("u-frz-2", "manual", DateTime.UtcNow.AddHours(-30), null);
-        Assert.False(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-2"));
+        await stub.Use<IFreezeService>().FreezeAsync("u-frz-2", "manual", DateTime.UtcNow.AddHours(-30), null, ct: TestContext.Current.CancellationToken);
+        Assert.False(await stub.Use<IFreezeStateProvider>().IsFrozenAsync("u-frz-2", ct: TestContext.Current.CancellationToken));
 
         // 到期后放行（用存储盐——正密码可登录）
         var provider = new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance);
         var ok = await provider.AuthenticateAsync(new ProviderAuthenticateContext(
-            Identifier: "13800000702", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt));
+            Identifier: "13800000702", ClientHash: ClientHash("Secret123!", Convert.FromHexString(storeSalt)), Salt: storeSalt), ct: TestContext.Current.CancellationToken);
         Assert.True(ok.Success);
     }
 
@@ -317,11 +317,11 @@ public class PasswordCapabilityTests
         // 首次（错密码——Provider 失败，但 TryAcquire 成功消耗额度；B3b：非频控失败 → DomainException）
         var salt = NewSalt();
         await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
-            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt)));
+            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt), ct: TestContext.Current.CancellationToken));
 
         // 第二次 → TryAcquire 失败 → RateLimitedException（PASSWORD_RATE_LIMITED 锁定=限流，ADR 决策 2/3）
         var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.RateLimitedException>(() =>
-            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt)));
+            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt), ct: TestContext.Current.CancellationToken));
         Assert.Equal("PASSWORD_RATE_LIMITED", ex.ErrorCode);
     }
 
@@ -345,9 +345,9 @@ public class PasswordCapabilityTests
                 AuthType = AuthTypes.Password,
                 IsSuccess = false,
                 AttemptTime = DateTime.UtcNow,
-            });
+            }, ct: TestContext.Current.CancellationToken);
         }
-        Assert.False(await service.IsRateLimitedAsync("u-fl-1", AuthTypes.Password));
+        Assert.False(await service.IsRateLimitedAsync("u-fl-1", AuthTypes.Password, ct: TestContext.Current.CancellationToken));
 
         // 第 3 次 ≥ 阈值 3 → 限流
         await ds.CreateAsync(new AuthLoginAttemptEntity
@@ -356,8 +356,8 @@ public class PasswordCapabilityTests
             AuthType = AuthTypes.Password,
             IsSuccess = false,
             AttemptTime = DateTime.UtcNow,
-        });
-        Assert.True(await service.IsRateLimitedAsync("u-fl-1", AuthTypes.Password));
+        }, ct: TestContext.Current.CancellationToken);
+        Assert.True(await service.IsRateLimitedAsync("u-fl-1", AuthTypes.Password, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -372,15 +372,15 @@ public class PasswordCapabilityTests
         var ds = stub.Use<AuthLoginAttemptEntityDataService>();
 
         // 同一 IP 1 条记录（模拟分布式爆破起始）——< 阈值 2 → 不限流
-        await ds.CreateAsync(new AuthLoginAttemptEntity { UserIdentity = "u-a", IpAddress = "1.2.3.4", AuthType = AuthTypes.Password, IsSuccess = false, AttemptTime = DateTime.UtcNow });
-        Assert.False(await service.IsRateLimitedAsync("u-c", "1.2.3.4", AuthTypes.Password));
+        await ds.CreateAsync(new AuthLoginAttemptEntity { UserIdentity = "u-a", IpAddress = "1.2.3.4", AuthType = AuthTypes.Password, IsSuccess = false, AttemptTime = DateTime.UtcNow }, ct: TestContext.Current.CancellationToken);
+        Assert.False(await service.IsRateLimitedAsync("u-c", "1.2.3.4", AuthTypes.Password, ct: TestContext.Current.CancellationToken));
 
         // 第 2 条同 IP → IP 维度 ≥ 2 → 限流（即使单账号维度未命中——u-c 自身无记录）
-        await ds.CreateAsync(new AuthLoginAttemptEntity { UserIdentity = "u-b", IpAddress = "1.2.3.4", AuthType = AuthTypes.Password, IsSuccess = false, AttemptTime = DateTime.UtcNow });
-        Assert.True(await service.IsRateLimitedAsync("u-c", "1.2.3.4", AuthTypes.Password));
+        await ds.CreateAsync(new AuthLoginAttemptEntity { UserIdentity = "u-b", IpAddress = "1.2.3.4", AuthType = AuthTypes.Password, IsSuccess = false, AttemptTime = DateTime.UtcNow }, ct: TestContext.Current.CancellationToken);
+        Assert.True(await service.IsRateLimitedAsync("u-c", "1.2.3.4", AuthTypes.Password, ct: TestContext.Current.CancellationToken));
 
         // IP 为 null → 退化单维度（不按 IP 限流——u-c 单账号 60s 内 0 条 → false）
-        Assert.False(await service.IsRateLimitedAsync("u-c", null, AuthTypes.Password));
+        Assert.False(await service.IsRateLimitedAsync("u-c", null, AuthTypes.Password, ct: TestContext.Current.CancellationToken));
     }
 
     // ── 找回：SMS 统一完成（P1-NEW-1——clientHash 语义） ───────────────
@@ -400,9 +400,9 @@ public class PasswordCapabilityTests
 
         var newSalt = NewSalt();
         await service.CompleteResetSmsAsync("u-sms-reset", "13800000501", "123456",
-            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt);
+            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt, ct: TestContext.Current.CancellationToken);
 
-        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sms-reset");
+        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sms-reset", ct: TestContext.Current.CancellationToken);
         var factor = await GetPasswordFactorAsync(stub, "u-sms-reset");
         Assert.False(string.IsNullOrEmpty(factor!.SecretHash));   // protected blob 落库（Password 因子行）
         Assert.Equal(1, reloaded!.TokenVersion);                       // TokenVersion++
@@ -424,9 +424,9 @@ public class PasswordCapabilityTests
         var newSalt = NewSalt();
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.CompleteResetSmsAsync(
             "u-sms-reset2", "13800000502", "000000",
-            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt));
+            ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt, ct: TestContext.Current.CancellationToken));
         Assert.Equal("SMS_CODE_MISMATCH", ex.Message);
-        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sms-reset2");
+        var reloaded = await stub.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-sms-reset2", ct: TestContext.Current.CancellationToken);
         Assert.Null(await GetPasswordFactorAsync(stub, "u-sms-reset2"));   // 未改写
         Assert.Equal(0, reloaded!.TokenVersion);
     }
@@ -453,7 +453,7 @@ public class PasswordCapabilityTests
         await SeedAccountAsync(stub, "u-res-1", "13800000401");
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
-        var result = await service.InitiateEmailResetAsync("u-res-1");
+        var result = await service.InitiateEmailResetAsync("u-res-1", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("EMAIL_SENDER_NOT_CONFIGURED", result);
     }
@@ -471,7 +471,7 @@ public class PasswordCapabilityTests
         // 无 UserProfile（未绑定邮箱）
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
-        var result = await service.InitiateEmailResetAsync("u-res-2");
+        var result = await service.InitiateEmailResetAsync("u-res-2", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("EMAIL_NOT_BOUND", result);
     }
@@ -488,7 +488,7 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
         await SeedAccountAsync(stub, "u-res-tpl", "13800000403");
-        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-tpl", Email = "tpl@test.dev" });
+        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-tpl", Email = "tpl@test.dev" }, ct: TestContext.Current.CancellationToken);
 
         var options = new AuthCenterOptions();
         options.PasswordPolicy.ResetCodeValidityMinutes = 15;                    // ③ TTL 配置化
@@ -496,7 +496,7 @@ public class PasswordCapabilityTests
         options.PasswordPolicy.ResetEmailBodyTemplate = "码：{code}，{expiresInMinutes} 分钟内有效";
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(options), NullLogger<PasswordResetService>.Instance);
 
-        var result = await service.InitiateEmailResetAsync("u-res-tpl");
+        var result = await service.InitiateEmailResetAsync("u-res-tpl", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("EMAIL_RESET_CODE_SENT", result);
         var msg = FakeEmailSender.LastMessage!;
@@ -508,7 +508,7 @@ public class PasswordCapabilityTests
         Assert.Contains("15 分钟内有效", msg.Body);               // ③ 占位符 {expiresInMinutes} 替换 = Options TTL
         // ③ 落库 ExpireAt 按配置 TTL（15min）——用同表 CreateTime 抵消 SQLite DateTime 本地化 +8h 偏移
         //（ExpireAt 与 CreateTime 同为 UtcNow 落库、同偏移；差值 = 精确 TTL）
-        var record = await stub.Use<PasswordResetCodeEntityDataService>().GetLastUnconsumedAsync("u-res-tpl", "email");
+        var record = await stub.Use<PasswordResetCodeEntityDataService>().GetLastUnconsumedAsync("u-res-tpl", "email", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(record);
         var ttl = record!.ExpireAt - record.CreateTime;
         Assert.True(ttl > TimeSpan.FromMinutes(14) && ttl <= TimeSpan.FromMinutes(16),
@@ -525,11 +525,11 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
         await SeedAccountAsync(stub, "u-res-frz", "13800000404");
-        await stub.Use<IFreezeService>().FreezeAsync("u-res-frz", "manual", null, null);   // 永久冻结
+        await stub.Use<IFreezeService>().FreezeAsync("u-res-frz", "manual", null, null, ct: TestContext.Current.CancellationToken);   // 永久冻结
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
-            () => service.InitiateEmailResetAsync("u-res-frz"));
+            () => service.InitiateEmailResetAsync("u-res-frz", ct: TestContext.Current.CancellationToken));
         Assert.Equal("ACCOUNT_FROZEN", ex.Message);
     }
 
@@ -543,12 +543,12 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountService>(CreateAuthAccountService(user));
         });
         await SeedAccountAsync(stub, "u-res-frz2", "13800000405");
-        await stub.Use<IFreezeService>().FreezeAsync("u-res-frz2", "manual", DateTime.UtcNow.AddHours(1), null);   // 临时冻结
+        await stub.Use<IFreezeService>().FreezeAsync("u-res-frz2", "manual", DateTime.UtcNow.AddHours(1), null, ct: TestContext.Current.CancellationToken);   // 临时冻结
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
         var newSalt = NewSalt();
         var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
-            () => service.CompleteResetWithCodeAsync("u-res-frz2", "12345678", ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt));
+            () => service.CompleteResetWithCodeAsync("u-res-frz2", "12345678", ClientHash("NewSecret456!", Convert.FromHexString(newSalt)), newSalt, ct: TestContext.Current.CancellationToken));
         Assert.Equal("ACCOUNT_FROZEN", ex.Message);
     }
 
@@ -562,16 +562,16 @@ public class PasswordCapabilityTests
             services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(user));
         });
         await SeedAccountAsync(stub, "u-res-rl", "13800000406");
-        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-rl", Email = "rl@test.dev" });
+        await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity { UId = "u-res-rl", Email = "rl@test.dev" }, ct: TestContext.Current.CancellationToken);
 
         var service = new PasswordResetService(stub, stub.ServiceProvider!, CreateRateLimit(), Options.Create(new AuthCenterOptions()), NullLogger<PasswordResetService>.Instance);
 
-        var first = await service.InitiateEmailResetAsync("u-res-rl");
+        var first = await service.InitiateEmailResetAsync("u-res-rl", ct: TestContext.Current.CancellationToken);
         Assert.Equal("EMAIL_RESET_CODE_SENT", first);
 
         // 60s 重发间隔窗口内二次发起 → PASSWORD_RESET_RATE_LIMITED（独立 key，不干扰 pwd:reset:{id} 统一频控）
         var ex = await Assert.ThrowsAsync<System.Security.Authentication.AuthenticationException>(
-            () => service.InitiateEmailResetAsync("u-res-rl"));
+            () => service.InitiateEmailResetAsync("u-res-rl", ct: TestContext.Current.CancellationToken));
         Assert.Equal("PASSWORD_RESET_RATE_LIMITED", ex.Message);
     }
 
@@ -585,12 +585,12 @@ public class PasswordCapabilityTests
         var ds = stub.Use<UserProfileEntityDataService>();
 
         // 首次创建
-        var created = await ds.CreateOrUpdateAsync(new UserProfileEntity { UId = "u-up-1", Nickname = "初名" });
+        var created = await ds.CreateOrUpdateAsync(new UserProfileEntity { UId = "u-up-1", Nickname = "初名" }, ct: TestContext.Current.CancellationToken);
         Assert.Equal("初名", created.Nickname);
 
         // 二次 upsert（更新）
-        await ds.CreateOrUpdateAsync(new UserProfileEntity { UId = "u-up-1", Nickname = "改名", Email = "a@b.c" });
-        var reloaded = await ds.GetByUIdAsync("u-up-1");
+        await ds.CreateOrUpdateAsync(new UserProfileEntity { UId = "u-up-1", Nickname = "改名", Email = "a@b.c" }, ct: TestContext.Current.CancellationToken);
+        var reloaded = await ds.GetByUIdAsync("u-up-1", ct: TestContext.Current.CancellationToken);
         Assert.Equal("改名", reloaded!.Nickname);
         Assert.Equal("a@b.c", reloaded.Email);
     }

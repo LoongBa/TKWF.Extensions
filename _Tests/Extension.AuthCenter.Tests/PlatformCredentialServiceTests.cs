@@ -40,15 +40,15 @@ public class PlatformCredentialServiceTests
             AppId = "wx-123",
             AppName = "测试公众号"
         };
-        await service.CreateAsync(credential, "secret-abc");
+        await service.CreateAsync(credential, "secret-abc", ct: TestContext.Current.CancellationToken);
 
-        var stored = await ds.GetByAppAsync(TestPlatform, "mp");
+        var stored = await ds.GetByAppAsync(TestPlatform, "mp", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(stored);
         // DB 无明文
         Assert.DoesNotContain("secret-abc", stored!.AppSecretEncrypted);
 
         // 读路径解密
-        var secret = await service.GetSecretAsync(TestPlatform, "mp");
+        var secret = await service.GetSecretAsync(TestPlatform, "mp", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(secret);
         Assert.Equal("wx-123", secret!.AppId);
         Assert.Equal("secret-abc", secret.AppSecret);
@@ -58,9 +58,9 @@ public class PlatformCredentialServiceTests
     public async Task Create_DuplicateUniqueKey_Throws()
     {
         var (service, _) = CreateService();
-        await service.CreateAsync(new PlatformCredentialEntity { Platform = TestPlatform, AppType = "mp", AppId = "wx-1" }, "s1");
+        await service.CreateAsync(new PlatformCredentialEntity { Platform = TestPlatform, AppType = "mp", AppId = "wx-1" }, "s1", ct: TestContext.Current.CancellationToken);
         await Assert.ThrowsAnyAsync<System.Exception>(() =>
-            service.CreateAsync(new PlatformCredentialEntity { Platform = TestPlatform, AppType = "mp", AppId = "wx-1" }, "s2"));
+            service.CreateAsync(new PlatformCredentialEntity { Platform = TestPlatform, AppType = "mp", AppId = "wx-1" }, "s2", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -68,13 +68,13 @@ public class PlatformCredentialServiceTests
     {
         var (service, _) = CreateService();
         var credential = new PlatformCredentialEntity { Platform = TestPlatform, AppType = "mp", AppId = "wx-2" };
-        await service.CreateAsync(credential, "old-secret");
+        await service.CreateAsync(credential, "old-secret", ct: TestContext.Current.CancellationToken);
 
         // 更新（重加密）
-        var stored = await service.GetAsync(TestPlatform, "mp");
-        await service.UpdateAsync(stored!, "new-secret");
+        var stored = await service.GetAsync(TestPlatform, "mp", ct: TestContext.Current.CancellationToken);
+        await service.UpdateAsync(stored!, "new-secret", ct: TestContext.Current.CancellationToken);
 
-        var secret = await service.GetSecretAsync(TestPlatform, "mp");
+        var secret = await service.GetSecretAsync(TestPlatform, "mp", ct: TestContext.Current.CancellationToken);
         Assert.Equal("new-secret", secret!.AppSecret);
     }
 
@@ -83,11 +83,11 @@ public class PlatformCredentialServiceTests
     {
         var (service, ds) = CreateService();
         var credential = new PlatformCredentialEntity { Platform = TestPlatform, AppType = "mp", AppId = "wx-3" };
-        await service.CreateAsync(credential, "secret");
-        var id = (await ds.GetByAppAsync(TestPlatform, "mp"))!.Id;
+        await service.CreateAsync(credential, "secret", ct: TestContext.Current.CancellationToken);
+        var id = (await ds.GetByAppAsync(TestPlatform, "mp", ct: TestContext.Current.CancellationToken))!.Id;
 
-        await service.SetEnabledAsync(id, false);
-        var secret = await service.GetSecretAsync(TestPlatform, "mp");
+        await service.SetEnabledAsync(id, false, ct: TestContext.Current.CancellationToken);
+        var secret = await service.GetSecretAsync(TestPlatform, "mp", ct: TestContext.Current.CancellationToken);
         Assert.Null(secret);
     }
 }

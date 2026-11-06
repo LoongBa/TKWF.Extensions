@@ -128,7 +128,7 @@ public class JobHistoryCleanupTests
         var expired = await SeedExecutionAsync(user, "expired-1", DateTime.UtcNow.AddDays(-200));
         await SeedExecutionAsync(user, "expired-2", DateTime.UtcNow.AddDays(-365));
 
-        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync();
+        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.DeletedExecutions);
         Assert.Equal(0, result.DeletedResults);
@@ -142,7 +142,7 @@ public class JobHistoryCleanupTests
         var expired = await SeedExecutionAsync(user, "expired", DateTime.UtcNow.AddDays(-200));
         var recent = await SeedExecutionAsync(user, "recent", DateTime.UtcNow.AddDays(-1));
 
-        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync();
+        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.DeletedExecutions);
         var remaining = await GetAllExecutionIdsAsync(user);
@@ -157,7 +157,7 @@ public class JobHistoryCleanupTests
         var expired = await SeedResultAsync(user, "r-expired-1", DateTime.UtcNow.AddDays(-200));
         await SeedResultAsync(user, "r-expired-2", DateTime.UtcNow.AddDays(-900));
 
-        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync();
+        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.DeletedExecutions);
         Assert.Equal(2, result.DeletedResults);
@@ -172,7 +172,7 @@ public class JobHistoryCleanupTests
         var old = await SeedExecutionAsync(user, "old-10d", DateTime.UtcNow.AddDays(-10));
         var recent = await SeedExecutionAsync(user, "recent-2d", DateTime.UtcNow.AddDays(-2));
 
-        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync();
+        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.DeletedExecutions);
         var remaining = await GetAllExecutionIdsAsync(user);
@@ -187,7 +187,7 @@ public class JobHistoryCleanupTests
         await SeedExecutionAsync(user, "fresh-1", DateTime.UtcNow.AddDays(-1));
         await SeedResultAsync(user, "r-fresh-1", DateTime.UtcNow.AddDays(-1));
 
-        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync();
+        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.DeletedExecutions);
         Assert.Equal(0, result.DeletedResults);
@@ -201,7 +201,7 @@ public class JobHistoryCleanupTests
         for (int i = 0; i < 5; i++)
             await SeedExecutionAsync(user, $"batch-{i}", DateTime.UtcNow.AddDays(-200));
 
-        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync();
+        var result = await user.Use<IJobHistoryCleanupService>().CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.DeletedExecutions);
         Assert.Empty(await GetAllExecutionIdsAsync(user));
@@ -226,19 +226,19 @@ public class JobHistoryCleanupTests
             new FreeSqlEntityDAC<JobExecutionEntity>(new UnitOfWorkManager(fsql)));
         var resultDs = new JobResultEntityDataService(new StubDomainUser(),
             new FreeSqlEntityDAC<JobResultEntity>(new UnitOfWorkManager(fsql)));
-        await resultDs.EntityCreateAsync(CreateResult("r-ok-1", DateTime.UtcNow.AddDays(-200)));
-        await resultDs.EntityCreateAsync(CreateResult("r-ok-2", DateTime.UtcNow.AddDays(-300)));
+        await resultDs.EntityCreateAsync(CreateResult("r-ok-1", DateTime.UtcNow.AddDays(-200)), ct: TestContext.Current.CancellationToken);
+        await resultDs.EntityCreateAsync(CreateResult("r-ok-2", DateTime.UtcNow.AddDays(-300)), ct: TestContext.Current.CancellationToken);
 
         var logger = new CaptureLogger<JobHistoryCleanupService>();
         var service = CreateService(brokenExecDs, resultDs, logger: logger);
 
-        var result = await service.CleanupAsync();
+        var result = await service.CleanupAsync(ct: TestContext.Current.CancellationToken);
 
         // 执行侧失败静默（0 删 + Warning），结果侧正常清理
         Assert.Equal(0, result.DeletedExecutions);
         Assert.Equal(2, result.DeletedResults);
         Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("JobExecution"));
-        var remaining = await resultDs.EntitySelectAsync(e => true, 0, 10_000);
+        var remaining = await resultDs.EntitySelectAsync(e => true, 0, 10_000, ct: TestContext.Current.CancellationToken);
         Assert.Empty(remaining);
     }
 

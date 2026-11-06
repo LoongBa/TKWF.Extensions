@@ -30,7 +30,7 @@ public class SsoClientServiceTests
     public async Task Register_GeneratesSecretsEncrypted()
     {
         var (service, ds, _) = CreateService();
-        var client = await service.RegisterAsync(["https://app.example.com"], ["profile:basic"], default);
+        var client = await service.RegisterAsync(["https://app.example.com"], ["profile:basic"], TestContext.Current.CancellationToken);
 
         Assert.StartsWith("app-", client.AppId);
         Assert.Contains("https://app.example.com", client.Info.OriginWhitelist);
@@ -39,10 +39,10 @@ public class SsoClientServiceTests
         // ★2026-10-14 注册契约缺口修复：注册响应一次性携带明文 client_secret（RFC 7591）——
         // 非空 + 可经 ValidateClientCredentialAsync 通过（动态注册子应用兑现身份的关键）
         Assert.False(string.IsNullOrWhiteSpace(client.ClientSecret));
-        Assert.True(await service.ValidateClientCredentialAsync(client.AppId, client.ClientSecret, default));
+        Assert.True(await service.ValidateClientCredentialAsync(client.AppId, client.ClientSecret, TestContext.Current.CancellationToken));
 
         // 落库密文（AES-GCM）——明文绝不落库
-        var row = await ds.EntityGetAsync(m => m.AppId == client.AppId, default);
+        var row = await ds.EntityGetAsync(m => m.AppId == client.AppId, TestContext.Current.CancellationToken);
         Assert.NotNull(row);
         Assert.False(string.IsNullOrEmpty(row!.ClientSecretEncrypted));
         Assert.False(string.IsNullOrEmpty(row.HmacSecretEncrypted));
@@ -66,22 +66,22 @@ public class SsoClientServiceTests
             ClientSecretEncrypted = keys.Encrypt(clientSecret),
             HmacSecretEncrypted = keys.Encrypt(hmacSecret),
             IsEnabled = true,
-        }, default);
+        }, TestContext.Current.CancellationToken);
 
-        Assert.True(await service.ValidateClientCredentialAsync(appId, clientSecret, default));
-        Assert.False(await service.ValidateClientCredentialAsync(appId, "wrong-secret", default));
-        Assert.Equal(hmacSecret, await service.GetHmacSecretAsync(appId, default));
+        Assert.True(await service.ValidateClientCredentialAsync(appId, clientSecret, TestContext.Current.CancellationToken));
+        Assert.False(await service.ValidateClientCredentialAsync(appId, "wrong-secret", TestContext.Current.CancellationToken));
+        Assert.Equal(hmacSecret, await service.GetHmacSecretAsync(appId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task IsOriginAllowed_ExactMatch()
     {
         var (service, _, _) = CreateService();
-        var client = await service.RegisterAsync(["https://app.example.com"], ["profile:basic"], default);
+        var client = await service.RegisterAsync(["https://app.example.com"], ["profile:basic"], TestContext.Current.CancellationToken);
 
-        Assert.True(await service.IsOriginAllowedAsync(client.AppId, "https://app.example.com", default));
-        Assert.False(await service.IsOriginAllowedAsync(client.AppId, "https://evil.example.com", default));   // 不同 origin 拒
-        Assert.False(await service.IsOriginAllowedAsync(client.AppId, "https://app.example.com.evil.com", default)); // 子域混淆拒
-        Assert.False(await service.IsOriginAllowedAsync("app-not-exist", "https://app.example.com", default)); // 未注册拒
+        Assert.True(await service.IsOriginAllowedAsync(client.AppId, "https://app.example.com", TestContext.Current.CancellationToken));
+        Assert.False(await service.IsOriginAllowedAsync(client.AppId, "https://evil.example.com", TestContext.Current.CancellationToken));   // 不同 origin 拒
+        Assert.False(await service.IsOriginAllowedAsync(client.AppId, "https://app.example.com.evil.com", TestContext.Current.CancellationToken)); // 子域混淆拒
+        Assert.False(await service.IsOriginAllowedAsync("app-not-exist", "https://app.example.com", TestContext.Current.CancellationToken)); // 未注册拒
     }
 }

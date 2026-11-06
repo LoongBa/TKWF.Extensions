@@ -41,7 +41,7 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost(new FileManagementOptions { MaxUserFilesCount = 1 });
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "content-a"u8.ToArray());
 
         int blobsBefore = host.BlobCount();
@@ -56,7 +56,7 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost();   // 默认 null 不限制
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "content-a"u8.ToArray());
         var b = await UploadAsync(manager, folder.Id, "b.txt", "content-b"u8.ToArray());
 
@@ -70,7 +70,7 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost(new FileManagementOptions { MaxUserSizeBytes = 20 });
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "0123456789"u8.ToArray());   // 10 字节
 
         int blobsBefore = host.BlobCount();
@@ -86,7 +86,7 @@ public class FileUserQuotaTests
         // Oracle 定案：等值边界（current + contentLength > limit）——相等允许
         using var host = CreateAuthHost(new FileManagementOptions { MaxUserSizeBytes = 20 });
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "0123456789"u8.ToArray());   // 10 字节
         var b = await UploadAsync(manager, folder.Id, "b.txt", "0123456789"u8.ToArray());   // 10 → 10+10 = 20 不超
 
@@ -105,7 +105,7 @@ public class FileUserQuotaTests
             MaxTotalSizeBytes = 15      // 全局兜底（生效）
         });
         var manager = host.ManagerFor(host.User);   // 匿名（默认桩）
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "0123456789"u8.ToArray());   // 10 字节（用户配额 5 被跳过，全局 15 内允许）
 
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -118,7 +118,7 @@ public class FileUserQuotaTests
         // 系统账号（IsSystemActor）→ OwnerId null → 用户配额跳过（全局兜底）
         using var host = CreateAuthHost(new FileManagementOptions { MaxUserFilesCount = 1 }, userId: "42", isSystemActor: true);
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "content-a"u8.ToArray());
         var b = await UploadAsync(manager, folder.Id, "b.txt", "content-b"u8.ToArray());   // 系统账号不受用户配额限制
 
@@ -136,7 +136,7 @@ public class FileUserQuotaTests
             MaxTotalSizeBytes = 100  // 全局兜底
         }, userId: "guid-user-id-abc");
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(manager, folder.Id, "a.txt", "content-a"u8.ToArray());
         var b = await UploadAsync(manager, folder.Id, "b.txt", "content-b"u8.ToArray());   // 用户配额 1 被跳过
 
@@ -150,13 +150,13 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost(new FileManagementOptions { MaxUserFilesCount = 1 }, userId: "42");
         var managerA = host.ManagerFor(host.User);   // 用户 42
-        var folder = await managerA.CreateFolderAsync("docs", "文档");
+        var folder = await managerA.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         await UploadAsync(managerA, folder.Id, "a.txt", "content-a"u8.ToArray());   // 用户 42 达配额
 
         // 用户 43 上传不受影响（切换桩 userId——ManagerFor 每次直构新 FileManager 读当前桩）
         host.User.AsAuthenticated("43");
         var managerB = host.ManagerFor(host.User);   // 用户 43
-        var folderB = await managerB.CreateFolderAsync("docsB", "文档B");
+        var folderB = await managerB.CreateFolderAsync("docsB", "文档B", ct: TestContext.Current.CancellationToken);
         var b = await UploadAsync(managerB, folderB.Id, "b.txt", "content-b"u8.ToArray());
 
         Assert.NotNull(b);
@@ -170,7 +170,7 @@ public class FileUserQuotaTests
         // 同宿主内：上传 v1 → 上传同名不同内容 v2 → 主表 OwnerId 仍为原 owner（所有权保留，CanUpdate=false 语义）
         using var host = CreateAuthHost(userId: "42");
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         var v1 = await UploadAsync(manager, folder.Id, "doc.txt", "version-1-content"u8.ToArray());
         Assert.Equal(42L, v1.OwnerId);
 
@@ -183,14 +183,14 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost(userId: "42");
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         var v1 = await UploadAsync(manager, folder.Id, "doc.txt", "version-1-content"u8.ToArray());
         Assert.Equal(42L, v1.OwnerId);
 
         var v2 = await UploadAsync(manager, folder.Id, "doc.txt", "version-2-different-content"u8.ToArray());
         Assert.Equal(42L, v2.OwnerId);
 
-        var rolled = await manager.RollbackFileAsync(v2.Id, 1);
+        var rolled = await manager.RollbackFileAsync(v2.Id, 1, ct: TestContext.Current.CancellationToken);
         Assert.Equal(42L, rolled.OwnerId);   // 回滚不动 OwnerId（Oracle 条件 3）
     }
 
@@ -201,10 +201,10 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost(new FileManagementOptions { MaxUserSizeBytes = 30 });
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         var f = await UploadAsync(manager, folder.Id, "a.txt", new byte[20]);   // 20 字节
 
-        await manager.DeleteFileAsync(f.Id);
+        await manager.DeleteFileAsync(f.Id, ct: TestContext.Current.CancellationToken);
 
         // 删除后用户配额释放——可再上传 20 字节（20 < 30 允许）
         var b = await UploadAsync(manager, folder.Id, "b.txt", new byte[20]);
@@ -218,11 +218,11 @@ public class FileUserQuotaTests
     {
         using var host = CreateAuthHost(userId: "42");
         var manager = host.ManagerFor(host.User);
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         var f = await UploadAsync(manager, folder.Id, "a.txt", "content"u8.ToArray());
 
         Assert.Equal(42L, f.OwnerId);
-        var reloaded = await host.FileDataService.GetByIdAsync(f.Id);
+        var reloaded = await host.FileDataService.GetByIdAsync(f.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(42L, reloaded!.OwnerId);   // 列落库可读
     }
 
@@ -231,7 +231,7 @@ public class FileUserQuotaTests
     {
         using var host = FileManagementTestHost.Create();   // 默认匿名桩
         var manager = host.ManagerFor(host.User);   // 匿名
-        var folder = await manager.CreateFolderAsync("docs", "文档");
+        var folder = await manager.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         var f = await UploadAsync(manager, folder.Id, "a.txt", "content"u8.ToArray());
 
         Assert.Null(f.OwnerId);   // 匿名上传不归属

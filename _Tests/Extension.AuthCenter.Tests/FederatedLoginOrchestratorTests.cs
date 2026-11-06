@@ -66,7 +66,7 @@ public class FederatedLoginOrchestratorTests
         var (service, map, accountSvc, accountQuery, token) = CreateService();
         accountQuery.Account = Account("u-direct-1");
 
-        var result = await service.LoginAsync(Identity(uid: "u-direct-1"));
+        var result = await service.LoginAsync(Identity(uid: "u-direct-1"), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);
         Assert.False(accountSvc.CreateCalled);   // 直读命中不建号
@@ -89,7 +89,7 @@ public class FederatedLoginOrchestratorTests
 
         // ⚠️ Fake 语义：GetByUIdAsync 返回 Account；映射命中后 orchestrator 再 GetByUIdAsync(mapped.UId)——
         //   Fake 需区分"首次直读（null）"与"映射后回读（MappedAccount）"——见 FakeAuthAccountQueryService 实现
-        var result = await service.LoginAsync(Identity(uid: "u-nonexist"));
+        var result = await service.LoginAsync(Identity(uid: "u-nonexist"), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);
         Assert.False(accountSvc.CreateCalled);
@@ -107,7 +107,7 @@ public class FederatedLoginOrchestratorTests
         map.Mapping = new ExternalIdentityDto("u-mapped-2", ChannelId, ExternalUserId, DateTime.UtcNow);
         accountQuery.MappedAccount = Account("u-mapped-2");
 
-        var result = await service.LoginAsync(Identity(uid: null));
+        var result = await service.LoginAsync(Identity(uid: null), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);
         Assert.False(accountSvc.CreateCalled);
@@ -123,7 +123,7 @@ public class FederatedLoginOrchestratorTests
         var (service, map, accountSvc, accountQuery, token) = CreateService();
         accountQuery.MappedAccount = Account("u-created-ticket-1");
 
-        var result = await service.LoginAsync(Identity(uid: null));
+        var result = await service.LoginAsync(Identity(uid: null), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);
         Assert.True(accountSvc.CreateCalled);
@@ -144,7 +144,7 @@ public class FederatedLoginOrchestratorTests
             (services, _) => services.AddSingleton<IFreezeStateProvider>(freeze));
         accountQuery.Account = Account("u-frozen-1");
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: "u-frozen-1")));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: "u-frozen-1"), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_FROZEN", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
@@ -158,7 +158,7 @@ public class FederatedLoginOrchestratorTests
         var (service, _, accountSvc, accountQuery, token) = CreateService();
         accountQuery.Account = Account("u-disabled-1", enabled: false);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: "u-disabled-1")));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: "u-disabled-1"), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_DISABLED", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
@@ -173,7 +173,7 @@ public class FederatedLoginOrchestratorTests
         accountQuery.Account = Account("u-nullct-1");
         accountQuery.MappedAccount = Account("u-nullct-1");
 
-        var result = await service.LoginAsync(Identity(uid: "u-nullct-1", channelType: null));
+        var result = await service.LoginAsync(Identity(uid: "u-nullct-1", channelType: null), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);
         Assert.Null(token.LastRequest!.ChannelType);   // null 不写 channel_type claim
@@ -187,7 +187,7 @@ public class FederatedLoginOrchestratorTests
         map.Mapping = new ExternalIdentityDto("u-mapped-3", ChannelId, ExternalUserId, DateTime.UtcNow);
         // MappedAccount 未设置 → 回读 null
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: null)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: null), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_NOT_FOUND", ex.ErrorCode);
         Assert.Null(token.LastRequest);
@@ -201,7 +201,7 @@ public class FederatedLoginOrchestratorTests
         options.FederatedProvisioning.AutoProvision = false;
         var (service, map, accountSvc, _, token) = CreateService(options: options);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: null)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Identity(uid: null), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_NOT_PROVISIONED", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);

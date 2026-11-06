@@ -35,7 +35,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetMenu_ReturnsCurrent_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/menu"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/menu"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Menu.GetCurrentInvoked);
@@ -46,7 +46,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/menu"),
-            new PublishMenuRequest("""{"button":[{"type":"click","name":"测试","key":"test_key"}]}"""));
+            new PublishMenuRequest("""{"button":[{"type":"click","name":"测试","key":"test_key"}]}"""), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Menu.PublishInvoked);
@@ -56,7 +56,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetMenuVersions_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/menu/versions"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/menu/versions"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Menu.ListVersionsInvoked);
@@ -67,7 +67,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/menu/rollback"),
-            new RollbackMenuRequest(5));
+            new RollbackMenuRequest(5), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Menu.RollbackInvoked);
@@ -77,7 +77,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetRules_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/rules?scene_type=2"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/rules?scene_type=2"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.ReplyRule.ListInvoked);
@@ -88,7 +88,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/rules"),
-            new { ChannelId, SceneType = 2, TriggerKey = "优惠", Content = "欢迎", IsEnabled = true });
+            new { ChannelId, SceneType = 2, TriggerKey = "优惠", Content = "欢迎", IsEnabled = true }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.ReplyRule.SaveInvoked);
@@ -98,7 +98,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetMaterials_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/materials?kind=1"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/materials?kind=1"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Material.ListInvoked);
@@ -109,7 +109,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url("/materials"),
-            new { Name = "促销图文", Kind = 2 });
+            new { Name = "促销图文", Kind = 2 }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Material.SaveInvoked);
@@ -119,7 +119,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetSubscriptionStats_ReturnsTrend_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/subscription-stats?from=2026-10-01&to=2026-10-31&source="));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/subscription-stats?from=2026-10-01&to=2026-10-31&source="), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.SubscriptionStat.TrendInvoked);
@@ -129,7 +129,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetSubscriptionStatsSummary_ReturnsSummary_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/subscription-stats/summary?from=2026-10-01&to=2026-10-31&source="));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/subscription-stats/summary?from=2026-10-01&to=2026-10-31&source="), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.SubscriptionStat.SummaryInvoked);
@@ -139,7 +139,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetLogsInteractions_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/logs/interactions?openId=u-1&triggerType=2"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/logs/interactions?openId=u-1&triggerType=2"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.LogQuery.InteractionsInvoked);
@@ -149,7 +149,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetLogsPublishes_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/logs/publishes"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/logs/publishes"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.LogQuery.PublishesInvoked);
@@ -159,7 +159,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetStatus_ReturnsSummary_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/status"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/channels/{ChannelId}/status"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Status.Invoked);
@@ -171,7 +171,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetGatewayRules_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/gateway/rules?channelId=wechat-mp-main&msgType=text&eventType="));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/gateway/rules?channelId=wechat-mp-main&msgType=text&eventType="), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.ListRulesInvoked);
@@ -182,7 +182,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url("/gateway/rules"),
-            new { ChannelId, Name = "路由规则", MsgType = "text", MatchMode = 1, TriggerKey = "优惠" });
+            new { ChannelId, Name = "路由规则", MsgType = "text", MatchMode = 1, TriggerKey = "优惠" }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.SaveRuleInvoked);
@@ -192,7 +192,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task DeleteGatewayRule_Returns200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.DeleteAsync(WeChatOperationsEndpointHost.Url("/gateway/rules/11"));
+        var resp = await client.DeleteAsync(WeChatOperationsEndpointHost.Url("/gateway/rules/11"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.DeleteRuleInvoked);
@@ -202,7 +202,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetGatewayEndpoints_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/gateway/endpoints?channelId=wechat-mp-main"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/gateway/endpoints?channelId=wechat-mp-main"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.ListEndpointsInvoked);
@@ -213,7 +213,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url("/gateway/endpoints"),
-            new SaveEndpointRequest(0, ChannelId, "下游A", "https://downstream.example.com/webhook", null, "POST", 2, true, 0, "plain-token", 3, null));
+            new SaveEndpointRequest(0, ChannelId, "下游A", "https://downstream.example.com/webhook", null, "POST", 2, true, 0, "plain-token", 3, null), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.SaveEndpointInvoked);
@@ -223,7 +223,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task DeleteGatewayEndpoint_Returns200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.DeleteAsync(WeChatOperationsEndpointHost.Url("/gateway/endpoints/13"));
+        var resp = await client.DeleteAsync(WeChatOperationsEndpointHost.Url("/gateway/endpoints/13"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.DeleteEndpointInvoked);
@@ -233,7 +233,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetGatewayStatus_ReturnsStatus_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/gateway/status"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/gateway/status"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.StatusInvoked);
@@ -244,7 +244,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsJsonAsync(WeChatOperationsEndpointHost.Url("/gateway/enabled"),
-            new SetGatewayEnabledRequest(true));
+            new SetGatewayEnabledRequest(true), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.SetEnabledInvoked);
@@ -254,7 +254,7 @@ public sealed class WeChatOperationsWebExtensionTests
     public async Task GetGatewayForwardLogs_ReturnsList_200()
     {
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/gateway/forward-logs?channelId={ChannelId}"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url($"/gateway/forward-logs?channelId={ChannelId}"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.ForwardLogsInvoked);
@@ -267,7 +267,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         // 路由确实来自生成端点（非全放行兜底）——未知路径必须 404，证明冒烟有效
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/channels/wechat-mp-main/does-not-exist"));
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/channels/wechat-mp-main/does-not-exist"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
@@ -277,7 +277,7 @@ public sealed class WeChatOperationsWebExtensionTests
     {
         // RouteAsync 为事件内部入口（ExposeRest=false）——无 /gateway/route 端点；断言未知子路径 404
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
-        var resp = await client.PostAsync(WeChatOperationsEndpointHost.Url("/gateway/route"), new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+        var resp = await client.PostAsync(WeChatOperationsEndpointHost.Url("/gateway/route"), new StringContent("{}", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }

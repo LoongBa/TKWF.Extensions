@@ -377,7 +377,7 @@ public class SecurityLogFilterTests
 
         // 经 DataService 回查（红线：断言不经裸 fsql.Select）
         var queryService = SecurityLogTestHost.CreateQueryService(fsql);
-        var result = await queryService.GetListAsync(new SecurityLogQueryInput());
+        var result = await queryService.GetListAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, result.Total);
         var item = Assert.Single(result.Items);
         Assert.Equal("Login", item.EventType);

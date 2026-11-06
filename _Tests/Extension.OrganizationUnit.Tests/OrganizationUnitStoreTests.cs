@@ -36,7 +36,7 @@ public class OrganizationUnitStoreTests
     {
         using var host = NewHost();
 
-        var created = await CreateViaStore(host.Store, "HQ");
+        var created = await CreateViaStore(host.Store, "HQ", ct: TestContext.Current.CancellationToken);
 
         Assert.True(created.Id > 0);
         // 经 DataService 直接查询能读到（委托转发正确）
@@ -54,7 +54,7 @@ public class OrganizationUnitStoreTests
     public async Task GetByCode_ForwardsToDataService()
     {
         using var host = NewHost();
-        var created = await CreateViaStore(host.Store, "FIN");
+        var created = await CreateViaStore(host.Store, "FIN", ct: TestContext.Current.CancellationToken);
 
         var byCode = await host.Store.GetByCodeAsync("FIN", CancellationToken.None);
 
@@ -69,9 +69,9 @@ public class OrganizationUnitStoreTests
     public async Task GetAll_ReturnsAllRows()
     {
         using var host = NewHost();
-        await CreateViaStore(host.Store, "A");
-        await CreateViaStore(host.Store, "B");
-        await CreateViaStore(host.Store, "C");
+        await CreateViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
+        await CreateViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
+        await CreateViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
 
         var all = await host.Store.GetAllAsync(CancellationToken.None);
 
@@ -85,7 +85,7 @@ public class OrganizationUnitStoreTests
     public async Task Update_PersistsChanges()
     {
         using var host = NewHost();
-        var created = await CreateViaStore(host.Store, "HQ");
+        var created = await CreateViaStore(host.Store, "HQ", ct: TestContext.Current.CancellationToken);
 
         created.Name = "总部（更新）";
         created.IsEnabled = false;
@@ -101,7 +101,7 @@ public class OrganizationUnitStoreTests
     public async Task Delete_RemovesRow()
     {
         using var host = NewHost();
-        var created = await CreateViaStore(host.Store, "HQ");
+        var created = await CreateViaStore(host.Store, "HQ", ct: TestContext.Current.CancellationToken);
 
         await host.Store.DeleteAsync(created.Id, CancellationToken.None);
 
@@ -113,7 +113,7 @@ public class OrganizationUnitStoreTests
     public async Task UserAssociation_DelegatesToDataService_AndQueriesCorrectly()
     {
         using var host = NewHost();
-        var ou = await CreateViaStore(host.Store, "DE");
+        var ou = await CreateViaStore(host.Store, "DE", ct: TestContext.Current.CancellationToken);
 
         await host.Store.AddUserAsync(new OrganizationUnitUserEntity
         {
@@ -146,7 +146,7 @@ public class OrganizationUnitStoreTests
     public async Task DeleteUsersByOrganizationUnitId_ClearsAssociation()
     {
         using var host = NewHost();
-        var ou = await CreateViaStore(host.Store, "DE");
+        var ou = await CreateViaStore(host.Store, "DE", ct: TestContext.Current.CancellationToken);
         await host.Store.AddUserAsync(new OrganizationUnitUserEntity { OrganizationUnitId = ou.Id, UserId = "u_001" }, CancellationToken.None);
         await host.Store.AddUserAsync(new OrganizationUnitUserEntity { OrganizationUnitId = ou.Id, UserId = "u_002" }, CancellationToken.None);
 
@@ -160,9 +160,9 @@ public class OrganizationUnitStoreTests
     public async Task GetByIds_Batch_OrderIndependent()
     {
         using var host = NewHost();
-        var a = await CreateViaStore(host.Store, "A");
-        var b = await CreateViaStore(host.Store, "B");
-        var c = await CreateViaStore(host.Store, "C");
+        var a = await CreateViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
+        var b = await CreateViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
+        var c = await CreateViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
 
         // 批量按 Id 查询：入参顺序无关，三行全回
         var result = await host.OuDataService.GetByIdsAsync(

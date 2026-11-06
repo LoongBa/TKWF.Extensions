@@ -47,11 +47,11 @@ public class ApprovalEngineTests : IDisposable
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "manager1", ApprovalMode.Any)
         };
 
-        var flowId = await _host.ApprovalService.CreateFlowAsync("test_flow", "测试流程", steps, "描述");
+        var flowId = await _host.ApprovalService.CreateFlowAsync("test_flow", "测试流程", steps, "描述", ct: TestContext.Current.CancellationToken);
 
         Assert.True(flowId > 0);
 
-        var entity = await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId);
+        var entity = await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(entity);
         Assert.Equal("test_flow", entity!.Code);
         Assert.Equal("测试流程", entity.Name);
@@ -63,21 +63,21 @@ public class ApprovalEngineTests : IDisposable
     {
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "u1") };
 
-        await _host.ApprovalService.CreateFlowAsync("dup_code", "流程1", steps);
+        await _host.ApprovalService.CreateFlowAsync("dup_code", "流程1", steps, ct: TestContext.Current.CancellationToken);
         await Assert.ThrowsAnyAsync<Exception>(
-            () => _host.ApprovalService.CreateFlowAsync("dup_code", "流程2", steps));
+            () => _host.ApprovalService.CreateFlowAsync("dup_code", "流程2", steps, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D2_UpdateFlow_ShouldUpdateFields()
     {
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "u1") };
-        var flowId = await _host.ApprovalService.CreateFlowAsync("update_flow", "旧名", steps);
+        var flowId = await _host.ApprovalService.CreateFlowAsync("update_flow", "旧名", steps, ct: TestContext.Current.CancellationToken);
 
         var newSteps = new[] { new ApprovalStepDefinition(0, "总监", ApprovalApproverType.User, "u2") };
-        await _host.ApprovalService.UpdateFlowAsync(flowId, "新名", newSteps, "新描述");
+        await _host.ApprovalService.UpdateFlowAsync(flowId, "新名", newSteps, "新描述", ct: TestContext.Current.CancellationToken);
 
-        var entity = await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId);
+        var entity = await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId, ct: TestContext.Current.CancellationToken);
         Assert.Equal("新名", entity!.Name);
         Assert.Equal("新描述", entity.Description);
     }
@@ -86,24 +86,24 @@ public class ApprovalEngineTests : IDisposable
     public async Task D2_EnableDisable_ShouldToggleIsEnabled()
     {
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "u1") };
-        var flowId = await _host.ApprovalService.CreateFlowAsync("toggle_flow", "流程", steps);
+        var flowId = await _host.ApprovalService.CreateFlowAsync("toggle_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.DisableFlowAsync(flowId);
-        Assert.False((await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId))!.IsEnabled);
+        await _host.ApprovalService.DisableFlowAsync(flowId, ct: TestContext.Current.CancellationToken);
+        Assert.False((await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId, ct: TestContext.Current.CancellationToken))!.IsEnabled);
 
-        await _host.ApprovalService.EnableFlowAsync(flowId);
-        Assert.True((await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId))!.IsEnabled);
+        await _host.ApprovalService.EnableFlowAsync(flowId, ct: TestContext.Current.CancellationToken);
+        Assert.True((await _host.FlowDataService.EntityGetAsync(f => f.Id == flowId, ct: TestContext.Current.CancellationToken))!.IsEnabled);
     }
 
     [Fact]
     public async Task D2_DisabledFlow_StartAsync_ShouldThrow()
     {
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "u1") };
-        var flowId = await _host.ApprovalService.CreateFlowAsync("disabled_flow", "流程", steps);
-        await _host.ApprovalService.DisableFlowAsync(flowId);
+        var flowId = await _host.ApprovalService.CreateFlowAsync("disabled_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.DisableFlowAsync(flowId, ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.StartAsync("Biz", "1", "disabled_flow", "submitter"));
+            () => _host.ApprovalService.StartAsync("Biz", "1", "disabled_flow", "submitter", ct: TestContext.Current.CancellationToken));
     }
 
     // ── D3: StartAsync 防重复 ──
@@ -112,30 +112,30 @@ public class ApprovalEngineTests : IDisposable
     public async Task D3_StartAsync_Duplicate_ShouldThrow()
     {
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "u1") };
-        await _host.ApprovalService.CreateFlowAsync("dup_start", "流程", steps);
+        await _host.ApprovalService.CreateFlowAsync("dup_start", "流程", steps, ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.StartAsync("Biz", "1", "dup_start", "user1");
+        await _host.ApprovalService.StartAsync("Biz", "1", "dup_start", "user1", ct: TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.StartAsync("Biz", "1", "dup_start", "user1"));
+            () => _host.ApprovalService.StartAsync("Biz", "1", "dup_start", "user1", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D3_StartAsync_AfterTerminalState_ShouldAllowResubmit()
     {
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "u1") };
-        await _host.ApprovalService.CreateFlowAsync("resubmit", "流程", steps);
+        await _host.ApprovalService.CreateFlowAsync("resubmit", "流程", steps, ct: TestContext.Current.CancellationToken);
 
         // 第一次提交
-        var id1 = await _host.ApprovalService.StartAsync("Biz", "1", "resubmit", "user1");
-        await _host.ApprovalService.SubmitAsync(id1);
+        var id1 = await _host.ApprovalService.StartAsync("Biz", "1", "resubmit", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(id1, ct: TestContext.Current.CancellationToken);
 
         // 审批通过（终态 IsActive=false）
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == id1, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task.Id, "u1");
+            t => t.InstanceId == id1, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task.Id, "u1", ct: TestContext.Current.CancellationToken);
 
         // 终态后可重新 Start（IsActive 释放约束）
-        var id2 = await _host.ApprovalService.StartAsync("Biz", "1", "resubmit", "user1");
+        var id2 = await _host.ApprovalService.StartAsync("Biz", "1", "resubmit", "user1", ct: TestContext.Current.CancellationToken);
         Assert.True(id2 > 0);
         Assert.NotEqual(id1, id2);
     }
@@ -149,17 +149,17 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "manager1")
         };
-        await _host.ApprovalService.CreateFlowAsync("submit_flow", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "submit_flow", "user1");
+        await _host.ApprovalService.CreateFlowAsync("submit_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "submit_flow", "user1", ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Pending, instance!.Status);
         Assert.True(instance.SubmittedAt.HasValue);
 
         var tasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default);
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(tasks);
         Assert.Equal("manager1", tasks[0].ApproverUserId);
         Assert.Equal(ApprovalTaskStatus.Pending, tasks[0].Status);
@@ -174,15 +174,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("approve_single", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "approve_single", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("approve_single", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "approve_single", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task.Id, "mgr", "同意");
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task.Id, "mgr", "同意", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
         Assert.False(instance.IsActive); // C2: 终态释放
         Assert.True(instance.ApprovedAt.HasValue);
@@ -196,27 +196,27 @@ public class ApprovalEngineTests : IDisposable
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr"),
             new ApprovalStepDefinition(1, "财务", ApprovalApproverType.User, "fin")
         };
-        await _host.ApprovalService.CreateFlowAsync("approve_multi", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "approve_multi", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("approve_multi", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "approve_multi", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         // 第一步通过
         var task1 = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId && t.StepIndex == 0, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task1.Id, "mgr");
+            t => t.InstanceId == instanceId && t.StepIndex == 0, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task1.Id, "mgr", ct: TestContext.Current.CancellationToken);
 
         // 应有第二步任务
         var task2List = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId && t.StepIndex == 1, 0, 10, q => q, default);
+            t => t.InstanceId == instanceId && t.StepIndex == 1, 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(task2List);
 
         // 实例仍在 Pending
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Pending, instance!.Status);
 
         // 第二步通过→实例 Approved
-        await _host.ApprovalService.ApproveAsync(task2List[0].Id, "fin");
-        instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        await _host.ApprovalService.ApproveAsync(task2List[0].Id, "fin", ct: TestContext.Current.CancellationToken);
+        instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
         Assert.False(instance.IsActive);
     }
@@ -228,9 +228,9 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "会签组", ApprovalApproverType.User, "user1", ApprovalMode.Any)
         };
-        await _host.ApprovalService.CreateFlowAsync("any_mode", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "any_mode", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("any_mode", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "any_mode", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         // 手动建两个任务（模拟 Role 解析多人，Any 模式）
         await _host.TaskDataService.EntityCreateAsync(new ApprovalTaskEntity
@@ -238,18 +238,18 @@ public class ApprovalEngineTests : IDisposable
             InstanceId = instanceId, StepIndex = 0, StepName = "会签组",
             ApproverType = ApprovalApproverType.User, ApproverValue = "user2",
             ApproverUserId = "user2", Status = ApprovalTaskStatus.Pending
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // user1 通过→Any 模式直接完成
         var task1 = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId && t.ApproverUserId == "user1", 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task1.Id, "user1");
+            t => t.InstanceId == instanceId && t.ApproverUserId == "user1", 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task1.Id, "user1", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
 
         // user2 的任务应标记 Completed
-        var task2 = await _host.TaskDataService.EntityGetAsync(t => t.ApproverUserId == "user2");
+        var task2 = await _host.TaskDataService.EntityGetAsync(t => t.ApproverUserId == "user2", ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Completed, task2!.Status);
     }
 
@@ -260,9 +260,9 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "会签组", ApprovalApproverType.User, "user1", ApprovalMode.All)
         };
-        await _host.ApprovalService.CreateFlowAsync("all_mode", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "all_mode", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("all_mode", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "all_mode", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         // 手动建第二个任务
         await _host.TaskDataService.EntityCreateAsync(new ApprovalTaskEntity
@@ -270,20 +270,20 @@ public class ApprovalEngineTests : IDisposable
             InstanceId = instanceId, StepIndex = 0, StepName = "会签组",
             ApproverType = ApprovalApproverType.User, ApproverValue = "user2",
             ApproverUserId = "user2", Status = ApprovalTaskStatus.Pending
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // user1 通过→All 模式未完成
         var task1 = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId && t.ApproverUserId == "user1", 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task1.Id, "user1");
+            t => t.InstanceId == instanceId && t.ApproverUserId == "user1", 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task1.Id, "user1", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Pending, instance!.Status); // 仍在 Pending
 
         // user2 通过→All 模式完成
-        var task2 = await _host.TaskDataService.EntityGetAsync(t => t.ApproverUserId == "user2");
-        await _host.ApprovalService.ApproveAsync(task2!.Id, "user2");
-        instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var task2 = await _host.TaskDataService.EntityGetAsync(t => t.ApproverUserId == "user2", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.ApproveAsync(task2!.Id, "user2", ct: TestContext.Current.CancellationToken);
+        instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
     }
 
@@ -294,16 +294,16 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("c1_check", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "c1_check", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("c1_check", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "c1_check", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
 
         // 非任务审批人操作→C1 身份硬校验失败
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.ApproveAsync(task.Id, "wrong_user"));
+            () => _host.ApprovalService.ApproveAsync(task.Id, "wrong_user", ct: TestContext.Current.CancellationToken));
     }
 
     // ── D6: RejectAsync ──
@@ -315,15 +315,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("reject_flow", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "reject_flow", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("reject_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "reject_flow", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "不通过");
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "不通过", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Rejected, instance!.Status);
         Assert.False(instance.IsActive); // C2: 终态释放
         Assert.Equal("不通过", instance.Reason);
@@ -336,17 +336,17 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("terminal_guard", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "terminal_guard", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("terminal_guard", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "terminal_guard", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task.Id, "mgr"); // Approved 终态
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task.Id, "mgr", ct: TestContext.Current.CancellationToken); // Approved 终态
 
         // 终态任务再操作→非法迁移
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.ApproveAsync(task.Id, "mgr"));
+            () => _host.ApprovalService.ApproveAsync(task.Id, "mgr", ct: TestContext.Current.CancellationToken));
     }
 
     // ── D7: TransferAsync ──
@@ -358,23 +358,23 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("transfer_flow", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "transfer_flow", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("transfer_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "transfer_flow", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.TransferAsync(task.Id, "mgr", "deputy");
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.TransferAsync(task.Id, "mgr", "deputy", ct: TestContext.Current.CancellationToken);
 
         // 原任务 Transferred
-        var originalTask = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var originalTask = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Transferred, originalTask!.Status);
         Assert.Equal("deputy", originalTask.TransferredTo);
 
         // 新任务 Pending
         var newTasks = await _host.TaskDataService.EntitySelectAsync(
             t => t.InstanceId == instanceId && t.ApproverUserId == "deputy",
-            0, 10, q => q, default);
+            0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(newTasks);
         Assert.Equal(ApprovalTaskStatus.Pending, newTasks[0].Status);
     }
@@ -386,15 +386,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("transfer_c1", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "transfer_c1", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("transfer_c1", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "transfer_c1", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.TransferAsync(task.Id, "wrong_user", "deputy"));
+            () => _host.ApprovalService.TransferAsync(task.Id, "wrong_user", "deputy", ct: TestContext.Current.CancellationToken));
     }
 
     // ── D8: WithdrawAsync ──
@@ -406,12 +406,12 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("withdraw_draft", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_draft", "submitter");
+        await _host.ApprovalService.CreateFlowAsync("withdraw_draft", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_draft", "submitter", ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter");
+        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Withdrawn, instance!.Status);
         Assert.False(instance.IsActive);
     }
@@ -423,13 +423,13 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("withdraw_pending", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_pending", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("withdraw_pending", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_pending", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter");
+        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Withdrawn, instance!.Status);
         Assert.False(instance.IsActive);
     }
@@ -441,12 +441,12 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("withdraw_auth", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_auth", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("withdraw_auth", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_auth", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.WithdrawAsync(instanceId, "wrong_user"));
+            () => _host.ApprovalService.WithdrawAsync(instanceId, "wrong_user", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -456,16 +456,16 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("withdraw_terminal", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_terminal", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("withdraw_terminal", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_terminal", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task.Id, "mgr"); // 终态
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task.Id, "mgr", ct: TestContext.Current.CancellationToken); // 终态
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.WithdrawAsync(instanceId, "submitter"));
+            () => _host.ApprovalService.WithdrawAsync(instanceId, "submitter", ct: TestContext.Current.CancellationToken));
     }
 
     // ── D9: 完成事件派发 ──
@@ -477,15 +477,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("event_flow", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Expense", "exp-001", "event_flow", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("event_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Expense", "exp-001", "event_flow", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         _host.Events.PublishedEvents.Clear();
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(task.Id, "mgr");
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(task.Id, "mgr", ct: TestContext.Current.CancellationToken);
 
         // C3: CommitAsync 后 PublishAsync
         var evt = _host.Events.PublishedEvents.OfType<ApprovalCompletedEvent>().FirstOrDefault();
@@ -503,15 +503,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("reject_event", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Leave", "lr-001", "reject_event", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("reject_event", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Leave", "lr-001", "reject_event", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         _host.Events.PublishedEvents.Clear();
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "不同意");
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "不同意", ct: TestContext.Current.CancellationToken);
 
         var evt = _host.Events.PublishedEvents.OfType<ApprovalCompletedEvent>().FirstOrDefault();
         Assert.NotNull(evt);
@@ -528,15 +528,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("query_flow", "流程", steps);
-        await _host.ApprovalService.StartAsync("Biz", "1", "query_flow", "user1");
-        await _host.ApprovalService.StartAsync("Biz", "2", "query_flow", "user2");
+        await _host.ApprovalService.CreateFlowAsync("query_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.StartAsync("Biz", "1", "query_flow", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.StartAsync("Biz", "2", "query_flow", "user2", ct: TestContext.Current.CancellationToken);
 
         var result = await _host.QueryService.GetInstancesAsync(new ApprovalInstanceQueryInput
         {
             BusinessType = "Biz",
             Take = 10
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.Equal(2, result.Items.Count);
@@ -549,14 +549,14 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("task_query", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "task_query", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("task_query", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "task_query", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var result = await _host.QueryService.GetPendingTasksAsync(new ApprovalTaskQueryInput
         {
             ApproverUserId = "mgr"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Total);
         Assert.Equal("mgr", result.Items[0].ApproverUserId);
@@ -570,12 +570,12 @@ public class ApprovalEngineTests : IDisposable
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr"),
             new ApprovalStepDefinition(1, "财务", ApprovalApproverType.User, "fin")
         };
-        await _host.ApprovalService.CreateFlowAsync("detail_flow", "流程", steps);
+        await _host.ApprovalService.CreateFlowAsync("detail_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
         var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "detail_flow", "user1",
-            businessDataJson: "{\"amount\":100}");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+            businessDataJson: "{\"amount\":100}", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
-        var detail = await _host.QueryService.GetInstanceDetailAsync(instanceId);
+        var detail = await _host.QueryService.GetInstanceDetailAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(detail);
         Assert.Equal(instanceId, detail!.Id);
@@ -592,12 +592,12 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("invalid_submit", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "invalid_submit", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId); // Draft→Pending
+        await _host.ApprovalService.CreateFlowAsync("invalid_submit", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "invalid_submit", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken); // Draft→Pending
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.SubmitAsync(instanceId)); // Pending→Pending 非法
+            () => _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken)); // Pending→Pending 非法
     }
 
     // ── D12: v0.1.0 遗留修复（P2-1~P2-6/P2-7）──
@@ -610,16 +610,16 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("db_page", "流程", steps);
+        await _host.ApprovalService.CreateFlowAsync("db_page", "流程", steps, ct: TestContext.Current.CancellationToken);
         for (var i = 0; i < 5; i++)
-            await _host.ApprovalService.StartAsync("Biz", $"page-{i}", "db_page", "user1");
+            await _host.ApprovalService.StartAsync("Biz", $"page-{i}", "db_page", "user1", ct: TestContext.Current.CancellationToken);
 
         var result = await _host.QueryService.GetInstancesAsync(new ApprovalInstanceQueryInput
         {
             BusinessType = "Biz",
             Skip = 2,
             Take = 2
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total); // total 独立 count（页数据之外）
         Assert.Equal(2, result.Items.Count); // 页数据精确切片
@@ -636,11 +636,11 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("db_page_task", "流程", steps);
+        await _host.ApprovalService.CreateFlowAsync("db_page_task", "流程", steps, ct: TestContext.Current.CancellationToken);
         for (var i = 0; i < 4; i++)
         {
-            var id = await _host.ApprovalService.StartAsync("Biz", $"pt-{i}", "db_page_task", "user1");
-            await _host.ApprovalService.SubmitAsync(id);
+            var id = await _host.ApprovalService.StartAsync("Biz", $"pt-{i}", "db_page_task", "user1", ct: TestContext.Current.CancellationToken);
+            await _host.ApprovalService.SubmitAsync(id, ct: TestContext.Current.CancellationToken);
         }
 
         var result = await _host.QueryService.GetPendingTasksAsync(new ApprovalTaskQueryInput
@@ -648,7 +648,7 @@ public class ApprovalEngineTests : IDisposable
             ApproverUserId = "mgr",
             Skip = 1,
             Take = 2
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(4, result.Total);
         Assert.Equal(2, result.Items.Count);
@@ -662,15 +662,15 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("rejected_at", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "rejected_at", "user1");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("rejected_at", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "rejected_at", "user1", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
-        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "驳回");
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.RejectAsync(task.Id, "mgr", "驳回", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.True(instance!.RejectedAt.HasValue);
         Assert.Null(instance.ApprovedAt);
         Assert.Equal(ApprovalInstanceStatus.Rejected, instance.Status);
@@ -684,25 +684,25 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "会签组", ApprovalApproverType.User, "user1", ApprovalMode.All)
         };
-        await _host.ApprovalService.CreateFlowAsync("withdraw_tx", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_tx", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("withdraw_tx", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", "1", "withdraw_tx", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
         // 手动加第二个会签任务
         await _host.TaskDataService.EntityCreateAsync(new ApprovalTaskEntity
         {
             InstanceId = instanceId, StepIndex = 0, StepName = "会签组",
             ApproverType = ApprovalApproverType.User, ApproverValue = "user2",
             ApproverUserId = "user2", Status = ApprovalTaskStatus.Pending
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter");
+        await _host.ApprovalService.WithdrawAsync(instanceId, "submitter", ct: TestContext.Current.CancellationToken);
 
         // 实例 Withdrawn + 全部任务 Completed
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Withdrawn, instance!.Status);
         Assert.False(instance.IsActive);
         var tasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default);
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.All(tasks, t => Assert.Equal(ApprovalTaskStatus.Completed, t.Status));
     }
 
@@ -714,7 +714,7 @@ public class ApprovalEngineTests : IDisposable
         {
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr")
         };
-        await _host.ApprovalService.CreateFlowAsync("ct_base", "流程", steps);
+        await _host.ApprovalService.CreateFlowAsync("ct_base", "流程", steps, ct: TestContext.Current.CancellationToken);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();

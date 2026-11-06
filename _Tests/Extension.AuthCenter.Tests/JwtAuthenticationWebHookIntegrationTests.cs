@@ -53,14 +53,14 @@ public class JwtAuthenticationWebHookIntegrationTests
         // 顺序串 = ContextExtraction → JwtAuth 验签 → HttpAuthentication（核心验收 P0-1 锚点分桶）
         var client1 = server.CreateClient();
         client1.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
-        var resp1 = await client1.GetAsync("/api/test");
+        var resp1 = await client1.GetAsync("/api/test", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, resp1.StatusCode);
         Assert.Equal("ContextExtraction→JwtAuth验签→HttpAuthentication", GetOrderHeader(resp1));
 
         // 场景 2（负向控制）：无 Bearer → JwtAuth 中间件透传（不验签）——哨兵应记录 "JwtAuth跳过"
         // （证明 "JwtAuth验签" 标记确实由 JWT 处理触发，非恒真；每次请求独立 HttpContext.Items）
         var client2 = server.CreateClient();
-        var resp2 = await client2.GetAsync("/api/test");
+        var resp2 = await client2.GetAsync("/api/test", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
         Assert.Equal("ContextExtraction→JwtAuth跳过→HttpAuthentication", GetOrderHeader(resp2));
     }

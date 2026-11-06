@@ -95,7 +95,7 @@ public class ExternalTicketLoginServiceTests
         ticketSvc.Payload = Payload(uid: "u-ticket-1");
         orchestrator.Result = new TokenResponse("at-t", "rt-t", "Bearer", 7200);
 
-        var result = await service.LoginAsync(Request(Ticket));
+        var result = await service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("at-t", result.AccessToken);
         Assert.NotNull(result.RefreshToken);
@@ -114,7 +114,7 @@ public class ExternalTicketLoginServiceTests
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.2");
         ticketSvc.Payload = null;   // RedeemAsync null（无效/过期/已用/篡改统一）
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("TICKET_INVALID", ex.ErrorCode);
         Assert.False(orchestrator.Invoked);
@@ -128,7 +128,7 @@ public class ExternalTicketLoginServiceTests
         rateLimit.AcquireResult = false;
 
         var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
-            service.LoginAsync(Request(Ticket)));
+            service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("TICKET_RATE_LIMITED", ex.ErrorCode);
         Assert.Null(ticketSvc.LastTicket);     // 频控前置——票服务未被触碰
@@ -143,7 +143,7 @@ public class ExternalTicketLoginServiceTests
         var (service, ticketSvc, _, rateLimit) = CreateService(remoteIp: null);
         ticketSvc.Payload = Payload();
 
-        await service.LoginAsync(Request(Ticket));
+        await service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("ext:ticket:unknown", rateLimit.LastKey);
     }
@@ -156,7 +156,7 @@ public class ExternalTicketLoginServiceTests
         ticketSvc.Payload = Payload(uid: "u-ticket-2", channelId: ChannelId);
 
         var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            service.LoginAsync(Request(Ticket, "other-channel")));
+            service.LoginAsync(Request(Ticket, "other-channel"), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("TICKET_INVALID", ex.ErrorCode);
         Assert.False(orchestrator.Invoked);
@@ -169,7 +169,7 @@ public class ExternalTicketLoginServiceTests
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.5");
         ticketSvc.Payload = Payload(uid: "u-ticket-3", channelId: null);   // 票载荷 ChannelId 空
 
-        var result = await service.LoginAsync(Request(Ticket, ChannelId));
+        var result = await service.LoginAsync(Request(Ticket, ChannelId), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);                          // 兜底生效
         Assert.Equal(ChannelId, orchestrator.LastIdentity!.ChannelId);
@@ -182,7 +182,7 @@ public class ExternalTicketLoginServiceTests
         var (service, ticketSvc, orchestrator, _) = CreateService(remoteIp: "10.0.0.6");
         ticketSvc.Payload = Payload(uid: "u-ticket-4", channelId: null);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("TICKET_INVALID", ex.ErrorCode);
         Assert.False(orchestrator.Invoked);
@@ -198,7 +198,7 @@ public class ExternalTicketLoginServiceTests
         ticketSvc.RedeemBehavior = (ticket, context) =>
             context?.ExpectedClaimant == "app-1" ? Payload() : null;
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket)));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("TICKET_INVALID", ex.ErrorCode);   // 统一判因——不泄露"claimant 不符"
         Assert.False(orchestrator.Invoked);
@@ -212,7 +212,7 @@ public class ExternalTicketLoginServiceTests
         ticketSvc.Payload = Payload(uid: "u-ticket-5");
         orchestrator.Throw = new InvalidOperationException("DB 瞬时故障——建号失败");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(Request(Ticket)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(Request(Ticket), ct: TestContext.Current.CancellationToken));
     }
 
     // ── 测试桩（Fake 门面——仅测试项目，不注册进生产） ──

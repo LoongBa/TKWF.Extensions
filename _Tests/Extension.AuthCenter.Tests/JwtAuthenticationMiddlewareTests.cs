@@ -80,7 +80,7 @@ public class JwtAuthenticationMiddlewareTests
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
 
-        var resp = await client.GetAsync("/api/test");
+        var resp = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("restored", resp.Headers.GetValues("X-Auth-User").FirstOrDefault());
@@ -92,7 +92,7 @@ public class JwtAuthenticationMiddlewareTests
         using var server = CreateServer();
         var client = server.CreateClient();
 
-        var resp = await client.GetAsync("/api/test");
+        var resp = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.False(resp.Headers.Contains("X-Auth-User"));
@@ -105,7 +105,7 @@ public class JwtAuthenticationMiddlewareTests
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "forged-token");
 
-        var resp = await client.GetAsync("/api/test");
+        var resp = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
@@ -118,7 +118,7 @@ public class JwtAuthenticationMiddlewareTests
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
 
-        var resp = await client.GetAsync("/api/test");
+        var resp = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.False(resp.Headers.Contains("X-Auth-User"));
@@ -134,7 +134,7 @@ public class JwtAuthenticationMiddlewareTests
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
 
-        var resp = await client.GetAsync("/api/test");
+        var resp = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var jti = resp.Headers.GetValues("X-Ambient-Jti").FirstOrDefault();
@@ -150,12 +150,12 @@ public class JwtAuthenticationMiddlewareTests
 
         // 请求 1：Bearer → 写 ambient（确认已写入）
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
-        var resp1 = await client.GetAsync("/api/test");
+        var resp1 = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
         Assert.Equal("jti-test", resp1.Headers.GetValues("X-Ambient-Jti").FirstOrDefault());
 
         // 请求 2：无 Bearer → ambient 不得泄漏（X-Ambient-Jti 头缺）
         client.DefaultRequestHeaders.Remove("Authorization");
-        var resp2 = await client.GetAsync("/api/test");
+        var resp2 = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
         Assert.False(resp2.Headers.Contains("X-Ambient-Jti"));
     }

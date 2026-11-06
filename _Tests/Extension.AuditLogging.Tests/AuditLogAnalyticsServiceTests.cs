@@ -59,14 +59,14 @@ public class AuditLogAnalyticsServiceTests
 
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
 
-        var top2 = await analytics.GetTopServicesAsync(topN: 2);
+        var top2 = await analytics.GetTopServicesAsync(topN: 2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, top2.Count);
         Assert.Equal("OrderService", top2[0].Dimension);
         Assert.Equal(3, top2[0].Count);
         Assert.Equal("PaymentService", top2[1].Dimension);
         Assert.Equal(2, top2[1].Count);
 
-        var top5 = await analytics.GetTopServicesAsync(topN: 5);
+        var top5 = await analytics.GetTopServicesAsync(topN: 5, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, top5.Count);      // 仅 3 个服务有记录
         Assert.Equal("InventoryService", top5[2].Dimension);
         Assert.Equal(1, top5[2].Count);
@@ -87,13 +87,13 @@ public class AuditLogAnalyticsServiceTests
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
 
         // 30 分钟窗口 → 仅 OrderService 计入
-        var windowed = await analytics.GetTopServicesAsync(topN: 10, window: TimeSpan.FromMinutes(30));
+        var windowed = await analytics.GetTopServicesAsync(topN: 10, window: TimeSpan.FromMinutes(30), ct: TestContext.Current.CancellationToken);
         var order = Assert.Single(windowed);
         Assert.Equal("OrderService", order.Dimension);
         Assert.Equal(3, order.Count);
 
         // 全量（window: null）→ 两个服务都计入
-        var all = await analytics.GetTopServicesAsync(topN: 10);
+        var all = await analytics.GetTopServicesAsync(topN: 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, all.Count);
         Assert.Equal(3, all.Single(s => s.Dimension == "OrderService").Count);
         Assert.Equal(2, all.Single(s => s.Dimension == "PaymentService").Count);
@@ -111,7 +111,7 @@ public class AuditLogAnalyticsServiceTests
         await InsertAtAsync(ds, null!, "AnonymousService", DateTime.UtcNow.AddMinutes(-10));
 
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
-        var result = await analytics.GetTopUsersAsync(topN: 10);
+        var result = await analytics.GetTopUsersAsync(topN: 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("alice", result[0].Dimension);
@@ -142,7 +142,7 @@ public class AuditLogAnalyticsServiceTests
         fsql.Aop.CommandBefore += (_, e) => sqlLog.Add(e.Command.CommandText);
 
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
-        var top = await analytics.GetTopServicesAsync(topN: 10);   // topN 超分组数 → 全量：仅 2 组证明空白键被 WHERE 过滤（否则 null/全空白各成 1 条组）
+        var top = await analytics.GetTopServicesAsync(topN: 10, ct: TestContext.Current.CancellationToken);   // topN 超分组数 → 全量：仅 2 组证明空白键被 WHERE 过滤（否则 null/全空白各成 1 条组）
 
         // 语义保持：TopN 降序 + 空白键跳过（SQL 下推后 WHERE 过滤生效——topN=10 全量返回仍仅 2 组）
         Assert.Equal(2, top.Count);
@@ -165,8 +165,8 @@ public class AuditLogAnalyticsServiceTests
         using var fsql = CreateInMemoryFreeSql();
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
 
-        Assert.Empty(await analytics.GetTopServicesAsync());
-        Assert.Empty(await analytics.GetTopUsersAsync());
+        Assert.Empty(await analytics.GetTopServicesAsync(ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await analytics.GetTopUsersAsync(ct: TestContext.Current.CancellationToken));
     }
 
     // ── ② SQL 级统计 ──
@@ -184,7 +184,7 @@ public class AuditLogAnalyticsServiceTests
         await InsertAtAsync(ds, "erin", "PaymentService", now.AddMinutes(-10), success: false, durationMs: 400);
 
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
-        var stats = await analytics.GetStatsAsync();
+        var stats = await analytics.GetStatsAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, stats.Total);
         Assert.Equal(3, stats.Succeeded);
@@ -206,14 +206,14 @@ public class AuditLogAnalyticsServiceTests
 
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
 
-        var windowed = await analytics.GetStatsAsync(window: TimeSpan.FromMinutes(30));
+        var windowed = await analytics.GetStatsAsync(window: TimeSpan.FromMinutes(30), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, windowed.Total);
         Assert.Equal(1, windowed.Succeeded);
         Assert.Equal(1, windowed.Failed);
         Assert.Equal(40.0, windowed.AvgDurationMs, 2);   // (50+30)/2 —— 窗外 999ms 不计入
         Assert.Equal(50, windowed.MaxDurationMs);
 
-        var all = await analytics.GetStatsAsync();
+        var all = await analytics.GetStatsAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, all.Total);
         Assert.Equal(999, all.MaxDurationMs);
     }
@@ -224,7 +224,7 @@ public class AuditLogAnalyticsServiceTests
         using var fsql = CreateInMemoryFreeSql();
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
 
-        var stats = await analytics.GetStatsAsync();
+        var stats = await analytics.GetStatsAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(0, stats.Total);
         Assert.Equal(0, stats.Succeeded);
         Assert.Equal(0, stats.Failed);
@@ -247,12 +247,12 @@ public class AuditLogAnalyticsServiceTests
 
         // 默认 Options（RetentionDays=90、CleanupBatchSize=500）
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
-        var deleted = await analytics.CleanupExpiredAsync();
+        var deleted = await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, deleted);
 
         var query = AuditLoggingTestHost.CreateQueryService(fsql);
-        var remaining = await query.GetListAsync(new AuditLogQueryInput());
+        var remaining = await query.GetListAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
         var remainingIds = remaining.Items.Select(i => i.Id).OrderBy(i => i).ToArray();
         Assert.Equal(new[] { recentA.Id, recentB.Id }.OrderBy(i => i), remainingIds);   // Id 集合断言（不比较 DateTime）
         Assert.Equal(2, remaining.Total);
@@ -272,12 +272,12 @@ public class AuditLogAnalyticsServiceTests
         // 单批仅 2 条 → 验证分批循环（2+2+1=5 全部清完）
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql,
             new AuditLoggingOptions { CleanupBatchSize = 2 });
-        var deleted = await analytics.CleanupExpiredAsync();
+        var deleted = await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, deleted);
 
         var query = AuditLoggingTestHost.CreateQueryService(fsql);
-        Assert.Equal(0, await query.CountAsync(new AuditLogQueryInput()));
+        Assert.Equal(0, await query.CountAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -288,10 +288,10 @@ public class AuditLogAnalyticsServiceTests
         await InsertAtAsync(ds, "alice", "OrderService", DateTime.UtcNow);   // 仅近期记录
 
         var analytics = AuditLoggingTestHost.CreateAnalyticsService(fsql);
-        Assert.Equal(0, await analytics.CleanupExpiredAsync());
+        Assert.Equal(0, await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken));
 
         var query = AuditLoggingTestHost.CreateQueryService(fsql);
-        Assert.Equal(1, await query.CountAsync(new AuditLogQueryInput()));
+        Assert.Equal(1, await query.CountAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken));
     }
 
     // ── ④ 异常静默 ──
@@ -311,11 +311,11 @@ public class AuditLogAnalyticsServiceTests
 
         fsql.Dispose();
 
-        Assert.Empty(await analytics.GetTopServicesAsync());
-        Assert.Empty(await analytics.GetTopUsersAsync());
-        var stats = await analytics.GetStatsAsync();
+        Assert.Empty(await analytics.GetTopServicesAsync(ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await analytics.GetTopUsersAsync(ct: TestContext.Current.CancellationToken));
+        var stats = await analytics.GetStatsAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(0, stats.Total);
-        Assert.Equal(0, await analytics.CleanupExpiredAsync());
+        Assert.Equal(0, await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken));
         Assert.NotEmpty(logger.Warnings);
     }
 

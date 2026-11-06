@@ -36,9 +36,9 @@ public class ApprovalVEntityTests : IDisposable
     {
         // 建 2 步流程 + 实例 + 提交（首步 1 任务）→ 推进首步 → 第 2 步任务生成（任务链 2 条）
         var (instanceId, firstTaskId) = await CreateTwoStepPendingInstanceAsync();
-        await _host.ApprovalService.ApproveAsync(firstTaskId, "mgr");
+        await _host.ApprovalService.ApproveAsync(firstTaskId, "mgr", ct: TestContext.Current.CancellationToken);
 
-        var tasks = await _host.TaskViewDataService.GetTasksByInstanceIdAsync(instanceId);
+        var tasks = await _host.TaskViewDataService.GetTasksByInstanceIdAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, tasks.Count);
         Assert.All(tasks, t => Assert.Equal(instanceId, t.InstanceId));
@@ -56,10 +56,10 @@ public class ApprovalVEntityTests : IDisposable
     public async Task N2_VEntityView_RowsShouldContainInstanceColumns()
     {
         var (instanceId, firstTaskId) = await CreateTwoStepPendingInstanceAsync();
-        await _host.ApprovalService.ApproveAsync(firstTaskId, "mgr");
+        await _host.ApprovalService.ApproveAsync(firstTaskId, "mgr", ct: TestContext.Current.CancellationToken);
 
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
-        var rows = await _host.TaskViewDataService.GetTasksByInstanceIdAsync(instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
+        var rows = await _host.TaskViewDataService.GetTasksByInstanceIdAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(instance);
         Assert.Equal(2, rows.Count);

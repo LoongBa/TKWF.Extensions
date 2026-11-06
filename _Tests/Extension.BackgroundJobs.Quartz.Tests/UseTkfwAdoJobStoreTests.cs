@@ -57,7 +57,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var provider = services.BuildServiceProvider();
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
 
-        var scheduler = await schedulerFactory.GetScheduler();
+        var scheduler = await schedulerFactory.GetScheduler(TestContext.Current.CancellationToken);
         Assert.NotNull(scheduler);
         // 默认 InstanceId="AUTO" → 扩展生成 NODE_xxx 唯一 ID
         Assert.StartsWith("NODE_", scheduler.SchedulerInstanceId);
@@ -80,7 +80,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var provider = services.BuildServiceProvider();
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
 
-        var scheduler = await schedulerFactory.GetScheduler();
+        var scheduler = await schedulerFactory.GetScheduler(TestContext.Current.CancellationToken);
         Assert.NotNull(scheduler);
     }
 
@@ -101,7 +101,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var provider = services.BuildServiceProvider();
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
 
-        var scheduler = await schedulerFactory.GetScheduler();
+        var scheduler = await schedulerFactory.GetScheduler(TestContext.Current.CancellationToken);
         Assert.NotNull(scheduler);
     }
 
@@ -123,7 +123,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var provider = services.BuildServiceProvider();
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
 
-        var scheduler = await schedulerFactory.GetScheduler();
+        var scheduler = await schedulerFactory.GetScheduler(TestContext.Current.CancellationToken);
         Assert.NotNull(scheduler);
         Assert.StartsWith("NODE_", scheduler.SchedulerInstanceId);
     }
@@ -351,7 +351,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var sp = services.BuildServiceProvider();
         var schedulerFactory = sp.GetRequiredService<ISchedulerFactory>();
 
-        var scheduler = await schedulerFactory.GetScheduler();
+        var scheduler = await schedulerFactory.GetScheduler(TestContext.Current.CancellationToken);
         Assert.NotNull(scheduler);
     }
 
@@ -380,7 +380,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
 
         // GetScheduler() 时 Quartz 检测 SQLite + Clustering → 抛 InvalidConfigurationException
-        var ex = await Assert.ThrowsAnyAsync<Exception>(() => schedulerFactory.GetScheduler().AsTask());
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => schedulerFactory.GetScheduler(TestContext.Current.CancellationToken).AsTask());
         Assert.Contains("SQLite", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -403,7 +403,7 @@ public class UseTkfwAdoJobStoreTests : IDisposable
         var provider = services.BuildServiceProvider();
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
 
-        var ex = await Assert.ThrowsAsync<SchedulerException>(() => schedulerFactory.GetScheduler().AsTask());
+        var ex = await Assert.ThrowsAsync<SchedulerException>(() => schedulerFactory.GetScheduler(TestContext.Current.CancellationToken).AsTask());
         Assert.Contains("schema", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

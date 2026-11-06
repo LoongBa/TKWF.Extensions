@@ -33,13 +33,13 @@ public class AuthorizationCodeServiceTests
     {
         var (service, ds) = CreateService();
         var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest(
-            "mp-1", "u-100", "app-1", "profile:basic", OpenId: "openid-xxx", IpAddress: "1.2.3.4"), default);
+            "mp-1", "u-100", "app-1", "profile:basic", OpenId: "openid-xxx", IpAddress: "1.2.3.4"), TestContext.Current.CancellationToken);
 
         Assert.NotNull(issued.Code);
         Assert.Equal(120, issued.ExpiresIn);
 
         // 落库只存 SHA256 hash——原文绝不出现
-        var row = await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued.Code), default);
+        var row = await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued.Code), TestContext.Current.CancellationToken);
         Assert.NotNull(row);
         Assert.Equal("u-100", row!.UId);
         Assert.Equal("app-1", row.TargetAppId);
@@ -52,14 +52,14 @@ public class AuthorizationCodeServiceTests
     public async Task Consume_SingleUse_ReplayRejected()
     {
         var (service, _) = CreateService();
-        var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), default);
+        var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
 
-        var consumed = await service.ConsumeAsync(issued.Code, default);
+        var consumed = await service.ConsumeAsync(issued.Code, ct: TestContext.Current.CancellationToken);
         Assert.Equal("u-100", consumed.UId);
         Assert.Equal("app-1", consumed.TargetAppId);
 
         // 同 code 二次消费 → TICKET_CONSUMED（原子 CAS 重放拒）
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, default));
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, ct: TestContext.Current.CancellationToken));
         Assert.Contains("TICKET_CONSUMED", ex.Message);
     }
 
@@ -67,7 +67,7 @@ public class AuthorizationCodeServiceTests
     public async Task Consume_UnknownCode_Throws()
     {
         var (service, _) = CreateService();
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync("not-a-real-code", default));
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync("not-a-real-code", ct: TestContext.Current.CancellationToken));
         Assert.Contains("ACCESS_CODE_NOT_FOUND", ex.Message);
     }
 
@@ -75,15 +75,15 @@ public class AuthorizationCodeServiceTests
     public async Task Consume_Expired_Throws()
     {
         var (service, ds) = CreateService();
-        var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), default);
+        var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
 
         // 确定性老化（对齐既有模式）
         await ds.EntityUpdateWhereAsync(
             m => m.CodeHash == Token2Service.Sha256Hex(issued.Code),
             m => new { ExpiresAt = DateTime.UtcNow.AddMinutes(-1) },
-            default);
+            TestContext.Current.CancellationToken);
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, default));
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, ct: TestContext.Current.CancellationToken));
         Assert.Contains("TICKET_EXPIRED", ex.Message);
     }
 
@@ -92,10 +92,10 @@ public class AuthorizationCodeServiceTests
     {
         var (service, _) = CreateService();
         var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest(
-            "mp-1", "u-100", "app-1", "profile:basic", CodeVerifier: "verifier-abc"), default);
+            "mp-1", "u-100", "app-1", "profile:basic", CodeVerifier: "verifier-abc"), TestContext.Current.CancellationToken);
 
         // 签发时有 verifier → 消费必传，缺失拒（TICKET_STATE_MISMATCH）
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, default));
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, ct: TestContext.Current.CancellationToken));
         Assert.Contains("TICKET_STATE_MISMATCH", ex.Message);
     }
 
@@ -104,9 +104,9 @@ public class AuthorizationCodeServiceTests
     {
         var (service, _) = CreateService();
         var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest(
-            "mp-1", "u-100", "app-1", "profile:basic", CodeVerifier: "verifier-abc"), default);
+            "mp-1", "u-100", "app-1", "profile:basic", CodeVerifier: "verifier-abc"), TestContext.Current.CancellationToken);
 
-        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, "wrong-verifier", default));
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ConsumeAsync(issued.Code, "wrong-verifier", ct: TestContext.Current.CancellationToken));
         Assert.Contains("TICKET_STATE_MISMATCH", ex.Message);
     }
 
@@ -115,9 +115,9 @@ public class AuthorizationCodeServiceTests
     {
         var (service, _) = CreateService();
         var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest(
-            "mp-1", "u-100", "app-1", "profile:basic", CodeVerifier: "verifier-abc"), default);
+            "mp-1", "u-100", "app-1", "profile:basic", CodeVerifier: "verifier-abc"), TestContext.Current.CancellationToken);
 
-        var consumed = await service.ConsumeAsync(issued.Code, "verifier-abc", default);
+        var consumed = await service.ConsumeAsync(issued.Code, "verifier-abc", ct: TestContext.Current.CancellationToken);
         Assert.Equal("u-100", consumed.UId);
     }
 
@@ -125,36 +125,36 @@ public class AuthorizationCodeServiceTests
     public async Task CleanupExpired_RemovesStaleRows_KeepsActive()
     {
         var (service, ds) = CreateService();
-        var issued1 = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), default);
-        var issued2 = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-200", "app-1", "profile:basic"), default);
+        var issued1 = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
+        var issued2 = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-200", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
 
         var old = DateTime.UtcNow.AddDays(-30);
-        await ds.EntityUpdateWhereAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued1.Code), m => new { ExpiresAt = old }, default);
-        await ds.EntityUpdateWhereAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued2.Code), m => new { ExpiresAt = old }, default);
+        await ds.EntityUpdateWhereAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued1.Code), m => new { ExpiresAt = old }, TestContext.Current.CancellationToken);
+        await ds.EntityUpdateWhereAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued2.Code), m => new { ExpiresAt = old }, TestContext.Current.CancellationToken);
 
         // 未过期行（新签发仍有效）不受影响
-        var issued3 = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-300", "app-1", "profile:basic"), default);
+        var issued3 = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-300", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
 
-        var deleted = await service.CleanupExpiredAsync();
+        var deleted = await service.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, deleted);
 
-        Assert.Null(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued1.Code), default));
-        Assert.Null(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued2.Code), default));
-        Assert.NotNull(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued3.Code), default));
+        Assert.Null(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued1.Code), TestContext.Current.CancellationToken));
+        Assert.Null(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued2.Code), TestContext.Current.CancellationToken));
+        Assert.NotNull(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued3.Code), TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task CleanupExpired_UsesConfiguredRetentionDays_ZeroSkips()
     {
         var (service, ds) = CreateService(authorizationCodeRetentionDays: 0);
-        var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), default);
+        var issued = await service.IssueAsync(new AuthorizationCodeIssueRequest("mp-1", "u-100", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
         await ds.EntityUpdateWhereAsync(
             m => m.CodeHash == Token2Service.Sha256Hex(issued.Code),
             m => new { ExpiresAt = DateTime.UtcNow.AddDays(-2) },
-            default);
+            TestContext.Current.CancellationToken);
 
         // retention=0 → 跳过清理（返回 0，不删除）
-        Assert.Equal(0, await service.CleanupExpiredAsync());
-        Assert.NotNull(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued.Code), default));
+        Assert.Equal(0, await service.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken));
+        Assert.NotNull(await ds.EntityGetAsync(m => m.CodeHash == Token2Service.Sha256Hex(issued.Code), TestContext.Current.CancellationToken));
     }
 }

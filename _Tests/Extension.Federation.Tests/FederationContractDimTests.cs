@@ -28,7 +28,7 @@ public sealed class FederationContractDimTests
     public async Task SsoChannel_DefaultHandleEvent_IsNotApplicable()
     {
         ISsoChannel channel = new DefaultChannel();   // 接口引用（DIM 成员须经接口调用）
-        var outcome = await channel.HandleEventAsync(new ChannelInboundContext(new Dictionary<string, string?>()));
+        var outcome = await channel.HandleEventAsync(new ChannelInboundContext(new Dictionary<string, string?>()), ct: TestContext.Current.CancellationToken);
         Assert.Equal(ChannelEventOutcomeState.NotApplicable, outcome.State);
         Assert.Null(outcome.Event);
     }
@@ -38,7 +38,7 @@ public sealed class FederationContractDimTests
     public async Task SsoChannel_DefaultVerifyUrl_IsNull()
     {
         ISsoChannel channel = new DefaultChannel();   // 接口引用（DIM 成员须经接口调用）
-        var echo = await channel.VerifyUrlAsync(new ChannelInboundContext(new Dictionary<string, string?>()));
+        var echo = await channel.VerifyUrlAsync(new ChannelInboundContext(new Dictionary<string, string?>()), ct: TestContext.Current.CancellationToken);
         Assert.Null(echo);
     }
 
@@ -48,7 +48,7 @@ public sealed class FederationContractDimTests
     {
         ISsoChannel channel = new DefaultChannel();   // 接口引用（DIM 成员须经接口调用）
         var url = await channel.BuildAuthorizeUrlAsync(
-            new SsoChannelAuthorizeContext("https://cb.example.com", null, null, new Dictionary<string, string?>()));
+            new SsoChannelAuthorizeContext("https://cb.example.com", null, null, new Dictionary<string, string?>()), ct: TestContext.Current.CancellationToken);
         Assert.Null(url);
     }
 

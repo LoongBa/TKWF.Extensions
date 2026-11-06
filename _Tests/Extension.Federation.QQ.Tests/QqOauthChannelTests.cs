@@ -39,7 +39,7 @@ public class QqOauthChannelTests : QqChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "qq_oauth");
         Assert.Equal("qq_oauth", template.ChannelType);
         // ……真实实例经工厂构造（ChannelId = 注册表选区键）
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "qq_oauth");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "qq_oauth", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
         Assert.Equal(TestChannelId, channel!.ChannelId);
     }
@@ -181,10 +181,10 @@ public class QqApiClientTests
         var handler = new CapturingHandler(m => captured.TrySetResult(m), QqTestHost.CreateStubHandler(TestOpenId));
         var client = CreateClient(handler);
 
-        var token = await client.GetAccessTokenAsync(TestAppId, "code-1", QqTestHost.TestRedirectUri);
+        var token = await client.GetAccessTokenAsync(TestAppId, "code-1", QqTestHost.TestRedirectUri, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("stub-access-token", token);
-        var req = await captured.Task.WaitAsync(System.TimeSpan.FromSeconds(5));
+        var req = await captured.Task.WaitAsync(System.TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Contains("fmt=json", req.RequestUri!.Query);
         Assert.Contains($"redirect_uri={System.Uri.EscapeDataString(QqTestHost.TestRedirectUri)}", req.RequestUri.Query);
         Assert.Contains($"grant_type=authorization_code", req.RequestUri.Query);

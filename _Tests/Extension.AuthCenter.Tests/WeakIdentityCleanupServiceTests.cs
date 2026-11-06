@@ -89,7 +89,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-strong-pwd", createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-strong-pwd", AuthFactorTypes.Password, "u-strong-pwd", secretHash: "hash");
+        await user.Use<IAuthFactorService>().BindAsync("u-strong-pwd", AuthFactorTypes.Password, "u-strong-pwd", secretHash: "hash", ct: TestContext.Current.CancellationToken);
 
         var page = await service.QueryWeakIdentitiesAsync(
             new WeakIdentityCriteria(InactiveDays: 30), TestContext.Current.CancellationToken);
@@ -119,7 +119,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-frozen-weak", createTime: OldCreateTime());
-        await user.Use<IFreezeService>().FreezeAsync("u-frozen-weak", "manual", null, null);
+        await user.Use<IFreezeService>().FreezeAsync("u-frozen-weak", "manual", null, null, ct: TestContext.Current.CancellationToken);
 
         var page = await service.QueryWeakIdentitiesAsync(
             new WeakIdentityCriteria(InactiveDays: 30), TestContext.Current.CancellationToken);
@@ -146,7 +146,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-disabled-weak", enabled: false, createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-disabled-weak", AuthFactorTypes.Federated, "wechat_mp|openid-disabled");
+        await user.Use<IAuthFactorService>().BindAsync("u-disabled-weak", AuthFactorTypes.Federated, "wechat_mp|openid-disabled", ct: TestContext.Current.CancellationToken);
 
         var page = await service.QueryWeakIdentitiesAsync(
             new WeakIdentityCriteria(InactiveDays: 30), TestContext.Current.CancellationToken);
@@ -164,7 +164,7 @@ public class WeakIdentityCleanupServiceTests
         for (var i = 1; i <= 3; i++)
         {
             await SeedAccountAsync(user, $"u-weak-page-{i}", createTime: OldCreateTime());
-            await user.Use<IAuthFactorService>().BindAsync($"u-weak-page-{i}", AuthFactorTypes.Federated, $"wechat_mp|openid-page-{i}");
+            await user.Use<IAuthFactorService>().BindAsync($"u-weak-page-{i}", AuthFactorTypes.Federated, $"wechat_mp|openid-page-{i}", ct: TestContext.Current.CancellationToken);
         }
 
         var first = await service.QueryWeakIdentitiesAsync(
@@ -202,7 +202,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-purge-soft", createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-purge-soft", AuthFactorTypes.Federated, "wechat_mp|openid-soft");
+        await user.Use<IAuthFactorService>().BindAsync("u-purge-soft", AuthFactorTypes.Federated, "wechat_mp|openid-soft", ct: TestContext.Current.CancellationToken);
 
         var processed = await service.PurgeAsync(
             ["u-purge-soft"], PurgeMode.SoftDelete, TestContext.Current.CancellationToken);
@@ -235,7 +235,7 @@ public class WeakIdentityCleanupServiceTests
         await BindFederatedFactorAsync(user, "u-purge-phys");
         await user.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(
             new UserProfileEntity { UId = "u-purge-phys", Nickname = "待删" }, TestContext.Current.CancellationToken);
-        await user.Use<IFreezeService>().FreezeAsync("u-purge-phys", "manual", null, null);
+        await user.Use<IFreezeService>().FreezeAsync("u-purge-phys", "manual", null, null, ct: TestContext.Current.CancellationToken);
 
         var processed = await service.PurgeAsync(
             ["u-purge-phys"], PurgeMode.PhysicalDelete, TestContext.Current.CancellationToken);
@@ -255,7 +255,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-strong-purge", createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-strong-purge", AuthFactorTypes.Password, "u-strong-purge", secretHash: "hash");
+        await user.Use<IAuthFactorService>().BindAsync("u-strong-purge", AuthFactorTypes.Password, "u-strong-purge", secretHash: "hash", ct: TestContext.Current.CancellationToken);
 
         var processed = await service.PurgeAsync(
             ["u-strong-purge"], PurgeMode.PhysicalDelete, TestContext.Current.CancellationToken);
@@ -299,14 +299,14 @@ public class WeakIdentityCleanupServiceTests
         // 弱身份×3：含无因素（u-stat-w1）+ 联邦因素（u-stat-w2）+ 新近账号（u-stat-w3, CreateTime=now——
         // 基线与天数无关的实证——GetWeakStatsAsync 忽略 InactiveDays）
         await SeedAccountAsync(user, "u-stat-w1", createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-stat-w1", AuthFactorTypes.Federated, "wechat_mp|openid-stat1");
+        await user.Use<IAuthFactorService>().BindAsync("u-stat-w1", AuthFactorTypes.Federated, "wechat_mp|openid-stat1", ct: TestContext.Current.CancellationToken);
         await SeedAccountAsync(user, "u-stat-w2");
-        await user.Use<IAuthFactorService>().BindAsync("u-stat-w2", AuthFactorTypes.Federated, "wechat_mp|openid-stat2", source: AuthFactorSources.Provisioning);
+        await user.Use<IAuthFactorService>().BindAsync("u-stat-w2", AuthFactorTypes.Federated, "wechat_mp|openid-stat2", source: AuthFactorSources.Provisioning, ct: TestContext.Current.CancellationToken);
         await SeedAccountAsync(user, "u-stat-w3");
-        await user.Use<IAuthFactorService>().BindAsync("u-stat-w3", AuthFactorTypes.Federated, "wechat_mp|openid-stat3");
+        await user.Use<IAuthFactorService>().BindAsync("u-stat-w3", AuthFactorTypes.Federated, "wechat_mp|openid-stat3", ct: TestContext.Current.CancellationToken);
         // 强身份×1
         await SeedAccountAsync(user, "u-stat-s1");
-        await user.Use<IAuthFactorService>().BindAsync("u-stat-s1", AuthFactorTypes.Password, "u-stat-s1", secretHash: "hash");
+        await user.Use<IAuthFactorService>().BindAsync("u-stat-s1", AuthFactorTypes.Password, "u-stat-s1", secretHash: "hash", ct: TestContext.Current.CancellationToken);
 
         var stats = await service.GetWeakStatsAsync(TestContext.Current.CancellationToken);
 
@@ -321,9 +321,9 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-stat-strong-1");
-        await user.Use<IAuthFactorService>().BindAsync("u-stat-strong-1", AuthFactorTypes.Password, "u-stat-strong-1", secretHash: "hash");
+        await user.Use<IAuthFactorService>().BindAsync("u-stat-strong-1", AuthFactorTypes.Password, "u-stat-strong-1", secretHash: "hash", ct: TestContext.Current.CancellationToken);
         await SeedAccountAsync(user, "u-stat-strong-2");
-        await user.Use<IAuthFactorService>().BindAsync("u-stat-strong-2", AuthFactorTypes.Sms, "13800001234");
+        await user.Use<IAuthFactorService>().BindAsync("u-stat-strong-2", AuthFactorTypes.Sms, "13800001234", ct: TestContext.Current.CancellationToken);
 
         var stats = await service.GetWeakStatsAsync(TestContext.Current.CancellationToken);
 
@@ -353,7 +353,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-email-1", createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-email-1", AuthFactorTypes.Email, "a@b.c");
+        await user.Use<IAuthFactorService>().BindAsync("u-email-1", AuthFactorTypes.Email, "a@b.c", ct: TestContext.Current.CancellationToken);
 
         var page = await service.QueryWeakIdentitiesAsync(
             new WeakIdentityCriteria(InactiveDays: 30), TestContext.Current.CancellationToken);
@@ -389,7 +389,7 @@ public class WeakIdentityCleanupServiceTests
     {
         var (service, user) = CreateService();
         await SeedAccountAsync(user, "u-badmode-1", createTime: OldCreateTime());
-        await user.Use<IAuthFactorService>().BindAsync("u-badmode-1", AuthFactorTypes.Federated, "wechat_mp|openid-bm");
+        await user.Use<IAuthFactorService>().BindAsync("u-badmode-1", AuthFactorTypes.Federated, "wechat_mp|openid-bm", ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<DomainException>(() => service.PurgeAsync(
             ["u-badmode-1"], (PurgeMode)99, TestContext.Current.CancellationToken));

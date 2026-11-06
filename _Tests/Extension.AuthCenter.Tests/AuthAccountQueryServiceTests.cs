@@ -31,12 +31,12 @@ public class AuthAccountQueryServiceTests
     {
         var (service, ds, stub) = CreateService();
 
-        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" });
-        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1002" });
-        await stub.Use<IAuthFactorService>().BindAsync("u-1001", AuthFactorTypes.Sms, "13812345678");
+        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" }, ct: TestContext.Current.CancellationToken);
+        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1002" }, ct: TestContext.Current.CancellationToken);
+        await stub.Use<IAuthFactorService>().BindAsync("u-1001", AuthFactorTypes.Sms, "13812345678", ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal("u-1002", (await service.GetByUIdAsync("u-1002"))!.UId);
-        Assert.Equal("u-1001", (await service.GetByPhoneAsync("13812345678"))!.UId);
+        Assert.Equal("u-1002", (await service.GetByUIdAsync("u-1002", ct: TestContext.Current.CancellationToken))!.UId);
+        Assert.Equal("u-1001", (await service.GetByPhoneAsync("13812345678", ct: TestContext.Current.CancellationToken))!.UId);
     }
 
     /// <summary>未知键查询 → null（无账号 / 无对应因素行）。</summary>
@@ -44,10 +44,10 @@ public class AuthAccountQueryServiceTests
     public async Task QueryMethods_UnknownKey_ReturnsNull()
     {
         var (service, ds, _) = CreateService();
-        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" });
+        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" }, ct: TestContext.Current.CancellationToken);
 
-        Assert.Null(await service.GetByUIdAsync("u-unknown"));
-        Assert.Null(await service.GetByPhoneAsync("13900000000"));
+        Assert.Null(await service.GetByUIdAsync("u-unknown", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await service.GetByPhoneAsync("13900000000", ct: TestContext.Current.CancellationToken));
     }
 
     /// <summary>V0.11.0（T7）：微信绑定判定经 Federated 因素通道前缀（wechat_mp / wechat_web）。</summary>
@@ -55,11 +55,11 @@ public class AuthAccountQueryServiceTests
     public async Task IsWechatBound_ReadsFederatedFactorChannel()
     {
         var (service, ds, stub) = CreateService();
-        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" });
-        await stub.Use<IAuthFactorService>().BindAsync("u-1001", AuthFactorTypes.Federated, "wechat_mp|openid-1");
+        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" }, ct: TestContext.Current.CancellationToken);
+        await stub.Use<IAuthFactorService>().BindAsync("u-1001", AuthFactorTypes.Federated, "wechat_mp|openid-1", ct: TestContext.Current.CancellationToken);
 
-        Assert.True(await service.IsWechatBoundAsync("u-1001"));
-        Assert.False(await service.IsWechatBoundAsync("u-1002"));
+        Assert.True(await service.IsWechatBoundAsync("u-1001", ct: TestContext.Current.CancellationToken));
+        Assert.False(await service.IsWechatBoundAsync("u-1002", ct: TestContext.Current.CancellationToken));
     }
 
     /// <summary>V0.9.0（T3）：档案查询委托 UserProfile 1:1 表（凭据/档案分离——Nickname/Avatar 迁档案表）。</summary>
@@ -67,7 +67,7 @@ public class AuthAccountQueryServiceTests
     public async Task GetProfileByUId_ReadsUserProfileTable()
     {
         var (service, ds, stub) = CreateService();
-        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" });
+        await ds.CreateAsync(new AuthAccountEntity { UId = "u-1001" }, ct: TestContext.Current.CancellationToken);
 
         // 档案种子（UserProfile 1:1——UId 唯一；经 DataService 落库，红线合规路径）
         await stub.Use<UserProfileEntityDataService>().CreateOrUpdateAsync(new UserProfileEntity
@@ -76,15 +76,15 @@ public class AuthAccountQueryServiceTests
             Nickname = "测试用户",
             Avatar = "https://cdn.example.com/a.png",
             Email = "test@example.com",
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
-        var profile = await service.GetProfileByUIdAsync("u-1001");
+        var profile = await service.GetProfileByUIdAsync("u-1001", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(profile);
         Assert.Equal("u-1001", profile!.UId);
         Assert.Equal("测试用户", profile.Nickname);
         Assert.Equal("test@example.com", profile.Email);
 
         // 无档案 → null
-        Assert.Null(await service.GetProfileByUIdAsync("u-unknown"));
+        Assert.Null(await service.GetProfileByUIdAsync("u-unknown", ct: TestContext.Current.CancellationToken));
     }
 }

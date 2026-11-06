@@ -20,16 +20,16 @@ public class NotificationStoreTests
         var store = host.Store;
 
         // 发布 2 条 → 均未读（经 Store 读取收件箱，按创建倒序）
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
-        var inbox = await store.GetListAsync(1, page: 1, pageSize: 10);
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        var inbox = await store.GetListAsync(1, page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, inbox.Count);
 
         // 标记其中一条已读
         var firstRow = inbox[0];
-        await store.MarkReadAsync(1, firstRow.NotificationId);
+        await store.MarkReadAsync(1, firstRow.NotificationId, ct: TestContext.Current.CancellationToken);
 
-        var unread = await store.GetUnreadAsync(1);
+        var unread = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
         Assert.Single(unread);
         Assert.NotEqual(firstRow.NotificationId, unread[0].NotificationId); // 另一条仍未读
     }
@@ -44,15 +44,15 @@ public class NotificationStoreTests
         var store = host.Store;
 
         for (int i = 0; i < 5; i++)
-            await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
+            await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
-        var page1 = await store.GetListAsync(1, page: 1, pageSize: 2);
+        var page1 = await store.GetListAsync(1, page: 1, pageSize: 2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, page1.Count);
 
-        var page2 = await store.GetListAsync(1, page: 2, pageSize: 2);
+        var page2 = await store.GetListAsync(1, page: 2, pageSize: 2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, page2.Count);
 
-        var page3 = await store.GetListAsync(1, page: 3, pageSize: 2);
+        var page3 = await store.GetListAsync(1, page: 3, pageSize: 2, ct: TestContext.Current.CancellationToken);
         Assert.Single(page3);
     }
 
@@ -65,15 +65,15 @@ public class NotificationStoreTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, await store.GetUnreadCountAsync(1));
+        Assert.Equal(2, await store.GetUnreadCountAsync(1, ct: TestContext.Current.CancellationToken));
 
-        var notif = (await store.GetListAsync(1, page: 1, pageSize: 10))[0];
-        await store.MarkReadAsync(1, notif.NotificationId);
+        var notif = (await store.GetListAsync(1, page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken))[0];
+        await store.MarkReadAsync(1, notif.NotificationId, ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, await store.GetUnreadCountAsync(1));
+        Assert.Equal(1, await store.GetUnreadCountAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -85,13 +85,13 @@ public class NotificationStoreTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        var notif = (await store.GetListAsync(1, page: 1, pageSize: 10))[0];
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        var notif = (await store.GetListAsync(1, page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken))[0];
         var before = DateTime.UtcNow;
 
-        await store.MarkReadAsync(1, notif.NotificationId);
+        await store.MarkReadAsync(1, notif.NotificationId, ct: TestContext.Current.CancellationToken);
 
-        var inboxRow = (await store.GetListAsync(1, page: 1, pageSize: 10))
+        var inboxRow = (await store.GetListAsync(1, page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken))
             .Single(r => r.NotificationId == notif.NotificationId);
         Assert.Equal(1, inboxRow.State);
         Assert.NotNull(inboxRow.ReadTime);
@@ -107,14 +107,14 @@ public class NotificationStoreTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
-        Assert.Equal(2, await store.GetUnreadCountAsync(1));
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(2, await store.GetUnreadCountAsync(1, ct: TestContext.Current.CancellationToken));
 
-        await store.MarkAllReadAsync(1);
+        await store.MarkAllReadAsync(1, ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, await store.GetUnreadCountAsync(1));
-        var rows = await store.GetListAsync(1, page: 1, pageSize: 10);
+        Assert.Equal(0, await store.GetUnreadCountAsync(1, ct: TestContext.Current.CancellationToken));
+        var rows = await store.GetListAsync(1, page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken);
         Assert.All(rows, r => Assert.Equal(1, r.State));
     }
 
@@ -127,14 +127,14 @@ public class NotificationStoreTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
-        var shipped = await store.GetListAsync(1, page: 1, pageSize: 10, name: TestNotificationDefinitions.OrderShipped);
+        var shipped = await store.GetListAsync(1, page: 1, pageSize: 10, name: TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, shipped.Count);
 
-        var alert = await store.GetListAsync(1, page: 1, pageSize: 10, name: TestNotificationDefinitions.SystemAlert);
+        var alert = await store.GetListAsync(1, page: 1, pageSize: 10, name: TestNotificationDefinitions.SystemAlert, ct: TestContext.Current.CancellationToken);
         Assert.Single(alert);
     }
 }

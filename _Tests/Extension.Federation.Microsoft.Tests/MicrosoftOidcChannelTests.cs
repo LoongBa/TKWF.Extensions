@@ -48,7 +48,7 @@ public class MicrosoftOidcChannelTests : MicrosoftChannelTestHost
             TokenIssuers = ["^https://login\\.microsoftonline\\.com/[^/]+/v2\\.0$"],
         }];
         var (_, user) = BindScope();
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("ms-main", "microsoft_oidc");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("ms-main", "microsoft_oidc", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
 
         Assert.Equal("microsoft_oidc:microsoft-app-1", channel!.ChannelId);   // pairwise 复合编码（自动拼接）
@@ -64,7 +64,7 @@ public class MicrosoftOidcChannelTests : MicrosoftChannelTestHost
             TokenIssuers = ["^https://login\\.microsoftonline\\.com/[^/]+/v2\\.0$"],
         }];
         var (_, userA) = BindScope();
-        var channelA = await userA.Use<ISsoChannelFactory>().CreateAsync("app-a", "microsoft_oidc");
+        var channelA = await userA.Use<ISsoChannelFactory>().CreateAsync("app-a", "microsoft_oidc", TestContext.Current.CancellationToken);
         Assert.NotNull(channelA);
         Assert.Equal("microsoft_oidc:app-a", channelA!.ChannelId);
 
@@ -74,7 +74,7 @@ public class MicrosoftOidcChannelTests : MicrosoftChannelTestHost
             TokenIssuers = ["^https://login\\.microsoftonline\\.com/[^/]+/v2\\.0$"],
         }];
         var (_, userB) = BindScope();
-        var channelB = await userB.Use<ISsoChannelFactory>().CreateAsync("app-b", "microsoft_oidc");
+        var channelB = await userB.Use<ISsoChannelFactory>().CreateAsync("app-b", "microsoft_oidc", TestContext.Current.CancellationToken);
         Assert.NotNull(channelB);
         Assert.Equal("microsoft_oidc:app-b", channelB!.ChannelId);
 

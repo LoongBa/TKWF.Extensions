@@ -23,9 +23,9 @@ public class FileManagerTests
     public async Task Upload_ValidContent_ReturnsEntity_BlobPersisted_Sha256Correct()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
-        var file = await host.UploadFileAsync(folder.Id, "hello.txt", HelloBytes);
+        var file = await host.UploadFileAsync(folder.Id, "hello.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(folder.Id, file.FolderId);
         Assert.Equal(".txt", file.Extension);
@@ -44,7 +44,7 @@ public class FileManagerTests
     {
         using var host = FileManagementTestHost.Create();
 
-        var file = await host.UploadFileAsync(null, "root.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "root.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(file.FolderId);
         Assert.Equal("root.txt", file.Name);
@@ -59,7 +59,7 @@ public class FileManagerTests
         using var host = FileManagementTestHost.Create();
 
         await Assert.ThrowsAnyAsync<ArgumentException>(
-            () => host.UploadFileAsync(null, "malware.exe", HelloBytes));
+            () => host.UploadFileAsync(null, "malware.exe", HelloBytes, ct: TestContext.Current.CancellationToken));
 
         // 校验先于 Blob（步骤 3 白名单）→ 无残留
         Assert.Equal(0, host.BlobCount());
@@ -71,7 +71,7 @@ public class FileManagerTests
         using var host = FileManagementTestHost.Create();
 
         // .JPG 大小写归一（C6）→ 白名单 .jpg 放行；ContentType 由扩展名服务端推导（C5）
-        var file = await host.UploadFileAsync(null, "photo.JPG", HelloBytes);
+        var file = await host.UploadFileAsync(null, "photo.JPG", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.True(file.Id > 0);
         Assert.Equal("image/jpeg", file.ContentType);
@@ -83,7 +83,7 @@ public class FileManagerTests
     {
         using var host = FileManagementTestHost.Create(options: new FileManagementOptions { AllowAnyExtension = true });
 
-        var file = await host.UploadFileAsync(null, "data.xyz", HelloBytes);
+        var file = await host.UploadFileAsync(null, "data.xyz", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.True(file.Id > 0);
         // 未知扩展名 → application/octet-stream（C5）
@@ -99,7 +99,7 @@ public class FileManagerTests
 
         // seekable → 步骤 4a：Length 预检 fail-fast（不读流）
         await Assert.ThrowsAnyAsync<ArgumentException>(
-            () => host.Manager.UploadFileAsync(null, "big.txt", stream, ct: CancellationToken.None));
+            () => host.Manager.UploadFileAsync(null, "big.txt", stream, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class FileManagerTests
 
         // 非 seekable → 步骤 4b：边复制边计数，超限中断读取（C4）
         await Assert.ThrowsAnyAsync<ArgumentException>(
-            () => host.Manager.UploadFileAsync(null, "big.txt", nonSeekable, ct: CancellationToken.None));
+            () => host.Manager.UploadFileAsync(null, "big.txt", nonSeekable, ct: TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -128,7 +128,7 @@ public class FileManagerTests
 
         // 步骤 1（空/空白）+ 步骤 2（防穿越：. / .. / 分隔符 / 盘符）→ ArgumentException
         await Assert.ThrowsAnyAsync<ArgumentException>(
-            () => host.UploadFileAsync(null, fileName, HelloBytes));
+            () => host.UploadFileAsync(null, fileName, HelloBytes, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class FileManagerTests
         using var host = FileManagementTestHost.Create();
 
         // C5：ContentType 服务端推导（.txt → text/plain），不信任客户端伪造值
-        var file = await host.UploadFileAsync(null, "doc.txt", HelloBytes, contentType: "text/html");
+        var file = await host.UploadFileAsync(null, "doc.txt", HelloBytes, contentType: "text/html", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("text/plain", file.ContentType);
     }
@@ -148,12 +148,12 @@ public class FileManagerTests
     public async Task Upload_DuplicateContentSameFolderSameName_Idempotent_NoDoubleBlob()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
-        var first = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
+        var first = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, host.BlobCount());
 
-        var second = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
+        var second = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         // 幂等返回既有（步骤 6 去重预查命中）
         Assert.Equal(first.Id, second.Id);
@@ -168,10 +168,10 @@ public class FileManagerTests
         // V0.2.0（Oracle P1-3 分支 C）：Deduplicate=false + 同内容 → 幂等返回既有（不产生冗余版本行），
         // 不再撞 UX 约束抛异常（v0.1.0 旧行为——版本化后同名走版本路径）
         using var host = FileManagementTestHost.Create(options: new FileManagementOptions { Deduplicate = false });
-        var folder = await host.CreateFolderAsync("docs", "文档");
-        var first = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        var first = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
-        var second = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes);
+        var second = await host.UploadFileAsync(folder.Id, "same.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(first.Id, second.Id);   // 幂等返回既有
         Assert.Equal(1, host.BlobCount());   // 不产生新 Blob
@@ -183,16 +183,16 @@ public class FileManagerTests
     public async Task Download_ReturnsStream_MatchesMetadata()
     {
         using var host = FileManagementTestHost.Create();
-        var file = await host.UploadFileAsync(null, "down.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "down.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
-        var result = await host.Manager.DownloadFileAsync(file.Id, CancellationToken.None);
+        var result = await host.Manager.DownloadFileAsync(file.Id, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(file.Id, result!.Value.File.Id);
         Assert.Equal("down.txt", result.Value.File.Name);
         await using var stream = result.Value.Stream;   // 释放下载流——避免临时目录清理文件占用
         using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms);
+        await stream.CopyToAsync(ms, TestContext.Current.CancellationToken);
         Assert.Equal(HelloBytes, ms.ToArray());
     }
 
@@ -202,7 +202,7 @@ public class FileManagerTests
         using var host = FileManagementTestHost.Create();
 
         await Assert.ThrowsAnyAsync<InvalidOperationException>(
-            () => host.Manager.DownloadFileAsync(999_999, CancellationToken.None));
+            () => host.Manager.DownloadFileAsync(999_999, TestContext.Current.CancellationToken));
     }
 
     // ── D13 删除文件：元数据 + Blob 均删（临时目录文件消失） ──
@@ -211,15 +211,15 @@ public class FileManagerTests
     public async Task DeleteFile_RemovesMetadataAndBlob()
     {
         using var host = FileManagementTestHost.Create();
-        var file = await host.UploadFileAsync(null, "del.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "del.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
         Assert.True(File.Exists(Path.Combine(host.BlobRoot, file.StoredPath)));
 
-        await host.Manager.DeleteFileAsync(file.Id, CancellationToken.None);
+        await host.Manager.DeleteFileAsync(file.Id, TestContext.Current.CancellationToken);
 
         // 元数据删 + Blob 删
         Assert.False(File.Exists(Path.Combine(host.BlobRoot, file.StoredPath)));
         Assert.Equal(0, host.BlobCount());
-        Assert.Null(await host.Manager.GetFileAsync(file.Id, CancellationToken.None));   // GetFileAsync 不存在返回 null
+        Assert.Null(await host.Manager.GetFileAsync(file.Id, TestContext.Current.CancellationToken));   // GetFileAsync 不存在返回 null
     }
 
     // ── D14 重命名文件：目录内唯一约束冲突 → 业务异常（P3）；移动文件：目标目录校验 + 重名检查 + FolderId 更新 ──
@@ -228,11 +228,11 @@ public class FileManagerTests
     public async Task RenameFile_Success_NameUpdated()
     {
         using var host = FileManagementTestHost.Create();
-        var file = await host.UploadFileAsync(null, "a.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "a.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
-        await host.Manager.RenameFileAsync(file.Id, "b.txt", CancellationToken.None);
+        await host.Manager.RenameFileAsync(file.Id, "b.txt", TestContext.Current.CancellationToken);
 
-        var renamed = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
+        var renamed = (await host.Manager.GetFileAsync(file.Id, TestContext.Current.CancellationToken))!;
         Assert.Equal("b.txt", renamed.Name);
         Assert.Equal(".txt", renamed.Extension);
     }
@@ -241,12 +241,12 @@ public class FileManagerTests
     public async Task RenameFile_DuplicateNameInFolder_ThrowsBusinessException()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
-        var a = await host.UploadFileAsync(folder.Id, "a.txt", HelloBytes);
-        await host.UploadFileAsync(folder.Id, "b.txt", OtherBytes);
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        var a = await host.UploadFileAsync(folder.Id, "a.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(folder.Id, "b.txt", OtherBytes, ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Manager.RenameFileAsync(a.Id, "b.txt", CancellationToken.None));
+            () => host.Manager.RenameFileAsync(a.Id, "b.txt", TestContext.Current.CancellationToken));
 
         Assert.Contains("已存在同名文件", ex.Message);
     }
@@ -257,17 +257,17 @@ public class FileManagerTests
     public async Task RenameFile_CrossExtension_RecomputesDerivedColumns()
     {
         using var host = FileManagementTestHost.Create();
-        var file = await host.UploadFileAsync(null, "a.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "a.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         // 同扩展名重命名 → 派生列不变（回归）
-        await host.Manager.RenameFileAsync(file.Id, "b.txt", CancellationToken.None);
-        var sameExt = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
+        await host.Manager.RenameFileAsync(file.Id, "b.txt", TestContext.Current.CancellationToken);
+        var sameExt = (await host.Manager.GetFileAsync(file.Id, TestContext.Current.CancellationToken))!;
         Assert.Equal(".txt", sameExt.Extension);
         Assert.Equal("text/plain", sameExt.ContentType);
 
         // 跨扩展名重命名 → Extension/ContentType 由新扩展名服务端推导（C5 不变量）
-        await host.Manager.RenameFileAsync(file.Id, "b.jpg", CancellationToken.None);
-        var crossExt = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
+        await host.Manager.RenameFileAsync(file.Id, "b.jpg", TestContext.Current.CancellationToken);
+        var crossExt = (await host.Manager.GetFileAsync(file.Id, TestContext.Current.CancellationToken))!;
         Assert.Equal("b.jpg", crossExt.Name);
         Assert.Equal(".jpg", crossExt.Extension);
         Assert.Equal("image/jpeg", crossExt.ContentType);
@@ -277,11 +277,11 @@ public class FileManagerTests
     public async Task RenameFile_WhitelistOutsideExtension_Throws()
     {
         using var host = FileManagementTestHost.Create();
-        var file = await host.UploadFileAsync(null, "a.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "a.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         // AllowAnyExtension=false（默认）→ 重命名为白名单外扩展名拒绝
         await Assert.ThrowsAsync<ArgumentException>(
-            () => host.Manager.RenameFileAsync(file.Id, "a.exe", CancellationToken.None));
+            () => host.Manager.RenameFileAsync(file.Id, "a.exe", TestContext.Current.CancellationToken));
     }
 
     // ── V0.2.0（Oracle P1-1）：C2 根级同名预检移除——根级同名不同内容走版本化路径 ──
@@ -291,12 +291,12 @@ public class FileManagerTests
     {
         // V0.2.0：Deduplicate=false + 根级同名不同内容 → 生成新版本（不再抛"已存在同名文件"）
         using var host = FileManagementTestHost.Create(options: new FileManagementOptions { Deduplicate = false });
-        var first = await host.UploadFileAsync(null, "root.txt", HelloBytes);
+        var first = await host.UploadFileAsync(null, "root.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
-        var second = await host.UploadFileAsync(null, "root.txt", OtherBytes);
+        var second = await host.UploadFileAsync(null, "root.txt", OtherBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(first.Id, second.Id);   // 根级同名 → 同文件新版本
-        var versions = await host.Manager.GetFileVersionsAsync(first.Id);
+        var versions = await host.Manager.GetFileVersionsAsync(first.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, versions.Count);
         Assert.Equal(2, host.BlobCount());   // v1 + v2 两个 Blob
     }
@@ -305,23 +305,23 @@ public class FileManagerTests
     public async Task MoveFile_TargetFolderNotExists_Throws()
     {
         using var host = FileManagementTestHost.Create();
-        var file = await host.UploadFileAsync(null, "m.txt", HelloBytes);
+        var file = await host.UploadFileAsync(null, "m.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAnyAsync<InvalidOperationException>(
-            () => host.Manager.MoveFileAsync(file.Id, 999_999, CancellationToken.None));
+            () => host.Manager.MoveFileAsync(file.Id, 999_999, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task MoveFile_TargetFolderHasSameName_Throws()
     {
         using var host = FileManagementTestHost.Create();
-        var src = await host.CreateFolderAsync("src", "源");
-        var dst = await host.CreateFolderAsync("dst", "目标");
-        var file = await host.UploadFileAsync(src.Id, "x.txt", HelloBytes);
-        await host.UploadFileAsync(dst.Id, "x.txt", OtherBytes);
+        var src = await host.CreateFolderAsync("src", "源", ct: TestContext.Current.CancellationToken);
+        var dst = await host.CreateFolderAsync("dst", "目标", ct: TestContext.Current.CancellationToken);
+        var file = await host.UploadFileAsync(src.Id, "x.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(dst.Id, "x.txt", OtherBytes, ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Manager.MoveFileAsync(file.Id, dst.Id, CancellationToken.None));
+            () => host.Manager.MoveFileAsync(file.Id, dst.Id, TestContext.Current.CancellationToken));
 
         Assert.Contains("已存在同名文件", ex.Message);
     }
@@ -330,13 +330,13 @@ public class FileManagerTests
     public async Task MoveFile_Success_UpdatesFolderId()
     {
         using var host = FileManagementTestHost.Create();
-        var src = await host.CreateFolderAsync("src", "源");
-        var dst = await host.CreateFolderAsync("dst", "目标");
-        var file = await host.UploadFileAsync(src.Id, "m.txt", HelloBytes);
+        var src = await host.CreateFolderAsync("src", "源", ct: TestContext.Current.CancellationToken);
+        var dst = await host.CreateFolderAsync("dst", "目标", ct: TestContext.Current.CancellationToken);
+        var file = await host.UploadFileAsync(src.Id, "m.txt", HelloBytes, ct: TestContext.Current.CancellationToken);
 
-        await host.Manager.MoveFileAsync(file.Id, dst.Id, CancellationToken.None);
+        await host.Manager.MoveFileAsync(file.Id, dst.Id, TestContext.Current.CancellationToken);
 
-        var moved = (await host.Manager.GetFileAsync(file.Id, CancellationToken.None))!;
+        var moved = (await host.Manager.GetFileAsync(file.Id, TestContext.Current.CancellationToken))!;
         Assert.Equal(dst.Id, moved.FolderId);
     }
 
@@ -349,7 +349,7 @@ public class FileManagerTests
 
         // 上传流程：步骤 8 先写 Blob → 步骤 9 元数据落库（FolderId 引用守卫）失败 → 步骤 10 补偿删除 Blob
         await Assert.ThrowsAnyAsync<Exception>(
-            () => host.UploadFileAsync(999_999, "orphan.txt", HelloBytes));
+            () => host.UploadFileAsync(999_999, "orphan.txt", HelloBytes, ct: TestContext.Current.CancellationToken));
 
         // 补偿生效：临时目录干净，无残留 Blob
         Assert.Equal(0, host.BlobCount());
@@ -367,7 +367,7 @@ public class FileManagerTests
         // ObjectPool.Get() 可能超时 10s，对齐 FileVersionManager 并发版本上传测试先例）
         using var host = FileManagementTestHost.CreateFile(out _,
             options: new FileManagementOptions { Deduplicate = false });
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         var results = await Task.WhenAll(new[]
         {
@@ -393,7 +393,7 @@ public class FileManagerTests
         // 文件模式 SQLite（同上一用例——:memory: 单连接池并发争用超时先例）
         using var host = FileManagementTestHost.CreateFile(out _,
             options: new FileManagementOptions { Deduplicate = false });
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         var results = await Task.WhenAll(new[]
         {
@@ -407,7 +407,7 @@ public class FileManagerTests
         Assert.Empty(failures);               // 双成功（败者版本化而非异常）
         Assert.Equal(2, success.Count);
         Assert.Single(success.Select(r => r.File!.Id).Distinct());   // 同一文件
-        var versions = await host.Manager.GetFileVersionsAsync(success[0].File!.Id);
+        var versions = await host.Manager.GetFileVersionsAsync(success[0].File!.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, versions.Count);      // v1 + v2（败者追加新版本）
         Assert.Equal(2, host.BlobCount());    // 两内容两个 Blob（胜者 v1 + 败者新版本 v2）
     }

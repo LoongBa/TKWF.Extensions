@@ -52,7 +52,7 @@ public class SmtpEmailSenderRetryTests
         var message = new EmailMessage { To = "test@example.com", Subject = "Test", Body = "Hello" };
 
         // Act — should not throw
-        await sender.SendAsync(message);
+        await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
         // Assert — 最终失败记录 + RetryCount 反映实际重试次数（= RetryCount 配置 = 2）
         Assert.Single(store.SavedRecords);
@@ -72,7 +72,7 @@ public class SmtpEmailSenderRetryTests
         var message = new EmailMessage { To = "test@example.com", Subject = "Test", Body = "Hello" };
 
         // Act — should not throw
-        await sender.SendAsync(message);
+        await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
         // Assert — 单次失败记录，RetryCount 保持 0，无重试警告
         Assert.Single(store.SavedRecords);
@@ -91,7 +91,7 @@ public class SmtpEmailSenderRetryTests
 
         // Act — should not throw，且不应因退避等待而拖慢（base=0 无等待；本机每次连接尝试约 2s）
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await sender.SendAsync(message);
+        await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
         sw.Stop();
 
         // Assert — 防挂起软断言（配置错误导致无限重试/长退避时会远超该值）+ 最终失败 + RetryCount=2

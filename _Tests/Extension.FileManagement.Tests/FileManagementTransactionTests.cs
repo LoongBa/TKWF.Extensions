@@ -25,7 +25,7 @@ public class FileManagementTransactionTests
     {
         using var host = NewHostWithRecording(out var tm);
 
-        await host.CreateFolderAsync("docs", "文档");
+        await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, tm.BeginCount);
         Assert.Equal(1, tm.CommitCount);
@@ -36,10 +36,10 @@ public class FileManagementTransactionTests
     public async Task UploadFile_Success_CommitsExactlyOnce()
     {
         using var host = NewHostWithRecording(out var tm);
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         tm.Reset();
 
-        await host.UploadFileAsync(folder.Id, "a.txt", SampleBytes);
+        await host.UploadFileAsync(folder.Id, "a.txt", SampleBytes, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, tm.BeginCount);
         Assert.Equal(1, tm.CommitCount);
@@ -50,8 +50,8 @@ public class FileManagementTransactionTests
     public async Task DeleteFolder_BlockedByFiles_RollsBack()
     {
         using var host = NewHostWithRecording(out var tm);
-        var folder = await host.CreateFolderAsync("docs", "文档");
-        await host.UploadFileAsync(folder.Id, "a.txt", SampleBytes);
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(folder.Id, "a.txt", SampleBytes, ct: TestContext.Current.CancellationToken);
         tm.Reset();
 
         // 删除保护拒绝（事务内二次确认）→ 业务异常经 Rollback 路径自然传播
@@ -67,7 +67,7 @@ public class FileManagementTransactionTests
     public async Task DeleteFolder_Empty_Succeeds_CommitsOnce()
     {
         using var host = NewHostWithRecording(out var tm);
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         tm.Reset();
 
         await host.Manager.DeleteFolderAsync(folder.Id, CancellationToken.None);
@@ -81,13 +81,13 @@ public class FileManagementTransactionTests
     public async Task UploadFile_CommitFailure_PropagatesAndRollsBack()
     {
         using var host = NewHostWithRecording(out var tm);
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         tm.Reset();
         tm.FailCommit = true;
 
         // 提交阶段注入失败 → 异常自然传播 + Rollback 调用（Blob 补偿同步生效，不额外断言）
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.UploadFileAsync(folder.Id, "a.txt", SampleBytes));
+            () => host.UploadFileAsync(folder.Id, "a.txt", SampleBytes, ct: TestContext.Current.CancellationToken));
 
         Assert.Equal(1, tm.BeginCount);
         Assert.Equal(0, tm.CommitCount);

@@ -42,7 +42,7 @@ public class LocalStorageServiceTests : IDisposable
         var content = new MemoryStream(Encoding.UTF8.GetBytes("Hello, Blob!"));
 
         // Act
-        var result = (await service.UploadAsync("test.txt", content, "text/plain"))!;
+        var result = (await service.UploadAsync("test.txt", content, "text/plain", ct: TestContext.Current.CancellationToken))!;
 
         // Assert
         Assert.Equal("test.txt", result.Name);
@@ -60,13 +60,13 @@ public class LocalStorageServiceTests : IDisposable
         using var uploadStream = new MemoryStream(original);
 
         // Act
-        var blobInfo = (await service.UploadAsync("download.txt", uploadStream, "text/plain"))!;
-        using var downloadStream = await service.DownloadAsync(blobInfo.Path);
+        var blobInfo = (await service.UploadAsync("download.txt", uploadStream, "text/plain", ct: TestContext.Current.CancellationToken))!;
+        using var downloadStream = await service.DownloadAsync(blobInfo.Path, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(downloadStream);
         using var ms = new MemoryStream();
-        await downloadStream!.CopyToAsync(ms);
+        await downloadStream!.CopyToAsync(ms, TestContext.Current.CancellationToken);
         Assert.Equal(original, ms.ToArray());
     }
 
@@ -76,16 +76,16 @@ public class LocalStorageServiceTests : IDisposable
         // Arrange
         var service = CreateService();
         using var uploadStream = new MemoryStream(Encoding.UTF8.GetBytes("Delete me"));
-        var blobInfo = (await service.UploadAsync("delete.txt", uploadStream, "text/plain"))!;
+        var blobInfo = (await service.UploadAsync("delete.txt", uploadStream, "text/plain", ct: TestContext.Current.CancellationToken))!;
 
         // Act
-        var result = await service.DeleteAsync(blobInfo.Path);
+        var result = await service.DeleteAsync(blobInfo.Path, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);
 
         // 文件已不存在
-        var exists = await service.ExistsAsync(blobInfo.Path);
+        var exists = await service.ExistsAsync(blobInfo.Path, ct: TestContext.Current.CancellationToken);
         Assert.False(exists);
     }
 
@@ -95,10 +95,10 @@ public class LocalStorageServiceTests : IDisposable
         // Arrange
         var service = CreateService();
         using var uploadStream = new MemoryStream(Encoding.UTF8.GetBytes("Exist check"));
-        var blobInfo = (await service.UploadAsync("exists.txt", uploadStream, "text/plain"))!;
+        var blobInfo = (await service.UploadAsync("exists.txt", uploadStream, "text/plain", ct: TestContext.Current.CancellationToken))!;
 
         // Act
-        var result = await service.ExistsAsync(blobInfo.Path);
+        var result = await service.ExistsAsync(blobInfo.Path, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);
@@ -111,14 +111,14 @@ public class LocalStorageServiceTests : IDisposable
         //   原实现 "Z:\nonexistent\deeply\nested" 依赖 Windows 无效盘符（Linux 上是合法相对路径，目录被创建→不会失败）。
         //   改用 RootPath 指向一个已存在文件——Directory.CreateDirectory 在任何平台都抛 IOException（路径占位冲突）。
         var pathAsFile = Path.Combine(_tempDir, "not-a-directory");
-        await File.WriteAllTextAsync(pathAsFile, "occupied");
+        await File.WriteAllTextAsync(pathAsFile, "occupied", TestContext.Current.CancellationToken);
         var invalidOptions = Options.Create(new BlobStoringOptions { RootPath = pathAsFile });
         var logger = new FakeLogger<LocalStorageService>();
         var service = new LocalStorageService(invalidOptions, logger);
         var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
 
         // Act — should not throw
-        var result = (await service.UploadAsync("test.txt", content, "text/plain"))!;
+        var result = (await service.UploadAsync("test.txt", content, "text/plain", ct: TestContext.Current.CancellationToken))!;
 
         // Assert — V0.1.1 评审修复：失败返回 null（区分成功/失败）
         Assert.Null(result);
@@ -133,7 +133,7 @@ public class LocalStorageServiceTests : IDisposable
         var service = CreateService();
 
         // Act
-        var result = await service.DownloadAsync("nonexistent/file.txt");
+        var result = await service.DownloadAsync("nonexistent/file.txt", ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(result);
@@ -146,16 +146,16 @@ public class LocalStorageServiceTests : IDisposable
         var service = CreateService();
         var original = Encoding.UTF8.GetBytes("Streaming download content");
         using var uploadStream = new MemoryStream(original);
-        var blobInfo = (await service.UploadAsync("stream.txt", uploadStream, "text/plain"))!;
+        var blobInfo = (await service.UploadAsync("stream.txt", uploadStream, "text/plain", ct: TestContext.Current.CancellationToken))!;
 
         // Act
-        var stream = await service.DownloadAsync(blobInfo.Path);
+        var stream = await service.DownloadAsync(blobInfo.Path, ct: TestContext.Current.CancellationToken);
 
         // Assert — V0.2.0：直接返回 FileStream（流式下载，大文件不占内存），而非复制到 MemoryStream
         Assert.NotNull(stream);
         using var fileStream = Assert.IsType<FileStream>(stream);
         using var ms = new MemoryStream();
-        await fileStream.CopyToAsync(ms);
+        await fileStream.CopyToAsync(ms, TestContext.Current.CancellationToken);
         Assert.Equal(original, ms.ToArray());
     }
 

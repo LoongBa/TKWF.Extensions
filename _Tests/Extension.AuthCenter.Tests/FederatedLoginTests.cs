@@ -55,10 +55,10 @@ public class FederatedLoginTests
         // 签发密封票据（D3 InMemory 后端 Singleton——跨作用域可兑换）
         var identity = new FederatedIdentity("u-fed-full", "ch-wechat", "openid-1", "wechat_event", 2);
         var issued = await user.GetService<ISealedTicketService<FederatedIdentity>>()
-            .IssueAsync(identity, TimeSpan.FromMinutes(5));
+            .IssueAsync(identity, TimeSpan.FromMinutes(5), ct: TestContext.Current.CancellationToken);
 
         // 全链登录（期望身份 uid 一致）
-        await user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb);
+        await user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb, ct: TestContext.Current.CancellationToken);
 
         Assert.True(user.IsAuthenticated);
         Assert.Equal("u-fed-full", user.UserInfo!.UserIdString);
@@ -85,10 +85,10 @@ public class FederatedLoginTests
 
         var identity = new FederatedIdentity("u-fed-missing", "ch-wechat", "openid-missing", "wechat_event", 2);
         var issued = await user.GetService<ISealedTicketService<FederatedIdentity>>()
-            .IssueAsync(identity, TimeSpan.FromMinutes(5));
+            .IssueAsync(identity, TimeSpan.FromMinutes(5), ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb));
+            user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb, ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_NOT_FOUND", ex.Message);
         Assert.False(user.IsAuthenticated);
@@ -116,10 +116,10 @@ public class FederatedLoginTests
 
         var identity = new FederatedIdentity("u-fed-disabled", "ch-wechat", "openid-disabled", "wechat_event", 2);
         var issued = await user.GetService<ISealedTicketService<FederatedIdentity>>()
-            .IssueAsync(identity, TimeSpan.FromMinutes(5));
+            .IssueAsync(identity, TimeSpan.FromMinutes(5), ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb));
+            user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb, ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_DISABLED", ex.Message);
         Assert.False(user.IsAuthenticated);
@@ -148,10 +148,10 @@ public class FederatedLoginTests
 
         var identity = new FederatedIdentity("u-fed-frozen", "ch-wechat", "openid-frozen", "wechat_event", 2);
         var issued = await user.GetService<ISealedTicketService<FederatedIdentity>>()
-            .IssueAsync(identity, TimeSpan.FromMinutes(5));
+            .IssueAsync(identity, TimeSpan.FromMinutes(5), ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() =>
-            user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb));
+            user.LoginAsFederatedAsync(issued.Ticket, identity with { ChannelType = "wechat_event" }, EnumLoginFrom.PcWeb, ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("ACCOUNT_FROZEN", ex.Message);
         Assert.False(user.IsAuthenticated);

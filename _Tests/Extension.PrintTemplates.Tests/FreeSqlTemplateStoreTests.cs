@@ -30,9 +30,9 @@ public class FreeSqlTemplateStoreTests
         var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "测试模板" };
-        await store.UpsertTemplateAsync(template);
+        await store.UpsertTemplateAsync(template, ct: TestContext.Current.CancellationToken);
 
-        var result = await store.GetByKeyAsync("Invoice.Standard");
+        var result = await store.GetByKeyAsync("Invoice.Standard", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal("Invoice.Standard", result!.Key);
@@ -45,7 +45,7 @@ public class FreeSqlTemplateStoreTests
     {
         var store = CreateStore();
 
-        var result = await store.GetByKeyAsync("No.Such.Key");
+        var result = await store.GetByKeyAsync("No.Such.Key", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
     }
@@ -55,7 +55,7 @@ public class FreeSqlTemplateStoreTests
     {
         var store = CreateStore();
 
-        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k1", Name = "n1" });
+        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k1", Name = "n1" }, ct: TestContext.Current.CancellationToken);
 
         var saved = await store.GetByKeyAsync("k1", CancellationToken.None);
         Assert.NotNull(saved);
@@ -67,8 +67,8 @@ public class FreeSqlTemplateStoreTests
         var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
-        await store.UpsertTemplateAsync(template);
-        var savedTemplate = await store.GetByKeyAsync("k");
+        await store.UpsertTemplateAsync(template, ct: TestContext.Current.CancellationToken);
+        var savedTemplate = await store.GetByKeyAsync("k", ct: TestContext.Current.CancellationToken);
 
         var version = new PrintTemplateVersionEntity
         {
@@ -77,9 +77,9 @@ public class FreeSqlTemplateStoreTests
             Content = "Hello {{ model.Name }}",
             Status = PrintTemplateVersionStatus.Active
         };
-        await store.UpsertVersionAsync(version);
+        await store.UpsertVersionAsync(version, ct: TestContext.Current.CancellationToken);
 
-        var result = await store.GetVersionAsync(savedTemplate.Id, "1.0.0");
+        var result = await store.GetVersionAsync(savedTemplate.Id, "1.0.0", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal("1.0.0", result!.Version);
@@ -93,8 +93,8 @@ public class FreeSqlTemplateStoreTests
         var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
-        await store.UpsertTemplateAsync(template);
-        var savedTemplate = await store.GetByKeyAsync("k");
+        await store.UpsertTemplateAsync(template, ct: TestContext.Current.CancellationToken);
+        var savedTemplate = await store.GetByKeyAsync("k", ct: TestContext.Current.CancellationToken);
 
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
         {
@@ -102,16 +102,16 @@ public class FreeSqlTemplateStoreTests
             Version = "1.0.0",
             Content = "archived",
             Status = PrintTemplateVersionStatus.Archived
-        });
+        }, ct: TestContext.Current.CancellationToken);
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
         {
             TemplateId = savedTemplate.Id,
             Version = "1.1.0",
             Content = "active",
             Status = PrintTemplateVersionStatus.Active
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
-        var result = await store.GetActiveVersionAsync(savedTemplate.Id);
+        var result = await store.GetActiveVersionAsync(savedTemplate.Id, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal("1.1.0", result!.Version);
@@ -125,14 +125,14 @@ public class FreeSqlTemplateStoreTests
         var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
-        await store.UpsertTemplateAsync(template);
-        var savedTemplate = await store.GetByKeyAsync("k");
+        await store.UpsertTemplateAsync(template, ct: TestContext.Current.CancellationToken);
+        var savedTemplate = await store.GetByKeyAsync("k", ct: TestContext.Current.CancellationToken);
 
-        await store.UpsertVersionAsync(new PrintTemplateVersionEntity { TemplateId = savedTemplate!.Id, Version = "1.1.0", Content = "c1" });
-        await store.UpsertVersionAsync(new PrintTemplateVersionEntity { TemplateId = savedTemplate.Id, Version = "1.0.0", Content = "c0" });
-        await store.UpsertVersionAsync(new PrintTemplateVersionEntity { TemplateId = savedTemplate.Id, Version = "1.2.0", Content = "c2" });
+        await store.UpsertVersionAsync(new PrintTemplateVersionEntity { TemplateId = savedTemplate!.Id, Version = "1.1.0", Content = "c1" }, ct: TestContext.Current.CancellationToken);
+        await store.UpsertVersionAsync(new PrintTemplateVersionEntity { TemplateId = savedTemplate.Id, Version = "1.0.0", Content = "c0" }, ct: TestContext.Current.CancellationToken);
+        await store.UpsertVersionAsync(new PrintTemplateVersionEntity { TemplateId = savedTemplate.Id, Version = "1.2.0", Content = "c2" }, ct: TestContext.Current.CancellationToken);
 
-        var result = await store.ListVersionsAsync(savedTemplate.Id);
+        var result = await store.ListVersionsAsync(savedTemplate.Id, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(3, result.Count);
         // OrderByDescending(Version)：按版本号倒序
@@ -147,8 +147,8 @@ public class FreeSqlTemplateStoreTests
         var store = CreateStore();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
-        await store.UpsertTemplateAsync(template);
-        var savedTemplate = await store.GetByKeyAsync("k");
+        await store.UpsertTemplateAsync(template, ct: TestContext.Current.CancellationToken);
+        var savedTemplate = await store.GetByKeyAsync("k", ct: TestContext.Current.CancellationToken);
 
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
         {
@@ -156,7 +156,7 @@ public class FreeSqlTemplateStoreTests
             Version = "1.0.0",
             Content = "content",
             Status = PrintTemplateVersionStatus.Draft
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         var versions = await store.ListVersionsAsync(savedTemplate.Id, CancellationToken.None);
         Assert.Single(versions);
@@ -179,8 +179,8 @@ public class FreeSqlTemplateStoreTests
         var store = user.Use<ITemplateStore>();
 
         var template = new PrintTemplateEntity { Key = "k", Name = "n" };
-        await store.UpsertTemplateAsync(template);
-        var savedTemplate = await store.GetByKeyAsync("k");
+        await store.UpsertTemplateAsync(template, ct: TestContext.Current.CancellationToken);
+        var savedTemplate = await store.GetByKeyAsync("k", ct: TestContext.Current.CancellationToken);
 
         // 首次创建 1.0.0
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
@@ -188,7 +188,7 @@ public class FreeSqlTemplateStoreTests
             TemplateId = savedTemplate!.Id,
             Version = "1.0.0",
             Content = "v1"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // 并发败者直插同键 → 唯一约束异常必须向上传播（不吞）
         var dupDataService = new PrintTemplateVersionEntityDataService(
@@ -199,7 +199,7 @@ public class FreeSqlTemplateStoreTests
             TemplateId = savedTemplate.Id,
             Version = "1.0.0",
             Content = "v2"
-        }));
+        }, ct: TestContext.Current.CancellationToken));
 
         // 异常显式暴露（审计关键资产，存储层错误不得静默）
         Assert.NotNull(ex);

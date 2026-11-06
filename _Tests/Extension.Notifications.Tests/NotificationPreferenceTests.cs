@@ -22,7 +22,7 @@ public class NotificationPreferenceTests
         using var host = NotificationTestHost.Build(fsql);
         var manager = host.PreferenceManager;
 
-        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped);
+        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(channels); // 无偏好 → null（回退定义级）
     }
@@ -35,9 +35,9 @@ public class NotificationPreferenceTests
         using var host = NotificationTestHost.Build(fsql);
         var manager = host.PreferenceManager;
 
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" }, ct: TestContext.Current.CancellationToken);
 
-        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped);
+        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(channels);
         Assert.Equal(new[] { "Email" }, channels);
     }
@@ -51,9 +51,9 @@ public class NotificationPreferenceTests
         var manager = host.PreferenceManager;
 
         // 空列表 = 显式"不接收该通知"（区别于无偏好 null）
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, Array.Empty<string>());
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, Array.Empty<string>(), ct: TestContext.Current.CancellationToken);
 
-        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped);
+        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(channels);   // 非 null（有偏好记录）
         Assert.Empty(channels!);    // 空列表 = 不接收
     }
@@ -66,12 +66,12 @@ public class NotificationPreferenceTests
         using var host = NotificationTestHost.Build(fsql);
         var manager = host.PreferenceManager;
 
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Inbox" });
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" }, ct: TestContext.Current.CancellationToken);
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Inbox" }, ct: TestContext.Current.CancellationToken);
 
         // 唯一约束（UserId + NotificationName）→ 幂等更新，不产生第二行
         Assert.Equal(1, fsql.Select<NotificationPreferenceEntity>().Count());
-        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped);
+        var channels = await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
         Assert.Equal(new[] { "Inbox" }, channels);
     }
 
@@ -83,10 +83,10 @@ public class NotificationPreferenceTests
         using var host = NotificationTestHost.Build(fsql);
         var manager = host.PreferenceManager;
 
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
-        await manager.ClearAsync(1, TestNotificationDefinitions.OrderShipped);
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" }, ct: TestContext.Current.CancellationToken);
+        await manager.ClearAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
-        Assert.Null(await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped));
+        Assert.Null(await manager.GetChannelsAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken));
         Assert.Equal(0, fsql.Select<NotificationPreferenceEntity>().Count());
     }
 
@@ -98,10 +98,10 @@ public class NotificationPreferenceTests
         using var host = NotificationTestHost.Build(fsql);
         var manager = host.PreferenceManager;
 
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" });
-        await manager.SetAsync(3, TestNotificationDefinitions.OrderShipped, Array.Empty<string>());
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, new[] { "Email" }, ct: TestContext.Current.CancellationToken);
+        await manager.SetAsync(3, TestNotificationDefinitions.OrderShipped, Array.Empty<string>(), ct: TestContext.Current.CancellationToken);
 
-        var map = await manager.GetChannelsBatchAsync(new long[] { 1, 2, 3 }, TestNotificationDefinitions.OrderShipped);
+        var map = await manager.GetChannelsBatchAsync(new long[] { 1, 2, 3 }, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         // 一次批量查询——仅返回有偏好记录的用户（无偏好用户不在字典）
         Assert.Equal(2, map.Count);
@@ -126,7 +126,7 @@ public class NotificationPreferenceTests
         var publisher = host.Publisher;
 
         // 无偏好 → 回退定义级 ["Inbox"]
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(fakeInbox.Requests);
         Assert.Equal(1L, fakeInbox.Requests[0].UserId);
@@ -147,13 +147,13 @@ public class NotificationPreferenceTests
         var store = host.Store;
         var publisher = host.Publisher;
 
-        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, Array.Empty<string>());
+        await manager.SetAsync(1, TestNotificationDefinitions.OrderShipped, Array.Empty<string>(), ct: TestContext.Current.CancellationToken);
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         // 空偏好 = 不接收（P2-2）→ 无投递、无 inbox 行
         Assert.Empty(fakeInbox.Requests);
-        Assert.Empty(await store.GetUnreadAsync(1));
+        Assert.Empty(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -174,9 +174,9 @@ public class NotificationPreferenceTests
         var publisher = host.Publisher;
 
         // 定义级 UseChannels("Inbox","Email")；用户 1 偏好 ["Email"]（排除 Inbox），用户 2 无偏好
-        await manager.SetAsync(1, MultiChannelDefinitions.MultiChannelNotice, new[] { "Email" });
+        await manager.SetAsync(1, MultiChannelDefinitions.MultiChannelNotice, new[] { "Email" }, ct: TestContext.Current.CancellationToken);
 
-        await publisher.PublishAsync(MultiChannelDefinitions.MultiChannelNotice, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(MultiChannelDefinitions.MultiChannelNotice, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // 用户 1：偏好覆盖 → 仅 Email 通道
         Assert.Single(fakeEmail.Requests, r => r.UserId == 1);

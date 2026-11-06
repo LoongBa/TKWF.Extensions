@@ -31,10 +31,10 @@ public class NotificationPermissionGateTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
-        Assert.Single(await store.GetUnreadAsync(1));
-        Assert.Empty(await store.GetUnreadAsync(2)); // 用户 2 无权限 → 过滤
+        Assert.Single(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken)); // 用户 2 无权限 → 过滤
     }
 
     [Fact]
@@ -51,12 +51,12 @@ public class NotificationPermissionGateTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // 全部无权限 → 收件人为空 → 不进入事务（不落库）
         Assert.Equal(0, fsql.Select<NotificationEntity>().Count());
-        Assert.Empty(await store.GetUnreadAsync(1));
-        Assert.Empty(await store.GetUnreadAsync(2));
+        Assert.Empty(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -73,11 +73,11 @@ public class NotificationPermissionGateTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // 批量检查器缺失 → 跳过逐用户门控（P2-2）→ 全部收件人投递
-        Assert.Single(await store.GetUnreadAsync(1));
-        Assert.Single(await store.GetUnreadAsync(2));
+        Assert.Single(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Single(await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -100,9 +100,9 @@ public class NotificationPermissionGateTests
         var publisher = host.Publisher;
 
         // 定义级 UseChannels("Inbox","Email")；用户 1 有权限 + 偏好 ["Email"]；用户 2 无权限
-        await manager.SetAsync(1, GatedMultiChannelDefinitions.SecureChannelNotice, new[] { "Email" });
+        await manager.SetAsync(1, GatedMultiChannelDefinitions.SecureChannelNotice, new[] { "Email" }, ct: TestContext.Current.CancellationToken);
 
-        await publisher.PublishAsync(GatedMultiChannelDefinitions.SecureChannelNotice, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(GatedMultiChannelDefinitions.SecureChannelNotice, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // 先权限过滤（用户 2 出局）→ 再偏好覆盖（用户 1 仅 Email）
         Assert.Single(fakeEmail.Requests, r => r.UserId == 1);

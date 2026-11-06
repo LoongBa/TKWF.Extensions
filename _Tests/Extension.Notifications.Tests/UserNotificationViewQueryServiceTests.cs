@@ -35,11 +35,11 @@ namespace TKWF.Ext.Notifications.Tests;
         // N4：DI 注册可解析——测试宿主镜像生产自动注册，容器直接解析 Service
         var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
         await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert,
-            severity: NotificationSeverity.Warning, userIds: new long[] { 1 });
+            severity: NotificationSeverity.Warning, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
-        var inbox = await svc.GetMyInboxAsync(page: 1, pageSize: 10);
+        var inbox = await svc.GetMyInboxAsync(page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, inbox.Count);
         var shipped = Assert.Single(inbox, d => d.Name == TestNotificationDefinitions.OrderShipped);
@@ -60,10 +60,10 @@ namespace TKWF.Ext.Notifications.Tests;
         var publisher = host.Publisher;
         var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // 以用户 1 身份调用只返回用户 1 的收件箱——不泄露用户 2 的（防 IDOR）
-        var inbox = await svc.GetMyInboxAsync(page: 1, pageSize: 10);
+        var inbox = await svc.GetMyInboxAsync(page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken);
         Assert.Single(inbox);
         Assert.Equal(1, inbox[0].UserId);
     }
@@ -79,12 +79,12 @@ namespace TKWF.Ext.Notifications.Tests;
         var publisher = host.Publisher;
         var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         // name 可空——null = 查全部收件箱（REST 面 ≥ 门面面）；且 JOIN 列完整保留（REST 面 > 门面面）
-        var all = await svc.GetMyInboxAsync(page: 1, pageSize: 10, name: null);
+        var all = await svc.GetMyInboxAsync(page: 1, pageSize: 10, name: null, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, all.Count);
         Assert.All(all, d => Assert.False(string.IsNullOrEmpty(d.Name)));
         Assert.All(all, d => Assert.Equal(1, d.UserId));
@@ -99,15 +99,15 @@ namespace TKWF.Ext.Notifications.Tests;
         var publisher = host.Publisher;
         var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
-        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
+        await publisher.PublishAsync(TestNotificationDefinitions.SystemAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
-        var shipped = await svc.GetMyInboxAsync(page: 1, pageSize: 10, name: TestNotificationDefinitions.OrderShipped);
+        var shipped = await svc.GetMyInboxAsync(page: 1, pageSize: 10, name: TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, shipped.Count);
         Assert.All(shipped, d => Assert.Equal(TestNotificationDefinitions.OrderShipped, d.Name));
 
-        var alert = await svc.GetMyInboxAsync(page: 1, pageSize: 10, name: TestNotificationDefinitions.SystemAlert);
+        var alert = await svc.GetMyInboxAsync(page: 1, pageSize: 10, name: TestNotificationDefinitions.SystemAlert, ct: TestContext.Current.CancellationToken);
         Assert.Single(alert);
     }
 
@@ -122,6 +122,6 @@ namespace TKWF.Ext.Notifications.Tests;
         var svc = host.GetRequiredService<UserNotificationViewQueryService>();
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.GetMyInboxAsync(page: 1, pageSize: 10));
+            () => svc.GetMyInboxAsync(page: 1, pageSize: 10, ct: TestContext.Current.CancellationToken));
     }
 }

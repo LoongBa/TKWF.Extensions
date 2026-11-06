@@ -74,7 +74,7 @@ public class FreeSqlBlobRecordStoreTests
         };
 
         // Act
-        await store.SaveAsync(record);
+        await store.SaveAsync(record, ct: TestContext.Current.CancellationToken);
 
         // Assert
         var list = await store.GetListAsync(ct: CancellationToken.None);
@@ -101,14 +101,14 @@ public class FreeSqlBlobRecordStoreTests
             ContentType = "application/pdf",
             Size = 2048
         };
-        await store.SaveAsync(record);
+        await store.SaveAsync(record, ct: TestContext.Current.CancellationToken);
 
         var saved = (await store.GetListAsync(ct: CancellationToken.None))[0];
         var originalId = saved.Id;
         saved.Size = 4096;
 
         // Act
-        await store.SaveAsync(saved);
+        await store.SaveAsync(saved, ct: TestContext.Current.CancellationToken);
 
         // Assert — 改造后 Upsert 保留自增 Id（不再先删后插）
         var list = await store.GetListAsync(ct: CancellationToken.None);
@@ -132,11 +132,11 @@ public class FreeSqlBlobRecordStoreTests
             ContentType = "video/mp4",
             Size = 1048576
         };
-        await store.SaveAsync(record);
+        await store.SaveAsync(record, ct: TestContext.Current.CancellationToken);
         var id = (await store.GetListAsync(ct: CancellationToken.None))[0].Id;
 
         // Act
-        var result = await store.GetAsync(id);
+        var result = await store.GetAsync(id, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -152,7 +152,7 @@ public class FreeSqlBlobRecordStoreTests
         var store = user.Use<IBlobRecordStore>();
 
         // Act
-        var result = await store.GetAsync(999);
+        var result = await store.GetAsync(999, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(result);
@@ -170,10 +170,10 @@ public class FreeSqlBlobRecordStoreTests
             Name = "image.jpg",
             Path = "ghi/image.jpg",
             ContentType = "image/jpeg"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // Act
-        var result = await store.GetByNameAsync("image.jpg");
+        var result = await store.GetByNameAsync("image.jpg", ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -187,12 +187,12 @@ public class FreeSqlBlobRecordStoreTests
         var (_, user) = CreateProductionHost();
         var store = user.Use<IBlobRecordStore>();
 
-        await store.SaveAsync(new BlobRecordEntity { Name = "a.txt", Path = "a/a.txt", ContentType = "text/plain" });
-        await store.SaveAsync(new BlobRecordEntity { Name = "b.png", Path = "b/b.png", ContentType = "image/png" });
-        await store.SaveAsync(new BlobRecordEntity { Name = "c.pdf", Path = "c/c.pdf", ContentType = "application/pdf" });
+        await store.SaveAsync(new BlobRecordEntity { Name = "a.txt", Path = "a/a.txt", ContentType = "text/plain" }, ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new BlobRecordEntity { Name = "b.png", Path = "b/b.png", ContentType = "image/png" }, ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new BlobRecordEntity { Name = "c.pdf", Path = "c/c.pdf", ContentType = "application/pdf" }, ct: TestContext.Current.CancellationToken);
 
         // Act
-        var list = await store.GetListAsync();
+        var list = await store.GetListAsync(ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, list.Count);
@@ -206,7 +206,7 @@ public class FreeSqlBlobRecordStoreTests
         var store = user.Use<IBlobRecordStore>();
 
         // Act — null record should be silently skipped
-        await store.SaveAsync(null!);
+        await store.SaveAsync(null!, ct: TestContext.Current.CancellationToken);
 
         // Assert — no records created
         Assert.Empty(await store.GetListAsync(ct: CancellationToken.None));
@@ -258,7 +258,7 @@ public class FreeSqlBlobRecordStoreTests
         var record = new BlobRecordEntity { Name = "test.txt", Path = "test.txt" };
 
         // Act — should not throw
-        await store.SaveAsync(record);
+        await store.SaveAsync(record, ct: TestContext.Current.CancellationToken);
 
         // Assert — logger captured warning
         Assert.Single(logger.Warnings);

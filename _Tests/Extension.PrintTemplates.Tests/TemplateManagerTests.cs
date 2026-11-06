@@ -35,7 +35,7 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        var result = await manager.PublishAsync("Invoice.Standard", "Hello {{ model.Name }}");
+        var result = await manager.PublishAsync("Invoice.Standard", "Hello {{ model.Name }}", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("1.0.0", result.Version);
         Assert.Equal(PrintTemplateVersionStatus.Active, result.Status);
@@ -48,8 +48,8 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("k", "v1");
-        var result = await manager.PublishAsync("k", "v2");
+        await manager.PublishAsync("k", "v1", ct: TestContext.Current.CancellationToken);
+        var result = await manager.PublishAsync("k", "v2", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("1.1.0", result.Version);
         Assert.Equal(PrintTemplateVersionStatus.Active, result.Status);
@@ -60,14 +60,14 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("k", "v1");
-        await manager.PublishAsync("k", "v2");
+        await manager.PublishAsync("k", "v1", ct: TestContext.Current.CancellationToken);
+        await manager.PublishAsync("k", "v2", ct: TestContext.Current.CancellationToken);
 
-        var old = await manager.GetVersionAsync("k", "1.0.0");
+        var old = await manager.GetVersionAsync("k", "1.0.0", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(old);
         Assert.Equal(PrintTemplateVersionStatus.Archived, old!.Status);
 
-        var active = await manager.GetActiveVersionAsync("k");
+        var active = await manager.GetActiveVersionAsync("k", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(active);
         Assert.Equal("1.1.0", active!.Version);
     }
@@ -77,10 +77,10 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("Invoice.Standard", "content", "desc");
+        await manager.PublishAsync("Invoice.Standard", "content", "desc", ct: TestContext.Current.CancellationToken);
 
         // C2：Key 不存在时自动建 PrintTemplate 行，Name = Key
-        var template = await manager.GetTemplateAsync("Invoice.Standard");
+        var template = await manager.GetTemplateAsync("Invoice.Standard", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(template);
         Assert.Equal("Invoice.Standard", template!.Key);
         Assert.Equal("Invoice.Standard", template.Name);
@@ -92,7 +92,7 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        var result = await manager.DraftAsync("k", "draft content");
+        var result = await manager.DraftAsync("k", "draft content", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("1.0.0-draft", result.Version);
         Assert.Equal(PrintTemplateVersionStatus.Draft, result.Status);
@@ -104,8 +104,8 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.DraftAsync("k", "first draft");
-        var result = await manager.DraftAsync("k", "updated draft");
+        await manager.DraftAsync("k", "first draft", ct: TestContext.Current.CancellationToken);
+        var result = await manager.DraftAsync("k", "updated draft", ct: TestContext.Current.CancellationToken);
 
         // 单 Draft：upsert 而非新增
         var all = await manager.ListVersionsAsync("k", CancellationToken.None);
@@ -121,10 +121,10 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.DraftAsync("k", "draft content");
+        await manager.DraftAsync("k", "draft content", ct: TestContext.Current.CancellationToken);
 
         // Draft 不占 Active 槽位
-        var active = await manager.GetActiveVersionAsync("k");
+        var active = await manager.GetActiveVersionAsync("k", ct: TestContext.Current.CancellationToken);
         Assert.Null(active);
     }
 
@@ -133,10 +133,10 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("k", "content");
-        await manager.ArchiveAsync("k", "1.0.0");
+        await manager.PublishAsync("k", "content", ct: TestContext.Current.CancellationToken);
+        await manager.ArchiveAsync("k", "1.0.0", ct: TestContext.Current.CancellationToken);
 
-        var ver = await manager.GetVersionAsync("k", "1.0.0");
+        var ver = await manager.GetVersionAsync("k", "1.0.0", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(ver);
         Assert.Equal(PrintTemplateVersionStatus.Archived, ver!.Status);
     }
@@ -146,9 +146,9 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("k", "Hello {{ model.Name }}");
+        await manager.PublishAsync("k", "Hello {{ model.Name }}", ct: TestContext.Current.CancellationToken);
 
-        var result = await manager.RenderAsync("k", RenderModel("Alice"));
+        var result = await manager.RenderAsync("k", RenderModel("Alice"), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("Hello Alice", result);
     }
@@ -158,11 +158,11 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("k", "v1-{{ model.Name }}");
-        await manager.PublishAsync("k", "v2-{{ model.Name }}");
+        await manager.PublishAsync("k", "v1-{{ model.Name }}", ct: TestContext.Current.CancellationToken);
+        await manager.PublishAsync("k", "v2-{{ model.Name }}", ct: TestContext.Current.CancellationToken);
 
         // 固定版本渲染（审计用）——即使 Active 已是 1.1.0，仍渲染 1.0.0
-        var result = await manager.RenderAsync("k", RenderModel("Alice"), "1.0.0");
+        var result = await manager.RenderAsync("k", RenderModel("Alice"), "1.0.0", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("v1-Alice", result);
     }
@@ -179,8 +179,8 @@ public class TemplateManagerTests
         var (manager, user) = CreateManager();
 
         var store = user.Use<ITemplateStore>();
-        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "tpl desc" });
-        var tpl = await store.GetByKeyAsync("Invoice.Standard");
+        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "Invoice.Standard", Name = "标准发票", Description = "tpl desc" }, ct: TestContext.Current.CancellationToken);
+        var tpl = await store.GetByKeyAsync("Invoice.Standard", ct: TestContext.Current.CancellationToken);
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
         {
             TemplateId = tpl!.Id,
@@ -188,9 +188,9 @@ public class TemplateManagerTests
             Content = "Hello {{ model.Name }}",
             Status = PrintTemplateVersionStatus.Active,
             Description = "ver desc"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
-        var ver = await manager.GetVersionAsync("Invoice.Standard", "1.0.0");
+        var ver = await manager.GetVersionAsync("Invoice.Standard", "1.0.0", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(ver);
         Assert.Equal("Invoice.Standard", ver!.Key);          // 核心收益：模板键（视图外层过滤键）
@@ -211,10 +211,10 @@ public class TemplateManagerTests
     {
         var (manager, user) = CreateManager();
 
-        await manager.PublishAsync("k", "v1");
-        await manager.PublishAsync("k", "v2"); // 1.0.0 → Archived，1.1.0 → Active
+        await manager.PublishAsync("k", "v1", ct: TestContext.Current.CancellationToken);
+        await manager.PublishAsync("k", "v2", ct: TestContext.Current.CancellationToken); // 1.0.0 → Archived，1.1.0 → Active
 
-        var active = await manager.GetActiveVersionAsync("k");
+        var active = await manager.GetActiveVersionAsync("k", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(active);
         Assert.Equal("1.1.0", active!.Version);
@@ -231,22 +231,22 @@ public class TemplateManagerTests
         var (manager, user) = CreateManager();
 
         var store = user.Use<ITemplateStore>();
-        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k", Name = "自定义模板名" });
-        var tpl = await store.GetByKeyAsync("k");
+        await store.UpsertTemplateAsync(new PrintTemplateEntity { Key = "k", Name = "自定义模板名" }, ct: TestContext.Current.CancellationToken);
+        var tpl = await store.GetByKeyAsync("k", ct: TestContext.Current.CancellationToken);
         await store.UpsertVersionAsync(new PrintTemplateVersionEntity
         {
             TemplateId = tpl!.Id,
             Version = "1.0.0",
             Content = "{{ model.Name }} 你好",
             Status = PrintTemplateVersionStatus.Active
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // JOIN 核心收益再确认（渲染取数同源：vw_PrintTemplateVersionView）
-        var active = await manager.GetActiveVersionAsync("k");
+        var active = await manager.GetActiveVersionAsync("k", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(active);
         Assert.Equal("自定义模板名", active!.TemplateName);
 
-        var result = await manager.RenderAsync("k", RenderModel("Alice"));
+        var result = await manager.RenderAsync("k", RenderModel("Alice"), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("Alice 你好", result);
     }

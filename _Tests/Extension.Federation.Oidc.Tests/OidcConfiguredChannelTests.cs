@@ -51,7 +51,7 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "oidc_oidc");
         Assert.Equal("oidc_oidc", template.ChannelType);
         // 真实实例经工厂构造（ChannelId = 注册表选区键——配置直填默认 BuildChannelId）
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("keycloak-corp", "oidc_oidc");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("keycloak-corp", "oidc_oidc", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
         Assert.Equal("keycloak-corp", channel!.ChannelId);
     }

@@ -38,7 +38,7 @@ public class ApprovalDelegationTests : IDisposable
         var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), flowCode, "submitter");
         await _host.ApprovalService.SubmitAsync(instanceId);
         return (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
     }
 
     [Fact]
@@ -46,9 +46,9 @@ public class ApprovalDelegationTests : IDisposable
     {
         var task = await StartSubmittedTaskAsync();
 
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
 
-        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalDelegationState.Pending, updated!.DelegationState);
         Assert.Equal("owner", updated.OriginalAssigneeId);
         Assert.Equal("deputy", updated.DelegatedToUserId);
@@ -63,18 +63,18 @@ public class ApprovalDelegationTests : IDisposable
         var task = await StartSubmittedTaskAsync();
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "wrong_user", "deputy"));
+            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "wrong_user", "deputy", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D2_ResolveTaskAsync_ShouldReturnToOriginalAssignee()
     {
         var task = await StartSubmittedTaskAsync();
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
 
-        await _host.ApprovalService.ResolveTaskAsync(task.Id, "deputy", "已核实，请复核");
+        await _host.ApprovalService.ResolveTaskAsync(task.Id, "deputy", "已核实，请复核", ct: TestContext.Current.CancellationToken);
 
-        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalDelegationState.Resolved, updated!.DelegationState);
         Assert.Equal("owner", updated.ApproverUserId); // 回到原审批人
         Assert.Equal("已核实，请复核", updated.Comment);
@@ -84,36 +84,36 @@ public class ApprovalDelegationTests : IDisposable
     public async Task D2_ResolveTaskAsync_NonDelegate_ShouldThrow()
     {
         var task = await StartSubmittedTaskAsync();
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.ResolveTaskAsync(task.Id, "wrong_user"));
+            () => _host.ApprovalService.ResolveTaskAsync(task.Id, "wrong_user", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D3_DelegatePending_DelegateCannotComplete_ShouldThrow()
     {
         var task = await StartSubmittedTaskAsync();
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
 
         // 委派中（Pending）委派人不可 Complete（须先 Resolve——Flowable 语义）
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.ApproveAsync(task.Id, "deputy"));
+            () => _host.ApprovalService.ApproveAsync(task.Id, "deputy", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D3_AfterResolve_OriginalAssigneeCanApprove()
     {
         var task = await StartSubmittedTaskAsync();
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
-        await _host.ApprovalService.ResolveTaskAsync(task.Id, "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.ResolveTaskAsync(task.Id, "deputy", ct: TestContext.Current.CancellationToken);
 
         // 原审批人复核后 Complete——实例 Approved
-        await _host.ApprovalService.ApproveAsync(task.Id, "owner", "同意");
+        await _host.ApprovalService.ApproveAsync(task.Id, "owner", "同意", ct: TestContext.Current.CancellationToken);
 
-        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Approved, updated!.Status);
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
     }
 
@@ -121,23 +121,23 @@ public class ApprovalDelegationTests : IDisposable
     public async Task D3_DelegatePending_DelegateCannotDelegateAgain_ShouldThrow()
     {
         var task = await StartSubmittedTaskAsync();
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
 
         // P1 嵌套阻断：委派中（Pending）再委派（deputy 是当前处理人，身份校验通过但嵌套阻断）→ 抛
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "deputy", "third"));
+            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "deputy", "third", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D3_AfterResolve_CannotDelegateAgain_ShouldThrow()
     {
         var task = await StartSubmittedTaskAsync();
-        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy");
-        await _host.ApprovalService.ResolveTaskAsync(task.Id, "deputy");
+        await _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.ResolveTaskAsync(task.Id, "deputy", ct: TestContext.Current.CancellationToken);
 
         // P1：Resolve 后不回退 None（Resolved）——原审批人不可再次委派同任务（须用 Transfer 替代）
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy"));
+            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "deputy", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -147,6 +147,6 @@ public class ApprovalDelegationTests : IDisposable
 
         // 防御守卫（实施偏离 #5）：委托给自己（fromUserId == toUserId）→ 拒绝
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "owner"));
+            () => _host.ApprovalService.DelegateTaskAsync(task.Id, "owner", "owner", ct: TestContext.Current.CancellationToken));
     }
 }

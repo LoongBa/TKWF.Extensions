@@ -88,7 +88,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             StartTime = new DateTime(2026, 1, 16, 0, 0, 0)
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(4, result.Total);
         Assert.All(result.Items, item => Assert.True(item.ExecutionTime >= new DateTime(2026, 1, 16, 0, 0, 0)));
@@ -103,7 +103,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             EndTime = new DateTime(2026, 1, 16, 23, 59, 59)
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
     }
@@ -117,7 +117,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             UserName = "ali"  // LIKE '%ali%' → matches "alice"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.All(result.Items, item => Assert.Equal("alice", item.UserName));
@@ -132,7 +132,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             UserId = "u2"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.All(result.Items, item => Assert.Equal("u2", item.UserId));
@@ -147,7 +147,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             ServiceName = "PaymentService"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.All(result.Items, item => Assert.Equal("PaymentService", item.ServiceName));
@@ -162,7 +162,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             MethodName = "CreateOrder"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(result.Items);
         Assert.Equal("CreateOrder", result.Items[0].MethodName);
@@ -177,7 +177,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             Success = false
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(result.Items);
         Assert.False(result.Items[0].Success);
@@ -193,7 +193,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             CorrelationId = "corr-001"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.All(result.Items, item => Assert.Equal("corr-001", item.CorrelationId));
@@ -208,7 +208,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             MinDurationMs = 100
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.All(result.Items, item => Assert.True(item.DurationMs >= 100));
@@ -223,7 +223,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             MaxDurationMs = 50
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(3, result.Total);
         Assert.All(result.Items, item => Assert.True(item.DurationMs <= 50));
@@ -242,7 +242,7 @@ public class AuditLogQueryServiceTests
             UserName = "alice",
             ServiceName = "PaymentService",
             Success = true
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(result.Items);
         var item = result.Items[0];
@@ -262,7 +262,7 @@ public class AuditLogQueryServiceTests
             StartTime = new DateTime(2026, 1, 15, 0, 0, 0),
             EndTime = new DateTime(2026, 1, 17, 23, 59, 59),
             Success = true
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Total);
         Assert.All(result.Items, item =>
@@ -283,7 +283,7 @@ public class AuditLogQueryServiceTests
         {
             MinDurationMs = 30,
             MaxDurationMs = 100
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // 30ms(bob), 50ms(alice), 100ms(charlie) → 3 records in [30,100]
         Assert.Equal(3, result.Total);
@@ -303,7 +303,7 @@ public class AuditLogQueryServiceTests
         await InsertTestData(dataService);
 
         // 默认 Take=50，数据只有 5 条 → 全部返回
-        var result = await service.GetListAsync(new AuditLogQueryInput());
+        var result = await service.GetListAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total);
         Assert.Equal(5, result.Items.Count);
@@ -319,7 +319,7 @@ public class AuditLogQueryServiceTests
         {
             Skip = 2,
             Take = 2
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total);
         Assert.Equal(2, result.Items.Count);
@@ -335,7 +335,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             Take = 500
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total);
         Assert.Equal(5, result.Items.Count);
@@ -351,7 +351,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             Take = 0
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total);
         Assert.Equal(5, result.Items.Count);
@@ -367,7 +367,7 @@ public class AuditLogQueryServiceTests
         {
             Skip = 100,
             Take = 10
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total);
         Assert.Empty(result.Items);
@@ -382,7 +382,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             Take = 5
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // 应按 ExecutionTime 降序排列
         for (int i = 0; i < result.Items.Count - 1; i++)
@@ -399,7 +399,7 @@ public class AuditLogQueryServiceTests
         var (service, fsql, dataService) = CreateService();
         await InsertTestData(dataService);
 
-        var count = await service.CountAsync(new AuditLogQueryInput());
+        var count = await service.CountAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, count);
     }
@@ -413,7 +413,7 @@ public class AuditLogQueryServiceTests
         var count = await service.CountAsync(new AuditLogQueryInput
         {
             UserName = "alice"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, count);
     }
@@ -427,7 +427,7 @@ public class AuditLogQueryServiceTests
         var count = await service.CountAsync(new AuditLogQueryInput
         {
             UserName = "nonexistent"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, count);
     }
@@ -454,13 +454,13 @@ public class AuditLogQueryServiceTests
             }, CancellationToken.None);
         }
 
-        var total = await service.CountAsync(new AuditLogQueryInput());
+        var total = await service.CountAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
         Assert.Equal(250, total);
 
-        var alice = await service.CountAsync(new AuditLogQueryInput { UserName = "alice" });
+        var alice = await service.CountAsync(new AuditLogQueryInput { UserName = "alice" }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(125, alice);
 
-        var failed = await service.CountAsync(new AuditLogQueryInput { Success = false });
+        var failed = await service.CountAsync(new AuditLogQueryInput { Success = false }, ct: TestContext.Current.CancellationToken);
         // i % 3 == 0 的 i：0,3,...,249 → 84 条失败
         Assert.Equal(84, failed);
     }
@@ -473,7 +473,7 @@ public class AuditLogQueryServiceTests
         var (service, fsql, dataService) = CreateService();
         // 不插入数据
 
-        var result = await service.GetListAsync(new AuditLogQueryInput());
+        var result = await service.GetListAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.Total);
         Assert.Empty(result.Items);
@@ -488,7 +488,7 @@ public class AuditLogQueryServiceTests
         var result = await service.GetListAsync(new AuditLogQueryInput
         {
             UserName = "nonexistent"
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.Total);
         Assert.Empty(result.Items);
@@ -508,7 +508,7 @@ public class AuditLogQueryServiceTests
         fsql.Dispose();
 
         // Act
-        var result = await service.GetListAsync(new AuditLogQueryInput());
+        var result = await service.GetListAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         // Assert — 静默语义：DataService 对 disposed 连接安全降级返回空（不抛异常，Warning 由封装层决定）
         Assert.Equal(0, result.Total);
@@ -527,7 +527,7 @@ public class AuditLogQueryServiceTests
         fsql.Dispose();
 
         // Act
-        var count = await service.CountAsync(new AuditLogQueryInput());
+        var count = await service.CountAsync(new AuditLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         // Assert — 静默语义：DataService 对 disposed 连接安全降级返回 0（不抛异常，Warning 由封装层决定）
         Assert.Equal(0, count);
@@ -556,14 +556,14 @@ public class AuditLogQueryServiceTests
     public async Task GetListAsync_NullQuery_ThrowsArgumentNullException()
     {
         var (service, _, _) = CreateService();
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetListAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetListAsync(null!, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task CountAsync_NullQuery_ThrowsArgumentNullException()
     {
         var (service, _, _) = CreateService();
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.CountAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.CountAsync(null!, ct: TestContext.Current.CancellationToken));
     }
 
     // ── 索引特性反射断言 ──

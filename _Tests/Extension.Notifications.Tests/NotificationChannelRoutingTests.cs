@@ -61,7 +61,7 @@ public class NotificationChannelRoutingTests
         });
         var publisher = host.Publisher;
 
-        await publisher.PublishAsync(MultiChannelDefinitions.MultiChannelNotice, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(MultiChannelDefinitions.MultiChannelNotice, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // 定义 UseChannels("Inbox","Email") → 2 收件人 × 2 通道 = 各通知器收到 2 个请求
         Assert.Equal(2, fakeInbox.Requests.Count);
@@ -89,7 +89,7 @@ public class NotificationChannelRoutingTests
         var publisher = host.Publisher;
 
         // 不调 UseChannels → 默认 ["Inbox"] → 仅 Inbox 通道投递
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, fakeInbox.Requests.Count);
         Assert.Empty(fakeEmail.Requests);
@@ -113,7 +113,7 @@ public class NotificationChannelRoutingTests
         var publisher = host.Publisher;
 
         // 定义 UseChannels("Inbox","Sms")——"Sms" 无匹配 notifier → 不抛异常、自然跳过
-        await publisher.PublishAsync(MultiChannelDefinitions.UnknownChannelNotice, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(MultiChannelDefinitions.UnknownChannelNotice, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, fakeInbox.Requests.Count);
         Assert.Empty(fakeEmail.Requests);
@@ -128,7 +128,7 @@ public class NotificationChannelRoutingTests
         using var sp = BuildEmailNotifierHost();
         var notifier = sp.GetRequiredService<EmailNotifier>();
 
-        await notifier.DeliverAsync(CreateEmailRequest());
+        await notifier.DeliverAsync(CreateEmailRequest(), ct: TestContext.Current.CancellationToken);
 
         // 无异常即通过（投递被跳过）
     }
@@ -141,7 +141,7 @@ public class NotificationChannelRoutingTests
         var notifier = sp.GetRequiredService<EmailNotifier>();
 
         // IUserEmailProvider 返回 null（无邮箱）→ 跳过发送
-        await notifier.DeliverAsync(CreateEmailRequest());
+        await notifier.DeliverAsync(CreateEmailRequest(), ct: TestContext.Current.CancellationToken);
 
         Assert.Empty(sender.Sent);
     }
@@ -156,7 +156,7 @@ public class NotificationChannelRoutingTests
         var notifier = sp.GetRequiredService<EmailNotifier>();
 
         const string dataJson = "{\"OrderId\":\"100\",\"TrackingNo\":\"SF1234567890\"}";
-        await notifier.DeliverAsync(new NotificationDeliveryRequest(7, "OrderShipped", dataJson, NotificationSeverity.Info, 42, "Email"));
+        await notifier.DeliverAsync(new NotificationDeliveryRequest(7, "OrderShipped", dataJson, NotificationSeverity.Info, 42, "Email"), ct: TestContext.Current.CancellationToken);
 
         var msg = Assert.Single(sender.Sent);
         Assert.Equal("buyer@example.com", msg.To);
@@ -174,7 +174,7 @@ public class NotificationChannelRoutingTests
         var notifier = sp.GetRequiredService<EmailNotifier>();
 
         // 外部通道 best-effort（M1）：SendAsync 抛异常 → catch + LogWarning，不重抛阻塞发布流程
-        await notifier.DeliverAsync(CreateEmailRequest());
+        await notifier.DeliverAsync(CreateEmailRequest(), ct: TestContext.Current.CancellationToken);
 
         Assert.Single(sender.Sent); // 已尝试发送
     }

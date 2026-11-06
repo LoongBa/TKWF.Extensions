@@ -49,7 +49,7 @@ public class SmtpEmailSenderTests
         var (sender, store, logger) = CreateSender();
 
         // Act — should not throw
-        await sender.SendAsync(null!);
+        await sender.SendAsync(null!, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(store.SavedRecords);
@@ -65,7 +65,7 @@ public class SmtpEmailSenderTests
         var message = new EmailMessage { To = "test@example.com", Subject = "Hello" };
 
         // Act — should not throw
-        await sender.SendAsync(message);
+        await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(store.SavedRecords);
@@ -86,7 +86,7 @@ public class SmtpEmailSenderTests
         };
 
         // Act — should not throw
-        await sender.SendAsync(message);
+        await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
         // Assert — 记录了 Failed 状态
         Assert.Single(store.SavedRecords);
@@ -108,7 +108,7 @@ public class SmtpEmailSenderTests
         };
 
         // Act — 连接会失败，但能验证 From 被正确设置
-        await sender.SendAsync(message);
+        await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
         // Assert — 检查记录中的 From 使用了 DefaultFrom
         Assert.Single(store.SavedRecords);

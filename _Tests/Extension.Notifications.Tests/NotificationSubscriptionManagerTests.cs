@@ -17,7 +17,7 @@ public class NotificationSubscriptionManagerTests
         using var host = NotificationTestHost.Build(fsql);
         var subManager = host.SubscriptionManager;
 
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         var row = fsql.Select<NotificationSubscriptionEntity>().First();
@@ -35,7 +35,7 @@ public class NotificationSubscriptionManagerTests
         using var host = NotificationTestHost.Build(fsql);
         var subManager = host.SubscriptionManager;
 
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100");
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100", ct: TestContext.Current.CancellationToken);
 
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         var row = fsql.Select<NotificationSubscriptionEntity>().First();
@@ -53,8 +53,8 @@ public class NotificationSubscriptionManagerTests
         var subManager = host.SubscriptionManager;
 
         // 重复订阅（定义级）→ 幂等，仅 1 行
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Single(fsql.Select<NotificationSubscriptionEntity>().ToList());
@@ -68,11 +68,11 @@ public class NotificationSubscriptionManagerTests
         using var host = NotificationTestHost.Build(fsql);
         var subManager = host.SubscriptionManager;
 
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Single(fsql.Select<NotificationSubscriptionEntity>().ToList());
 
-        await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
+        await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Empty(fsql.Select<NotificationSubscriptionEntity>().ToList());
@@ -87,7 +87,7 @@ public class NotificationSubscriptionManagerTests
         var subManager = host.SubscriptionManager;
 
         // 从未订阅 → 退订应静默（不抛异常）
-        await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
+        await subManager.UnsubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         // 无业务方法覆盖（INotificationSubscriptionManager 无读接口），保留直查
         Assert.Empty(fsql.Select<NotificationSubscriptionEntity>().ToList());

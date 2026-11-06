@@ -46,11 +46,11 @@ public class TaggingV03Tests
         var (_, ruleDs, _) = CreateHost();
         var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
-        var id = await store.CreateAsync(NewRule("Category", "电子", "手机"));
+        var id = await store.CreateAsync(NewRule("Category", "电子", "手机"), ct: TestContext.Current.CancellationToken);
         Assert.NotNull(id);
         Assert.True(id > 0);
 
-        var all = await store.GetAllAsync();
+        var all = await store.GetAllAsync(ct: TestContext.Current.CancellationToken);
         Assert.Single(all);
         Assert.Equal("电子", all[0].TagName);
     }
@@ -61,11 +61,11 @@ public class TaggingV03Tests
         var (_, ruleDs, _) = CreateHost();
         var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
-        var id1 = await store.CreateAsync(NewRule("Category", "电子", "手机"));
-        var id2 = await store.CreateAsync(NewRule("Category", "电子", "手机"));   // 业务键幂等
+        var id1 = await store.CreateAsync(NewRule("Category", "电子", "手机"), ct: TestContext.Current.CancellationToken);
+        var id2 = await store.CreateAsync(NewRule("Category", "电子", "手机"), ct: TestContext.Current.CancellationToken);   // 业务键幂等
 
         Assert.Equal(id1, id2);   // 同 (Dimension,TagName,Pattern) → 既有 Id
-        Assert.Single(await store.GetAllAsync());
+        Assert.Single(await store.GetAllAsync(ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -77,10 +77,10 @@ public class TaggingV03Tests
         var r1 = NewRule("Category", "电子", "手机");
         var r2 = NewRule("Category", "家电", "冰箱");
         r2.IsEnabled = false;
-        await store.CreateAsync(r1);
-        await store.CreateAsync(r2);
+        await store.CreateAsync(r1, ct: TestContext.Current.CancellationToken);
+        await store.CreateAsync(r2, ct: TestContext.Current.CancellationToken);
 
-        var enabled = await store.GetEnabledAsync();
+        var enabled = await store.GetEnabledAsync(ct: TestContext.Current.CancellationToken);
         Assert.Single(enabled);
         Assert.Equal("电子", enabled[0].TagName);
     }
@@ -91,12 +91,12 @@ public class TaggingV03Tests
         var (_, ruleDs, _) = CreateHost();
         var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
-        await store.CreateAsync(NewRule("Category", "电子", "手机"));
+        await store.CreateAsync(NewRule("Category", "电子", "手机"), ct: TestContext.Current.CancellationToken);
         var updated = NewRule("Category", "电子", "手机");
         updated.Priority = 99;
-        Assert.True(await store.UpdateAsync(updated));
+        Assert.True(await store.UpdateAsync(updated, ct: TestContext.Current.CancellationToken));
 
-        var all = await store.GetAllAsync();
+        var all = await store.GetAllAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(99, all[0].Priority);
     }
 
@@ -106,9 +106,9 @@ public class TaggingV03Tests
         var (_, ruleDs, _) = CreateHost();
         var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
-        var id = await store.CreateAsync(NewRule("Category", "电子", "手机"));
-        Assert.True(await store.DeleteAsync(id!.Value));
-        Assert.Empty(await store.GetAllAsync());
+        var id = await store.CreateAsync(NewRule("Category", "电子", "手机"), ct: TestContext.Current.CancellationToken);
+        Assert.True(await store.DeleteAsync(id!.Value, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await store.GetAllAsync(ct: TestContext.Current.CancellationToken));
     }
 
     // ── LoadRules 供给 ITagService 全链路（规则 → 命中）──
@@ -119,8 +119,8 @@ public class TaggingV03Tests
         var (_, ruleDs, _) = CreateHost();
         var store = new FreeSqlTagRuleStore(new StubDomainUser().With(ruleDs), NullLogger<FreeSqlTagRuleStore>.Instance);
 
-        await store.CreateAsync(NewRule("Category", "电子", "手机", TagMatchMode.Contains));
-        var rules = await store.GetAllAsync();
+        await store.CreateAsync(NewRule("Category", "电子", "手机", TagMatchMode.Contains), ct: TestContext.Current.CancellationToken);
+        var rules = await store.GetAllAsync(ct: TestContext.Current.CancellationToken);
 
         // 经 TaggingExtensionInitializer.ConfigureServices 的真实 DI 注册构建 TagService（对齐消费方路径）
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
@@ -148,13 +148,13 @@ public class TaggingV03Tests
         {
             new TagHit("Category", "电子", "手机", 3, 2, 1, null),
             new TagHit("Category", "家电", "冰箱", 8, 2, 1, null),
-        }, sourceText: "测试原文", hitTime: fixedTime);
+        }, sourceText: "测试原文", hitTime: fixedTime, ct: TestContext.Current.CancellationToken);
 
-        var recent = await store.GetRecentAsync(10);
+        var recent = await store.GetRecentAsync(10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, recent.Count);
         Assert.Contains(recent, h => h.TagName == "电子");   // MatchedValue = "手机"（TagHit 模型，SourceText 快照不映射入 TagHit）
 
-        var byDim = await store.GetByDimensionAsync("Category", null, null, 0, 10);
+        var byDim = await store.GetByDimensionAsync("Category", null, null, 0, 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, byDim.Count);
 
         // P2-4：SourceText 落库验证——直查实体（DTO/TagHit 映射丢弃 SourceText，实体验证快照持久化）
@@ -186,9 +186,9 @@ public class TaggingV03Tests
             new TagHit("Category", "电子", "手机", 0, 2, 1, null),
             new TagHit("Category", "电子", "手机", 5, 2, 1, null),
             new TagHit("Category", "家电", "冰箱", 9, 2, 1, null),
-        }, hitTime: t);
+        }, hitTime: t, ct: TestContext.Current.CancellationToken);
 
-        var freq = await analysis.GetFrequencyAsync("Category", null, null, 10);
+        var freq = await analysis.GetFrequencyAsync("Category", null, null, 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, freq.Count);
         Assert.Equal("电子", freq[0].TagName);   // 频次最高排前
         Assert.Equal(2, freq[0].Count);
@@ -206,9 +206,9 @@ public class TaggingV03Tests
         {
             new TagHit("Category", "电子", "手机", 0, 2, 1, null),
             new TagHit("Brand", "苹果", "Apple", 0, 5, 1, null),
-        }, hitTime: t);
+        }, hitTime: t, ct: TestContext.Current.CancellationToken);
 
-        var dist = await analysis.GetDimensionDistributionAsync(null, null);
+        var dist = await analysis.GetDimensionDistributionAsync(null, null, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, dist.Count);
         Assert.Contains(dist, d => d.Dimension == "Category" && d.Count == 1);
         Assert.Contains(dist, d => d.Dimension == "Brand" && d.Count == 1);
@@ -232,14 +232,14 @@ public class TaggingV03Tests
             new TagHit("Category", "电子", "手机", 0, 2, 1, null),
             new TagHit("Category", "电子", "手机", 5, 2, 1, null),
             new TagHit("Brand", "苹果", "Apple", 0, 5, 1, null),
-        }, hitTime: t);
+        }, hitTime: t, ct: TestContext.Current.CancellationToken);
 
         var sqlLog = new List<string>();
         fsql.Aop.CommandBefore += (_, e) => sqlLog.Add(e.Command.CommandText);
 
         // 频次 TopN（跨复合键(Dimension,TagName)）+ 维度分布（GROUP BY Dimension）
-        await analysis.GetFrequencyAsync(null, null, null, 10);
-        await analysis.GetDimensionDistributionAsync(null, null);
+        await analysis.GetFrequencyAsync(null, null, null, 10, ct: TestContext.Current.CancellationToken);
+        await analysis.GetDimensionDistributionAsync(null, null, ct: TestContext.Current.CancellationToken);
 
         var sql = string.Join(" ", sqlLog);
         Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
@@ -262,18 +262,18 @@ public class TaggingV03Tests
         var t3 = new DateTime(2026, 9, 2, 9, 0, 0, DateTimeKind.Utc);    // 跨 Day 桶
 
         // 逐条落库精确时间（t1/t2 同标签电子，t3 家电）
-        await hitStore.RecordHitsAsync(new[] { new TagHit("Category", "电子", "手机", 0, 2, 1, null) }, hitTime: t1);
-        await hitStore.RecordHitsAsync(new[] { new TagHit("Category", "电子", "手机", 5, 2, 1, null) }, hitTime: t2);
-        await hitStore.RecordHitsAsync(new[] { new TagHit("Category", "家电", "冰箱", 9, 2, 1, null) }, hitTime: t3);
+        await hitStore.RecordHitsAsync(new[] { new TagHit("Category", "电子", "手机", 0, 2, 1, null) }, hitTime: t1, ct: TestContext.Current.CancellationToken);
+        await hitStore.RecordHitsAsync(new[] { new TagHit("Category", "电子", "手机", 5, 2, 1, null) }, hitTime: t2, ct: TestContext.Current.CancellationToken);
+        await hitStore.RecordHitsAsync(new[] { new TagHit("Category", "家电", "冰箱", 9, 2, 1, null) }, hitTime: t3, ct: TestContext.Current.CancellationToken);
 
-        var trend = await analysis.GetTrendAsync("Category", null, t1.Date, t3.Date.AddDays(1), TagGranularity.Hour);
+        var trend = await analysis.GetTrendAsync("Category", null, t1.Date, t3.Date.AddDays(1), TagGranularity.Hour, ct: TestContext.Current.CancellationToken);
         // Hour 粒度：t1(10:30)/t2(14:00)/t3(09:00) 各占一个 Hour 桶（电子拆成 10:00 + 14:00 两点）→ 3 桶各 Count 1
         Assert.Equal(3, trend.Count);
         Assert.All(trend, p => Assert.Equal(1, p.Count));
         Assert.Contains(trend, p => p.TagName == "电子");
         Assert.Contains(trend, p => p.TagName == "家电");
 
-        var trendDay = await analysis.GetTrendAsync("Category", "电子", t1.Date, t3.Date.AddDays(1), TagGranularity.Day);
+        var trendDay = await analysis.GetTrendAsync("Category", "电子", t1.Date, t3.Date.AddDays(1), TagGranularity.Day, ct: TestContext.Current.CancellationToken);
         // Day 粒度：电子 t1/t2 同 9/1 桶合并 → Count 2（t3 是家电被 tagName 过滤）
         Assert.Single(trendDay);
         Assert.Equal("电子", trendDay[0].TagName);
@@ -314,22 +314,22 @@ public class TaggingV03Tests
         var t2 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
         var t3 = new DateTime(2026, 9, 2, 8, 0, 0, DateTimeKind.Utc);
 
-        await store.RecordHitsAsync(new[] { new TagHit("Category", "电子", "手机", 0, 2, 1, null) }, hitTime: t1);
-        await store.RecordHitsAsync(new[] { new TagHit("Category", "家电", "冰箱", 5, 2, 1, null) }, hitTime: t2);
-        await store.RecordHitsAsync(new[] { new TagHit("Category", "图书", "书", 9, 2, 1, null) }, hitTime: t3);
+        await store.RecordHitsAsync(new[] { new TagHit("Category", "电子", "手机", 0, 2, 1, null) }, hitTime: t1, ct: TestContext.Current.CancellationToken);
+        await store.RecordHitsAsync(new[] { new TagHit("Category", "家电", "冰箱", 5, 2, 1, null) }, hitTime: t2, ct: TestContext.Current.CancellationToken);
+        await store.RecordHitsAsync(new[] { new TagHit("Category", "图书", "书", 9, 2, 1, null) }, hitTime: t3, ct: TestContext.Current.CancellationToken);
 
         // (from, to) 分支：限定 [9/1 9:00, 9/1 13:00] → 命中 t1 + t2
-        var both = await store.GetByDimensionAsync("Category", t1.AddHours(-1), t2.AddHours(1), 0, 10);
+        var both = await store.GetByDimensionAsync("Category", t1.AddHours(-1), t2.AddHours(1), 0, 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, both.Count);
         Assert.Contains(both, h => h.TagName == "电子");
         Assert.Contains(both, h => h.TagName == "家电");
 
         // (from, null) 分支：>= 9/1 11:00 → 命中 t2 + t3
-        var fromOnly = await store.GetByDimensionAsync("Category", t1.AddHours(1), null, 0, 10);
+        var fromOnly = await store.GetByDimensionAsync("Category", t1.AddHours(1), null, 0, 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, fromOnly.Count);
 
         // (null, to) 分支：<= 9/1 11:00 → 命中 t1
-        var toOnly = await store.GetByDimensionAsync("Category", null, t2.AddHours(-1), 0, 10);
+        var toOnly = await store.GetByDimensionAsync("Category", null, t2.AddHours(-1), 0, 10, ct: TestContext.Current.CancellationToken);
         Assert.Single(toOnly);
         Assert.Equal("电子", toOnly[0].TagName);
     }

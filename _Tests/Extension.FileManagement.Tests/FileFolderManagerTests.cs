@@ -23,7 +23,7 @@ public class FileFolderManagerTests
     {
         using var host = FileManagementTestHost.Create();
 
-        var root = await host.CreateFolderAsync("docs", "文档");
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, root.Level);
         Assert.Equal("/docs/", root.Path);
@@ -38,9 +38,9 @@ public class FileFolderManagerTests
     public async Task CreateChild_LevelIncrements_PathInherits()
     {
         using var host = FileManagementTestHost.Create();
-        var parent = await host.CreateFolderAsync("docs", "文档");
+        var parent = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
-        var child = await host.CreateFolderAsync("attach", "附件", parent.Id);
+        var child = await host.CreateFolderAsync("attach", "附件", parent.Id, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, child.Level);
         Assert.Equal("/docs/attach/", child.Path);
@@ -53,7 +53,7 @@ public class FileFolderManagerTests
     public async Task CreateFolder_DuplicateCode_Throws()
     {
         using var host = FileManagementTestHost.Create();
-        await host.CreateFolderAsync("docs", "文档");
+        await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         // Code 库级唯一约束 → 原始库异常自然传播
         await Assert.ThrowsAnyAsync<Exception>(
@@ -77,7 +77,7 @@ public class FileFolderManagerTests
     {
         using var host = FileManagementTestHost.Create();
         // Path 列 MaxLength=1024（对齐 OrganizationUnit C3 路径守卫）——深链超限拒绝而非 DB 溢出。
-        var parent = await host.CreateFolderAsync(new string('r', 100), "root");
+        var parent = await host.CreateFolderAsync(new string('r', 100), "root", ct: TestContext.Current.CancellationToken);
         Exception? thrown = null;
 
         for (var i = 0; i < 30 && thrown == null; i++)
@@ -103,7 +103,7 @@ public class FileFolderManagerTests
     public async Task UpdateFolder_NameAndSortOrder_CodeAndPathUnchanged()
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("docs", "文档");
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         await host.Manager.UpdateFolderAsync(root.Id, name: "改名", sortOrder: 7, ct: CancellationToken.None);
 
@@ -120,8 +120,8 @@ public class FileFolderManagerTests
     public async Task DeleteFolder_HasSubfolder_Throws()
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("docs", "文档");
-        await host.CreateFolderAsync("sub", "子目录", root.Id);
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        await host.CreateFolderAsync("sub", "子目录", root.Id, ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => host.Manager.DeleteFolderAsync(root.Id, CancellationToken.None));
@@ -131,8 +131,8 @@ public class FileFolderManagerTests
     public async Task DeleteFolder_HasFiles_Throws()
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("docs", "文档");
-        await host.UploadFileAsync(root.Id, "a.txt", SampleBytes);
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(root.Id, "a.txt", SampleBytes, ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => host.Manager.DeleteFolderAsync(root.Id, CancellationToken.None));
@@ -142,7 +142,7 @@ public class FileFolderManagerTests
     public async Task DeleteFolder_Empty_Succeeds()
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("docs", "文档");
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         await host.Manager.DeleteFolderAsync(root.Id, CancellationToken.None);
 
@@ -155,9 +155,9 @@ public class FileFolderManagerTests
     public async Task RenameFolder_ChangesNameOnly_SubtreePathAndFileQueryUnaffected()
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("docs", "文档");
-        var child = await host.CreateFolderAsync("attach", "附件", root.Id);
-        await host.UploadFileAsync(root.Id, "a.txt", SampleBytes);
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        var child = await host.CreateFolderAsync("attach", "附件", root.Id, ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(root.Id, "a.txt", SampleBytes, ct: TestContext.Current.CancellationToken);
 
         await host.Manager.RenameFolderAsync(root.Id, "文档中心（新）", CancellationToken.None);
 
@@ -182,7 +182,7 @@ public class FileFolderManagerTests
     public async Task RenameFolder_InvalidName_Throws(string newName)
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("docs", "文档");
+        var root = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAnyAsync<ArgumentException>(
             () => host.Manager.RenameFolderAsync(root.Id, newName, CancellationToken.None));
@@ -194,11 +194,11 @@ public class FileFolderManagerTests
     public async Task GetFolderTree_AssemblesHierarchy_SortedBySortOrder()
     {
         using var host = FileManagementTestHost.Create();
-        var root = await host.CreateFolderAsync("root", "根目录", sortOrder: 5);
-        await host.CreateFolderAsync("beta", "B", root.Id, sortOrder: 2);
-        var alpha = await host.CreateFolderAsync("alpha", "A", root.Id, sortOrder: 1);
-        await host.CreateFolderAsync("leaf", "叶子", alpha.Id, sortOrder: 9);
-        await host.CreateFolderAsync("gamma", "G", root.Id, sortOrder: 3);
+        var root = await host.CreateFolderAsync("root", "根目录", sortOrder: 5, ct: TestContext.Current.CancellationToken);
+        await host.CreateFolderAsync("beta", "B", root.Id, sortOrder: 2, ct: TestContext.Current.CancellationToken);
+        var alpha = await host.CreateFolderAsync("alpha", "A", root.Id, sortOrder: 1, ct: TestContext.Current.CancellationToken);
+        await host.CreateFolderAsync("leaf", "叶子", alpha.Id, sortOrder: 9, ct: TestContext.Current.CancellationToken);
+        await host.CreateFolderAsync("gamma", "G", root.Id, sortOrder: 3, ct: TestContext.Current.CancellationToken);
 
         var tree = await host.Manager.GetFolderTreeAsync(CancellationToken.None);
 
@@ -217,8 +217,8 @@ public class FileFolderManagerTests
     {
         using var host = FileManagementTestHost.Create();
         // 显式 SortOrder——期望按升序返回
-        var z = await host.CreateFolderAsync("zdir", "Z", sortOrder: 5);
-        var adir = await host.CreateFolderAsync("adir", "A", sortOrder: 3);
+        var z = await host.CreateFolderAsync("zdir", "Z", sortOrder: 5, ct: TestContext.Current.CancellationToken);
+        var adir = await host.CreateFolderAsync("adir", "A", sortOrder: 3, ct: TestContext.Current.CancellationToken);
         _ = z;
         _ = adir;
 

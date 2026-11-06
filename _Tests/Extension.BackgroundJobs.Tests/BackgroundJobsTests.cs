@@ -150,10 +150,10 @@ public class BackgroundJobsTests
         var recorder = CreateRecorder(provider, user);
         var context = CreateTestContext(isSuccess: true);
 
-        await recorder.OnExecutedAsync(context);
+        await recorder.OnExecutedAsync(context, ct: TestContext.Current.CancellationToken);
 
         var execDs = user.Use<JobExecutionEntityDataService>();
-        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Single(rows);
         var row = rows[0];
         Assert.Equal("test-job-001", row.JobId);
@@ -175,10 +175,10 @@ public class BackgroundJobsTests
             isSuccess: false, isCancelled: false,
             error: "System.Exception: Test error\n   at Test.Method()");
 
-        await recorder.OnExecutedAsync(context);
+        await recorder.OnExecutedAsync(context, ct: TestContext.Current.CancellationToken);
 
         var execDs = user.Use<JobExecutionEntityDataService>();
-        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Single(rows);
         Assert.False(rows[0].IsSuccess);
         Assert.Contains("System.Exception: Test error", rows[0].ErrorText!);
@@ -192,10 +192,10 @@ public class BackgroundJobsTests
         var context = CreateTestContext(
             isSuccess: false, isCancelled: true, error: null);
 
-        await recorder.OnExecutedAsync(context);
+        await recorder.OnExecutedAsync(context, ct: TestContext.Current.CancellationToken);
 
         var execDs = user.Use<JobExecutionEntityDataService>();
-        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Single(rows);
         Assert.True(rows[0].IsCancelled);
         Assert.False(rows[0].IsSuccess);
@@ -208,12 +208,12 @@ public class BackgroundJobsTests
         var (provider, user) = CreateProductionHost();
         var recorder = CreateRecorder(provider, user);
 
-        await recorder.OnExecutedAsync(CreateTestContext(jobId: "j1", provider: "builtin"));
-        await recorder.OnExecutedAsync(CreateTestContext(jobId: "j2", provider: "hangfire"));
-        await recorder.OnExecutedAsync(CreateTestContext(jobId: "j3", provider: "quartz"));
+        await recorder.OnExecutedAsync(CreateTestContext(jobId: "j1", provider: "builtin"), ct: TestContext.Current.CancellationToken);
+        await recorder.OnExecutedAsync(CreateTestContext(jobId: "j2", provider: "hangfire"), ct: TestContext.Current.CancellationToken);
+        await recorder.OnExecutedAsync(CreateTestContext(jobId: "j3", provider: "quartz"), ct: TestContext.Current.CancellationToken);
 
         var execDs = user.Use<JobExecutionEntityDataService>();
-        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, rows.Count);
         Assert.Contains(rows, r => r.Provider == "builtin" && r.JobId == "j1");
         Assert.Contains(rows, r => r.Provider == "hangfire" && r.JobId == "j2");
@@ -226,11 +226,11 @@ public class BackgroundJobsTests
         var (provider, user) = CreateProductionHost();
         var recorder = CreateRecorder(provider, user);
 
-        await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 1));
-        await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 2));
+        await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 1), ct: TestContext.Current.CancellationToken);
+        await recorder.OnExecutedAsync(CreateTestContext(retryAttempt: 2), ct: TestContext.Current.CancellationToken);
 
         var execDs = user.Use<JobExecutionEntityDataService>();
-        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await execDs.EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, rows.Count);
         Assert.Contains(rows, r => r.RetryAttempt == 1);
         Assert.Contains(rows, r => r.RetryAttempt == 2);
@@ -247,11 +247,11 @@ public class BackgroundJobsTests
         var recorder = user.Use<IJobResultRecorder>();
 
         using var ctx = BackgroundJobContext.Enter("result-job-001", "builtin", null);
-        var id = await recorder.RecordAsync("success", "{\"count\":42}", "处理完成");
+        var id = await recorder.RecordAsync("success", "{\"count\":42}", "处理完成", ct: TestContext.Current.CancellationToken);
 
         Assert.True(id > 0);
 
-        var rows = await user.Use<JobResultEntityDataService>().EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await user.Use<JobResultEntityDataService>().EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Single(rows);
         Assert.Equal("result-job-001", rows[0].JobId);
         Assert.Equal("success", rows[0].ResultType);
@@ -268,7 +268,7 @@ public class BackgroundJobsTests
         // BackgroundJobContext.Current 应为 null（无上下文）
         Assert.Null(BackgroundJobContext.Current);
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => recorder.RecordAsync("success", "{}"));
+            () => recorder.RecordAsync("success", "{}", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -278,9 +278,9 @@ public class BackgroundJobsTests
         var recorder = user.Use<IJobResultRecorder>();
 
         using var ctx = BackgroundJobContext.Enter("default-type-job", "builtin", null);
-        var id = await recorder.RecordAsync("success", "{}");
+        var id = await recorder.RecordAsync("success", "{}", ct: TestContext.Current.CancellationToken);
 
-        var rows = await user.Use<JobResultEntityDataService>().EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id));
+        var rows = await user.Use<JobResultEntityDataService>().EntitySelectAsync(e => true, 0, 10, q => q.OrderByDescending(e => e.Id), ct: TestContext.Current.CancellationToken);
         Assert.Single(rows);
         Assert.Equal("success", rows[0].ResultType);
     }
@@ -299,11 +299,11 @@ public class BackgroundJobsTests
         for (int i = 0; i < 5; i++)
             await SeedExecutionAsync(user, CreateTestContext(jobId: $"job-{i}"));
 
-        var page1 = await queryService.GetListAsync(new JobExecutionQueryInput(Skip: 0, Take: 2));
+        var page1 = await queryService.GetListAsync(new JobExecutionQueryInput(Skip: 0, Take: 2), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, page1.Items.Count);
         Assert.Equal(5, page1.Total);   // Total = 过滤后总条数（SQL COUNT），非当前页条数
 
-        var page2 = await queryService.GetListAsync(new JobExecutionQueryInput(Skip: 2, Take: 2));
+        var page2 = await queryService.GetListAsync(new JobExecutionQueryInput(Skip: 2, Take: 2), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, page2.Items.Count);
         Assert.Equal(5, page2.Total);
     }
@@ -318,7 +318,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(jobId: "j2", provider: "hangfire"));
         await SeedExecutionAsync(user, CreateTestContext(jobId: "j3", provider: "builtin"));
 
-        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(Provider: "builtin"));
+        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(Provider: "builtin"), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, filtered.Items.Count);
         Assert.All(filtered.Items, i => Assert.Equal("builtin", i.Provider));
     }
@@ -333,7 +333,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: false, error: "fail"));
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: true));
 
-        var succeeded = await queryService.GetListAsync(new JobExecutionQueryInput(IsSuccess: true));
+        var succeeded = await queryService.GetListAsync(new JobExecutionQueryInput(IsSuccess: true), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, succeeded.Items.Count);
         Assert.All(succeeded.Items, i => Assert.True(i.IsSuccess));
     }
@@ -347,7 +347,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(jobId: "job-a"));
         await SeedExecutionAsync(user, CreateTestContext(jobId: "job-b"));
 
-        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(JobId: "job-a"));
+        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(JobId: "job-a"), ct: TestContext.Current.CancellationToken);
         Assert.Single(filtered.Items);
         Assert.Equal("job-a", filtered.Items[0].JobId);
         Assert.Equal(1, filtered.Total);
@@ -362,7 +362,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(jobType: "SyncJob, TestAssembly"));
         await SeedExecutionAsync(user, CreateTestContext(jobType: "CleanupJob, TestAssembly"));
 
-        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(JobType: "SyncJob, TestAssembly"));
+        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(JobType: "SyncJob, TestAssembly"), ct: TestContext.Current.CancellationToken);
         Assert.Single(filtered.Items);
         Assert.Equal("SyncJob, TestAssembly", filtered.Items[0].JobType);
     }
@@ -376,7 +376,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(jobId: "tenant-1-job", tenantId: 1));
         await SeedExecutionAsync(user, CreateTestContext(jobId: "tenant-2-job", tenantId: 2));
 
-        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(TenantId: 1));
+        var filtered = await queryService.GetListAsync(new JobExecutionQueryInput(TenantId: 1), ct: TestContext.Current.CancellationToken);
         Assert.Single(filtered.Items);
         Assert.Equal(1, filtered.Items[0].TenantId);
     }
@@ -390,7 +390,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: false, isCancelled: true));
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: true));
 
-        var cancelled = await queryService.GetListAsync(new JobExecutionQueryInput(IsCancelled: true));
+        var cancelled = await queryService.GetListAsync(new JobExecutionQueryInput(IsCancelled: true), ct: TestContext.Current.CancellationToken);
         Assert.Single(cancelled.Items);
         Assert.True(cancelled.Items[0].IsCancelled);
     }
@@ -406,13 +406,13 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(jobId: "in-window"));
 
         var inWindow = await queryService.GetListAsync(new JobExecutionQueryInput(
-            StartFromUtc: now.AddSeconds(-2), StartToUtc: now));
+            StartFromUtc: now.AddSeconds(-2), StartToUtc: now), ct: TestContext.Current.CancellationToken);
         Assert.Single(inWindow.Items);
         Assert.Equal("in-window", inWindow.Items[0].JobId);
 
         // 窗口偏移到未来——无命中
         var noHit = await queryService.GetListAsync(new JobExecutionQueryInput(
-            StartFromUtc: now.AddHours(1), StartToUtc: now.AddHours(2)));
+            StartFromUtc: now.AddHours(1), StartToUtc: now.AddHours(2)), ct: TestContext.Current.CancellationToken);
         Assert.Empty(noHit.Items);
     }
 
@@ -424,7 +424,7 @@ public class BackgroundJobsTests
 
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: false, error: "secret error detail"));
 
-        var result = await queryService.GetListAsync(new JobExecutionQueryInput());
+        var result = await queryService.GetListAsync(new JobExecutionQueryInput(), ct: TestContext.Current.CancellationToken);
         Assert.Single(result.Items);
         // JobExecutionListItemDto 无 ErrorText 属性（编译期保证）
     }
@@ -437,8 +437,8 @@ public class BackgroundJobsTests
 
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: false, error: "detailed error"));
 
-        var list = await queryService.GetListAsync(new JobExecutionQueryInput());
-        var detail = await queryService.GetDetailAsync(list.Items[0].Id);
+        var list = await queryService.GetListAsync(new JobExecutionQueryInput(), ct: TestContext.Current.CancellationToken);
+        var detail = await queryService.GetDetailAsync(list.Items[0].Id, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(detail);
         Assert.Equal("detailed error", detail!.ErrorText);
@@ -450,7 +450,7 @@ public class BackgroundJobsTests
         var (_, user) = CreateProductionHost();
         var queryService = user.Use<IJobExecutionQueryService>();
 
-        var detail = await queryService.GetDetailAsync(999);
+        var detail = await queryService.GetDetailAsync(999, ct: TestContext.Current.CancellationToken);
         Assert.Null(detail);
     }
 
@@ -466,7 +466,7 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: false, error: "err"));
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: false, isCancelled: true));
 
-        var stats = await queryService.GetStatsAsync();
+        var stats = await queryService.GetStatsAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(4, stats.Total);
         Assert.Equal(2, stats.Succeeded);
         Assert.Equal(1, stats.Failed);
@@ -484,11 +484,11 @@ public class BackgroundJobsTests
         await SeedExecutionAsync(user, CreateTestContext(isSuccess: true));
 
         // 1 小时窗口——刚插入的记录在窗口内
-        var statsInWindow = await queryService.GetStatsAsync(TimeSpan.FromHours(1));
+        var statsInWindow = await queryService.GetStatsAsync(TimeSpan.FromHours(1), ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, statsInWindow.Total);
 
         // 1 毫秒窗口——刚插入的记录可能已超出
-        var statsNoWindow = await queryService.GetStatsAsync(TimeSpan.FromMilliseconds(1));
+        var statsNoWindow = await queryService.GetStatsAsync(TimeSpan.FromMilliseconds(1), ct: TestContext.Current.CancellationToken);
         // 可能为 0 或 1（取决于执行速度）
         Assert.True(statsNoWindow.Total >= 0);
     }
@@ -501,14 +501,14 @@ public class BackgroundJobsTests
         var queryService = user.Use<IJobResultQueryService>();
 
         using (var ctx = BackgroundJobContext.Enter("q-job-1", "builtin", null))
-            await recorder.RecordAsync("success", "{\"a\":1}");
+            await recorder.RecordAsync("success", "{\"a\":1}", ct: TestContext.Current.CancellationToken);
         using (var ctx = BackgroundJobContext.Enter("q-job-2", "builtin", null))
-            await recorder.RecordAsync("error", "{\"b\":2}");
+            await recorder.RecordAsync("error", "{\"b\":2}", ct: TestContext.Current.CancellationToken);
 
-        var all = await queryService.GetListAsync(new JobResultQueryInput());
+        var all = await queryService.GetListAsync(new JobResultQueryInput(), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, all.Items.Count);
 
-        var filtered = await queryService.GetListAsync(new JobResultQueryInput(ResultType: "success"));
+        var filtered = await queryService.GetListAsync(new JobResultQueryInput(ResultType: "success"), ct: TestContext.Current.CancellationToken);
         Assert.Single(filtered.Items);
         Assert.Equal("success", filtered.Items[0].ResultType);
     }
@@ -522,12 +522,12 @@ public class BackgroundJobsTests
 
         using (var ctx = BackgroundJobContext.Enter("latest-job", "builtin", null))
         {
-            await recorder.RecordAsync("success", "{\"v\":1}");
-            await Task.Delay(10); // 确保时间差
-            await recorder.RecordAsync("success", "{\"v\":2}");
+            await recorder.RecordAsync("success", "{\"v\":1}", ct: TestContext.Current.CancellationToken);
+            await Task.Delay(10, TestContext.Current.CancellationToken); // 确保时间差
+            await recorder.RecordAsync("success", "{\"v\":2}", ct: TestContext.Current.CancellationToken);
         }
 
-        var latest = await queryService.GetLatestAsync("latest-job");
+        var latest = await queryService.GetLatestAsync("latest-job", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(latest);
         Assert.Contains("\"v\":2", latest!.ResultJson!);
     }
@@ -705,7 +705,7 @@ public class BackgroundJobsTests
 
         // 不应抛出异常（异常静默 + Warning）——DataService 经 SystemUser NoAop 直建（IEntityDAC 从 DI 解析），
         // 落库 SQL 异常被 OnExecutedAsync catch 吞掉
-        await recorder.OnExecutedAsync(CreateTestContext()); // should not throw
+        await recorder.OnExecutedAsync(CreateTestContext(), ct: TestContext.Current.CancellationToken); // should not throw
     }
 }
 

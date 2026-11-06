@@ -54,7 +54,7 @@ public class IdentityAdapterTests
             "jti-2", DateTime.UtcNow.AddHours(2),
             new Dictionary<string, string> { ["role"] = "Teacher" });   // V0.9.0：teacher_verified claim 移除——角色走本地映射（MapRoles 从通用 Claims 读业务声明）
 
-        var roles = await mapper.MapRolesAsync(token.UserId, token);
+        var roles = await mapper.MapRolesAsync(token.UserId, token, ct: TestContext.Current.CancellationToken);
 
         // V0.9.0（A.4）：teacher_verified 迁出——令牌不再携带业务声明；角色本地映射经通用 Claims（消费方自定业务键）
         Assert.Contains("Teacher", roles);
@@ -81,10 +81,10 @@ public class IdentityAdapterTests
         });
         var verifier = new LocalJwtTokenVerifier(stub);
         var account = new AuthAccountEntity { UId = "u-400", TokenVersion = 0 };
-        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account);
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
 
-        var issued = await stub.GetService<ITokenService>().IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone));
-        var result = await verifier.VerifyAsync(issued.AccessToken);
+        var issued = await stub.GetService<ITokenService>().IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
+        var result = await verifier.VerifyAsync(issued.AccessToken, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(account.UId, result.UserId);
     }

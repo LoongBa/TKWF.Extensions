@@ -37,14 +37,14 @@ public class ApprovalTimeoutTests : IDisposable
     {
         await _host.ApprovalService.CreateFlowAsync(flowCode, "流程", steps);
         var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), flowCode, "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
         configure?.Invoke(task);
         task.TimeoutAt = DateTime.UtcNow.AddMinutes(-1); // 已超期
         task.TimeoutProcessed = false;
-        await _host.TaskDataService.EntityUpdateAsync(task, default);
+        await _host.TaskDataService.EntityUpdateAsync(task, TestContext.Current.CancellationToken);
         return task;
     }
 
@@ -59,7 +59,7 @@ public class ApprovalTimeoutTests : IDisposable
         var task = await StartOverdueTaskAsync(steps, "timeout_remind");
         _host.Events.PublishedEvents.Clear();
 
-        var processed = await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        var processed = await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, processed);
         var evt = _host.Events.PublishedEvents.OfType<ApprovalTaskTimeoutEvent>().FirstOrDefault();
@@ -70,7 +70,7 @@ public class ApprovalTimeoutTests : IDisposable
         Assert.Null(evt.TransferToUserId);
 
         // 任务保持 Pending + TimeoutProcessed=true
-        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Pending, updated!.Status);
         Assert.True(updated.TimeoutProcessed);
     }
@@ -85,16 +85,16 @@ public class ApprovalTimeoutTests : IDisposable
         };
         var task = await StartOverdueTaskAsync(steps, "timeout_transfer");
 
-        await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
 
         // 原任务 Transferred + TransferredTo=目标
-        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Transferred, original!.Status);
         Assert.Equal("deputy", original.TransferredTo);
 
         // 新任务 Pending（继承超时配置 P4）
         var newTasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "deputy", 0, 10, q => q, default);
+            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "deputy", 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(newTasks);
         Assert.Equal(ApprovalTaskStatus.Pending, newTasks[0].Status);
         Assert.NotNull(newTasks[0].TimeoutAt); // P4：转交新任务继承步骤超时配置
@@ -113,23 +113,23 @@ public class ApprovalTimeoutTests : IDisposable
         };
         var task = await StartOverdueTaskAsync(steps, "timeout_jump");
 
-        await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
 
         // 当前步骤（0）任务 Completed
-        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Completed, original!.Status);
 
         // 实例推进到步骤 1 + 建目标步骤任务
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, instance!.CurrentStepIndex);
         var step1Tasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instance.Id && t.StepIndex == 1, 0, 10, q => q, default);
+            t => t.InstanceId == instance.Id && t.StepIndex == 1, 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(step1Tasks);
         Assert.Equal("fin", step1Tasks[0].ApproverUserId);
 
         // 目标步骤可正常审批完成
-        await _host.ApprovalService.ApproveAsync(step1Tasks[0].Id, "fin");
-        instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId);
+        await _host.ApprovalService.ApproveAsync(step1Tasks[0].Id, "fin", ct: TestContext.Current.CancellationToken);
+        instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
     }
 
@@ -145,12 +145,12 @@ public class ApprovalTimeoutTests : IDisposable
         await StartOverdueTaskAsync(steps, "timeout_jump_equal");
 
         // P2：等于当前步骤拒绝——动作失败但占位生效（processed=1，不抛到扫描层）
-        var processed = await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        var processed = await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, processed);
 
         // 任务保持 Pending（跳转未执行）
         var tasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.Status == ApprovalTaskStatus.Pending, 0, 10, q => q, default);
+            t => t.Status == ApprovalTaskStatus.Pending, 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.NotEmpty(tasks);
     }
 
@@ -165,11 +165,11 @@ public class ApprovalTimeoutTests : IDisposable
         };
         await StartOverdueTaskAsync(steps, "timeout_jump_oob");
 
-        var processed = await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        var processed = await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, processed); // 占位成功（防重扫），动作失败记录日志
 
         var tasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.Status == ApprovalTaskStatus.Pending, 0, 10, q => q, default);
+            t => t.Status == ApprovalTaskStatus.Pending, 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.NotEmpty(tasks); // 跳转未执行——仍 Pending
     }
 
@@ -183,14 +183,14 @@ public class ApprovalTimeoutTests : IDisposable
         };
         var task = await StartOverdueTaskAsync(steps, "timeout_approve");
 
-        await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
 
         // 实例 Approved（系统自动通过）
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
 
         // D15：审计 ApprovedBy="system:timeout"（不冒充审批人）
-        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Approved, updated!.Status);
         Assert.Equal(ApprovalManager.SystemTimeoutActor, updated.ApprovedBy);
     }
@@ -205,15 +205,15 @@ public class ApprovalTimeoutTests : IDisposable
         };
         var task = await StartOverdueTaskAsync(steps, "timeout_reject");
 
-        await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
 
         // 实例 Rejected（系统自动驳回）
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Rejected, instance!.Status);
         Assert.NotNull(instance.RejectedAt); // C5 验证：RejectedAt 正确写入
 
         // D15：审计 ApprovedBy="system:timeout"
-        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var updated = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Rejected, updated!.Status);
         Assert.Equal(ApprovalManager.SystemTimeoutActor, updated.ApprovedBy);
     }
@@ -229,11 +229,11 @@ public class ApprovalTimeoutTests : IDisposable
         await StartOverdueTaskAsync(steps, "timeout_once");
 
         // 第一次处理 → 1 个
-        var first = await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        var first = await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, first);
 
         // 第二次 → 0（TimeoutProcessed 已置位，扫描即排除；P3 防重）
-        var second = await _host.TimeoutService.ProcessTimeoutTasksAsync();
+        var second = await _host.TimeoutService.ProcessTimeoutTasksAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(0, second);
     }
 
@@ -246,15 +246,15 @@ public class ApprovalTimeoutTests : IDisposable
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr",
                 TimeoutMinutes: 30, TimeoutAction: ApprovalTimeoutAction.Remind)
         };
-        await _host.ApprovalService.CreateFlowAsync("claim_flow", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), "claim_flow", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("claim_flow", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), "claim_flow", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
 
         // 已通过（非 Pending）——ClaimTimeoutAsync 拒绝占位
-        await _host.ApprovalService.ApproveAsync(task.Id, "mgr");
-        var claimed = await _host.TaskDataService.ClaimTimeoutAsync(task.Id);
+        await _host.ApprovalService.ApproveAsync(task.Id, "mgr", ct: TestContext.Current.CancellationToken);
+        var claimed = await _host.TaskDataService.ClaimTimeoutAsync(task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(0, claimed);
     }
 
@@ -266,13 +266,13 @@ public class ApprovalTimeoutTests : IDisposable
             new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr",
                 TimeoutMinutes: 45, TimeoutAction: ApprovalTimeoutAction.Remind)
         };
-        await _host.ApprovalService.CreateFlowAsync("timeout_calc", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), "timeout_calc", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("timeout_calc", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), "timeout_calc", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         // D11：步骤级 TimeoutMinutes=45 → 任务 TimeoutAt = CreateTime+45min（P4 常规步骤创建路径）
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
         Assert.NotNull(task.TimeoutAt);
         var diff = task.TimeoutAt!.Value - task.CreateTime;
         Assert.True(diff >= TimeSpan.FromMinutes(44) && diff <= TimeSpan.FromMinutes(45),
@@ -285,12 +285,12 @@ public class ApprovalTimeoutTests : IDisposable
     {
         // TimeoutMinutes=null（默认）→ 任务 TimeoutAt=null（不超时）
         var steps = new[] { new ApprovalStepDefinition(0, "经理", ApprovalApproverType.User, "mgr") };
-        await _host.ApprovalService.CreateFlowAsync("timeout_none", "流程", steps);
-        var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), "timeout_none", "submitter");
-        await _host.ApprovalService.SubmitAsync(instanceId);
+        await _host.ApprovalService.CreateFlowAsync("timeout_none", "流程", steps, ct: TestContext.Current.CancellationToken);
+        var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), "timeout_none", "submitter", ct: TestContext.Current.CancellationToken);
+        await _host.ApprovalService.SubmitAsync(instanceId, ct: TestContext.Current.CancellationToken);
 
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
         Assert.Null(task.TimeoutAt);
     }
 }

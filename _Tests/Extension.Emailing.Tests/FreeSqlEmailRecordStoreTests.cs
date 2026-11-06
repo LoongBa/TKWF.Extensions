@@ -65,7 +65,7 @@ public class FreeSqlEmailRecordStoreTests
         };
 
         // Act
-        await store.SaveAsync(entity);
+        await store.SaveAsync(entity, ct: TestContext.Current.CancellationToken);
 
         // Assert
         var list = await store.GetListAsync(ct: CancellationToken.None);
@@ -94,7 +94,7 @@ public class FreeSqlEmailRecordStoreTests
             Subject = "Original",
             Status = "Pending"
         };
-        await store.SaveAsync(entity);
+        await store.SaveAsync(entity, ct: TestContext.Current.CancellationToken);
 
         // 获取生成的 Id
         var saved = (await store.GetListAsync(ct: CancellationToken.None))[0];
@@ -102,7 +102,7 @@ public class FreeSqlEmailRecordStoreTests
         saved.SendTime = DateTime.Now;
 
         // Act
-        await store.SaveAsync(saved);
+        await store.SaveAsync(saved, ct: TestContext.Current.CancellationToken);
 
         // Assert
         var list = await store.GetListAsync(ct: CancellationToken.None);
@@ -127,11 +127,11 @@ public class FreeSqlEmailRecordStoreTests
             Subject = "Test Subject",
             Status = "Sent"
         };
-        await store.SaveAsync(entity);
+        await store.SaveAsync(entity, ct: TestContext.Current.CancellationToken);
         var id = (await store.GetListAsync(ct: CancellationToken.None))[0].Id;
 
         // Act
-        var result = await store.GetAsync(id);
+        var result = await store.GetAsync(id, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -149,7 +149,7 @@ public class FreeSqlEmailRecordStoreTests
         var store = CreateStore(fsql, logger);
 
         // Act
-        var result = await store.GetAsync(999);
+        var result = await store.GetAsync(999, ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(result);
@@ -164,12 +164,12 @@ public class FreeSqlEmailRecordStoreTests
         var logger = new FakeLogger<EmailRecordStore>();
         var store = CreateStore(fsql, logger);
 
-        await store.SaveAsync(new EmailRecordEntity { To = "a@example.com", Subject = "A", Status = "Sent" });
-        await store.SaveAsync(new EmailRecordEntity { To = "b@example.com", Subject = "B", Status = "Failed" });
-        await store.SaveAsync(new EmailRecordEntity { To = "c@example.com", Subject = "C", Status = "Sent" });
+        await store.SaveAsync(new EmailRecordEntity { To = "a@example.com", Subject = "A", Status = "Sent" }, ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new EmailRecordEntity { To = "b@example.com", Subject = "B", Status = "Failed" }, ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new EmailRecordEntity { To = "c@example.com", Subject = "C", Status = "Sent" }, ct: TestContext.Current.CancellationToken);
 
         // Act
-        var list = await store.GetListAsync();
+        var list = await store.GetListAsync(ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, list.Count);
@@ -184,12 +184,12 @@ public class FreeSqlEmailRecordStoreTests
         var logger = new FakeLogger<EmailRecordStore>();
         var store = CreateStore(fsql, logger);
 
-        await store.SaveAsync(new EmailRecordEntity { To = "a@example.com", Subject = "A", Status = "Sent" });
-        await store.SaveAsync(new EmailRecordEntity { To = "b@example.com", Subject = "B", Status = "Failed" });
-        await store.SaveAsync(new EmailRecordEntity { To = "c@example.com", Subject = "C", Status = "Sent" });
+        await store.SaveAsync(new EmailRecordEntity { To = "a@example.com", Subject = "A", Status = "Sent" }, ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new EmailRecordEntity { To = "b@example.com", Subject = "B", Status = "Failed" }, ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new EmailRecordEntity { To = "c@example.com", Subject = "C", Status = "Sent" }, ct: TestContext.Current.CancellationToken);
 
         // Act
-        var list = await store.GetListAsync("Failed");
+        var list = await store.GetListAsync("Failed", ct: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(list);
@@ -206,7 +206,7 @@ public class FreeSqlEmailRecordStoreTests
         var store = CreateStore(fsql, logger);
 
         // Act — null entity should be silently skipped
-        await store.SaveAsync(null!);
+        await store.SaveAsync(null!, ct: TestContext.Current.CancellationToken);
 
         // Assert — no records created
         Assert.Empty(await store.GetListAsync(ct: CancellationToken.None));
@@ -226,7 +226,7 @@ public class FreeSqlEmailRecordStoreTests
         var entity = new EmailRecordEntity { To = "test@example.com", Subject = "Test" };
 
         // Act — should not throw
-        await store.SaveAsync(entity);
+        await store.SaveAsync(entity, ct: TestContext.Current.CancellationToken);
 
         // Assert — logger captured warning
         Assert.Single(logger.Warnings);

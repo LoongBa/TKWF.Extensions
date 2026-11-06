@@ -42,7 +42,7 @@ public class AuthGrantCommandServiceTests
         await command.RecordLoginGrantAsync("u-100", "app-1", CancellationToken.None);
 
         // B3b：门面返回 GrantsResponse（Grants 列表）；userId 读 ambient（FakeTokenVerificationContext("u-100")）——无 userId 参数
-        var grants = await query.GetGrantsAsync();
+        var grants = await query.GetGrantsAsync(ct: TestContext.Current.CancellationToken);
         var grant = Assert.Single(grants.Grants);
         Assert.Equal("app-1", grant.AppId);
         Assert.Equal(0, grant.Status);                    // Active
@@ -60,7 +60,7 @@ public class AuthGrantCommandServiceTests
         await command.RecordLoginGrantAsync("u-100", "app-1", CancellationToken.None);
 
         // upsert 幂等：同一复合键（UserId+AppId+Source=Login）两次调用 → 仅 1 行（存在刷新 Active 态）
-        var grants = await query.GetGrantsAsync();
+        var grants = await query.GetGrantsAsync(ct: TestContext.Current.CancellationToken);
         Assert.Single(grants.Grants);
         Assert.Equal(0, grants.Grants[0].Status);
 
@@ -87,7 +87,7 @@ public class AuthGrantCommandServiceTests
 
             // 经任一连接查询断言仅 1 行（唯一索引兜底生效）
             var query = new AuthGrantQueryService(stub1, new FakeTokenVerificationContext("u-100"));
-            var grants = await query.GetGrantsAsync();
+            var grants = await query.GetGrantsAsync(ct: TestContext.Current.CancellationToken);
             var grant = Assert.Single(grants.Grants);
             Assert.Equal(0, grant.Status);
             Assert.Equal(AuthGrantSources.Login, grant.Source);
@@ -112,7 +112,7 @@ public class AuthGrantCommandServiceTests
         await command.RecordLoginGrantAsync("u-100", "app-2", CancellationToken.None);
 
         // 不同 AppId = 不同复合键 → 各自独立授权行
-        var grants = await query.GetGrantsAsync();
+        var grants = await query.GetGrantsAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, grants.Grants.Count);
         Assert.Equal(2, grants.Grants.Select(g => g.AppId).Distinct().Count());
     }

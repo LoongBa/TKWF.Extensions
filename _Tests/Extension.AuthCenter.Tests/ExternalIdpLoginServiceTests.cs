@@ -73,7 +73,7 @@ public class ExternalIdpLoginServiceTests
             TokenVersion = 0
         };
 
-        var result = await service.LoginAsync(ChannelType, Params());
+        var result = await service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);            // B3b：TokenResponse 形态
         Assert.Equal(AuthTypes.Federated, token.LastRequest!.AuthType);
@@ -88,7 +88,7 @@ public class ExternalIdpLoginServiceTests
         var (service, auth, _, accountSvc, _, token) = CreateService();
         auth.Result = new ExternalIdpAuthResult(false, null, "CHANNEL_NOT_FOUND", 0);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(ChannelType, Params()));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("CHANNEL_NOT_FOUND", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
@@ -102,7 +102,7 @@ public class ExternalIdpLoginServiceTests
         var (service, auth, _, accountSvc, _, _) = CreateService();
         auth.Result = new ExternalIdpAuthResult(true, null, null, 2);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(ChannelType, Params()));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("EXTERNAL_USER_ID_MISSING", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);
@@ -125,7 +125,7 @@ public class ExternalIdpLoginServiceTests
         });
         var service = new ExternalIdpLoginService(stub, NullLogger<ExternalIdpLoginService>.Instance);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(ChannelType, Params()));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken));
         Assert.Contains("IExternalIdpAuthenticator", ex.Message);   // GetRequiredService 缺实现守卫
     }
 
@@ -142,7 +142,7 @@ public class ExternalIdpLoginServiceTests
             TokenVersion = 0
         };
 
-        var result = await service.LoginAsync(ChannelType, Params());
+        var result = await service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);            // B3b：TokenResponse 形态
         Assert.False(accountSvc.CreateCalled);   // 复用不建号
@@ -163,7 +163,7 @@ public class ExternalIdpLoginServiceTests
             TokenVersion = 0
         };
 
-        var result = await service.LoginAsync(ChannelType, Params());
+        var result = await service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.AccessToken);            // B3b：TokenResponse 形态
         Assert.True(accountSvc.CreateCalled);
@@ -187,7 +187,7 @@ public class ExternalIdpLoginServiceTests
             ["state"] = "csrf-token-abc",
             ["scope"] = "snsapi_userinfo",
         };
-        await service.LoginAsync("wechat_oauth", parameters);
+        await service.LoginAsync("wechat_oauth", parameters, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("wechat_oauth", auth.LastChannelType);
         Assert.NotNull(auth.LastParameters);
@@ -204,7 +204,7 @@ public class ExternalIdpLoginServiceTests
         var (service, _, _, accountSvc, _, _) = CreateService();
 
         var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            service.LoginAsync(ChannelType, new Dictionary<string, string?> { ["code"] = "wx-code-2" }));
+            service.LoginAsync(ChannelType, new Dictionary<string, string?> { ["code"] = "wx-code-2" }, ct: TestContext.Current.CancellationToken));
 
         Assert.Equal("EXTERNAL_CHANNEL_ID_REQUIRED", ex.ErrorCode);
         Assert.False(accountSvc.CreateCalled);

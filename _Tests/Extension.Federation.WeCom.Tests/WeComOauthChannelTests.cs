@@ -51,7 +51,7 @@ public class WeComOauthChannelTests : WeComChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "wecom_oauth");
         Assert.Equal("wecom_oauth", template.ChannelType);
         // ……真实实例经工厂构造（ChannelId = 注册表选区键）
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
         Assert.Equal(TestChannelId, channel!.ChannelId);
     }
@@ -142,6 +142,6 @@ public class WeComOauthChannelTests : WeComChannelTestHost
         ];
         var (_, user) = BindTestScope();
         await Assert.ThrowsAnyAsync<Exception>(
-            () => user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth"));
+            () => user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wecom_oauth", TestContext.Current.CancellationToken));
     }
 }

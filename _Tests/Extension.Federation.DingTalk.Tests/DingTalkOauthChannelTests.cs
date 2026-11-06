@@ -40,7 +40,7 @@ public class DingTalkOauthChannelTests : DingTalkChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "dingtalk_oauth");
         Assert.Equal("dingtalk_oauth", template.ChannelType);
         // ……真实实例经工厂构造（ChannelId = 注册表选区键）
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("dingtalk-app-1", "dingtalk_oauth");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("dingtalk-app-1", "dingtalk_oauth", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
         Assert.Equal("dingtalk-app-1", channel!.ChannelId);
     }

@@ -34,7 +34,7 @@ public class BlobStoringSecurityTests
         var service = CreateService();
 
         await Assert.ThrowsAnyAsync<ArgumentException>(
-            () => service.UploadAsync(name, new MemoryStream(new byte[] { 1 }), "text/plain"));
+            () => service.UploadAsync(name, new MemoryStream(new byte[] { 1 }), "text/plain", ct: TestContext.Current.CancellationToken));
     }
 
     // ── ① Download/Delete/Exists 防穿越（path 参数） ──
@@ -53,7 +53,7 @@ public class BlobStoringSecurityTests
     {
         var service = CreateService();
 
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DownloadAsync(path));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DownloadAsync(path, ct: TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -66,7 +66,7 @@ public class BlobStoringSecurityTests
     {
         var service = CreateService();
 
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DeleteAsync(path));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DeleteAsync(path, ct: TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -79,7 +79,7 @@ public class BlobStoringSecurityTests
     {
         var service = CreateService();
 
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.ExistsAsync(path));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.ExistsAsync(path, ct: TestContext.Current.CancellationToken));
     }
 
     // ── ② 合法路径回归（防穿越不得破坏内部生成的 {guid}/{name} 路径） ──
@@ -116,7 +116,7 @@ public class BlobStoringSecurityTests
         // {guid}/{name} 形式的多段合法相对路径——不存在返回 null，而非抛 ArgumentException
         var service = CreateService();
 
-        var result = await service.DownloadAsync("0123456789abcdef0123456789abcdef/missing.txt");
+        var result = await service.DownloadAsync("0123456789abcdef0123456789abcdef/missing.txt", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
     }

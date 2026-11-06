@@ -18,9 +18,9 @@ public class FileQueryTests
     public async Task GetFilesAsync_Pagination_SkipTake()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
         for (var i = 1; i <= 5; i++)
-            await host.UploadFileAsync(folder.Id, $"f{i}.txt", Encoding.UTF8.GetBytes($"payload {i}"));
+            await host.UploadFileAsync(folder.Id, $"f{i}.txt", Encoding.UTF8.GetBytes($"payload {i}"), ct: TestContext.Current.CancellationToken);
 
         var page1 = await host.Manager.GetFilesAsync(folder.Id, skip: 0, take: 2, ct: CancellationToken.None);
         var page2 = await host.Manager.GetFilesAsync(folder.Id, skip: 2, take: 2, ct: CancellationToken.None);
@@ -39,9 +39,9 @@ public class FileQueryTests
     public async Task GetFilesAsync_RootLevelFiles_FolderIdNull()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
-        await host.UploadFileAsync(null, "root.txt", Content1);
-        await host.UploadFileAsync(folder.Id, "inside.txt", Content2);
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(null, "root.txt", Content1, ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(folder.Id, "inside.txt", Content2, ct: TestContext.Current.CancellationToken);
 
         // FolderId = null → 仅根级文件
         var roots = await host.Manager.GetFilesAsync(null, ct: CancellationToken.None);
@@ -59,8 +59,8 @@ public class FileQueryTests
     public async Task GetFilesAsync_AfterFolderRename_QueryUnaffected()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
-        await host.UploadFileAsync(folder.Id, "a.txt", Content1);
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(folder.Id, "a.txt", Content1, ct: TestContext.Current.CancellationToken);
 
         await host.Manager.RenameFolderAsync(folder.Id, "改名后", CancellationToken.None);
 
@@ -74,9 +74,9 @@ public class FileQueryTests
     public async Task SearchFilesAsync_KeywordMatch()
     {
         using var host = FileManagementTestHost.Create();
-        var folder = await host.CreateFolderAsync("docs", "文档");
-        await host.UploadFileAsync(folder.Id, "report-final.txt", Content1);
-        await host.UploadFileAsync(folder.Id, "invoice.csv", Content2);
+        var folder = await host.CreateFolderAsync("docs", "文档", ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(folder.Id, "report-final.txt", Content1, ct: TestContext.Current.CancellationToken);
+        await host.UploadFileAsync(folder.Id, "invoice.csv", Content2, ct: TestContext.Current.CancellationToken);
 
         var hits = await host.Manager.SearchFilesAsync("report", ct: CancellationToken.None);
         var hit = Assert.Single(hits);

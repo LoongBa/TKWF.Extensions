@@ -51,7 +51,7 @@ public class GoogleOidcChannelTests : GoogleChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "google_oidc");
         Assert.Equal("google_oidc", template.ChannelType);
         // 真实实例经工厂构造
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("google-main", "google_oidc");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync("google-main", "google_oidc", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
     }
 

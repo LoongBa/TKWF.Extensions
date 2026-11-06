@@ -24,7 +24,7 @@ public class ScribanTemplateRendererTests
             ["model"] = new Dictionary<string, object?> { ["Name"] = "Alice" }
         };
 
-        var result = await renderer.RenderContentAsync("Hello {{ model.Name }}", model);
+        var result = await renderer.RenderContentAsync("Hello {{ model.Name }}", model, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("Hello Alice", result);
     }
@@ -41,7 +41,7 @@ public class ScribanTemplateRendererTests
             }
         };
 
-        var result = await renderer.RenderContentAsync("{{ for item in model.Items }}[{{ item }}]{{ end }}", model);
+        var result = await renderer.RenderContentAsync("{{ for item in model.Items }}[{{ item }}]{{ end }}", model, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("[A][B][C]", result);
     }
@@ -56,7 +56,7 @@ public class ScribanTemplateRendererTests
         };
 
         // Scriban 7 无 Liquid 式 money 过滤器——用 object.format（.NET IFormattable "C2" 货币格式）
-        var result = await renderer.RenderContentAsync("{{ model.Price | object.format \"C2\" }}", model);
+        var result = await renderer.RenderContentAsync("{{ model.Price | object.format \"C2\" }}", model, ct: TestContext.Current.CancellationToken);
 
         // 货币符号随文化区域（$ / ¤ / ¥）而变——断言数字部分即可，保证跨机器稳定
         Assert.Contains("12.50", result);
@@ -73,7 +73,7 @@ public class ScribanTemplateRendererTests
         };
 
         // Scriban 7：date.parse 解析字符串 → object.format 按 .NET 格式串输出（等价 strftime %Y-%m-%d）
-        var result = await renderer.RenderContentAsync("{{ date.parse model.Date | object.format \"yyyy-MM-dd\" }}", model);
+        var result = await renderer.RenderContentAsync("{{ date.parse model.Date | object.format \"yyyy-MM-dd\" }}", model, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("2026-01-15", result);
     }
@@ -87,7 +87,7 @@ public class ScribanTemplateRendererTests
             ["model"] = new Dictionary<string, object?> { ["IsVip"] = true }
         };
 
-        var result = await renderer.RenderContentAsync("{{ if model.IsVip }}VIP{{ else }}Normal{{ end }}", model);
+        var result = await renderer.RenderContentAsync("{{ if model.IsVip }}VIP{{ else }}Normal{{ end }}", model, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("VIP", result);
     }
@@ -104,7 +104,7 @@ public class ScribanTemplateRendererTests
             }
         };
 
-        var result = await renderer.RenderContentAsync("{{ model.User.Name }}", model);
+        var result = await renderer.RenderContentAsync("{{ model.User.Name }}", model, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("Bob", result);
     }
@@ -120,7 +120,7 @@ public class ScribanTemplateRendererTests
 
         // "{{ if }}" 缺少条件表达式——Scriban Template.Parse 报错 → 抛 TemplateParseException
         await Assert.ThrowsAsync<TemplateParseException>(
-            () => renderer.RenderContentAsync("{{ if }}", model));
+            () => renderer.RenderContentAsync("{{ if }}", model, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class ScribanTemplateRendererTests
         // Scriban 对不可用函数抛 ScriptRuntimeException（"function model.GetType was not found"），
         // 渲染结果不会泄漏任何 .NET 类型信息（"empty/error" 双分支均代表阻断成功）。
         var ex = await Assert.ThrowsAsync<ScriptRuntimeException>(
-            () => renderer.RenderContentAsync("{{ model.GetType() }}", model));
+            () => renderer.RenderContentAsync("{{ model.GetType() }}", model, ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("GetType", ex.Message);
         Assert.DoesNotContain("System.", ex.Message);

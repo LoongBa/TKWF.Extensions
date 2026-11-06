@@ -51,19 +51,19 @@ public class SmsMfaMethodTests
         const string phone = "13900000000";
 
         // 绑定时发码（SendCount=1）→ 确认激活（确认码单次消费）
-        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone));
+        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, host.SmsSender.SendCount);
         var enrollCode = ExtractSmsCode(host.SmsSender.Messages[0].Content);
-        await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, enrollCode);
+        await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, enrollCode, ct: TestContext.Current.CancellationToken);
 
         // 激活后挑战发码（SendCount=2）→ 正确码通过
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, host.SmsSender.SendCount);
         var challengeCode = ExtractSmsCode(host.SmsSender.Messages[1].Content);
-        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, challengeCode));
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, challengeCode, ct: TestContext.Current.CancellationToken));
 
         // 单次消费——同 challengeId 复用同码失败（统一 false 防枚举）
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, challengeCode));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, challengeCode, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -73,11 +73,11 @@ public class SmsMfaMethodTests
         var userId = NewUserId();
         await EnableSmsAsync(host, userId, "13900000001");
 
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
 
         // 错码（不同于落库码）→ 统一 false（恒定时间比对）
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, WrongCode(code)));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, WrongCode(code), ct: TestContext.Current.CancellationToken));
     }
 
     /// <summary>构造与正确码不同的 6 位码（取反最后一位）。</summary>
@@ -94,19 +94,19 @@ public class SmsMfaMethodTests
         await EnableSmsAsync(host, userId, "13900000002");
 
         // 挑战发码成功（SendCount=2——含绑定 1 次）
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, host.SmsSender.SendCount);
 
         // TTL 内活动挑战未消费 → 重发拒绝（InvalidOperationException 含"短信验证码已发送"）
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Mfa.RequestChallengeAsync(userId, "sms"));
+            () => host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken));
         Assert.Contains("短信验证码已发送", ex.Message);
         Assert.Equal(2, host.SmsSender.SendCount);   // 未重发
 
         // 消费后 → 可重发（SendCount=3）
         var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
-        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code));
-        var challenge2 = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code, ct: TestContext.Current.CancellationToken));
+        var challenge2 = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, host.SmsSender.SendCount);
         Assert.False(string.IsNullOrEmpty(challenge2.ChallengeId));
     }
@@ -129,10 +129,10 @@ public class SmsMfaMethodTests
             CodeHash = Sha256Hex(code),
             ExpireAt = DateTime.UtcNow.AddHours(-24),
             CreateTime = DateTime.UtcNow,
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // 码正确但票据过期 → 统一 false
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", expired.Id.ToString(), code));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", expired.Id.ToString(), code, ct: TestContext.Current.CancellationToken));
     }
 
     // ── 并发单次消费竞态（Oracle C1——文件模式 SQLite） ──
@@ -146,7 +146,7 @@ public class SmsMfaMethodTests
         var userId = NewUserId();
         await EnableSmsAsync(host, userId, "13900000004");
 
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
 
         // 双独立 MfaService 实例（分层直构——各自独立 stub 用户 + DataService/UnitOfWorkManager 链）
@@ -174,22 +174,22 @@ public class SmsMfaMethodTests
         const string phone = "13900000009";
 
         // 绑定发送成功（渠道初始正常）→ 确认激活
-        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone));
+        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, sender.SendCount);
         var enrollCode = ExtractSmsCode(sender.Messages[0].Content);
-        await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, enrollCode);
+        await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, enrollCode, ct: TestContext.Current.CancellationToken);
 
         // 模拟渠道故障——挑战发码抛异常 → 孤儿挑战行被清理（无活动挑战阻塞重发）
         sender.SetThrowOnSend(true);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Mfa.RequestChallengeAsync(userId, "sms"));
-        Assert.Empty(await host.Challenges.GetActiveByUserMethodAsync(userId, "sms"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await host.Challenges.GetActiveByUserMethodAsync(userId, "sms", ct: TestContext.Current.CancellationToken));
 
         // 渠道恢复 → 立即重发成功（未被孤儿挑战阻塞至 TTL）→ 正确码可验证
         sender.SetThrowOnSend(false);
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, sender.SendCount);
         var code = ExtractSmsCode(sender.Messages[^1].Content);
-        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code));
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -208,11 +208,11 @@ public class SmsMfaMethodTests
             IsConfirmed = true,
             CreateTime = DateTime.UtcNow,
             UpdateTime = DateTime.UtcNow,
-        });
+        }, ct: TestContext.Current.CancellationToken);
 
         // 挑战发码 → 发送失败抛异常（异常自然传播不吞）→ 孤儿挑战行已清理
-        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Mfa.RequestChallengeAsync(userId, "sms"));
-        Assert.Empty(await host.Challenges.GetActiveByUserMethodAsync(userId, "sms"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await host.Challenges.GetActiveByUserMethodAsync(userId, "sms", ct: TestContext.Current.CancellationToken));
     }
 }
 

@@ -31,7 +31,7 @@ public class SecurityLogStoreTests
             Detail: null,
             CorrelationId: "corr-1");
 
-        await store.SaveAsync(entry);
+        await store.SaveAsync(entry, ct: TestContext.Current.CancellationToken);
 
         // 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）——NoAop 直建路径
         var dataService = host.User.Use<SecurityLogEntityDataService>();
@@ -64,7 +64,7 @@ public class SecurityLogStoreTests
             UserAgent: null,
             Result: "Failed",
             Detail: "密码错误",
-            CorrelationId: null));
+            CorrelationId: null), ct: TestContext.Current.CancellationToken);
 
         var dataService = host.User.Use<SecurityLogEntityDataService>();
         var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
@@ -80,7 +80,7 @@ public class SecurityLogStoreTests
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
 
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(null!);
+        await store.SaveAsync(null!, ct: TestContext.Current.CancellationToken);
 
         var dataService = host.User.Use<SecurityLogEntityDataService>();
         var all = await dataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
@@ -107,7 +107,7 @@ public class SecurityLogStoreTests
             UserAgent: null,
             Result: "Success",
             Detail: null,
-            CorrelationId: "x"));
+            CorrelationId: "x"), ct: TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(logger.Warnings);   // Warning 已记录
         Assert.True(true);                  // 静默语义保留（不抛异常）
@@ -131,7 +131,7 @@ public class SecurityLogStoreTests
                 UserAgent: null,
                 Result: "Success",
                 Detail: null,
-                CorrelationId: null));
+                CorrelationId: null), ct: TestContext.Current.CancellationToken);
         }
 
         var dataService = host.User.Use<SecurityLogEntityDataService>();

@@ -40,27 +40,27 @@ public class SecurityLogAnalyticsServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));   // alice: 3 Failed
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null));       // Success 不计入
-        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"));     // bob: 2
-        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"));
-        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"));   // carol: 4
-        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"));
-        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"));
-        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"));
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);   // alice: 3 Failed
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null), ct: TestContext.Current.CancellationToken);       // Success 不计入
+        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);     // bob: 2
+        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);   // carol: 4
+        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
 
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
 
-        var top2 = await analytics.GetTopFailedUsersAsync(topN: 2);
+        var top2 = await analytics.GetTopFailedUsersAsync(topN: 2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, top2.Count);
         Assert.Equal("carol", top2[0].Dimension);
         Assert.Equal(4, top2[0].Count);
         Assert.Equal("alice", top2[1].Dimension);
         Assert.Equal(3, top2[1].Count);   // Success 不计数——alice 若含 Success 会是 4
 
-        var top5 = await analytics.GetTopFailedUsersAsync(topN: 5);
+        var top5 = await analytics.GetTopFailedUsersAsync(topN: 5, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, top5.Count);      // 仅 3 个有失败记录的用户
         Assert.Equal("bob", top5[2].Dimension);
         Assert.Equal(2, top5[2].Count);
@@ -82,13 +82,13 @@ public class SecurityLogAnalyticsServiceTests
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
 
         // 30 分钟窗口 → 仅 alice 计入（bob 在 2 小时前被过滤）
-        var windowed = await analytics.GetTopFailedUsersAsync(topN: 10, window: TimeSpan.FromMinutes(30));
+        var windowed = await analytics.GetTopFailedUsersAsync(topN: 10, window: TimeSpan.FromMinutes(30), ct: TestContext.Current.CancellationToken);
         var alice = Assert.Single(windowed);
         Assert.Equal("alice", alice.Dimension);
         Assert.Equal(3, alice.Count);
 
         // 全量（window: null）→ 两用户都计入
-        var all = await analytics.GetTopFailedUsersAsync(topN: 10);
+        var all = await analytics.GetTopFailedUsersAsync(topN: 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, all.Count);
         Assert.Equal(3, all.Single(s => s.Dimension == "alice").Count);
         Assert.Equal(2, all.Single(s => s.Dimension == "bob").Count);
@@ -100,14 +100,14 @@ public class SecurityLogAnalyticsServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null));    // alice: 2 次
-        await store.SaveAsync(Login("alice", 2, "10.0.0.2", "Failed", null));
-        await store.SaveAsync(Login("bob", 3, "10.0.0.3", "Failed", null));     // bob: 1 次
-        await store.SaveAsync(Login("", 4, "10.0.0.4", "Failed", null));        // UserName 空串: 不应计入
-        await store.SaveAsync(Login(" ", 5, "10.0.0.5", "Failed", null));       // UserName 空白: 不应计入
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null), ct: TestContext.Current.CancellationToken);    // alice: 2 次
+        await store.SaveAsync(Login("alice", 2, "10.0.0.2", "Failed", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 3, "10.0.0.3", "Failed", null), ct: TestContext.Current.CancellationToken);     // bob: 1 次
+        await store.SaveAsync(Login("", 4, "10.0.0.4", "Failed", null), ct: TestContext.Current.CancellationToken);        // UserName 空串: 不应计入
+        await store.SaveAsync(Login(" ", 5, "10.0.0.5", "Failed", null), ct: TestContext.Current.CancellationToken);       // UserName 空白: 不应计入
 
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
-        var result = await analytics.GetTopFailedUsersAsync(topN: 10);
+        var result = await analytics.GetTopFailedUsersAsync(topN: 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("alice", result[0].Dimension);
@@ -124,14 +124,14 @@ public class SecurityLogAnalyticsServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null));   // IP 1: 2 次
-        await store.SaveAsync(Login("bob", 2, "10.0.0.1", "Failed", null));
-        await store.SaveAsync(Login("carol", 3, "10.0.0.2", "Failed", null));   // IP 2: 1 次
-        await store.SaveAsync(Login("dave", 4, null!, "Failed", null));          // IP null: 不应计入
-        await store.SaveAsync(Login("erin", 5, "", "Failed", null));            // IP 空串: 不应计入
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", null), ct: TestContext.Current.CancellationToken);   // IP 1: 2 次
+        await store.SaveAsync(Login("bob", 2, "10.0.0.1", "Failed", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("carol", 3, "10.0.0.2", "Failed", null), ct: TestContext.Current.CancellationToken);   // IP 2: 1 次
+        await store.SaveAsync(Login("dave", 4, null!, "Failed", null), ct: TestContext.Current.CancellationToken);          // IP null: 不应计入
+        await store.SaveAsync(Login("erin", 5, "", "Failed", null), ct: TestContext.Current.CancellationToken);            // IP 空串: 不应计入
 
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
-        var result = await analytics.GetTopFailedIpsAsync(topN: 10);
+        var result = await analytics.GetTopFailedIpsAsync(topN: 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("10.0.0.1", result[0].Dimension);
@@ -149,8 +149,8 @@ public class SecurityLogAnalyticsServiceTests
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
 
-        Assert.Empty(await analytics.GetTopFailedUsersAsync());
-        Assert.Empty(await analytics.GetTopFailedIpsAsync());
+        Assert.Empty(await analytics.GetTopFailedUsersAsync(ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await analytics.GetTopFailedIpsAsync(ct: TestContext.Current.CancellationToken));
     }
 
     // ── ② 保留天数清理 ──
@@ -169,12 +169,12 @@ public class SecurityLogAnalyticsServiceTests
 
         // 默认 Options（RetentionDays=90、CleanupBatchSize=500）
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
-        var deleted = await analytics.CleanupExpiredAsync();
+        var deleted = await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, deleted);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var remaining = await query.GetListAsync(new SecurityLogQueryInput());
+        var remaining = await query.GetListAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken);
         var remainingIds = remaining.Items.Select(i => i.Id).OrderBy(i => i).ToArray();
         Assert.Equal(new[] { recentA.Id, recentB.Id }.OrderBy(i => i), remainingIds);   // Id 集合断言（不比较 DateTime）
         Assert.Equal(2, remaining.Total);
@@ -194,12 +194,12 @@ public class SecurityLogAnalyticsServiceTests
 
         // 单批仅 2 条 → 验证分批循环（2+2+1=5 全部清完）
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
-        var deleted = await analytics.CleanupExpiredAsync();
+        var deleted = await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, deleted);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput()));
+        Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -211,10 +211,10 @@ public class SecurityLogAnalyticsServiceTests
         await InsertAtAsync(ds, "alice", "10.0.0.1", "Success", DateTime.UtcNow);   // 仅近期记录
 
         var analytics = host.User.Use<ISecurityLogAnalyticsService>();
-        Assert.Equal(0, await analytics.CleanupExpiredAsync());
+        Assert.Equal(0, await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken));
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        Assert.Equal(1, await query.CountAsync(new SecurityLogQueryInput()));
+        Assert.Equal(1, await query.CountAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken));
     }
 
     // ── ③ 异常静默 ──
@@ -233,9 +233,9 @@ public class SecurityLogAnalyticsServiceTests
 
         fsql.Dispose();
 
-        Assert.Empty(await analytics.GetTopFailedUsersAsync());
-        Assert.Empty(await analytics.GetTopFailedIpsAsync());
-        Assert.Equal(0, await analytics.CleanupExpiredAsync());
+        Assert.Empty(await analytics.GetTopFailedUsersAsync(ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await analytics.GetTopFailedIpsAsync(ct: TestContext.Current.CancellationToken));
+        Assert.Equal(0, await analytics.CleanupExpiredAsync(ct: TestContext.Current.CancellationToken));
         Assert.NotEmpty(logger.Warnings);
     }
 }

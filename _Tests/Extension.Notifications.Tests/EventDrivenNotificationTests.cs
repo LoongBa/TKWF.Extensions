@@ -38,7 +38,7 @@ public class EventDrivenNotificationTests
         Assert.Equal("订单已创建", notification.DisplayName);
 
         // 验证：收件箱 1 行（BuyerId=7，未读）——经 Store 业务方法
-        var inbox = await store.GetUnreadAsync(7);
+        var inbox = await store.GetUnreadAsync(7, ct: TestContext.Current.CancellationToken);
         Assert.Single(inbox);
         Assert.Equal(7L, inbox[0].UserId);
         Assert.Equal(notification.Id, inbox[0].NotificationId);

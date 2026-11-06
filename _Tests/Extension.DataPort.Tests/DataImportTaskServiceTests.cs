@@ -42,7 +42,7 @@ public class DataImportTaskServiceTests
 
         try
         {
-            var result = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
+            var result = await host.TaskService.ImportAsync(filePath, new TestImportAdapter(), ct: TestContext.Current.CancellationToken);
 
             Assert.True(result.RecordId > 0);
             Assert.False(string.IsNullOrWhiteSpace(result.BatchNo));
@@ -75,8 +75,8 @@ public class DataImportTaskServiceTests
 
         try
         {
-            var first = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
-            var second = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
+            var first = await host.TaskService.ImportAsync(filePath, new TestImportAdapter(), ct: TestContext.Current.CancellationToken);
+            var second = await host.TaskService.ImportAsync(filePath, new TestImportAdapter(), ct: TestContext.Current.CancellationToken);
 
             // 幂等：同一文件（FileHash 相同）二次导入 → 拒绝/返回已有批次
             Assert.Equal(first.BatchNo, second.BatchNo);
@@ -106,7 +106,7 @@ public class DataImportTaskServiceTests
             var adapter = new ThrowingBatchAdapter();
             var batchOptions = new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false);
 
-            var result = await host.TaskService.ImportAsync(filePath, adapter, batchOptions);
+            var result = await host.TaskService.ImportAsync(filePath, adapter, batchOptions, ct: TestContext.Current.CancellationToken);
 
             Assert.NotEmpty(result.ImportResult.BatchFailures);
             Assert.Equal(2, adapter.BatchCount);
@@ -137,7 +137,7 @@ public class DataImportTaskServiceTests
         {
             // Provider 读取抛异常（记录已落库 Processing）→ 核心 ImportAsync 抛异常 → 记录更新为 Failed
             await Assert.ThrowsAsync<DataImportException>(
-                () => host.TaskService.ImportAsync(filePath, new TestImportAdapter()));
+                () => host.TaskService.ImportAsync(filePath, new TestImportAdapter(), ct: TestContext.Current.CancellationToken));
 
             // 导入抛异常 → 无 BatchNo 可用；经 DataService 枚举回查（红线：断言不经裸 fsql.Select）
             var records = await host.DataService.EntitySelectAsync(predicate: null, ct: CancellationToken.None);
@@ -164,12 +164,12 @@ public class DataImportTaskServiceTests
         {
             // First import: ThrowingBatchAdapter causes PartiallySucceeded
             var firstResult = await host.TaskService.ImportAsync(filePath, new ThrowingBatchAdapter(),
-                new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false));
+                new ImportBatchOptions(BatchSize: 2, StopOnBatchFailure: false), ct: TestContext.Current.CancellationToken);
             var firstRecord = await host.TaskService.GetRecordByBatchNoAsync(firstResult.BatchNo, CancellationToken.None);
             Assert.Equal("PartiallySucceeded", firstRecord!.Status);
 
             // Second import of same file: should reset and re-run with TestImportAdapter
-            var secondResult = await host.TaskService.ImportAsync(filePath, new TestImportAdapter());
+            var secondResult = await host.TaskService.ImportAsync(filePath, new TestImportAdapter(), ct: TestContext.Current.CancellationToken);
             Assert.Equal(firstResult.RecordId, secondResult.RecordId); // Same record
             Assert.Equal(firstResult.BatchNo, secondResult.BatchNo);
 
@@ -188,7 +188,7 @@ public class DataImportTaskServiceTests
     {
         using var host = DataPortTestHost.Create();
 
-        var result = await host.TaskService.GetRecordByBatchNoAsync("no-such-batch");
+        var result = await host.TaskService.GetRecordByBatchNoAsync("no-such-batch", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
     }

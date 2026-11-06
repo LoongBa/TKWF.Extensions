@@ -29,9 +29,9 @@ public class Token2ServiceTests
     public async Task Issue_And_Validate_RoundTrip()
     {
         var service = CreateService();
-        var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", "profile:basic"), default);
+        var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", "profile:basic"), TestContext.Current.CancellationToken);
 
-        var validated = await service.ValidateToken2Async(issued.Token, default);
+        var validated = await service.ValidateToken2Async(issued.Token, TestContext.Current.CancellationToken);
         Assert.Equal("u-100", validated.UId);
         Assert.Equal("app-1", validated.TargetAppId);
         Assert.NotNull(validated.Jti);
@@ -42,7 +42,7 @@ public class Token2ServiceTests
     public async Task Validate_RejectsTamperedToken()
     {
         var service = CreateService();
-        var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), default);
+        var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), TestContext.Current.CancellationToken);
 
         // 篡改 payload（sub 改 u-999）→ 签名失效
         var parts = issued.Token.Split('.');
@@ -50,21 +50,21 @@ public class Token2ServiceTests
             .Replace("u-100", "u-999");
         var forged = parts[0] + "." + Token2Service.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(payload)) + "." + parts[2];
 
-        await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateToken2Async(forged, default));
+        await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateToken2Async(forged, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Validate_RejectsUnknownKid()
     {
         var service = CreateService();
-        var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), default);
+        var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), TestContext.Current.CancellationToken);
 
         // 直接构造 kid=unknown 的 header（签名部分原样——kid 白名单先于签名校验拒绝）
         var forgedHeader = "{\"alg\":\"ES256\",\"typ\":\"JWT\",\"kid\":\"unknown-kid\"}";
         var parts = issued.Token.Split('.');
         var forged = SignatureHeader(parts[1]);
 
-        await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateToken2Async(forged, default));
+        await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateToken2Async(forged, TestContext.Current.CancellationToken));
     }
 
     private static string SignatureHeader(string payloadB64)
@@ -88,7 +88,7 @@ public class Token2ServiceTests
             SigningKeys = options.SigningKeys, Token2ExpirationSeconds = 0, ClockSkewSeconds = 0, IsProduction = true,
         };
         var shortService = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(shortOptions), NullLogger<Token2Service>.Instance);
-        var issued = await shortService.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), default);
+        var issued = await shortService.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), TestContext.Current.CancellationToken);
         // 同密钥验签（shortOptions 与 options 同 SigningKeys——签发/验签密钥一致），但 exp=now 且 leeway=0 → TOKEN_EXPIRED
         var verifyOptions = new TrustCenterOptions
         {
@@ -96,7 +96,7 @@ public class Token2ServiceTests
             SigningKeys = options.SigningKeys, Token2ExpirationSeconds = 300, ClockSkewSeconds = 0, IsProduction = true,
         };
         var verifyService = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(verifyOptions), NullLogger<Token2Service>.Instance);
-        await Assert.ThrowsAsync<AuthenticationException>(() => verifyService.ValidateToken2Async(issued.Token, default));
+        await Assert.ThrowsAsync<AuthenticationException>(() => verifyService.ValidateToken2Async(issued.Token, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -137,9 +137,9 @@ public class Token2ServiceTests
             Issuer = options.Issuer, SigningKeyPath = key1Private, CurrentKid = "sso-old-key", SigningKeys = options.SigningKeys, IsProduction = true,
         };
         var oldService = new Token2Service(stub, new DevKeyCache<Token2Service.EcKeySet>(), Options.Create(oldOptions), NullLogger<Token2Service>.Instance);
-        var issued = await oldService.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), default);
+        var issued = await oldService.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), TestContext.Current.CancellationToken);
 
-        var validated = await service.ValidateToken2Async(issued.Token, default);   // 新 service 验旧签名
+        var validated = await service.ValidateToken2Async(issued.Token, TestContext.Current.CancellationToken);   // 新 service 验旧签名
         Assert.Equal("u-100", validated.UId);
     }
 }

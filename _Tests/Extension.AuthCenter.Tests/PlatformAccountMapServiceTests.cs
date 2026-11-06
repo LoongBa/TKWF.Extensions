@@ -46,11 +46,11 @@ public class PlatformAccountMapServiceTests
     {
         var (service, _) = CreateService();
 
-        var created = await service.LinkAsync("u-100", "app-1", "local-1");
+        var created = await service.LinkAsync("u-100", "app-1", "local-1", ct: TestContext.Current.CancellationToken);
         Assert.True(created.Id > 0);
 
         // 同三键（唯一索引）存在 → 幂等返回既有行，不重复写入
-        var again = await service.LinkAsync("u-100", "app-1", "local-1");
+        var again = await service.LinkAsync("u-100", "app-1", "local-1", ct: TestContext.Current.CancellationToken);
         Assert.Equal(created.Id, again.Id);
         Assert.Equal(created.BusinessLocalId, again.BusinessLocalId);
     }
@@ -59,13 +59,13 @@ public class PlatformAccountMapServiceTests
     public async Task GetByPlatform_And_GetByBusiness_Bidirectional()
     {
         var (service, _) = CreateService();
-        await service.LinkAsync("u-100", "app-1", "local-1");
+        await service.LinkAsync("u-100", "app-1", "local-1", ct: TestContext.Current.CancellationToken);
 
-        var byPlatform = await service.GetByPlatformAsync("u-100", "app-1");
+        var byPlatform = await service.GetByPlatformAsync("u-100", "app-1", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(byPlatform);
         Assert.Equal("local-1", byPlatform!.BusinessLocalId);
 
-        var byBusiness = await service.GetByBusinessAsync("app-1", "local-1");
+        var byBusiness = await service.GetByBusinessAsync("app-1", "local-1", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(byBusiness);
         Assert.Equal("u-100", byBusiness!.PlatformAccountId);
     }
@@ -75,19 +75,19 @@ public class PlatformAccountMapServiceTests
     {
         var (service, _) = CreateService();
 
-        await service.LinkAsync("u-100", "app-1", "local-1");
-        await service.LinkAsync("u-100", "app-2", "local-2");
+        await service.LinkAsync("u-100", "app-1", "local-1", ct: TestContext.Current.CancellationToken);
+        await service.LinkAsync("u-100", "app-2", "local-2", ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal("local-1", (await service.GetByPlatformAsync("u-100", "app-1"))!.BusinessLocalId);
-        Assert.Equal("local-2", (await service.GetByPlatformAsync("u-100", "app-2"))!.BusinessLocalId);
+        Assert.Equal("local-1", (await service.GetByPlatformAsync("u-100", "app-1", ct: TestContext.Current.CancellationToken))!.BusinessLocalId);
+        Assert.Equal("local-2", (await service.GetByPlatformAsync("u-100", "app-2", ct: TestContext.Current.CancellationToken))!.BusinessLocalId);
     }
 
     [Fact]
     public async Task GetByPlatform_Unknown_ReturnsNull()
     {
         var (service, _) = CreateService();
-        Assert.Null(await service.GetByPlatformAsync("u-404", "app-1"));
-        Assert.Null(await service.GetByBusinessAsync("app-1", "local-404"));
+        Assert.Null(await service.GetByPlatformAsync("u-404", "app-1", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await service.GetByBusinessAsync("app-1", "local-404", ct: TestContext.Current.CancellationToken));
     }
 
     // ── ② 外部身份统一契约（IExternalIdentityService——因素行为权威）──
@@ -98,19 +98,19 @@ public class PlatformAccountMapServiceTests
         var (service, _) = CreateService();
         var ext = (IExternalIdentityService)service;
 
-        var linked = await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
+        var linked = await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
         Assert.Equal("u-100", linked.UId);
         Assert.Equal("wechat_mp", linked.ChannelId);
         Assert.Equal("openid-1", linked.ExternalUserId);
         Assert.NotEqual(default, linked.LinkedAt);
 
         // 权威在因素行：Identifier 规范化为 {channelId}|{externalUserId}
-        var factor = await ext.GetByExternalIdAsync("wechat_mp", "openid-1");
+        var factor = await ext.GetByExternalIdAsync("wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(factor);
         Assert.Equal(linked.LinkedAt, AsUtc(factor!.LinkedAt));
 
         // 业务映射表不被联邦绑定污染（映射列与联邦列已解耦）
-        Assert.Null(await service.GetByPlatformAsync("u-100", "wechat_mp"));
+        Assert.Null(await service.GetByPlatformAsync("u-100", "wechat_mp", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -119,8 +119,8 @@ public class PlatformAccountMapServiceTests
         var (service, _) = CreateService();
         var ext = (IExternalIdentityService)service;
 
-        var first = await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
-        var second = await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
+        var first = await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
+        var second = await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(first.LinkedAt, AsUtc(second.LinkedAt));   // BoundAt 只写一次，未重建
     }
@@ -130,11 +130,11 @@ public class PlatformAccountMapServiceTests
     {
         var (service, _) = CreateService();
         var ext = (IExternalIdentityService)service;
-        await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
+        await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
         // fail-closed：同一外部身份不得绑到第二个账号（唯一约束 → 重查跨 UId → FACTOR_ALREADY_BOUND）
         var ex = await Assert.ThrowsAsync<AuthenticationException>(
-            () => ext.LinkAsync("u-200", "wechat_mp", "openid-1"));
+            () => ext.LinkAsync("u-200", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken));
         Assert.Equal(IAuthFactorService.FACTOR_ALREADY_BOUND, ex.Message);
     }
 
@@ -143,14 +143,14 @@ public class PlatformAccountMapServiceTests
     {
         var (service, stub) = CreateService();
         var ext = (IExternalIdentityService)service;
-        await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
-        await ext.LinkAsync("u-100", "wechat_web", "openid-2");
+        await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
+        await ext.LinkAsync("u-100", "wechat_web", "openid-2", ct: TestContext.Current.CancellationToken);
 
         // 非联邦因素（密码：Identifier 恒为 UId）不进入外部身份投影
         await stub.Use<IAuthFactorService>().BindAsync(
-            "u-100", AuthFactorTypes.Password, "u-100", secretHash: "hash");
+            "u-100", AuthFactorTypes.Password, "u-100", secretHash: "hash", ct: TestContext.Current.CancellationToken);
 
-        var identities = await ext.GetByAccountAsync("u-100");
+        var identities = await ext.GetByAccountAsync("u-100", ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, identities.Count);
         Assert.Equal(["wechat_mp", "wechat_web"], identities.Select(x => x.ChannelId).OrderBy(x => x).ToArray());
         Assert.All(identities, x => Assert.Equal("u-100", x.UId));
@@ -161,9 +161,9 @@ public class PlatformAccountMapServiceTests
     {
         var (service, _) = CreateService();
         var ext = (IExternalIdentityService)service;
-        await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
+        await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
-        Assert.Empty(await ext.GetByAccountAsync("u-404"));
+        Assert.Empty(await ext.GetByAccountAsync("u-404", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -171,14 +171,14 @@ public class PlatformAccountMapServiceTests
     {
         var (service, stub) = CreateService();
         var ext = (IExternalIdentityService)service;
-        await stub.Use<IAuthAccountService>().CreateAsync(new AuthAccountEntity { UId = "u-100", IsEnabled = true });
-        await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
-        await ext.LinkAsync("u-100", "wechat_web", "openid-2");
+        await stub.Use<IAuthAccountService>().CreateAsync(new AuthAccountEntity { UId = "u-100", IsEnabled = true }, ct: TestContext.Current.CancellationToken);
+        await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
+        await ext.LinkAsync("u-100", "wechat_web", "openid-2", ct: TestContext.Current.CancellationToken);
 
-        await ext.UnlinkAsync("u-100", "wechat_mp", "openid-1");
+        await ext.UnlinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
-        Assert.Null(await ext.GetByExternalIdAsync("wechat_mp", "openid-1"));
-        Assert.NotNull(await ext.GetByExternalIdAsync("wechat_web", "openid-2"));
+        Assert.Null(await ext.GetByExternalIdAsync("wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken));
+        Assert.NotNull(await ext.GetByExternalIdAsync("wechat_web", "openid-2", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -186,14 +186,14 @@ public class PlatformAccountMapServiceTests
     {
         var (service, _) = CreateService();
         var ext = (IExternalIdentityService)service;
-        await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
+        await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
         // 不存在 → 幂等返回
-        await ext.UnlinkAsync("u-100", "wechat_mp", "openid-404");
+        await ext.UnlinkAsync("u-100", "wechat_mp", "openid-404", ct: TestContext.Current.CancellationToken);
         // 归属不符（属 u-100）→ 幂等返回，不泄露、不误删
-        await ext.UnlinkAsync("u-200", "wechat_mp", "openid-1");
+        await ext.UnlinkAsync("u-200", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
-        Assert.NotNull(await ext.GetByExternalIdAsync("wechat_mp", "openid-1"));
+        Assert.NotNull(await ext.GetByExternalIdAsync("wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -201,12 +201,12 @@ public class PlatformAccountMapServiceTests
     {
         var (service, _) = CreateService();
         var ext = (IExternalIdentityService)service;
-        await ext.LinkAsync("u-100", "wechat_mp", "openid-1");
+        await ext.LinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken);
 
         // 唯一可登录凭据 → 守卫硬失败（fail-closed：不静默留下零凭据账号）
         var ex = await Assert.ThrowsAsync<AuthenticationException>(
-            () => ext.UnlinkAsync("u-100", "wechat_mp", "openid-1"));
+            () => ext.UnlinkAsync("u-100", "wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken));
         Assert.Equal(IAuthFactorService.LAST_FACTOR_CANNOT_UNBIND, ex.Message);
-        Assert.NotNull(await ext.GetByExternalIdAsync("wechat_mp", "openid-1"));
+        Assert.NotNull(await ext.GetByExternalIdAsync("wechat_mp", "openid-1", ct: TestContext.Current.CancellationToken));
     }
 }

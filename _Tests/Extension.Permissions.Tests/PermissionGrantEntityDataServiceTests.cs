@@ -44,7 +44,7 @@ public class PermissionGrantEntityDataServiceTests
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
 
-        var dto = await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true);
+        var dto = await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(Permission, dto.PermissionName);
         Assert.Equal(Provider, dto.ProviderName);
@@ -61,9 +61,9 @@ public class PermissionGrantEntityDataServiceTests
     {
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
-        await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true);
+        await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true, ct: TestContext.Current.CancellationToken);
 
-        var dto = await svc.SetGrantAsync(Permission, Provider, Key, isGranted: false);
+        var dto = await svc.SetGrantAsync(Permission, Provider, Key, isGranted: false, ct: TestContext.Current.CancellationToken);
 
         Assert.False(dto.IsGranted);
         Assert.Equal(1, dac.InsertCallCount);
@@ -76,9 +76,9 @@ public class PermissionGrantEntityDataServiceTests
     {
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
-        await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true);
+        await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true, ct: TestContext.Current.CancellationToken);
 
-        var dto = await svc.GetGrantAsync(Permission, Provider, Key);
+        var dto = await svc.GetGrantAsync(Permission, Provider, Key, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(dto);
         Assert.Equal(Permission, dto!.PermissionName);
@@ -90,7 +90,7 @@ public class PermissionGrantEntityDataServiceTests
     {
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), new InMemoryEntityDac());
 
-        var dto = await svc.GetGrantAsync(Permission, Provider, Key);
+        var dto = await svc.GetGrantAsync(Permission, Provider, Key, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(dto);
     }
@@ -100,11 +100,11 @@ public class PermissionGrantEntityDataServiceTests
     {
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
-        await svc.SetGrantAsync("Order.Create", Provider, "u-1", isGranted: true);
-        await svc.SetGrantAsync("Order.Create", Provider, "u-2", isGranted: false);
-        await svc.SetGrantAsync("Order.Delete", Provider, "u-1", isGranted: true);
+        await svc.SetGrantAsync("Order.Create", Provider, "u-1", isGranted: true, ct: TestContext.Current.CancellationToken);
+        await svc.SetGrantAsync("Order.Create", Provider, "u-2", isGranted: false, ct: TestContext.Current.CancellationToken);
+        await svc.SetGrantAsync("Order.Delete", Provider, "u-1", isGranted: true, ct: TestContext.Current.CancellationToken);
 
-        var dtos = await svc.GetByPermissionNameAsync("Order.Create");
+        var dtos = await svc.GetByPermissionNameAsync("Order.Create", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, dtos.Count);
         Assert.All(dtos, d => Assert.Equal("Order.Create", d.PermissionName));
@@ -115,11 +115,11 @@ public class PermissionGrantEntityDataServiceTests
     {
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
-        await svc.SetGrantAsync("Order.Create", Provider, "u-1001", isGranted: true);
-        await svc.SetGrantAsync("Order.Delete", Provider, "u-1001", isGranted: true);
-        await svc.SetGrantAsync("Order.Create", "Role", "admin", isGranted: true);
+        await svc.SetGrantAsync("Order.Create", Provider, "u-1001", isGranted: true, ct: TestContext.Current.CancellationToken);
+        await svc.SetGrantAsync("Order.Delete", Provider, "u-1001", isGranted: true, ct: TestContext.Current.CancellationToken);
+        await svc.SetGrantAsync("Order.Create", "Role", "admin", isGranted: true, ct: TestContext.Current.CancellationToken);
 
-        var dtos = await svc.GetByProviderAsync(Provider, "u-1001");
+        var dtos = await svc.GetByProviderAsync(Provider, "u-1001", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, dtos.Count);
         Assert.All(dtos, d => Assert.Equal(Provider, d.ProviderName));
@@ -131,9 +131,9 @@ public class PermissionGrantEntityDataServiceTests
     {
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
-        await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true);
+        await svc.SetGrantAsync(Permission, Provider, Key, isGranted: true, ct: TestContext.Current.CancellationToken);
 
-        var result = await svc.RevokeGrantAsync(Permission, Provider, Key);
+        var result = await svc.RevokeGrantAsync(Permission, Provider, Key, ct: TestContext.Current.CancellationToken);
 
         Assert.True(result);
         Assert.Empty(dac.Items);
@@ -144,7 +144,7 @@ public class PermissionGrantEntityDataServiceTests
     {
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), new InMemoryEntityDac());
 
-        var result = await svc.RevokeGrantAsync(Permission, Provider, Key);
+        var result = await svc.RevokeGrantAsync(Permission, Provider, Key, ct: TestContext.Current.CancellationToken);
 
         Assert.False(result);
     }
@@ -154,19 +154,19 @@ public class PermissionGrantEntityDataServiceTests
     {
         var dac = new InMemoryEntityDac();
         var svc = new PermissionGrantEntityDataService(new StubDomainUser(), dac);
-        await svc.SetGrantAsync(Permission, Provider, "u-1001", isGranted: true);
-        await svc.SetGrantAsync(Permission, Provider, "u-2002", isGranted: false);
-        await svc.SetGrantAsync(Permission, "Role", "admin", isGranted: true);
+        await svc.SetGrantAsync(Permission, Provider, "u-1001", isGranted: true, ct: TestContext.Current.CancellationToken);
+        await svc.SetGrantAsync(Permission, Provider, "u-2002", isGranted: false, ct: TestContext.Current.CancellationToken);
+        await svc.SetGrantAsync(Permission, "Role", "admin", isGranted: true, ct: TestContext.Current.CancellationToken);
 
-        var userGrant = await svc.GetGrantAsync(Permission, Provider, "u-1001");
-        var roleGrant = await svc.GetGrantAsync(Permission, "Role", "admin");
+        var userGrant = await svc.GetGrantAsync(Permission, Provider, "u-1001", ct: TestContext.Current.CancellationToken);
+        var roleGrant = await svc.GetGrantAsync(Permission, "Role", "admin", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(userGrant);
         Assert.True(userGrant!.IsGranted);
         Assert.NotNull(roleGrant);
         Assert.True(roleGrant!.IsGranted);
         // u-2002 denied
-        var denied = await svc.GetGrantAsync(Permission, Provider, "u-2002");
+        var denied = await svc.GetGrantAsync(Permission, Provider, "u-2002", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(denied);
         Assert.False(denied!.IsGranted);
     }

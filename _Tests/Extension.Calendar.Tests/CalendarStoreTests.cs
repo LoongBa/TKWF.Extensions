@@ -50,11 +50,11 @@ public class CalendarStoreTests
         using var host = NewHost();
 
         // 经 Store 创建日历
-        var cal = await CreateCalendarViaStore(host.Store, "CAL");
+        var cal = await CreateCalendarViaStore(host.Store, "CAL", ct: TestContext.Current.CancellationToken);
         Assert.True(cal.Id > 0);
 
         // 经 Store 创建事件（Store 委托 DataService 写路径，不触碰 ORM/IEntityDAC）
-        var evt = await CreateEventViaStore(host.Store, cal.Id, "E1", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10));
+        var evt = await CreateEventViaStore(host.Store, cal.Id, "E1", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: TestContext.Current.CancellationToken);
 
         // 经 DataService 直查能读到（委托转发正确）
         var viaCalendarDs = await host.CalendarDataService.EntityGetAsync(c => c.Id == cal.Id, CancellationToken.None);
@@ -71,8 +71,8 @@ public class CalendarStoreTests
     public async Task StoreCreateCalendar_GetByCode_AndGetAll_Forward()
     {
         using var host = NewHost();
-        await CreateCalendarViaStore(host.Store, "A");
-        await CreateCalendarViaStore(host.Store, "B");
+        await CreateCalendarViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
+        await CreateCalendarViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
 
         var byCode = await host.Store.GetByCodeAsync("B", CancellationToken.None);
         Assert.NotNull(byCode);
@@ -88,7 +88,7 @@ public class CalendarStoreTests
     public async Task GetSingleByRangeAsync_ExcludesRecurringRows()
     {
         using var host = NewHost();
-        var cal = await CreateCalendarViaStore(host.Store, "C");
+        var cal = await CreateCalendarViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
         // 单次 + 重复事件混建（经 Manager 走真实 RecurrenceEndUtc 推导；Store/DataService 谓词按 RecurrenceRule 分路）
         var single = await host.Manager.CreateEventAsync(cal.Id, "单次", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: CancellationToken.None);
         await host.Manager.CreateEventAsync(cal.Id, "重复", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10),
@@ -107,7 +107,7 @@ public class CalendarStoreTests
     public async Task GetRecurringByRangeAsync_ExcludesSingleRows()
     {
         using var host = NewHost();
-        var cal = await CreateCalendarViaStore(host.Store, "C");
+        var cal = await CreateCalendarViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
         var recurring = await host.Manager.CreateEventAsync(cal.Id, "重复", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10),
             recurrenceRule: "FREQ=DAILY;COUNT=3", ct: CancellationToken.None);
         await host.Manager.CreateEventAsync(cal.Id, "单次", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: CancellationToken.None);
@@ -125,11 +125,11 @@ public class CalendarStoreTests
     public async Task CountByCalendarIdAsync_CountsEventRows()
     {
         using var host = NewHost();
-        var cal1 = await CreateCalendarViaStore(host.Store, "A");
-        var cal2 = await CreateCalendarViaStore(host.Store, "B");
-        await CreateEventViaStore(host.Store, cal1.Id, "E1", Utc(2026, 9, 9, 9), null);
-        await CreateEventViaStore(host.Store, cal1.Id, "E2", Utc(2026, 9, 10, 9), null);
-        await CreateEventViaStore(host.Store, cal2.Id, "E3", Utc(2026, 9, 11, 9), null);
+        var cal1 = await CreateCalendarViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
+        var cal2 = await CreateCalendarViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
+        await CreateEventViaStore(host.Store, cal1.Id, "E1", Utc(2026, 9, 9, 9), null, ct: TestContext.Current.CancellationToken);
+        await CreateEventViaStore(host.Store, cal1.Id, "E2", Utc(2026, 9, 10, 9), null, ct: TestContext.Current.CancellationToken);
+        await CreateEventViaStore(host.Store, cal2.Id, "E3", Utc(2026, 9, 11, 9), null, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, await host.Store.CountByCalendarIdAsync(cal1.Id, CancellationToken.None));
         Assert.Equal(1, await host.Store.CountByCalendarIdAsync(cal2.Id, CancellationToken.None));

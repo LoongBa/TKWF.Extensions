@@ -37,7 +37,7 @@ public class WeChatOauthChannelTests : WeChatChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "wechat_oauth");
         Assert.Equal("wechat_oauth", template.ChannelType);
         // ……真实实例经工厂构造（ChannelId = 注册表选区键）
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wechat_oauth");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "wechat_oauth", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
         Assert.Equal(TestChannelId, channel!.ChannelId);
     }

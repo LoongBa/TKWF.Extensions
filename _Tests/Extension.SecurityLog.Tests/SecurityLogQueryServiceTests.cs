@@ -23,12 +23,12 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null));
-        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"));
-        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "账户已锁定"));
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("carol", 3, "10.0.0.3", "Failed", "账户已锁定"), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput());
+        var result = await query.GetListAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(3, result.Total);
         Assert.Equal(3, result.Items.Count);
@@ -41,11 +41,11 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null));
-        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"));
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput { UserName = "ali" });
+        var result = await query.GetListAsync(new SecurityLogQueryInput { UserName = "ali" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Total);
         Assert.Equal("alice", Assert.Single(result.Items).UserName);
@@ -57,11 +57,11 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "203.0.113.7", "Success", null));
-        await store.SaveAsync(Login("bob", 2, "198.51.100.9", "Failed", "密码错误"));
+        await store.SaveAsync(Login("alice", 1, "203.0.113.7", "Success", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 2, "198.51.100.9", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput { IpAddress = "203.0.113" });
+        var result = await query.GetListAsync(new SecurityLogQueryInput { IpAddress = "203.0.113" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Total);
         Assert.Equal("alice", Assert.Single(result.Items).UserName);
@@ -73,12 +73,12 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null));
-        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"));
-        await store.SaveAsync(new SecurityLogEntry("Logout", "Authentication", "alice", 1, null, null, "Success", null, null));
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(new SecurityLogEntry("Logout", "Authentication", "alice", 1, null, null, "Success", null, null), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput { EventType = "Login", Result = "Failed" });
+        var result = await query.GetListAsync(new SecurityLogQueryInput { EventType = "Login", Result = "Failed" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Total);
         Assert.Equal("bob", Assert.Single(result.Items).UserName);
@@ -95,9 +95,9 @@ public class SecurityLogQueryServiceTests
         var t1 = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc);
         var t2 = new DateTime(2026, 1, 1, 10, 1, 0, DateTimeKind.Utc);
         var t3 = new DateTime(2026, 1, 1, 10, 2, 0, DateTimeKind.Utc);
-        await ds.EntityCreateAsync(new SecurityLogEntity { EventType = "Login", EventCategory = "Authentication", UserName = "alice", Result = "Success", CreateTime = t1 });
-        await ds.EntityCreateAsync(new SecurityLogEntity { EventType = "Login", EventCategory = "Authentication", UserName = "bob", Result = "Failed", CreateTime = t2 });
-        await ds.EntityCreateAsync(new SecurityLogEntity { EventType = "Login", EventCategory = "Authentication", UserName = "carol", Result = "Success", CreateTime = t3 });
+        await ds.EntityCreateAsync(new SecurityLogEntity { EventType = "Login", EventCategory = "Authentication", UserName = "alice", Result = "Success", CreateTime = t1 }, ct: TestContext.Current.CancellationToken);
+        await ds.EntityCreateAsync(new SecurityLogEntity { EventType = "Login", EventCategory = "Authentication", UserName = "bob", Result = "Failed", CreateTime = t2 }, ct: TestContext.Current.CancellationToken);
+        await ds.EntityCreateAsync(new SecurityLogEntity { EventType = "Login", EventCategory = "Authentication", UserName = "carol", Result = "Success", CreateTime = t3 }, ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
 
@@ -106,7 +106,7 @@ public class SecurityLogQueryServiceTests
         {
             FromUtc = new DateTime(2026, 1, 1, 10, 0, 30, DateTimeKind.Utc),
             ToUtc = new DateTime(2026, 1, 1, 10, 1, 30, DateTimeKind.Utc),
-        });
+        }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, windowed.Total);
         Assert.Equal("bob", Assert.Single(windowed.Items).UserName);
 
@@ -114,14 +114,14 @@ public class SecurityLogQueryServiceTests
         var ge = await query.GetListAsync(new SecurityLogQueryInput
         {
             FromUtc = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
-        });
+        }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, ge.Total);
 
         // 仅上界（<= 10:01:59）→ alice + bob
         var le = await query.GetListAsync(new SecurityLogQueryInput
         {
             ToUtc = new DateTime(2026, 1, 1, 10, 1, 59, DateTimeKind.Utc),
-        });
+        }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, le.Total);
     }
 
@@ -132,10 +132,10 @@ public class SecurityLogQueryServiceTests
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
         for (int i = 0; i < 5; i++)
-            await store.SaveAsync(Login($"user{i}", i, $"10.0.0.{i}", "Success", null));
+            await store.SaveAsync(Login($"user{i}", i, $"10.0.0.{i}", "Success", null), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput { Skip = 2, Take = 2 });
+        var result = await query.GetListAsync(new SecurityLogQueryInput { Skip = 2, Take = 2 }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(5, result.Total);
         Assert.Equal(2, result.Items.Count);
@@ -149,10 +149,10 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"));
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput());
+        var result = await query.GetListAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken);
 
         var item = Assert.Single(result.Items);
         Assert.Equal("Login", item.EventType);
@@ -173,13 +173,13 @@ public class SecurityLogQueryServiceTests
         var store = host.User.Use<ISecurityLogStore>();
         await store.SaveAsync(new SecurityLogEntry(
             "Login", "Authentication", "bob", null, "198.51.100.9", "Mozilla/5.0", "Failed",
-            "账户已锁定，请联系管理员解锁", "corr-9"));
+            "账户已锁定，请联系管理员解锁", "corr-9"), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        var result = await query.GetListAsync(new SecurityLogQueryInput { UserName = "bob" });
+        var result = await query.GetListAsync(new SecurityLogQueryInput { UserName = "bob" }, ct: TestContext.Current.CancellationToken);
         var id = Assert.Single(result.Items).Id;
 
-        var detail = await query.GetDetailAsync(id);
+        var detail = await query.GetDetailAsync(id, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(detail);
         Assert.Equal("账户已锁定，请联系管理员解锁", detail!.Detail);   // 详情含全文
         Assert.Equal("Mozilla/5.0", detail.UserAgent);
@@ -193,7 +193,7 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var query = host.User.Use<ISecurityLogQueryService>();
-        Assert.Null(await query.GetDetailAsync(99999));
+        Assert.Null(await query.GetDetailAsync(99999, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -202,15 +202,15 @@ public class SecurityLogQueryServiceTests
         using var fsql = SecurityLogTestHost.CreateInMemoryFreeSql();
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
-        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null));
-        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"));
-        await store.SaveAsync(Login("bob", 3, "10.0.0.3", "Failed", "密码错误"));
+        await store.SaveAsync(Login("alice", 1, "10.0.0.1", "Success", null), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 2, "10.0.0.2", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
+        await store.SaveAsync(Login("bob", 3, "10.0.0.3", "Failed", "密码错误"), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
-        Assert.Equal(3, await query.CountAsync(new SecurityLogQueryInput()));
-        Assert.Equal(2, await query.CountAsync(new SecurityLogQueryInput { UserName = "bob" }));
-        Assert.Equal(2, await query.CountAsync(new SecurityLogQueryInput { Result = "Failed" }));
-        Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput { EventType = "Lockout" }));
+        Assert.Equal(3, await query.CountAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken));
+        Assert.Equal(2, await query.CountAsync(new SecurityLogQueryInput { UserName = "bob" }, ct: TestContext.Current.CancellationToken));
+        Assert.Equal(2, await query.CountAsync(new SecurityLogQueryInput { Result = "Failed" }, ct: TestContext.Current.CancellationToken));
+        Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput { EventType = "Lockout" }, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -220,20 +220,20 @@ public class SecurityLogQueryServiceTests
         var host = SecurityLogTestHost.CreateProductionHost(fsql);
         var store = host.User.Use<ISecurityLogStore>();
         for (int i = 0; i < 60; i++)
-            await store.SaveAsync(Login($"user{i}", i, $"10.0.0.{i % 10}", "Success", null));
+            await store.SaveAsync(Login($"user{i}", i, $"10.0.0.{i % 10}", "Success", null), ct: TestContext.Current.CancellationToken);
 
         var query = host.User.Use<ISecurityLogQueryService>();
 
         // Take 默认 50
-        var defaultResult = await query.GetListAsync(new SecurityLogQueryInput());
+        var defaultResult = await query.GetListAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken);
         Assert.Equal(50, defaultResult.Items.Count);
 
         // Take 上限 200
-        var clamped = await query.GetListAsync(new SecurityLogQueryInput { Take = 1000 });
+        var clamped = await query.GetListAsync(new SecurityLogQueryInput { Take = 1000 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(60, clamped.Items.Count);
 
         // Take=0 → 默认 50
-        var zero = await query.GetListAsync(new SecurityLogQueryInput { Take = 0 });
+        var zero = await query.GetListAsync(new SecurityLogQueryInput { Take = 0 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(50, zero.Items.Count);
     }
 
@@ -248,10 +248,10 @@ public class SecurityLogQueryServiceTests
 
         fsql.Dispose();
 
-        var result = await query.GetListAsync(new SecurityLogQueryInput());
+        var result = await query.GetListAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken);
         Assert.Equal(0, result.Total);
         Assert.Empty(result.Items);
-        Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput()));
+        Assert.Equal(0, await query.CountAsync(new SecurityLogQueryInput(), ct: TestContext.Current.CancellationToken));
         Assert.NotEmpty(logger.Warnings);
     }
 }

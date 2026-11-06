@@ -40,12 +40,12 @@ public class AuthAccountServiceTests
         var (service, _) = CreateService();
         var account = new AuthAccountEntity { UId = "u-admin-1", IsEnabled = true }; // 影子账号：Phone 可空（唯一索引 NULL 放行）
 
-        await service.CreateAsync(account);
+        await service.CreateAsync(account, ct: TestContext.Current.CancellationToken);
 
         Assert.True(account.Id > 0);                    // 回写自增 Id
         Assert.NotEqual(default, account.CreateTime);    // UTC 时间戳写入
 
-        var read = await service.GetByUIdAsync("u-admin-1");
+        var read = await service.GetByUIdAsync("u-admin-1", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(read);
         Assert.Equal("u-admin-1", read!.UId);
         Assert.True(read.IsEnabled);
@@ -55,13 +55,13 @@ public class AuthAccountServiceTests
     public async Task Update_Modifies_Fields()
     {
         var (service, _) = CreateService();
-        await service.CreateAsync(new AuthAccountEntity { UId = "u-admin-1", IsEnabled = true });
+        await service.CreateAsync(new AuthAccountEntity { UId = "u-admin-1", IsEnabled = true }, ct: TestContext.Current.CancellationToken);
 
-        var read = await service.GetByUIdAsync("u-admin-1");
+        var read = await service.GetByUIdAsync("u-admin-1", ct: TestContext.Current.CancellationToken);
         read!.IsEnabled = false;                       // 禁用路径（DMP 管理员停用 → 令牌刷新 ACCOUNT_NOT_FOUND）
-        await service.UpdateAsync(read);
+        await service.UpdateAsync(read, ct: TestContext.Current.CancellationToken);
 
-        var updated = await service.GetByUIdAsync("u-admin-1");
+        var updated = await service.GetByUIdAsync("u-admin-1", ct: TestContext.Current.CancellationToken);
         Assert.False(updated!.IsEnabled);
     }
 
@@ -69,13 +69,13 @@ public class AuthAccountServiceTests
     public async Task IncrementTokenVersion_Invalidates_OldRefresh()
     {
         var (service, _) = CreateService();
-        await service.CreateAsync(new AuthAccountEntity { UId = "u-admin-1", IsEnabled = true });
-        Assert.Equal(0, (await service.GetByUIdAsync("u-admin-1"))!.TokenVersion);
+        await service.CreateAsync(new AuthAccountEntity { UId = "u-admin-1", IsEnabled = true }, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(0, (await service.GetByUIdAsync("u-admin-1", ct: TestContext.Current.CancellationToken))!.TokenVersion);
 
         // DMP 改密 → bump → 旧 refresh TokenVersion 不匹配 → 扩展 TokenService REFRESH_STALE（不再续期）
-        await service.IncrementTokenVersionAsync("u-admin-1");
+        await service.IncrementTokenVersionAsync("u-admin-1", ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, (await service.GetByUIdAsync("u-admin-1"))!.TokenVersion);
+        Assert.Equal(1, (await service.GetByUIdAsync("u-admin-1", ct: TestContext.Current.CancellationToken))!.TokenVersion);
     }
 
     [Fact]

@@ -45,7 +45,7 @@ public class AuditLogStoreTests
         );
 
         // Act
-        await store.SaveAsync(entry);
+        await store.SaveAsync(entry, ct: TestContext.Current.CancellationToken);
 
         // Assert — 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）
         var dataService = AuditLoggingTestHost.CreateDataService(fsql);
@@ -89,7 +89,7 @@ public class AuditLogStoreTests
         );
 
         // Act — Dispose 后写入：DataService 封装层不再抛（UoW 降级），静默跳过
-        await store.SaveAsync(entry);
+        await store.SaveAsync(entry, ct: TestContext.Current.CancellationToken);
 
         // Assert — 静默语义保留（不抛异常）
         Assert.True(true);
@@ -105,7 +105,7 @@ public class AuditLogStoreTests
         var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Act — null entry should be silently skipped
-        await store.SaveAsync(null!);
+        await store.SaveAsync(null!, ct: TestContext.Current.CancellationToken);
 
         // Assert — no records created
         var dataService = AuditLoggingTestHost.CreateDataService(fsql);
@@ -137,7 +137,7 @@ public class AuditLogStoreTests
         );
 
         // Act
-        await store.SaveAsync(entry);
+        await store.SaveAsync(entry, ct: TestContext.Current.CancellationToken);
 
         // Assert — 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）
         var dataService = AuditLoggingTestHost.CreateDataService(fsql);
@@ -196,7 +196,7 @@ public class AuditLogStoreTests
                 Success: true,
                 Exception: null,
                 CorrelationId: null
-            ));
+            ), ct: TestContext.Current.CancellationToken);
         }
 
         // Assert — 经 DataService 业务方法回查（红线：断言不经裸 fsql.Select）

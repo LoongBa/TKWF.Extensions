@@ -36,13 +36,13 @@ public class DevRsaKeyCacheTests
         var (verifier, verifierStub) = CreateService(options, _devKeys);
 
         var account = CreateAccount();
-        await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, default);
+        await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
 
         var issued = await issuer.IssueTokenAsync(
-            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), default);
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
 
         // 核心断言：跨实例验签成功（同一 DevKeyCache 密钥集——缺陷消除的唯一证明）
-        var validation = await verifier.ValidateTokenAsync(issued.AccessToken, default);
+        var validation = await verifier.ValidateTokenAsync(issued.AccessToken, ct: TestContext.Current.CancellationToken);
         Assert.Equal(account.UId, validation.UserId);
         Assert.Equal(AuthTypes.Sms, validation.AuthType);
     }
@@ -54,16 +54,16 @@ public class DevRsaKeyCacheTests
         var options = new AuthCenterOptions { IsProduction = false, Issuer = "auth-test" };
         var (issuer, issuerStub) = CreateService(options, _devKeys);
         var account = CreateAccount();
-        await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, default);
+        await issuerStub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
         var issued = await issuer.IssueTokenAsync(
-            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), default);
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
 
         // 隔离：新实例使用独立 DevKeyCache（另一密钥集——工厂独立生成）——验签旧 token 必须失败
         //（密钥集不共享 → 隔离有效；等价于原 ResetForTests 清场后重建密钥集的隔离语义）
         var freshCache = new DevKeyCache<TokenService.RsaKeySet>();
         var (freshVerifier, _) = CreateService(options, freshCache);
         var ex = await Assert.ThrowsAsync<AuthenticationException>(
-            () => freshVerifier.ValidateTokenAsync(issued.AccessToken, default));
+            () => freshVerifier.ValidateTokenAsync(issued.AccessToken, ct: TestContext.Current.CancellationToken));
         Assert.Contains("INVALID_SIGNATURE", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 

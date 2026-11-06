@@ -68,10 +68,10 @@ public class MfaServiceTests
         var userId = NewUserId();
 
         // 绑定前：未启用
-        Assert.False(await host.Mfa.IsMfaEnabledAsync(userId));
+        Assert.False(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));
 
         // Enroll——生成 secret + provisioning URI + EnrollToken
-        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(Issuer: "TestCo", DisplayName: "alice"));
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(Issuer: "TestCo", DisplayName: "alice"), ct: TestContext.Current.CancellationToken);
         Assert.Equal("totp", enroll.Method);
         Assert.False(string.IsNullOrEmpty(enroll.EnrollToken));
         Assert.NotNull(enroll.ProvisioningUri);
@@ -79,34 +79,34 @@ public class MfaServiceTests
 
         // Confirm——按 provisioning URI secret 算一次码 → 激活 + 首次恢复码一次性返回
         var secret = ExtractSecret(enroll.ProvisioningUri!);
-        var recoveryCodes = await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret));
+        var recoveryCodes = await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret), ct: TestContext.Current.CancellationToken);
         Assert.Equal(8, recoveryCodes.Count);
-        Assert.True(await host.Mfa.IsMfaEnabledAsync(userId));
+        Assert.True(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));
 
         // 启用方法列表
-        var methods = await host.Mfa.GetEnabledMethodsAsync(userId);
+        var methods = await host.Mfa.GetEnabledMethodsAsync(userId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, methods.Count);
         Assert.True(methods.Single(m => m.Method == "totp").IsEnabled);
         Assert.False(methods.Single(m => m.Method == "sms").IsEnabled);
 
         // 挑战-验证编排
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
         Assert.False(string.IsNullOrEmpty(challenge.ChallengeId));
-        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret)));
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         // 单次消费——同 challengeId 再验失败（统一 false 防枚举）
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret)));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         // Disable——解绑 + 级联删除绑定/恢复码
-        await host.Mfa.DisableAsync(userId, "totp");
-        Assert.False(await host.Mfa.IsMfaEnabledAsync(userId));
-        Assert.Empty(await host.Secrets.GetByUserAsync(userId));
-        Assert.Empty(await host.RecoveryCodes.GetByUserAsync(userId));
+        await host.Mfa.DisableAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.False(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await host.RecoveryCodes.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken));
 
         // 解绑后挑战——统一"已发起"（假 challengeId 验证必败）
-        var ch2 = await host.Mfa.RequestChallengeAsync(userId, "totp");
+        var ch2 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
         Assert.False(string.IsNullOrEmpty(ch2.ChallengeId));
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch2.ChallengeId, TotpCode(secret)));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch2.ChallengeId, TotpCode(secret), ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class MfaServiceTests
         const string phone = "13800138000";
 
         // Enroll——绑手机 + 自动发码（记录型 Fake 收到）
-        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone));
+        var enroll = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken);
         Assert.Equal("sms", enroll.Method);
         Assert.False(string.IsNullOrEmpty(enroll.EnrollToken));
         Assert.Null(enroll.ProvisioningUri);
@@ -126,9 +126,9 @@ public class MfaServiceTests
 
         // Confirm——Fake 捕获的 6 位码确认激活
         var code = ExtractSmsCode(host.SmsSender.Messages[0].Content);
-        var recoveryCodes = await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, code);
+        var recoveryCodes = await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, code, ct: TestContext.Current.CancellationToken);
         Assert.Equal(8, recoveryCodes.Count);
-        Assert.True(await host.Mfa.IsMfaEnabledAsync(userId));
+        Assert.True(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class MfaServiceTests
         using var host = MfaTestHost.Create();
         var userId = NewUserId();
 
-        var methods = await host.Mfa.GetEnabledMethodsAsync(userId);
+        var methods = await host.Mfa.GetEnabledMethodsAsync(userId, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, methods.Count);
         Assert.False(methods.Single(m => m.Method == "totp").IsEnabled);
@@ -151,20 +151,20 @@ public class MfaServiceTests
     {
         using var host = MfaTestHost.Create();
         var userId = NewUserId();
-        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext());
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(), ct: TestContext.Current.CancellationToken);
         var secret = ExtractSecret(enroll.ProvisioningUri!);
 
         // 测试侧操纵时间轴——把待激活绑定 EnrollExpireAt 改为过去（经 DataService 更新）
-        var pending = await host.Secrets.GetPendingSecretAsync(userId, "totp");
+        var pending = await host.Secrets.GetPendingSecretAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(pending);
         pending!.EnrollExpireAt = DateTime.UtcNow.AddHours(-24);
-        await host.Secrets.UpdateAsync(pending);
+        await host.Secrets.UpdateAsync(pending, ct: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret)));
+            () => host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("绑定确认失败", ex.Message);
-        Assert.False(await host.Mfa.IsMfaEnabledAsync(userId));   // 激活未发生
+        Assert.False(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));   // 激活未发生
     }
 
     [Fact]
@@ -172,14 +172,14 @@ public class MfaServiceTests
     {
         using var host = MfaTestHost.Create();
         var userId = NewUserId();
-        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext());
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(), ct: TestContext.Current.CancellationToken);
         var secret = ExtractSecret(enroll.ProvisioningUri!);
 
-        await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret));
+        await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret), ct: TestContext.Current.CancellationToken);
 
         // 激活成功后同 enrollToken 重放——待激活绑定已消失（单次消费）→ 统一失败
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret)));
+            () => host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("绑定确认失败", ex.Message);
     }
@@ -189,21 +189,21 @@ public class MfaServiceTests
     {
         using var host = MfaTestHost.Create();
         var userId = NewUserId();
-        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext());
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(), ct: TestContext.Current.CancellationToken);
         var secret = ExtractSecret(enroll.ProvisioningUri!);
 
         // 激活前——EnrollTokenHash 落库（SHA256 hex）+ 待激活态
-        var before = (await host.Secrets.GetByUserAsync(userId)).Single();
+        var before = (await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken)).Single();
         Assert.False(before.IsConfirmed);
         Assert.NotNull(before.EnrollTokenHash);
         Assert.Equal(64, before.EnrollTokenHash!.Length);
         Assert.NotNull(before.EnrollExpireAt);
         Assert.NotNull(before.SecretEncrypted);
 
-        await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret));
+        await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll.EnrollToken, TotpCode(secret), ct: TestContext.Current.CancellationToken);
 
         // 激活后——EnrollTokenHash/EnrollExpireAt 清空；secret 密文保持（CanUpdate=false 不可改）
-        var after = (await host.Secrets.GetByUserAsync(userId)).Single();
+        var after = (await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken)).Single();
         Assert.True(after.IsConfirmed);
         Assert.Null(after.EnrollTokenHash);
         Assert.Null(after.EnrollExpireAt);
@@ -220,12 +220,12 @@ public class MfaServiceTests
         var secret = await EnableTotpAsync(host, userId);
 
         // ① 挑战不存在
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", "999999999", TotpCode(secret)));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", "999999999", TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         // ② 正常验证成功 → 同挑战再验（已消费）失败
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp");
-        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret)));
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret)));
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret), ct: TestContext.Current.CancellationToken));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         // ③ 过期挑战（测试侧直接创建过去 ExpireAt 的票据——GetActiveById 视为失效）
         var expired = await host.Challenges.CreateAsync(new MfaChallengeEntity
@@ -235,8 +235,8 @@ public class MfaServiceTests
             CodeHash = null,
             ExpireAt = DateTime.UtcNow.AddHours(-24),
             CreateTime = DateTime.UtcNow,
-        });
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", expired.Id.ToString(), TotpCode(secret)));
+        }, ct: TestContext.Current.CancellationToken);
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", expired.Id.ToString(), TotpCode(secret), ct: TestContext.Current.CancellationToken));
 
         // ④ 非本人挑战（他用户活动票据 → 归属校验拒绝）
         var otherUser = NewUserId();
@@ -247,8 +247,8 @@ public class MfaServiceTests
             CodeHash = null,
             ExpireAt = DateTime.UtcNow.AddHours(1),
             CreateTime = DateTime.UtcNow,
-        });
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", other.Id.ToString(), TotpCode(secret)));
+        }, ct: TestContext.Current.CancellationToken);
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", other.Id.ToString(), TotpCode(secret), ct: TestContext.Current.CancellationToken));
     }
 
     // ── 尝试频控：超限抛异常含剩余等待；恢复码验证同窗口生效（Oracle C4） ──
@@ -260,15 +260,15 @@ public class MfaServiceTests
         var userId = NewUserId();
         await EnableSmsAsync(host, userId, "13800000000");
 
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
 
         // 第 1 次验证（错码）——记录尝试，统一 false
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, "000000"));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, "000000", ct: TestContext.Current.CancellationToken));
 
         // 第 2 次验证——per-(userId,method) 窗口超限（max=1）→ 抛异常含剩余等待
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code));
+            () => host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code, ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("秒后重试", ex.Message);
     }
@@ -278,15 +278,15 @@ public class MfaServiceTests
     {
         using var host = MfaTestHost.Create(options: new MfaOptions { MaxVerifyAttemptsPerWindow = 1 });
         var userId = NewUserId();
-        var codes = await host.Mfa.GenerateRecoveryCodesAsync(userId);
+        var codes = await host.Mfa.GenerateRecoveryCodesAsync(userId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(8, codes.Count);
 
         // 第 1 次恢复码验证 → 通过（记录尝试）
-        Assert.True(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0]));
+        Assert.True(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0], ct: TestContext.Current.CancellationToken));
 
         // 第 2 次——per-(UserId,"recovery") 窗口超限 → 抛异常（Oracle C4：恢复码 8 码 × 无限尝试可枚举，必须限流）
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0]));
+            () => host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0], ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("秒后重试", ex.Message);
     }
@@ -299,7 +299,7 @@ public class MfaServiceTests
         using var host = MfaTestHost.Create();
         var userId = NewUserId();
 
-        var codes = await host.Mfa.GenerateRecoveryCodesAsync(userId);
+        var codes = await host.Mfa.GenerateRecoveryCodesAsync(userId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(8, codes.Count);
         // 格式：8 位字母数字（去易混淆字符 0/O/1/I/l——Oracle P9，32 字符字母表）
         foreach (var code in codes)
@@ -309,7 +309,7 @@ public class MfaServiceTests
         }
 
         // 明文不落库——DB 仅 CodeHash（SHA256 hex 小写；Oracle C1 补充断言）
-        var rows = await host.RecoveryCodes.GetByUserAsync(userId);
+        var rows = await host.RecoveryCodes.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(8, rows.Count);
         Assert.All(rows, row =>
         {
@@ -318,17 +318,17 @@ public class MfaServiceTests
         });
 
         // 验证正确码 → true；单次消费 → 再用失败
-        Assert.True(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0]));
-        Assert.False(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0]));
+        Assert.True(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0], ct: TestContext.Current.CancellationToken));
+        Assert.False(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[0], ct: TestContext.Current.CancellationToken));
 
         // 错误码 → false（统一失败防枚举）
-        Assert.False(await host.Mfa.VerifyRecoveryCodeAsync(userId, "ZZZZZZZZ"));
+        Assert.False(await host.Mfa.VerifyRecoveryCodeAsync(userId, "ZZZZZZZZ", ct: TestContext.Current.CancellationToken));
 
         // 再生成 = 全量替换（旧码失效、新码可用）
-        var regenerated = await host.Mfa.GenerateRecoveryCodesAsync(userId);
+        var regenerated = await host.Mfa.GenerateRecoveryCodesAsync(userId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(8, regenerated.Count);
-        Assert.False(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[1]));    // 旧码失效
-        Assert.True(await host.Mfa.VerifyRecoveryCodeAsync(userId, regenerated[0]));
+        Assert.False(await host.Mfa.VerifyRecoveryCodeAsync(userId, codes[1], ct: TestContext.Current.CancellationToken));    // 旧码失效
+        Assert.True(await host.Mfa.VerifyRecoveryCodeAsync(userId, regenerated[0], ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -338,7 +338,7 @@ public class MfaServiceTests
         // 单连接池并发争用 ObjectPool.Get() 超时先例）
         using var host = MfaTestHost.CreateFile(out _);
         var userId = NewUserId();
-        var codes = await host.Mfa.GenerateRecoveryCodesAsync(userId);
+        var codes = await host.Mfa.GenerateRecoveryCodesAsync(userId, ct: TestContext.Current.CancellationToken);
 
         // 双独立 MfaService 实例（分层直构——各自独立 stub 用户 + DataService/UnitOfWorkManager 链）
         //（消除根容器单一实例→串行化→假绿；生产 ASP.NET 每请求一 scope 的真实形态）
@@ -361,15 +361,15 @@ public class MfaServiceTests
         var userId = NewUserId();
 
         // 未启用用户 RequestChallenge → 统一"已发起"（随机假 challengeId——防用户存在性/绑定状态探测）
-        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp");
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
         Assert.False(string.IsNullOrEmpty(challenge.ChallengeId));
         Assert.Equal("totp", challenge.Method);
 
         // 假 challengeId 验证必败（统一 false 不区分原因）
-        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, "000000"));
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, "000000", ct: TestContext.Current.CancellationToken));
 
         // SMS 未启用同样统一"已发起"——且不发码（防枚举面收敛：无短信计费副作用）
-        var smsChallenge = await host.Mfa.RequestChallengeAsync(userId, "sms");
+        var smsChallenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
         Assert.False(string.IsNullOrEmpty(smsChallenge.ChallengeId));
         Assert.Equal(0, host.SmsSender.SendCount);
     }
@@ -382,7 +382,7 @@ public class MfaServiceTests
         await EnableTotpAsync(host, userId);
 
         // 已启用用户 EnrollAsync → 统一响应（EnrollToken=""，防绑定状态探测——消费方可据此跳绑定 UI）
-        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext());
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("totp", enroll.Method);
         Assert.Equal("", enroll.EnrollToken);

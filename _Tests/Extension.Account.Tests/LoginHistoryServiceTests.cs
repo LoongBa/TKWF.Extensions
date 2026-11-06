@@ -94,7 +94,7 @@ public class LoginHistoryServiceTests
             new SecurityLogEntry("PasswordChange", "Authentication", "alice", 1, "10.0.0.1", null, "Success", null, null));
 
         var service = user.Use<ILoginHistoryService>();
-        var result = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput());
+        var result = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(4, result.Total);              // 仅 4 条 Login 事件（Logout/PasswordChange 被 EventType 过滤）
         Assert.Equal(4, result.Items.Count);
@@ -126,22 +126,22 @@ public class LoginHistoryServiceTests
         var service = user.Use<ILoginHistoryService>();
 
         // UserName LIKE
-        var byUser = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { UserName = "ali" });
+        var byUser = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { UserName = "ali" }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, byUser.Total);
         Assert.All(byUser.Items, i => Assert.Equal("alice", i.UserName));
 
         // Result 精确
-        var byResult = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Result = "Failed" });
+        var byResult = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Result = "Failed" }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, byResult.Total);
         Assert.All(byResult.Items, i => Assert.Equal("Failed", i.Result));
 
         // IpAddress LIKE
-        var byIp = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { IpAddress = "10.0.0.2" });
+        var byIp = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { IpAddress = "10.0.0.2" }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, byIp.Total);
         Assert.Equal("bob", byIp.Items[0].UserName);
 
         // 组合过滤（alice + Failed）
-        var combined = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { UserName = "alice", Result = "Failed" });
+        var combined = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { UserName = "alice", Result = "Failed" }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, combined.Total);
         Assert.Equal("Failed", combined.Items[0].Result);
     }
@@ -162,22 +162,22 @@ public class LoginHistoryServiceTests
         var service = user.Use<ILoginHistoryService>();
 
         // Take=3 → 3 条，Total 仍为 5
-        var paged = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 3 });
+        var paged = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 3 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(5, paged.Total);
         Assert.Equal(3, paged.Items.Count);
         Assert.Equal("u5", paged.Items[0].UserName);   // 倒序
 
         // Skip=2 → 跳过最新 2 条（u5/u4），剩 u3/u2/u1
-        var skipped = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Skip = 2, Take = 3 });
+        var skipped = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Skip = 2, Take = 3 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, skipped.Items.Count);
         Assert.Equal("u3", skipped.Items[0].UserName);
 
         // Take=0 → 回退默认 50 → 全量
-        var defaultTake = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 0 });
+        var defaultTake = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 0 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(5, defaultTake.Items.Count);
 
         // Take=500 → 钳制上限 200 → 全量（仅 5 条）
-        var clamped = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 500 });
+        var clamped = await service.GetLoginHistoryAsync(new LoginHistoryQueryInput { Take = 500 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(5, clamped.Items.Count);
     }
 
@@ -189,7 +189,7 @@ public class LoginHistoryServiceTests
         var user = BindUser(sp);
         var service = user.Use<ILoginHistoryService>();
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetLoginHistoryAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetLoginHistoryAsync(null!, ct: TestContext.Current.CancellationToken));
     }
 
     // ── ② SecurityLog 未启用（C1 明确异常）──
@@ -205,7 +205,7 @@ public class LoginHistoryServiceTests
         // C1 模式：SecurityLog 契约未注册 → 门面内 User.Use<ISecurityLogQueryService>() 经 AOP 路径 GetRequiredService
         // 抛 InvalidOperationException（未注册异常，消息含 SecurityLog 类型名）——保持原有"明确异常"语义
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.GetLoginHistoryAsync(new LoginHistoryQueryInput()));
+            () => service.GetLoginHistoryAsync(new LoginHistoryQueryInput(), ct: TestContext.Current.CancellationToken));
         Assert.Contains("SecurityLog", ex.Message);                        // 提示须启用 SecurityLog 扩展
     }
 
@@ -217,10 +217,10 @@ public class LoginHistoryServiceTests
         var user = BindUser(sp);
         var service = user.Use<ILoginHistoryService>();
 
-        var exUser = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedUsersAsync());
+        var exUser = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedUsersAsync(ct: TestContext.Current.CancellationToken));
         Assert.Contains("SecurityLog", exUser.Message);
 
-        var exIp = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedIpsAsync());
+        var exIp = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedIpsAsync(ct: TestContext.Current.CancellationToken));
         Assert.Contains("SecurityLog", exIp.Message);
     }
 
@@ -246,14 +246,14 @@ public class LoginHistoryServiceTests
 
         var service = user.Use<ILoginHistoryService>();
 
-        var top2 = await service.GetTopFailedUsersAsync(topN: 2);
+        var top2 = await service.GetTopFailedUsersAsync(topN: 2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, top2.Count);
         Assert.Equal("carol", top2[0].Dimension);
         Assert.Equal(4, top2[0].Count);
         Assert.Equal("alice", top2[1].Dimension);
         Assert.Equal(3, top2[1].Count);                  // Success 不计数
 
-        var top5 = await service.GetTopFailedUsersAsync(topN: 5);
+        var top5 = await service.GetTopFailedUsersAsync(topN: 5, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, top5.Count);                     // 仅 3 个有失败记录的用户
         Assert.Equal("bob", top5[2].Dimension);
         Assert.Equal(2, top5[2].Count);
@@ -273,7 +273,7 @@ public class LoginHistoryServiceTests
             Login("erin", 5, "", "Failed"));             // IP 空串不计入
 
         var service = user.Use<ILoginHistoryService>();
-        var result = await service.GetTopFailedIpsAsync(topN: 10);
+        var result = await service.GetTopFailedIpsAsync(topN: 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("10.0.0.1", result[0].Dimension);
@@ -324,19 +324,19 @@ public class LoginHistoryServiceTests
         var service = user.Use<ILoginHistoryService>();
 
         // 默认 topN=10（不传 topN）全量 → 两用户都计入
-        var all = await service.GetTopFailedUsersAsync();
+        var all = await service.GetTopFailedUsersAsync(ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, all.Count);
         Assert.Equal(3, all.Single(s => s.Dimension == "alice").Count);
         Assert.Equal(2, all.Single(s => s.Dimension == "bob").Count);
 
         // 30 分钟窗口 → 仅 alice（bob 在 2 小时前被过滤）
-        var windowed = await service.GetTopFailedUsersAsync(window: TimeSpan.FromMinutes(30));
+        var windowed = await service.GetTopFailedUsersAsync(window: TimeSpan.FromMinutes(30), ct: TestContext.Current.CancellationToken);
         var alice = Assert.Single(windowed);
         Assert.Equal("alice", alice.Dimension);
         Assert.Equal(3, alice.Count);
 
         // IP 维度同理
-        var ipWindowed = await service.GetTopFailedIpsAsync(window: TimeSpan.FromMinutes(30));
+        var ipWindowed = await service.GetTopFailedIpsAsync(window: TimeSpan.FromMinutes(30), ct: TestContext.Current.CancellationToken);
         var ip = Assert.Single(ipWindowed);
         Assert.Equal("10.0.0.1", ip.Dimension);
         Assert.Equal(3, ip.Count);

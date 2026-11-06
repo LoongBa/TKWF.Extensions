@@ -42,7 +42,7 @@ public class AlipayOauthChannelTests : AlipayChannelTestHost
         var template = Assert.Single(probe.Channels, c => c.ChannelType == "alipay_oauth");
         Assert.Equal("alipay_oauth", template.ChannelType);
         // ……真实实例经工厂构造（ChannelId = 注册表选区键）
-        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "alipay_oauth");
+        var channel = await user.Use<ISsoChannelFactory>().CreateAsync(TestChannelId, "alipay_oauth", TestContext.Current.CancellationToken);
         Assert.NotNull(channel);
         Assert.Equal(TestChannelId, channel!.ChannelId);
     }
@@ -171,8 +171,8 @@ public class AlipayApiClientTests
         Assert.Equal(3600, token.ExpiresInSeconds);
         Assert.Equal("stub-refresh-token", token.RefreshToken);
 
-        var req = await captured.Task.WaitAsync(System.TimeSpan.FromSeconds(5));
-        var body = await req.Content!.ReadAsStringAsync();
+        var req = await captured.Task.WaitAsync(System.TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var body = await req.Content!.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("method=alipay.system.oauth.token", body);
         Assert.Contains("grant_type=authorization_code", body);   // 顶层参数（非 biz_content）
         Assert.Contains("code=alipay-oauth-code-123", body);      // 顶层参数

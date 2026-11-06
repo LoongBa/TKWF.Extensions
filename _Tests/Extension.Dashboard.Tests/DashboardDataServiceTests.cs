@@ -27,7 +27,7 @@ public class DashboardDataServiceTests
         var (sp, _) = DashboardTestInfra.BuildServices(root.Path, root.Path, SampleRows);
         var service = sp.GetRequiredService<IDashboardDataService>();
 
-        var result = await service.GetWidgetDataAsync("overview", "payment-list");
+        var result = await service.GetWidgetDataAsync("overview", "payment-list", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(DashboardWidgetType.List, result.Type);
         Assert.Equal(3, result.Rows!.Count);
@@ -43,7 +43,7 @@ public class DashboardDataServiceTests
         var (sp, _) = DashboardTestInfra.BuildServices(root.Path, root.Path, SampleRows);
         var service = sp.GetRequiredService<IDashboardDataService>();
 
-        var result = await service.GetWidgetDataAsync("overview", "today-revenue");
+        var result = await service.GetWidgetDataAsync("overview", "today-revenue", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("total-revenue", result.MetricName);
         // ratio = sum(TotalAmount)/count(PaidCount) = 600/3 = 200（平均每行金额——ratio 计算器语义）
@@ -67,7 +67,7 @@ public class DashboardDataServiceTests
         var (sp, _) = DashboardTestInfra.BuildServices(root.Path, root.Path, SampleRows);
         var service = sp.GetRequiredService<IDashboardDataService>();
 
-        var result = await service.GetWidgetDataAsync("chart", "trend");
+        var result = await service.GetWidgetDataAsync("chart", "trend", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("daily-trend", result.MetricName);
         Assert.NotNull(result.Slices);
@@ -92,7 +92,7 @@ public class DashboardDataServiceTests
         var (sp, _) = DashboardTestInfra.BuildServices(root.Path, root.Path, SampleRows);
         var service = sp.GetRequiredService<IDashboardDataService>();
 
-        var result = await service.GetWidgetDataAsync("all", "all-metrics");
+        var result = await service.GetWidgetDataAsync("all", "all-metrics", ct: TestContext.Current.CancellationToken);
 
         // total-revenue（单值）+ daily-trend（3 切片展开）= 4 个 Slices 元素（Major#1 修复后语义）
         Assert.Equal(4, result.Slices!.Count);
@@ -118,7 +118,7 @@ public class DashboardDataServiceTests
         var (sp, _) = DashboardTestInfra.BuildServices(root.Path, root.Path, SampleRows);
         var service = sp.GetRequiredService<IDashboardDataService>();
 
-        var result = await service.GetWidgetDataAsync("all", "all-metrics");
+        var result = await service.GetWidgetDataAsync("all", "all-metrics", ct: TestContext.Current.CancellationToken);
 
         // total-revenue（单值 1 个）+ daily-trend（3 天 → 3 切片）= 4 个 Slices 元素
         Assert.Equal(4, result.Slices!.Count);
@@ -141,7 +141,7 @@ public class DashboardDataServiceTests
         var service = sp.GetRequiredService<IDashboardDataService>();
         var filters = new Dictionary<string, object?> { ["from"] = "2026-09-01", ["to"] = "2026-09-30" };
 
-        await service.GetWidgetDataAsync("overview", "payment-list", filters);
+        await service.GetWidgetDataAsync("overview", "payment-list", filters, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(provider.ReceivedFilters);
         Assert.Equal("2026-09-01", provider.ReceivedFilters!["from"]);
@@ -157,7 +157,7 @@ public class DashboardDataServiceTests
         var service = sp.GetRequiredService<IDashboardDataService>();
 
         var ex = await Assert.ThrowsAsync<DashboardDefinitionException>(
-            () => service.GetWidgetDataAsync("overview", "nope"));
+            () => service.GetWidgetDataAsync("overview", "nope", ct: TestContext.Current.CancellationToken));
         Assert.Contains("Widget 未找到", ex.Message);
     }
 
@@ -178,7 +178,7 @@ public class DashboardDataServiceTests
         var service = sp.GetRequiredService<IDashboardDataService>();
 
         var ex = await Assert.ThrowsAsync<DashboardDefinitionException>(
-            () => service.GetWidgetDataAsync("overview", "w1"));
+            () => service.GetWidgetDataAsync("overview", "w1", ct: TestContext.Current.CancellationToken));
         Assert.Contains("未注册", ex.Message);
     }
 
@@ -192,7 +192,7 @@ public class DashboardDataServiceTests
         var service = sp.GetRequiredService<IDashboardDataService>();
 
         var ex = await Assert.ThrowsAsync<DashboardDefinitionException>(
-            () => service.GetWidgetDataAsync("overview", "today-revenue"));
+            () => service.GetWidgetDataAsync("overview", "today-revenue", ct: TestContext.Current.CancellationToken));
         Assert.Contains("Metrics 扩展", ex.Message);
         Assert.Contains("TKWFEnabledExtension", ex.Message);
     }
@@ -215,7 +215,7 @@ public class DashboardDataServiceTests
         var service = sp.GetRequiredService<IDashboardDataService>();
 
         var ex = await Assert.ThrowsAsync<DashboardDefinitionException>(
-            () => service.GetWidgetDataAsync("overview", "w1"));
+            () => service.GetWidgetDataAsync("overview", "w1", ct: TestContext.Current.CancellationToken));
         Assert.Contains("未在规格", ex.Message);
     }
 
@@ -236,7 +236,7 @@ public class DashboardDataServiceTests
         var service = sp.GetRequiredService<IDashboardDataService>();
 
         var ex = await Assert.ThrowsAsync<DashboardDefinitionException>(
-            () => service.GetWidgetDataAsync("bad", "w1"));
+            () => service.GetWidgetDataAsync("bad", "w1", ct: TestContext.Current.CancellationToken));
         Assert.Contains("格式非法", ex.Message);
     }
 }

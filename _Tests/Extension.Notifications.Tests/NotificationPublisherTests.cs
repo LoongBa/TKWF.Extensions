@@ -26,7 +26,7 @@ public class NotificationPublisherTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         // Notification 发布态 1 行（含定义快照 + 严重级别）——无业务方法覆盖（发布态直读），保留直查
         var notifications = fsql.Select<NotificationEntity>().ToList();
@@ -36,8 +36,8 @@ public class NotificationPublisherTests
         Assert.Equal((int)NotificationSeverity.Info, notifications[0].Severity);
 
         // 收件箱每收件人 1 行（未读，指向同一 Notification）——经 Store 业务方法
-        var user1Inbox = await store.GetUnreadAsync(1);
-        var user2Inbox = await store.GetUnreadAsync(2);
+        var user1Inbox = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
+        var user2Inbox = await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken);
         Assert.Single(user1Inbox);
         Assert.Single(user2Inbox);
         Assert.All(user1Inbox.Concat(user2Inbox), r => Assert.Equal(notifications[0].Id, r.NotificationId));
@@ -53,10 +53,10 @@ public class NotificationPublisherTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: Array.Empty<long>());
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: Array.Empty<long>(), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, fsql.Select<NotificationEntity>().Count()); // 无业务方法覆盖（发布态直读），保留直查
-        Assert.Empty(await store.GetUnreadAsync(1));
+        Assert.Empty(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -68,11 +68,11 @@ public class NotificationPublisherTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 1, 2 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1, 1, 2 }, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(fsql.Select<NotificationEntity>().ToList()); // 无业务方法覆盖（发布态直读），保留直查
-        var user1Inbox = await store.GetUnreadAsync(1);
-        var user2Inbox = await store.GetUnreadAsync(2);
+        var user1Inbox = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
+        var user2Inbox = await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, user1Inbox.Count + user2Inbox.Count); // 1,1,2 → 去重 → 1,2
         Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
@@ -89,10 +89,10 @@ public class NotificationPublisherTests
         await publisher.PublishAsync(
             TestNotificationDefinitions.OrderShipped,
             userIds: new long[] { 1, 2, 3 },
-            excludedUserIds: new long[] { 2 });
+            excludedUserIds: new long[] { 2 }, ct: TestContext.Current.CancellationToken);
 
-        var user1Inbox = await store.GetUnreadAsync(1);
-        var user3Inbox = await store.GetUnreadAsync(3);
+        var user1Inbox = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
+        var user3Inbox = await store.GetUnreadAsync(3, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, user1Inbox.Count + user3Inbox.Count);
         Assert.Equal(new[] { 1L, 3L }, user1Inbox.Concat(user3Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
@@ -110,14 +110,14 @@ public class NotificationPublisherTests
         var subManager = host.SubscriptionManager;
 
         // 用户 1、2 订阅定义级通知；用户 3 未订阅
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
-        await subManager.SubscribeAsync(2, TestNotificationDefinitions.OrderShipped);
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
+        await subManager.SubscribeAsync(2, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
         // userIds=null → 按订阅解析收件人
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped);
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
 
-        var user1Inbox = await store.GetUnreadAsync(1);
-        var user2Inbox = await store.GetUnreadAsync(2);
+        var user1Inbox = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
+        var user2Inbox = await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, user1Inbox.Count + user2Inbox.Count);
         Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
@@ -133,16 +133,16 @@ public class NotificationPublisherTests
         var subManager = host.SubscriptionManager;
 
         // 用户 1 订阅实体 o-100；用户 2 订阅实体 o-200
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100");
-        await subManager.SubscribeAsync(2, TestNotificationDefinitions.OrderShipped, "Order", "o-200");
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, "Order", "o-100", ct: TestContext.Current.CancellationToken);
+        await subManager.SubscribeAsync(2, TestNotificationDefinitions.OrderShipped, "Order", "o-200", ct: TestContext.Current.CancellationToken);
 
         // 发布实体级通知（o-100）→ 仅订阅该实体的用户 1 收到
         await publisher.PublishAsync(
             TestNotificationDefinitions.OrderShipped,
             entityTypeName: "Order",
-            entityId: "o-100");
+            entityId: "o-100", ct: TestContext.Current.CancellationToken);
 
-        var user1Inbox = await store.GetUnreadAsync(1);
+        var user1Inbox = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
         Assert.Single(user1Inbox);
         Assert.Equal(1L, user1Inbox[0].UserId);
 
@@ -164,11 +164,11 @@ public class NotificationPublisherTests
         var store = host.Store;
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => publisher.PublishAsync("NoSuchNotification", userIds: new long[] { 1 }));
+            () => publisher.PublishAsync("NoSuchNotification", userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken));
 
         // 未定义 → 不落库
         Assert.Equal(0, fsql.Select<NotificationEntity>().Count()); // 无业务方法覆盖（发布态直读），保留直查
-        Assert.Empty(await store.GetUnreadAsync(1));
+        Assert.Empty(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
     // ─── 发布方权限门控（RequirePermission）───
@@ -188,7 +188,7 @@ public class NotificationPublisherTests
 
         // 发布方无权限 → InvalidOperationException（实现约定：发布方权限门控失败）
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 }));
+            () => publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken));
 
         Assert.Equal(0, fsql.Select<NotificationEntity>().Count()); // 无业务方法覆盖（发布态直读），保留直查
     }
@@ -207,10 +207,10 @@ public class NotificationPublisherTests
         var publisher = host.Publisher;
         var store = host.Store;
 
-        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 });
+        await publisher.PublishAsync(PermissionGatedDefinitions.RestrictedAlert, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(fsql.Select<NotificationEntity>().ToList()); // 无业务方法覆盖（发布态直读），保留直查
-        Assert.Single(await store.GetUnreadAsync(1));
+        Assert.Single(await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
     // ─── 通知数据（NotificationData JSON 往返）───
@@ -228,7 +228,7 @@ public class NotificationPublisherTests
             ["OrderId"] = "100",
             ["TrackingNo"] = "SF1234567890"
         });
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, data: data, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, data: data, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         // DataJson 落库后可反序列化回 NotificationData
         var notif = fsql.Select<NotificationEntity>().First(); // 无业务方法覆盖（发布态直读），保留直查
@@ -253,18 +253,18 @@ public class NotificationPublisherTests
         var subManager = host.SubscriptionManager;
 
         // 用户 1：定义级订阅（收全部）；用户 2：实体级订阅 o-100；用户 3：实体级订阅 o-200
-        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped);
-        await subManager.SubscribeAsync(2, TestNotificationDefinitions.OrderShipped, "Order", "o-100");
-        await subManager.SubscribeAsync(3, TestNotificationDefinitions.OrderShipped, "Order", "o-200");
+        await subManager.SubscribeAsync(1, TestNotificationDefinitions.OrderShipped, ct: TestContext.Current.CancellationToken);
+        await subManager.SubscribeAsync(2, TestNotificationDefinitions.OrderShipped, "Order", "o-100", ct: TestContext.Current.CancellationToken);
+        await subManager.SubscribeAsync(3, TestNotificationDefinitions.OrderShipped, "Order", "o-200", ct: TestContext.Current.CancellationToken);
 
         // 发布实体级通知（o-100）→ 并集：定义级用户 1 + 实体级用户 2（用户 3 不收）
         await publisher.PublishAsync(
             TestNotificationDefinitions.OrderShipped,
             entityTypeName: "Order",
-            entityId: "o-100");
+            entityId: "o-100", ct: TestContext.Current.CancellationToken);
 
-        var user1Inbox = await store.GetUnreadAsync(1);
-        var user2Inbox = await store.GetUnreadAsync(2);
+        var user1Inbox = await store.GetUnreadAsync(1, ct: TestContext.Current.CancellationToken);
+        var user2Inbox = await store.GetUnreadAsync(2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, user1Inbox.Count + user2Inbox.Count);
         Assert.Equal(new[] { 1L, 2L }, user1Inbox.Concat(user2Inbox).Select(r => r.UserId).OrderBy(id => id).ToArray());
     }
@@ -292,7 +292,7 @@ public class NotificationPublisherTests
         // 注：测试事务管理器为桩（不包物理事务），DB 行无法真正撤销——只验证"异常传播触发 RollbackAsync 调用"。
         // 真实 FreeSqlTransactionManager 下 Rollback 会撤销全部写入（框架侧已验证）。
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }));
+            () => publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken));
 
         Assert.True(recordingTx.RollbackCount > 0, "事务应回滚（inbox 写入失败）");
         Assert.Equal(0, recordingTx.CommitCount);

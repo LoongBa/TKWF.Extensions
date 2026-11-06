@@ -26,7 +26,7 @@ public class NotificationLocalizationTests
         using var host = NotificationTestHost.Build(fsql);
         var publisher = host.Publisher;
 
-        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 });
+        await publisher.PublishAsync(TestNotificationDefinitions.OrderShipped, userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         var notification = fsql.Select<NotificationEntity>().First();
         Assert.Equal("订单已发货", notification.DisplayName); // 原始文本快照，key 未设置不受影响
@@ -43,7 +43,7 @@ public class NotificationLocalizationTests
         using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
         var publisher = host.Publisher;
 
-        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
+        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         var notification = fsql.Select<NotificationEntity>().First();
         Assert.Equal("Order Shipped (zh)", notification.DisplayName);
@@ -59,7 +59,7 @@ public class NotificationLocalizationTests
         using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
         var publisher = host.Publisher;
 
-        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
+        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         var notification = fsql.Select<NotificationEntity>().First();
         Assert.Equal("订单已发货（本地化）", notification.DisplayName); // 回退原文
@@ -77,7 +77,7 @@ public class NotificationLocalizationTests
         using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer));
         var publisher = host.Publisher;
 
-        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
+        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         var notification = fsql.Select<NotificationEntity>().First();
         Assert.Equal("订单已发货（本地化）", notification.DisplayName); // 空串 → 回退原文，不落空串
@@ -92,7 +92,7 @@ public class NotificationLocalizationTests
         using var host = NotificationTestHost.Build(fsql, s => RegisterLocalizedDefinitions(s, localizer: null));
         var publisher = host.Publisher;
 
-        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 });
+        await publisher.PublishAsync("OrderShippedLocalized", userIds: new long[] { 1 }, ct: TestContext.Current.CancellationToken);
 
         var notification = fsql.Select<NotificationEntity>().First();
         Assert.Equal("订单已发货（本地化）", notification.DisplayName); // localizer null → 原文快照，与未设置 key 等价

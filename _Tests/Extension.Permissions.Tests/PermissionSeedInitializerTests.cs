@@ -46,12 +46,12 @@ public class PermissionSeedInitializerTests
 
         await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
 
-        var adminAll = await dataService.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
+        var adminAll = await dataService.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(adminAll);
         Assert.True(adminAll!.IsGranted);
 
         // V0.7.0：种子只预置 Admin.All 系统权限，不再逐权限授予
-        var grants = await dataService.GetByProviderAsync(RoleProvider, "admin");
+        var grants = await dataService.GetByProviderAsync(RoleProvider, "admin", ct: TestContext.Current.CancellationToken);
         Assert.Single(grants);
         Assert.Equal(PermissionNames.AdminAll, grants[0].PermissionName);
     }
@@ -65,7 +65,7 @@ public class PermissionSeedInitializerTests
         await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
         await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
 
-        var grants = await dataService.GetByProviderAsync(RoleProvider, "admin");
+        var grants = await dataService.GetByProviderAsync(RoleProvider, "admin", ct: TestContext.Current.CancellationToken);
         Assert.Single(grants);
     }
 
@@ -75,11 +75,11 @@ public class PermissionSeedInitializerTests
         var dac = new InMemoryEntityDac();
         var dataService = CreateDataService(dac);
         // 消费方先显式撤销 Admin.All（记录已存在，IsGranted=false）
-        await dataService.SetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", isGranted: false);
+        await dataService.SetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", isGranted: false, ct: TestContext.Current.CancellationToken);
 
         await PermissionExtensionInitializer<SimpleUserInfo>.SeedAdminAllAsync(dataService, "admin");
 
-        var grant = await dataService.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin");
+        var grant = await dataService.GetGrantAsync(PermissionNames.AdminAll, RoleProvider, "admin", ct: TestContext.Current.CancellationToken);
         Assert.NotNull(grant);
         Assert.False(grant!.IsGranted); // 未被种子覆盖
     }

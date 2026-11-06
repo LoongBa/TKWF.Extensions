@@ -42,10 +42,10 @@ public class AuthLoginAttemptServiceTests
         var identity = "13800138000";
 
         await RecordNAsync(service, identity, AuthTypes.Federated, 2);
-        Assert.False(await service.IsRateLimitedAsync(identity, AuthTypes.Federated));
+        Assert.False(await service.IsRateLimitedAsync(identity, AuthTypes.Federated, ct: TestContext.Current.CancellationToken));
 
         await RecordNAsync(service, identity, AuthTypes.Federated, 1);
-        Assert.True(await service.IsRateLimitedAsync(identity, AuthTypes.Federated));
+        Assert.True(await service.IsRateLimitedAsync(identity, AuthTypes.Federated, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -60,8 +60,8 @@ public class AuthLoginAttemptServiceTests
         await RecordNAsync(service, identity, AuthTypes.Federated, 5);   // 超 federated 阈值
         await RecordNAsync(service, identity, AuthTypes.Redeem, 3);   // 未超 redeem 阈值
 
-        Assert.True(await service.IsRateLimitedAsync(identity, AuthTypes.Federated));
-        Assert.False(await service.IsRateLimitedAsync(identity, AuthTypes.Redeem));
+        Assert.True(await service.IsRateLimitedAsync(identity, AuthTypes.Federated, ct: TestContext.Current.CancellationToken));
+        Assert.False(await service.IsRateLimitedAsync(identity, AuthTypes.Redeem, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class AuthLoginAttemptServiceTests
     {
         var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
         await RecordNAsync(service, "13800138000", AuthTypes.Sms, 100);
-        Assert.False(await service.IsRateLimitedAsync("13800138000", AuthTypes.Sms));
+        Assert.False(await service.IsRateLimitedAsync("13800138000", AuthTypes.Sms, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class AuthLoginAttemptServiceTests
     {
         var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
         await RecordNAsync(service, "13800138000", AuthTypes.Federated, 3);
-        var recent = await service.GetRecentAttemptsAsync("13800138000", AuthTypes.Federated, 2);
+        var recent = await service.GetRecentAttemptsAsync("13800138000", AuthTypes.Federated, 2, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, recent.Count);
     }
 }

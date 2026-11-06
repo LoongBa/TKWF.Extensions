@@ -35,10 +35,10 @@ public class SmsVerificationServiceTests
     public async Task SendCode_PersistsHash_NoPlaintext()
     {
         var (service, sender, ds) = CreateService(AuthenticationTestHost.CreateOptions());
-        await service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login));
+        await service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, sender.SendCount);
-        var record = await ds.GetLatestUnverifiedAsync("13800138000", SmsScenes.Login, default);
+        var record = await ds.GetLatestUnverifiedAsync("13800138000", SmsScenes.Login, TestContext.Current.CancellationToken);
         Assert.NotNull(record);
         Assert.False(record!.CodeHash.Contains("000000", StringComparison.Ordinal)); // 非明文
     }
@@ -47,10 +47,10 @@ public class SmsVerificationServiceTests
     public async Task SendCode_ResendTooFrequent_Rejected()
     {
         var (service, _, _) = CreateService(AuthenticationTestHost.CreateOptions());
-        await service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login));
+        await service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login), ct: TestContext.Current.CancellationToken);
         // B3b：频控失败抛 RateLimitedException（429）
         var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
-            service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login)));
+            service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login), ct: TestContext.Current.CancellationToken));
         Assert.Equal("SMS_RESEND_TOO_FREQUENT", ex.ErrorCode);
     }
 
@@ -62,7 +62,7 @@ public class SmsVerificationServiceTests
         var (service, _, _) = CreateService(options, withSender: false);
         // B3b：SmsMockForbiddenException（401 子类）显式转 ServiceNotConfiguredException（503——防 dev_code 泄露）
         var ex = await Assert.ThrowsAsync<ServiceNotConfiguredException>(() =>
-            service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login)));
+            service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login), ct: TestContext.Current.CancellationToken));
         Assert.Equal("SMS_SENDER_NOT_CONFIGURED", ex.ErrorCode);
     }
 
@@ -71,11 +71,11 @@ public class SmsVerificationServiceTests
     {
         var (service, _, _) = CreateService(AuthenticationTestHost.CreateOptions());
         // 取验证码（Mock 模式日志含码——测试经 SmsRecord CodeHash 无法反推，直接验证流程：无 sender 时 dev mock 仍落库）
-        await service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login));
+        await service.SendCodeAsync(new SendSmsCodeRequest("13800138000", SmsScenes.Login), ct: TestContext.Current.CancellationToken);
 
         // 校验失败（错误码）——B3b：DomainException 400
         var mismatch = await Assert.ThrowsAsync<DomainException>(() =>
-            service.VerifyCodeAsync(new SmsVerifyRequest("13800138000", "000000", SmsScenes.Login)));
+            service.VerifyCodeAsync(new SmsVerifyRequest("13800138000", "000000", SmsScenes.Login), ct: TestContext.Current.CancellationToken));
         Assert.Equal("SMS_CODE_MISMATCH", mismatch.ErrorCode);
     }
 
@@ -93,12 +93,12 @@ public class SmsVerificationServiceTests
             CodeHash = TokenService.Sha256Hex("123456"),
             ExpireAt = DateTime.UtcNow.AddDays(-1),
             CreateTime = DateTime.UtcNow.AddMinutes(-6)
-        });
+        }, ct: TestContext.Current.CancellationToken);
         var service = new SmsVerificationService(stub, null, Options.Create(AuthenticationTestHost.CreateOptions()), NullLogger<SmsVerificationService>.Instance);
 
         // B3b：DomainException 400（SMS_CODE_EXPIRED）
         var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            service.VerifyCodeAsync(new SmsVerifyRequest("13800138000", "123456", SmsScenes.Login)));
+            service.VerifyCodeAsync(new SmsVerifyRequest("13800138000", "123456", SmsScenes.Login), ct: TestContext.Current.CancellationToken));
         Assert.Equal("SMS_CODE_EXPIRED", ex.ErrorCode);
     }
 }

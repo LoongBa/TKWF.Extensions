@@ -43,10 +43,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login",
-            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "auth-code-1", ["state"] = "st-1" }));
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "auth-code-1", ["state"] = "st-1" }), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<SsoChannelAuthResult>();
+        var body = await resp.Content.ReadFromJsonAsync<SsoChannelAuthResult>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.True(body!.Success);
         Assert.Equal("ext-100", body.ExternalUserId);
@@ -66,10 +66,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login/wechat-mp",
-            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "auth-code-2" }));
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "auth-code-2" }), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<SsoChannelAuthResult>();
+        var body = await resp.Content.ReadFromJsonAsync<SsoChannelAuthResult>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.True(body!.Success);
         Assert.True(FederationEndpointHost.Login.Invoked);                   // 有 channelId → LoginAsync
@@ -86,10 +86,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login/unknown-channel",
-            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
         Assert.False(FederationEndpointHost.Channel.Authenticated);          // 选区失败不触达通道
@@ -109,10 +109,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login",
-            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_REQUIRED", body!.Code);
         Assert.False(FederationEndpointHost.Login.Invoked);                   // 守卫拦截不触达门面
@@ -127,10 +127,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/dingtalk/login/wechat-mp",
-            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
         Assert.False(FederationEndpointHost.Login.Invoked);                   // 平台错配不触达门面
@@ -149,10 +149,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/{DefaultPlatformId}/login/wechat-mp",
-            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }));
+            new SsoLoginWebRequest(new Dictionary<string, string?> { ["code"] = "x" }), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_DISABLED", body!.Code);
         Assert.False(FederationEndpointHost.Login.Invoked);                   // 禁用通道不触达门面
@@ -165,11 +165,11 @@ public sealed class FederationWebExtensionTests
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/jwks");
+        var resp = await client.GetAsync($"{DefaultPrefix}/jwks", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("application/json", resp.Content.Headers.ContentType?.MediaType);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("sso-key-1", body);                                  // kid 分发
         Assert.Contains("P-256", body);
         Assert.True(FederationEndpointHost.Token2.JwksInvoked);
@@ -187,7 +187,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("wechat-mp", FederationEndpointHost.Factory.LastChannelId);
@@ -204,7 +204,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/dingtalk/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
@@ -223,11 +223,11 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
-        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync());
+        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);      // 停用通道不触达通道工厂
     }
 
@@ -239,7 +239,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/ghost",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
@@ -255,11 +255,11 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/ghost",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
-        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync());
+        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
     }
 
@@ -276,11 +276,11 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
-        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync());
+        Assert.Equal(string.Empty, await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(FederationEndpointHost.Factory.CreateInvoked);
     }
 
@@ -294,10 +294,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("AUTHENTICATION_FAILED", body!.Code);
         Assert.Equal(0, FederationEndpointHost.Orchestrator.Invoked);   // 验签失败 → 编排不 invoked（信任根一票否决）
@@ -311,7 +311,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("wechat-mp", FederationEndpointHost.Factory.LastChannelId);
@@ -334,11 +334,11 @@ public sealed class FederationWebExtensionTests
 
         var resp = await client.PostAsync(
             $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);   // 微信要求 XML 回复
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("<MsgType><![CDATA[text]]></MsgType>", body);
 
         // query 透传（微信验签参数在 URL query——现有缺陷修复断言）
@@ -366,7 +366,7 @@ public sealed class FederationWebExtensionTests
         // 恶意 query 注入 base_url（攻击者企图劫持票据链接落地域——服务端必须权威覆盖）
         var resp = await client.PostAsync(
             $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?base_url=https://evil.example.com&msg_signature=sig-1&timestamp=123&nonce=nc-1",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.NotNull(FederationEndpointHost.Channel.LastEventContext);
@@ -386,10 +386,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync(
-            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1&echostr=echo-abc");
+            $"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp?msg_signature=sig-1&timestamp=123&nonce=nc-1&echostr=echo-abc", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Equal("echo-abc", body);                                          // 验签通过 → 原样回显
         Assert.True(FederationEndpointHost.Channel.UrlVerified);                // VerifyUrlAsync 已执行
     }
@@ -405,11 +405,11 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/xml", resp.Content.Headers.ContentType?.MediaType);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("from-handler-1", body);                                 // 首个非 null 生效
         Assert.DoesNotContain("from-handler-2", body);
         Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);           // handler-1 被调
@@ -427,7 +427,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
@@ -456,10 +456,10 @@ public sealed class FederationWebExtensionTests
             new AuthorizeStartRequest(
                 AppId: "app-1", Mode: "federated", ChannelId: "wechat-mp", State: "sub-state-1",
                 Redirect: "https://app.example.com/cb", Scope: null, Parameters: null,
-                CallbackBaseUrl: "https://evil.example.com/forged"));   // 请求体伪造值——handler 服务端覆盖
+                CallbackBaseUrl: "https://evil.example.com/forged"), TestContext.Current.CancellationToken);   // 请求体伪造值——handler 服务端覆盖
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        var body = await resp.Content.ReadFromJsonAsync<Dictionary<string, string>>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.True(body!.ContainsKey("authorize_url"));
         Assert.True(body.ContainsKey("state"));
@@ -483,10 +483,10 @@ public sealed class FederationWebExtensionTests
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/authorize/start",
             new AuthorizeStartRequest("app-1", "federated", "wechat-mp", "sub-state-1",
-                "https://evil.example.com/cb", null, null, ""));
+                "https://evil.example.com/cb", null, null, ""), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("ORIGIN_NOT_ALLOWED", body!.Code);
     }
@@ -502,7 +502,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync(
-            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/wechat-mp/callback?code=wechat-code-1&state=ticket-1");
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/wechat-mp/callback?code=wechat-code-1&state=ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         var location = resp.Headers.Location?.ToString();
@@ -529,7 +529,7 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync(
-            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/callback?code=wechat-code-1&state=ticket-1");
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/callback?code=wechat-code-1&state=ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         Assert.Equal("wechat-mp", FederationEndpointHost.Bridge.LastCallbackChannelId);   // 单通道降级解析
@@ -549,10 +549,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.GetAsync(
-            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/callback?code=wechat-code-1&state=ticket-1");
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/callback?code=wechat-code-1&state=ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_REQUIRED", body!.Code);
         Assert.Null(FederationEndpointHost.Bridge.LastCallbackChannelId);      // 守卫拦截不触达门面
@@ -572,7 +572,7 @@ public sealed class FederationWebExtensionTests
         };
         req.Headers.Add("X-Test-Auth-User", "u-100");   // 测试哨兵：模拟已认证帧
 
-        var resp = await client.SendAsync(req);
+        var resp = await client.SendAsync(req, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         var location = resp.Headers.Location?.ToString();
@@ -590,10 +590,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/trust/issue",
-            new TrustIssueRequest("app-1", "https://app.example.com/cb", "st-1", null));
+            new TrustIssueRequest("app-1", "https://app.example.com/cb", "st-1", null), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("UNAUTHENTICATED", body!.Code);
         Assert.Null(FederationEndpointHost.Bridge.LastTrustIssueRequest);   // 未触达门面
@@ -607,10 +607,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/identity/claim",
-            new IdentityClaimRequest("app-1", "secret-1", "ac-1"));
+            new IdentityClaimRequest("app-1", "secret-1", "ac-1"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<Dictionary<string, string?>>();
+        var body = await resp.Content.ReadFromJsonAsync<Dictionary<string, string?>>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("federated", body!["mode"]);
         Assert.Equal("wx-1", body["channel_id"]);
@@ -630,10 +630,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/identity/claim",
-            new IdentityClaimRequest("app-1", "wrong-secret", "ac-1"));
+            new IdentityClaimRequest("app-1", "wrong-secret", "ac-1"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("AUTHENTICATION_FAILED", body!.Code);
     }
@@ -650,10 +650,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("from-bound", body);                    // 绑定桶优先
         Assert.DoesNotContain("from-type", body);
         Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);   // 绑定 handler 被调
@@ -673,10 +673,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("from-type", body);                     // 回退类型桶
         Assert.DoesNotContain("from-bound", body);
         Assert.Equal(0, FederationEndpointHost.EventHandler1.Invoked);   // 绑定不匹配 + 类型不参与 → 未触达
@@ -693,10 +693,10 @@ public sealed class FederationWebExtensionTests
         var client = FederationEndpointHost.Server.CreateClient();
 
         var resp = await client.PostAsync($"{DefaultPrefix}/{DefaultPlatformId}/event/wechat-mp",
-            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"));
+            new StringContent("""{"EventType":"subscribe"}""", System.Text.Encoding.UTF8, "application/xml"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("from-shared", body);                  // 类型桶命中（默认共用）
         Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);
     }
@@ -715,11 +715,11 @@ public sealed class FederationWebExtensionTests
             externalUserId: "ext-100", platformUid: "u-100", assurance: "event");
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Contains("text/html", resp.Content.Headers.ContentType?.ToString());
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("票据兑验成功", body);
         Assert.Contains("u-100", body);                 // uid（签入载荷 PlatformUid）
         Assert.Contains("wechat-mp", body);             // channel_id（签入载荷 ChannelId——选区无关）
@@ -741,10 +741,10 @@ public sealed class FederationWebExtensionTests
             externalUserId: "<script>alert(1)</script>", platformUid: "u-100", assurance: "event");
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("&lt;script&gt;", body);        // 转义后实体（标签闭合符转义）
         Assert.DoesNotContain("<script>", body);         // 原始标签不得出现（XSS 面关闭）
         // 注：alert(1) 为脚本内容非元字符 → HtmlEncode 不转义，作为纯文本保留（不在 <script> 标签内，浏览器不执行）——安全
@@ -758,10 +758,10 @@ public sealed class FederationWebExtensionTests
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/dingtalk/test/wechat-mp/ticket-1");
+        var resp = await client.GetAsync($"{DefaultPrefix}/dingtalk/test/wechat-mp/ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
         Assert.Null(FederationEndpointHost.Ticket.LastTicket);                 // 平台错配不触达 Redeem
@@ -774,10 +774,10 @@ public sealed class FederationWebExtensionTests
         FederationEndpointHost.Reset();
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/unknown-channel/ticket-1");
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/unknown-channel/ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_NOT_FOUND", body!.Code);
         Assert.Null(FederationEndpointHost.Ticket.LastTicket);
@@ -790,10 +790,10 @@ public sealed class FederationWebExtensionTests
         FederationEndpointHost.Reset();                                        // RedeemResult 默认 null
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/unknown-ticket");
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/unknown-ticket", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("TICKET_NOT_FOUND", body!.Code);
         Assert.Equal("unknown-ticket", FederationEndpointHost.Ticket.LastTicket); // Redeem 被调（选区通过）
@@ -810,10 +810,10 @@ public sealed class FederationWebExtensionTests
         };
         var client = FederationEndpointHost.Server.CreateClient();
 
-        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1");
+        var resp = await client.GetAsync($"{DefaultPrefix}/wechat/test/wechat-mp/ticket-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_DISABLED", body!.Code);
         Assert.Null(FederationEndpointHost.Ticket.LastTicket);                 // 禁用不触达 Redeem

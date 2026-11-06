@@ -38,7 +38,7 @@ public class ApprovalAppendTests : IDisposable
         var instanceId = await _host.ApprovalService.StartAsync("Biz", Guid.NewGuid().ToString("N"), flowCode, "submitter");
         await _host.ApprovalService.SubmitAsync(instanceId);
         var task = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId, 0, 10, q => q, default)).First();
+            t => t.InstanceId == instanceId, 0, 10, q => q, TestContext.Current.CancellationToken)).First();
         return (instanceId, task);
     }
 
@@ -48,10 +48,10 @@ public class ApprovalAppendTests : IDisposable
         var steps = new[] { new ApprovalStepDefinition(0, "财务", ApprovalApproverType.User, "fin") };
         var (_, task) = await StartSubmittedAsync(steps, "append_flow");
 
-        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" }, remark: "法务确认");
+        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" }, remark: "法务确认", ct: TestContext.Current.CancellationToken);
 
         // 加签记录
-        var appends = await _host.AppendDataService.GetByInstanceAsync(task.InstanceId);
+        var appends = await _host.AppendDataService.GetByInstanceAsync(task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Single(appends);
         Assert.Equal("legal", appends[0].UserId);
         Assert.Equal("fin", appends[0].OperatedByUserId);
@@ -59,14 +59,14 @@ public class ApprovalAppendTests : IDisposable
 
         // 新任务（StepName 含加签标记 + Pending）
         var appendTasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "legal", 0, 10, q => q, default);
+            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "legal", 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(appendTasks);
         Assert.Equal("财务（加签）", appendTasks[0].StepName);
         Assert.Equal(ApprovalTaskStatus.Pending, appendTasks[0].Status);
         Assert.Equal(0, appendTasks[0].StepIndex);
 
         // 原任务保持 Pending
-        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Pending, original!.Status);
     }
 
@@ -81,10 +81,10 @@ public class ApprovalAppendTests : IDisposable
         };
         var (_, task) = await StartSubmittedAsync(steps, "append_timeout");
 
-        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" });
+        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" }, ct: TestContext.Current.CancellationToken);
 
         var appendTask = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "legal", 0, 10, q => q, default)).First();
+            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "legal", 0, 10, q => q, TestContext.Current.CancellationToken)).First();
         Assert.NotNull(appendTask.TimeoutAt);
         // TimeoutAt = 创建时间 + 30 分钟（容差：>= 29 分钟且 <= 30 分钟）
         var diff = appendTask.TimeoutAt!.Value - appendTask.CreateTime;
@@ -100,16 +100,16 @@ public class ApprovalAppendTests : IDisposable
         var steps = new[] { new ApprovalStepDefinition(0, "财务", ApprovalApproverType.User, "fin", ApprovalMode.Any) };
         var (instanceId, task) = await StartSubmittedAsync(steps, "append_any");
 
-        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" });
+        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" }, ct: TestContext.Current.CancellationToken);
 
         var appendTask = (await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == instanceId && t.ApproverUserId == "legal", 0, 10, q => q, default)).First();
-        await _host.ApprovalService.ApproveAsync(appendTask.Id, "legal");
+            t => t.InstanceId == instanceId && t.ApproverUserId == "legal", 0, 10, q => q, TestContext.Current.CancellationToken)).First();
+        await _host.ApprovalService.ApproveAsync(appendTask.Id, "legal", ct: TestContext.Current.CancellationToken);
 
         // Any：任一通过即步骤完成 → 实例 Approved + 原任务标记 Completed
-        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId);
+        var instance = await _host.InstanceDataService.EntityGetAsync(i => i.Id == instanceId, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalInstanceStatus.Approved, instance!.Status);
-        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id);
+        var original = await _host.TaskDataService.EntityGetAsync(t => t.Id == task.Id, ct: TestContext.Current.CancellationToken);
         Assert.Equal(ApprovalTaskStatus.Completed, original!.Status);
     }
 
@@ -121,16 +121,16 @@ public class ApprovalAppendTests : IDisposable
         _host.Events.PublishedEvents.Clear();
 
         await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "auditor" },
-            mode: ApprovalAppendMode.Notify, remark: "仅通知");
+            mode: ApprovalAppendMode.Notify, remark: "仅通知", ct: TestContext.Current.CancellationToken);
 
         // 记录加签（Notify 模式也记录）——GetByInstanceAsync 按 InstanceId 查询（P 级测试修正：原 task.Id 语义错误）
-        var appends = await _host.AppendDataService.GetByInstanceAsync(task.InstanceId);
+        var appends = await _host.AppendDataService.GetByInstanceAsync(task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Single(appends);
         Assert.Equal(ApprovalAppendMode.Notify, appends[0].AppendMode);
 
         // 不建任务（auditor 无待办）
         var auditTasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "auditor", 0, 10, q => q, default);
+            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "auditor", 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Empty(auditTasks);
 
         // C3：发布 ApprovalAppendNotifyEvent
@@ -152,7 +152,7 @@ public class ApprovalAppendTests : IDisposable
 
         // C2：加签已存在审批人（fin 是当前步骤审批人）→ 拒绝
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "fin" }));
+            () => _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "fin" }, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -162,13 +162,13 @@ public class ApprovalAppendTests : IDisposable
         var (_, task) = await StartSubmittedAsync(steps, "append_batch_dup");
 
         // C2：同批 appenderUserIds 含重复 → Distinct 后仅建一条
-        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal", "legal" });
+        await _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal", "legal" }, ct: TestContext.Current.CancellationToken);
 
         var legalTasks = await _host.TaskDataService.EntitySelectAsync(
-            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "legal", 0, 10, q => q, default);
+            t => t.InstanceId == task.InstanceId && t.ApproverUserId == "legal", 0, 10, q => q, TestContext.Current.CancellationToken);
         Assert.Single(legalTasks);
 
-        var appends = await _host.AppendDataService.GetByInstanceAsync(task.InstanceId);
+        var appends = await _host.AppendDataService.GetByInstanceAsync(task.InstanceId, ct: TestContext.Current.CancellationToken);
         Assert.Single(appends); // 记录也去重
     }
 
@@ -180,7 +180,7 @@ public class ApprovalAppendTests : IDisposable
 
         // C1 身份校验：非当前审批人不可加签
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.AppendApproverAsync(task.Id, "wrong_user", new[] { "legal" }));
+            () => _host.ApprovalService.AppendApproverAsync(task.Id, "wrong_user", new[] { "legal" }, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -188,10 +188,10 @@ public class ApprovalAppendTests : IDisposable
     {
         var steps = new[] { new ApprovalStepDefinition(0, "财务", ApprovalApproverType.User, "fin") };
         var (_, task) = await StartSubmittedAsync(steps, "append_completed");
-        await _host.ApprovalService.ApproveAsync(task.Id, "fin");
+        await _host.ApprovalService.ApproveAsync(task.Id, "fin", ct: TestContext.Current.CancellationToken);
 
         // 任务已非 Pending → 加签拒绝（状态机校验）
         await Assert.ThrowsAsync<InvalidApprovalOperationException>(
-            () => _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" }));
+            () => _host.ApprovalService.AppendApproverAsync(task.Id, "fin", new[] { "legal" }, ct: TestContext.Current.CancellationToken));
     }
 }

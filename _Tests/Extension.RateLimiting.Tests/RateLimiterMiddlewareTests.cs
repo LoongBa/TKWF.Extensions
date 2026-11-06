@@ -26,10 +26,10 @@ public class RateLimiterMiddlewareTests
 
         // 前 3 次放行
         for (var i = 0; i < 3; i++)
-            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // 第 4 次拒绝 429 + Retry-After
-        var rejected = await client.GetAsync("/api/test");
+        var rejected = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
         Assert.NotNull(rejected.Headers.RetryAfter);
         Assert.NotNull(rejected.Headers.RetryAfter?.Delta);
@@ -52,9 +52,9 @@ public class RateLimiterMiddlewareTests
         });
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // 整个 1s 窗口过期 → 分段回收，许可恢复
         // CI（Linux 高负载）下分段回收可能延迟——轮询等待窗口过期（上限 5s），容忍调度延迟
@@ -62,8 +62,8 @@ public class RateLimiterMiddlewareTests
         HttpStatusCode status;
         do
         {
-            await Task.Delay(100);
-            status = (await client.GetAsync("/api/test")).StatusCode;
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            status = (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode;
         } while (status == HttpStatusCode.TooManyRequests && DateTime.UtcNow < deadline);
 
         Assert.Equal(HttpStatusCode.OK, status);
@@ -88,15 +88,15 @@ public class RateLimiterMiddlewareTests
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
         // 突发 2 次许可
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
         // 桶空——立即拒绝（QueueLimit=0）
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // 1s 补充 1 token → 放行 1 次后再拒绝
-        await Task.Delay(1300);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test")).StatusCode);
+        await Task.Delay(1300, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── D5 端点级覆盖（精确路径匹配，Oracle P2-2）：/api/auth/login 更严 + 未命中回退全局 ────
@@ -116,13 +116,13 @@ public class RateLimiterMiddlewareTests
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
         // /api/auth/login：2 次放行、第 3 次拒绝（端点级更严生效）
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"))).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostAsync("/api/auth/login", new StringContent("{}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostAsync("/api/auth/login", new StringContent("{}"), TestContext.Current.CancellationToken)).StatusCode);
 
         // 其它路径未命中端点策略 → 回退全局（100 内放行；同 IP 端点配额已耗尽互不影响）
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/public")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/public", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── D5 分区隔离：不同 IP 互不影响 ────────────────────────────────────────────────────────
@@ -139,12 +139,12 @@ public class RateLimiterMiddlewareTests
         using var clientB = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.B);
 
         // IP-A 用尽配额
-        Assert.Equal(HttpStatusCode.OK, (await clientA.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await clientA.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await clientA.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await clientA.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // IP-B 独立配额
-        Assert.Equal(HttpStatusCode.OK, (await clientB.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await clientB.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await clientB.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await clientB.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── D6 用户分区：已认证用户按用户 ID 独立配额（Oracle C1 HttpContext.User 解析）─────────
@@ -163,11 +163,11 @@ public class RateLimiterMiddlewareTests
         using var user1ClientOtherIp = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.B, "user-1");
 
         // user-1：配额 1 次（换 IP 仍共享用户配额）
-        Assert.Equal(HttpStatusCode.OK, (await user1Client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await user1ClientOtherIp.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await user1Client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await user1ClientOtherIp.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // user-2：独立配额（不同用户互不影响）
-        Assert.Equal(HttpStatusCode.OK, (await user2Client.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await user2Client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── C1 / D6 匿名 fallback IP：未认证请求按 IP 分区 ───────────────────────────────────────
@@ -185,14 +185,14 @@ public class RateLimiterMiddlewareTests
         using var user1 = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A, "user-1");
 
         // 匿名 + IP-A：按 IP 分区
-        Assert.Equal(HttpStatusCode.OK, (await anonA.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await anonA.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await anonA.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await anonA.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // 匿名 + IP-B：独立配额
-        Assert.Equal(HttpStatusCode.OK, (await anonB.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await anonB.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
 
         // 已认证 user-1 走用户分区（与匿名 IP 配额互不干扰）
-        Assert.Equal(HttpStatusCode.OK, (await user1.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await user1.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── D7 RejectionStatusCode / RetryAfter 可配置 ───────────────────────────────────────────
@@ -207,8 +207,8 @@ public class RateLimiterMiddlewareTests
         });
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     [Fact]
@@ -221,8 +221,8 @@ public class RateLimiterMiddlewareTests
         });
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        var rejected = await client.GetAsync("/api/test");
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        var rejected = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
         Assert.Null(rejected.Headers.RetryAfter);
     }
@@ -240,8 +240,8 @@ public class RateLimiterMiddlewareTests
         using var clientA = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
         using var clientB = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.B);
 
-        Assert.Equal(HttpStatusCode.OK, (await clientA.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await clientB.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await clientA.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await clientB.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── D8 Options 绑定：配置节驱动中间件（无编程式 configure）───────────────────────────────
@@ -263,9 +263,9 @@ public class RateLimiterMiddlewareTests
         using var suite = RateLimitingTestInfra.BuildHost(configure: null, configuration: configuration);
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync("/api/test", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     // ── 标注式端点策略：MapTkfwRateLimiter 挂命名策略（AddPolicy 注册）──────────────────────
@@ -290,8 +290,8 @@ public class RateLimiterMiddlewareTests
             });
         using var client = RateLimitingTestInfra.CreateClient(suite.Server, TestIps.A);
 
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"))).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostAsync("/api/auth/login", new StringContent("{}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/login", new StringContent("{}"), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostAsync("/api/auth/login", new StringContent("{}"), TestContext.Current.CancellationToken)).StatusCode);
     }
 }

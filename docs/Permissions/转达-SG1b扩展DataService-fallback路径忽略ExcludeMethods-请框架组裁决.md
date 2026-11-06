@@ -75,3 +75,19 @@ Permissions V0.9.7（tag `Permissions/v0.9.7`）已按此落地：`GetGrantedNam
 | 日期 | 变更 |
 |------|------|
 | 2026-11-06 | 初稿：fallback 路径忽略 ExcludeMethods/IncludeMethods 缺陷定位（代码位置 + ALC 特性实证 + 清缓存重建复验 + GenerateIgnore 对照实证） |
+
+---
+
+## 七、闭环结论（框架组，2026-11-06，v4.10.113 / ADR129）
+
+**已根治**（方案 A：补全过滤链 + 单源实现 + 保留默认纳入；不绕行、不兼容）。
+
+| 项 | 结论 |
+|---|---|
+| 根因 | 转达定位准确（fallback 只判 `[GenerateIgnore]`）。框架侧另发现两处更深缺口：① fallback「默认纳入」vs 主路径「默认排除」（V4.9.40）——同一 DataService 因 TUser 可推断性产生两套契约；② fallback 未传 `reportDiagnostic`，且扩展编译分支在诊断上报循环前 `return`（`TKWCTRL007` 从不发射） |
+| 修复 | 谓词单源 `BuildDataServiceMethodPredicate`（优先级 `GenerateIgnore > ExcludeMethods > GenerateControllerMethod > IncludeMethods > 默认`）；fallback = 默认纳入、主路径 = false（行为逐字节不变）；`MatchesAnyPattern` 上提共用；诊断链路补齐（含扩展分支上报点）；**Service 目标 `[GenerateIgnore]` 一并修复**（此前两路径均 no-op） |
+| 已知边界（ADR129） | fallback 不补充基类 CRUD（逃生通道 = 扩展内声明同名 `new` 转发方法；`override` 会被提取器跳过）；Service 目标的 `ExcludeMethods`/`IncludeMethods` 仍为 no-op；扩展分支 `allExtTargets` 不含引用程序集中非扩展程序集的 B2 目标（诊断仍不上报，预存） |
+| 扩展侧动作 | CPM lockstep ≥ **4.10.113** → 重建；`GetGrantedNamesByProviderKeyAsync` 可从 `[GenerateIgnore]` 回退为纯 `ExcludeMethods` 声明（双保险可留，但不再必需）；若存在「剥 Async 后同名」方法，重建后会新增 `TKWCTRL007` Warning（`TreatWarningsAsErrors` 需处理） |
+| 验证 | `Domain.SG.Tests` **328/328**（+14：F1~F14）、`Domain.ApiService.SG.Tests` 163/163、`Domain.ApiClient.SG.Tests` 72/72、slnx Release 0 警告 0 错误；变异 ×5 全拦截 |
+
+文档：`_TKWF/docs/02-迭代开发/ADR129-SG1b扩展DataService方法提取语义-单源过滤链与默认纳入策略.md`、`V4/v4.10.113-*-{开发方案,审核报告}.md`、CHANGELOG v4.10.113。

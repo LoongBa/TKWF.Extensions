@@ -82,26 +82,27 @@ public class WeChatOperationsStatusTests : WeChatOperationsTestHost
     {
         using var _ = this;
         var (_, user) = BindScope();
-        var interactionLog = user.Use<InteractionLogEntityDataService>();
-        var now = DateTime.UtcNow;
+var interactionLog = user.Use<InteractionLogEntityDataService>();
+        // 锚定今日零点（跨 UTC 日界稳定——相对 UtcNow 的 -10min 偏移在 [00:00,00:10) 窗口会漏入昨日 == 既有失败先例）
+        var today = DateTime.UtcNow.Date;
 
         // 今日 3 条：ReplyContent 非空 / ReplyMaterialId 非空（命中 2 条）+ 未回复（未命中 1 条）
         await interactionLog.EntityCreateAsync(new InteractionLogEntity
         {
-            ChannelId = Ch, OpenId = "o1", MsgTime = now, ReplyContent = "欢迎语",
+            ChannelId = Ch, OpenId = "o1", MsgTime = today.AddHours(1), ReplyContent = "欢迎语",
         }, TestContext.Current.CancellationToken);
         await interactionLog.EntityCreateAsync(new InteractionLogEntity
         {
-            ChannelId = Ch, OpenId = "o2", MsgTime = now.AddMinutes(-5), ReplyMaterialId = 1,
+            ChannelId = Ch, OpenId = "o2", MsgTime = today.AddHours(2), ReplyMaterialId = 1,
         }, TestContext.Current.CancellationToken);
         await interactionLog.EntityCreateAsync(new InteractionLogEntity
         {
-            ChannelId = Ch, OpenId = "o3", MsgTime = now.AddMinutes(-10),
+            ChannelId = Ch, OpenId = "o3", MsgTime = today.AddHours(3),
         }, TestContext.Current.CancellationToken);
         // 昨日 1 条（今日半开区间窗口外——不计数）
         await interactionLog.EntityCreateAsync(new InteractionLogEntity
         {
-            ChannelId = Ch, OpenId = "o4", MsgTime = DateTime.UtcNow.Date.AddDays(-1), ReplyContent = "昨日回复",
+            ChannelId = Ch, OpenId = "o4", MsgTime = today.AddDays(-1), ReplyContent = "昨日回复",
         }, TestContext.Current.CancellationToken);
 
         var status = await user.Use<IWeChatOperationsStatusService>()

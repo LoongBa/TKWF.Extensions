@@ -1,6 +1,6 @@
 # TKWF.Ext.Permissions 权限扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.4 (建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化 + **V0.9.1 领域自治根治 ADR90——删 EntityDACPermissionStore，PermissionChecker 继承 DomainServiceBase<TUserInfo> + AddConstructibleService**；V0.9.3 = 既有 v0.9.2 tag 后的整改发布版；**V0.9.4 = Development 启动崩溃修复——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参，同 AuthCenter V0.5.4 defect 复制链**) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.7 (**GEN007/WARN007 同源暴露面修复——`GetGrantedNamesByProviderKeyAsync` 标 `[GenerateIgnore]` 排除出 ExtI 契约接口与控制器/REST/GraphQL 管理面**；V0.9.4 = 建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化；V0.9.1 领域自治根治 ADR90——删 EntityDACPermissionStore，PermissionChecker 继承 DomainServiceBase<TUserInfo> + AddConstructibleService；V0.9.3 = 既有 v0.9.2 tag 后的整改发布版；V0.9.4 = Development 启动崩溃修复——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参) | **框架**: .NET 10
 
 **核心约束**: 细粒度权限、fail-closed 安全语义、ORM 无关持久化、SG1 声明式实体
 
@@ -159,7 +159,7 @@ public class MyService
 | **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 | **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]`（SubDomain=Permissions） |
 | **`PermissionGrantEntityDto`** | 权限授予 DTO（xCodeGen 生成 record） | 内置，`IDomainDto<PermissionGrantEntity>` 实现 |
-| **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询 + REST 管理 API） | 内置，`DomainDataServiceBase<,>` 非泛型版 + `[GenerateController(FromDataService=true)]` |
+| **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询 + REST 管理 API；**V0.9.7 暴露面收敛**——`GetGrantedNamesByProviderKeyAsync` 标 `[GenerateIgnore]` 排除：返回 `Dictionary<string, HashSet<string>>` GraphQL 不可映射（消费方 GEN007）+ 内部归因查询本不应对管理面暴露；消费方 Store 经 `User.Use<...>()` 直调不受影响） | 内置，`DomainDataServiceBase<,>` 非泛型版 + `[GenerateController(FromDataService=true)]` |
 | **`PermissionOptions`** | 配置（`TKWF:Permissions` 节，含 `SeedAdminRoleName`） | 内置，SG1 `GeneratedOptionsBindings` 自动绑定 |
 | **`IRoleProvider<TUserInfo>`** | 角色提供者——为权限检查器解析用户角色列表（V0.6.0） | `DefaultRoleProvider<TUserInfo>`（内部，从 `IUserInfo.Roles` 解析；消费方可 DI 覆盖） |
 | **`PermissionNames`** | 系统权限名常量（V0.7.0，含 `Admin.All` 通配） | 内置，静态常量 |
@@ -234,6 +234,13 @@ CREATE TABLE [PermissionGrant] (
 - **W2 SQL 迁移脚本**：`scripts\PermissionGrant.sql` 随 NuGet 发布（生产 DBA/CI 迁移）。
 - **W3 Admin.All 系统权限**：`PermissionNames.AdminAll`——用户/任一角色拥有即对所有已定义权限放行；种子预置 admin 角色 Admin.All（替代 V0.4.0 逐权限授予）。
 - **W4 消费方集成验证**：`_Tests/Extension.Permissions.Consumer` 激活 SG1b 验证控制器接口名在消费方记录 + 三钩子接线 + TryAdd 语义。
+
+### 1f. V0.9.7：GEN007/WARN007 同源暴露面修复（已实施，2026-11-06）
+
+- **问题**：消费方 WebApi 引用 Permissions 后，SG2a 扫描 `PermissionGrantEntityDataService` 暴露面 → `GetGrantedNamesByProviderKeyAsync` 返回 `Dictionary<string, HashSet<string>>`（GraphQL 不可映射）→ `GEN007` error 编译阻塞；绕行（WebApi 不引 Permissions）则 `WARN007`（接口解析失败，端点/客户端缺失）。
+- **根因（双层）**：① 该方法为消费方 `IPermissionStore` 批量归因的内部能力，本不应暴露为 REST/GraphQL 管理 API；② 扩展 DataService（非泛型 `DomainServiceBase`、无具体 TUser）在 SG1b 走「TUser 推断失败 fallback 路径」，该路径**只认 `[GenerateIgnore]`、忽略 `ExcludeMethods`**（主框架缺陷，已转达框架组）。
+- **修复**：方法标 `[GenerateIgnore]`（优先级最高，黑/白名单模式均生效）+ `ExcludeMethods` 并存双保险 → ExtI 契约接口与消费方控制器均排除（实证：生成物 0 命中）；消费方 Store 内部直调路径零影响。
+- **验证**：Permissions 51 + Consumer 5 全绿；slnx 0 错误；ExtI 接口 7→6 方法、控制器 0 命中。
 
 ### 1e. V0.8.1：权限检查 N+1 优化（已实施）
 

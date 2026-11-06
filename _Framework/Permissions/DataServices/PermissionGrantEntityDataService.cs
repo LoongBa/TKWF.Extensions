@@ -31,8 +31,25 @@ namespace TKWF.Ext.Permissions;
 //   RevokeGrantAsync（撤销——替代 DeleteAsync），均 [GenerateControllerMethod] 暴露。
 // - 只读查询保留（GetByIdAsync/SelectAsync/SelectPageAsync/CountAsync）——只读无越权授权能力；
 //   业务读另有 GetByPermissionNameAsync/GetByProviderAsync/GetGrantAsync 覆盖主要查询模式。
+//
+// 【GEN007 修复（2026-11-06，DMP-Lite 转达方案 A）】
+// - ExcludeMethods 增 "GetGrantedNamesByProviderKeyAsync"——该方法为消费方 IPermissionStore
+//   批量归因的内部查询能力（返回 Dictionary<string, HashSet<string>>，GraphQL 不可映射；
+//   消费方 SG2a 经 FromDataService 扫描暴露面 → GEN007 error 编译阻塞）。
+//   排除后：接口/实现保持 public（消费方 Store 经 User.Use<PermissionGrantEntityDataService>() 直调不受影响），
+//   仅控制器/REST/GraphQL 暴露面排除 → 消费方 WARN007（WebApi 看不到 Permissions 契约时）+ GEN007 双归零。
+// - ⚠️ 双保险：方法同时标 [GenerateIgnore]——扩展 DataService（非泛型 DomainServiceBase、无具体 TUser）
+//   在 SG1b 里走「TUser 推断失败 fallback 路径」，该路径只认 [GenerateIgnore]（完全忽略 ExcludeMethods/IncludeMethods，
+//   主框架缺陷已转达）；GenerateIgnore 优先级最高（黑/白名单模式均生效），确保 ExtI 契约接口与消费方控制器均不含该方法。
 [GenerateController(FromDataService = true,
-    ExcludeMethods = new[] { "CreateAsync", "UpdateAsync", "DeleteAsync" })]
+    ExcludeMethods = new[]
+    {
+        "CreateAsync", "UpdateAsync", "DeleteAsync",
+        // GEN007 修复（2026-11-06，DMP-Lite 转达方案 A）：内部批量归因查询返回
+        // Dictionary<string, HashSet<string>>——GraphQL 不支持该返回类型（消费方 SG2a GEN007 编译阻塞）；
+        // 本就不应暴露为 REST/GraphQL 管理 API（消费方 Store 经 User.Use<PermissionGrantEntityDataService>() 内部直调）。
+        "GetGrantedNamesByProviderKeyAsync",
+    })]
 public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityDAC<PermissionGrantEntity> dac)
         : DomainDataServiceBase<PermissionGrantEntity, PermissionGrantEntityDto>(user, dac, hasSoftDelete: false)
 {
@@ -80,6 +97,7 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
     /// 多用户权限检查需按用户归因（GetGrantedNamesByProviderAsync 投影丢弃 ProviderKey）。
     /// 实现：同查询 GroupBy ProviderKey 保留归因——3N 查询 → N+2（1 分组用户级 + N 角色解析 + 1 分组角色级）。</para>
     /// </summary>
+    [GenerateIgnore]
     public async Task<Dictionary<string, HashSet<string>>> GetGrantedNamesByProviderKeyAsync(
         string providerName, IEnumerable<string>? providerKeys, CancellationToken ct = default)
     {

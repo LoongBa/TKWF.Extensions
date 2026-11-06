@@ -213,7 +213,7 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
     [GenerateControllerMethod]
     public async Task<int> CleanupAsync(CancellationToken ct = default)
     {
-        var options = user.GetOptionalService<IOptions<AuditLoggingOptions>>()?.Value
+        var options = User.GetOptionalService<IOptions<AuditLoggingOptions>>()?.Value
             ?? new AuditLoggingOptions();   // 测试宿主/无配置回退默认（RetentionDays 90/CleanupBatchSize 500）
         var cutoffUtc = DateTime.UtcNow.AddDays(-options.RetentionDays);
         var batchSize = Math.Max(1, options.CleanupBatchSize);

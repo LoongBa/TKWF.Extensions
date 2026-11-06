@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Web.Authentication;
 using TKWF.Ext.Testing.Shared;
@@ -24,7 +25,7 @@ public class JwtAuthenticationMiddlewareTests
 {
     private const string DomainUserKey = "DomainUser"; // 对齐主框架 ContextExtractionMiddleware.DomainUserKey 常量值
 
-    private static TestServer CreateServer(Func<HttpContext, TokenValidationResult, Task<DomainUser<TestUserInfo>>>? restoreUser = null, bool invalidToken = false)
+    private static async Task<TestServer> CreateServer(Func<HttpContext, TokenValidationResult, Task<DomainUser<TestUserInfo>>>? restoreUser = null, bool invalidToken = false)
     {
         var helper = new TestAuthUserHelper();
         // v4.10.45 收敛迁移：静态方法 AddJwtAuthentication/UseTkfwJwtAuthentication 已删除——
@@ -38,45 +39,49 @@ public class JwtAuthenticationMiddlewareTests
                     : Task.FromResult(helper.CreateUserInstanceForTest())
         };
 
-        var builder = new WebHostBuilder()
-            .ConfigureServices(services =>
+        var host = await new HostBuilder()
+            .ConfigureWebHost(webBuilder =>
             {
-                extension.ConfigureServices(services);
-                // ambient 设施（Oracle5 方案 A——Web 宿主 WebAppBuilder 自动注册；此处测试宿主显式注册
-                // 验证与中间件 TokenVerificationContextWriter 写入协同）
-                services.AddTokenVerificationContext();
-                // 替换验证器：中间件行为测试用假验证器（真实验签 TokenServiceTests 已覆盖）
-                if (invalidToken)
-                    services.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new ThrowingTokenVerifier()));
-                else
-                    services.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new FakeTokenVerifier()));
-            })
-            .Configure(app =>
-            {
-                // JwtAuthenticationMiddleware（Bearer JWT → 恢复委托 → Items[DomainUserKey]）——BeforeAuthentication 锚点语义
-                extension.ConfigureMiddleware(app, new TKW.Framework.Domain.Hosting.DomainWebOptions());
-                // 断言中间件：读 Items[DomainUserKey] → 响应头（验证恢复接线；UserInfo 填充经 LoginAsUserAsync 归消费方 Host 全链路）；
-                // 同时读 ambient（ITokenVerificationContext）→ 响应头（Oracle5 往返断言——中间件写、管线内读）
-                app.Use((ctx, next) =>
+                webBuilder.UseTestServer();
+                webBuilder.ConfigureServices(services =>
                 {
-                    var user = ctx.Items[DomainUserKey] as DomainUser<TestUserInfo>;
-                    if (user != null)
-                        ctx.Response.Headers["X-Auth-User"] = "restored";
-                    var ambient = ctx.RequestServices.GetService<ITokenVerificationContext>()?.Current;
-                    if (ambient != null)
-                        ctx.Response.Headers["X-Ambient-Jti"] = ambient.Jti;
-                    return next(ctx);
+                    extension.ConfigureServices(services);
+                    // ambient 设施（Oracle5 方案 A——Web 宿主 WebAppBuilder 自动注册；此处测试宿主显式注册
+                    // 验证与中间件 TokenVerificationContextWriter 写入协同）
+                    services.AddTokenVerificationContext();
+                    // 替换验证器：中间件行为测试用假验证器（真实验签 TokenServiceTests 已覆盖）
+                    if (invalidToken)
+                        services.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new ThrowingTokenVerifier()));
+                    else
+                        services.Replace(ServiceDescriptor.Scoped<ITokenVerifier>(_ => new FakeTokenVerifier()));
                 });
-                app.Run(ctx => { ctx.Response.StatusCode = 200; return Task.CompletedTask; });
+                webBuilder.Configure(app =>
+                {
+                    // JwtAuthenticationMiddleware（Bearer JWT → 恢复委托 → Items[DomainUserKey]）——BeforeAuthentication 锚点语义
+                    extension.ConfigureMiddleware(app, new TKW.Framework.Domain.Hosting.DomainWebOptions());
+                    // 断言中间件：读 Items[DomainUserKey] → 响应头（验证恢复接线；UserInfo 填充经 LoginAsUserAsync 归消费方 Host 全链路）；
+                    // 同时读 ambient（ITokenVerificationContext）→ 响应头（Oracle5 往返断言——中间件写、管线内读）
+                    app.Use((ctx, next) =>
+                    {
+                        var user = ctx.Items[DomainUserKey] as DomainUser<TestUserInfo>;
+                        if (user != null)
+                            ctx.Response.Headers["X-Auth-User"] = "restored";
+                        var ambient = ctx.RequestServices.GetService<ITokenVerificationContext>()?.Current;
+                        if (ambient != null)
+                            ctx.Response.Headers["X-Ambient-Jti"] = ambient.Jti;
+                        return next(ctx);
+                    });
+                    app.Run(ctx => { ctx.Response.StatusCode = 200; return Task.CompletedTask; });
+                });
             })
-            .UseTestServer();
-        return new TestServer(builder);
+            .StartAsync();
+        return host.GetTestServer();
     }
 
     [Fact]
     public async Task BearerRequest_RestoresDomainUser_IntoItems()
     {
-        using var server = CreateServer();
+        using var server = await CreateServer();
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
 
@@ -89,7 +94,7 @@ public class JwtAuthenticationMiddlewareTests
     [Fact]
     public async Task NoBearer_NoDomainUserInItems()
     {
-        using var server = CreateServer();
+        using var server = await CreateServer();
         var client = server.CreateClient();
 
         var resp = await client.GetAsync("/api/test", TestContext.Current.CancellationToken);
@@ -101,7 +106,7 @@ public class JwtAuthenticationMiddlewareTests
     [Fact]
     public async Task InvalidBearer_Rejected_401()
     {
-        using var server = CreateServer(invalidToken: true);
+        using var server = await CreateServer(invalidToken: true);
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "forged-token");
 
@@ -114,7 +119,7 @@ public class JwtAuthenticationMiddlewareTests
     public async Task RestoreUser_ReturnsNull_NoDomainUserInItems()
     {
         // 恢复委托返回 null（消费方判定不恢复）→ 中间件不写 Items（尊重委托结果）
-        using var server = CreateServer((ctx, token) => Task.FromResult<DomainUser<TestUserInfo>>(null!));
+        using var server = await CreateServer((ctx, token) => Task.FromResult<DomainUser<TestUserInfo>>(null!));
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
 
@@ -130,7 +135,7 @@ public class JwtAuthenticationMiddlewareTests
     {
         // Oracle5（方案 A）集成往返：JwtAuthenticationMiddleware 验签成功后写 ambient →
         // 断言中间件读 ITokenVerificationContext.Current 得 jti（管线内可读 = 门面 GetCurrentTokenInfoAsync 数据源就绪）
-        using var server = CreateServer();
+        using var server = await CreateServer();
         var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "valid-token");
 
@@ -145,7 +150,7 @@ public class JwtAuthenticationMiddlewareTests
     public async Task Ambient_ClearedAfterRequest_NoLeakToNextRequest()
     {
         // G13 泄漏守卫：请求结束时 finally 置 null——下一请求（无 Bearer）管线内读 ambient 必须为 null
-        using var server = CreateServer();
+        using var server = await CreateServer();
         var client = server.CreateClient();
 
         // 请求 1：Bearer → 写 ambient（确认已写入）

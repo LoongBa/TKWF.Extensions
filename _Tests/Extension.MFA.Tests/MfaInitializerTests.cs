@@ -155,7 +155,7 @@ public class MfaInitializerTests
     }
 
     [Fact]
-    public void Host_Di_Resolves_MfaService_WithTwoMethods_And_DefaultOptions()
+    public async Task Host_Di_Resolves_MfaService_WithTwoMethods_And_DefaultOptions()
     {
         using var host = MfaTestHost.Create();
 
@@ -164,7 +164,7 @@ public class MfaInitializerTests
         Assert.NotNull(host.Mfa);
 
         // 集合在 MfaService 构造时已帧内枚举——经 GetEnabledMethodsAsync 验证 2 方法注册序（C5 防 SMS 静默丢失）
-        var enabledMethods = host.Mfa.GetEnabledMethodsAsync("probe-user", ct: TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        var enabledMethods = await host.Mfa.GetEnabledMethodsAsync("probe-user", ct: TestContext.Current.CancellationToken);
         Assert.Equal(new[] { "totp", "sms" }, enabledMethods.Select(m => m.Method).ToArray());
 
         // Options 默认值（方案 §四决策 7 全表）

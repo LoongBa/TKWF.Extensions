@@ -6,7 +6,8 @@
     <SccAuxPath>SAK</SccAuxPath>
     <SccLocalPath>SAK</SccLocalPath>
     <Platforms>AnyCPU;x64</Platforms>
-    <NoWarn>$(NoWarn);TKWF_SG1b_TKWF0022;TKWF_SG1b_TKWF0030</NoWarn>
+    <NoWarn>$(NoWarn);TKWF_SG1b_TKWF0022;TKWF_SG1b_TKWF0030;TKWF_SG1a_CTRB001</NoWarn>
+    <!-- CTRB001 抑制（2026-11-06）：SG1a 扩展自身编译场景误报——[TKWFExtension] 泛型初始化器因无消费方 UserInfo 无法闭合被移除 → ExtensionInitializers 空 → 源码 I*Contributor 归属校验误判；消费方编译正常不报，待主框架修复 -->
   </PropertyGroup>
 
   <PropertyGroup>

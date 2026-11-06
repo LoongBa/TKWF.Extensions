@@ -59,7 +59,7 @@ namespace TKWF.Ext.Calendar
         // ── 事件 ──
 
         public async Task<CalendarEventEntity?> GetEventByIdAsync(long id, CancellationToken ct = default)
-            => NormalizeEvent(await EventDataService.GetByIdAsync(id, ct));
+            => NormalizeEvent(await EventDataService.EntityGetAsync(e => e.Id == id, ct));
 
         public async Task<IReadOnlyList<CalendarEventEntity>> GetSingleByRangeAsync(
             long? calendarId, DateTime? fromUtc, DateTime? toUtc, int skip, int take, CancellationToken ct = default)
@@ -84,8 +84,8 @@ namespace TKWF.Ext.Calendar
         public Task UpdateEventAsync(CalendarEventEntity entity, CancellationToken ct = default)
             => EventDataService.UpdateAsync(entity, ct);
 
-        public Task DeleteEventAsync(long id, CancellationToken ct = default)
-            => EventDataService.DeleteBatchAsync(new[] { id }, ct);
+        public async Task DeleteEventAsync(long id, CancellationToken ct = default)
+            => await EventDataService.DeleteBatchAsync(new[] { id }, ct);
 
         // ── 内部：SQLite DateTime 读出规范化 ──
         // FreeSql SQLite 把 UTC DateTime 存为本地墙钟（无 Kind 标识），读出 Kind=Unspecified 且偏移 +8

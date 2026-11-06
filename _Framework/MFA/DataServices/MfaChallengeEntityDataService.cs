@@ -51,10 +51,6 @@ partial class MfaChallengeEntityDataService(IDomainUser user, IEntityDAC<MfaChal
             x => new { IsConsumed = true },
             ct);
 
-    /// <summary>物理删除挑战（Disable 级联清理）。</summary>
-    public Task DeleteAsync(long id, CancellationToken ct = default)
-        => EntityDeleteBatchAsync(new[] { id }, ct);
-
     /// <summary>查询批量上限（挑战低频，兜底）。</summary>
     private const int MaxQuerySize = 1000;
 }

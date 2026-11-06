@@ -127,7 +127,7 @@ public class DashboardDataServiceTests
         Assert.Equal(3, dailySlices.Length);
         Assert.All(dailySlices, s =>
         {
-            Assert.IsNotType<IReadOnlyList<MetricSlice>>(s.Value);
+            Assert.IsNotAssignableFrom<IReadOnlyList<MetricSlice>>(s.Value);
             Assert.NotNull(s.Dimensions);
         });
     }

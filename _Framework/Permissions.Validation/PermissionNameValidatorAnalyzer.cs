@@ -47,7 +47,8 @@ namespace TKWF.Ext.Permissions.Validation
             "Permissions",
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
-            description: "编译期权限名校验：RequirePermission 引用了未声明的权限名（ADR D4，Warning 可升级为 Error）。");
+            description: "编译期权限名校验：RequirePermission 引用了未声明的权限名（ADR D4，Warning 可升级为 Error）.",
+            customTags: [WellKnownDiagnosticTags.CompilationEnd]);
 
         /// <inheritdoc />
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);

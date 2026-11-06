@@ -16,6 +16,9 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>AuthSurface/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.AuthSurface</PackageId>
+    <!-- TABLE002 抑制（2026-11-06）：跨扩展 VEntity（UserAppsView/UserRedemptionHistoryView）ViewSql 引用 AuthCenter 基表
+         TKWF_AuthAccount/TKWF_AuthGrant——正当跨扩展引用（ADR100 表名别名已注记），SG1a 在扩展自身编译无基表实体可见，预期警告 -->
+    <NoWarn>$(NoWarn);TKWF_SG1a_TABLE002</NoWarn>
     <Description>TKWF 扩展：授权面——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合（跨扩展 VEntity）+ 授权快照候选；行级 FK=AuthAccount.UId（P4）；兑换/应用查询经本扩展自有门面（UserCenter 退役后唯一通道）；兑换码 SHA256 哈希存储 + CAS 原子兑换 + 频控</Description>
   </PropertyGroup>
 

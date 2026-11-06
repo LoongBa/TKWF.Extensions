@@ -298,15 +298,14 @@ public class TokenServiceTests
     }
 
     [Fact]
-    public void Dev_MissingSigningKey_AutoGeneratesTemporary()
+    public async Task Dev_MissingSigningKey_AutoGeneratesTemporary()
     {
         var options = new AuthCenterOptions { IsProduction = false, Issuer = "auth-test" };
         var (service, stub) = CreateService(options);
         var account = CreateAccount();
-        stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
 
-        var result = service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken)
-            .GetAwaiter().GetResult();
+        var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, result.AccessToken.Split('.').Length);
     }
 

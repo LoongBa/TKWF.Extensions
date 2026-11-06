@@ -41,8 +41,8 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
     public async Task<List<PermissionGrantEntityDto>> GetByPermissionNameAsync(
         string permissionName, CancellationToken ct = default)
     {
-        var query = dac.Query.Where(g => g.PermissionName == permissionName);
-        var entities = await dac.ToListAsync(query, ct);
+        var query = Query.Where(g => g.PermissionName == permissionName);
+        var entities = await Dac.ToListAsync(query, ct);
         return entities.Select(PermissionGrantEntityDto.FromEntity).ToList();
     }
 
@@ -51,9 +51,9 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
     public async Task<List<PermissionGrantEntityDto>> GetByProviderAsync(
         string providerName, string providerKey, CancellationToken ct = default)
     {
-        var query = dac.Query
+        var query = Query
             .Where(g => g.ProviderName == providerName && g.ProviderKey == providerKey);
-        var entities = await dac.ToListAsync(query, ct);
+        var entities = await Dac.ToListAsync(query, ct);
         return entities.Select(PermissionGrantEntityDto.FromEntity).ToList();
     }
 
@@ -63,14 +63,14 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
     public async Task<HashSet<string>> GetGrantedNamesByProviderAsync(
         string providerName, IEnumerable<string>? providerKeys, CancellationToken ct = default)
     {
-        var query = dac.Query.Where(g => g.ProviderName == providerName && g.IsGranted);
+        var query = Query.Where(g => g.ProviderName == providerName && g.IsGranted);
         if (providerKeys != null)
         {
             var keys = providerKeys as IReadOnlyCollection<string> ?? providerKeys.ToList();
             if (keys.Count == 0) return new HashSet<string>(StringComparer.Ordinal);
             query = query.Where(g => keys.Contains(g.ProviderKey));
         }
-        var entities = await dac.ToListAsync(query, ct);
+        var entities = await Dac.ToListAsync(query, ct);
         return new HashSet<string>(entities.Select(e => e.PermissionName), StringComparer.Ordinal);
     }
 
@@ -83,14 +83,14 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
     public async Task<Dictionary<string, HashSet<string>>> GetGrantedNamesByProviderKeyAsync(
         string providerName, IEnumerable<string>? providerKeys, CancellationToken ct = default)
     {
-        var query = dac.Query.Where(g => g.ProviderName == providerName && g.IsGranted);
+        var query = Query.Where(g => g.ProviderName == providerName && g.IsGranted);
         if (providerKeys != null)
         {
             var keys = providerKeys as IReadOnlyCollection<string> ?? providerKeys.ToList();
             if (keys.Count == 0) return new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             query = query.Where(g => keys.Contains(g.ProviderKey));
         }
-        var entities = await dac.ToListAsync(query, ct);
+        var entities = await Dac.ToListAsync(query, ct);
         return entities
             .GroupBy(e => e.ProviderKey)
             .ToDictionary(
@@ -105,11 +105,11 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
         string permissionName, string providerName, string providerKey,
         CancellationToken ct = default)
     {
-        var query = dac.Query
+        var query = Query
             .Where(g => g.PermissionName == permissionName
                         && g.ProviderName == providerName
                         && g.ProviderKey == providerKey);
-        var entity = await dac.FirstOrDefaultAsync(query, ct);
+        var entity = await Dac.FirstOrDefaultAsync(query, ct);
         return entity == null ? null : PermissionGrantEntityDto.FromEntity(entity);
     }
 
@@ -121,16 +121,16 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
         string permissionName, string providerName, string providerKey,
         bool isGranted, CancellationToken ct = default)
     {
-        var query = dac.Query
+        var query = Query
             .Where(g => g.PermissionName == permissionName
                         && g.ProviderName == providerName
                         && g.ProviderKey == providerKey);
-        var existing = await dac.FirstOrDefaultAsync(query, ct);
+        var existing = await Dac.FirstOrDefaultAsync(query, ct);
 
         if (existing != null)
         {
             existing.IsGranted = isGranted;
-            await dac.UpdateAsync(existing, ct);
+            await EntityUpdateAsync(existing, ct);
             return PermissionGrantEntityDto.FromEntity(existing);
         }
         else
@@ -142,7 +142,7 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
                 ProviderKey = providerKey,
                 IsGranted = isGranted
             };
-            var inserted = await dac.InsertAsync(entity, ct);
+            var inserted = await EntityCreateAsync(entity, ct);
             return PermissionGrantEntityDto.FromEntity(inserted);
         }
     }
@@ -153,14 +153,14 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
         string permissionName, string providerName, string providerKey,
         CancellationToken ct = default)
     {
-        var query = dac.Query
+        var query = Query
             .Where(g => g.PermissionName == permissionName
                         && g.ProviderName == providerName
                         && g.ProviderKey == providerKey);
-        var existing = await dac.FirstOrDefaultAsync(query, ct);
+        var existing = await Dac.FirstOrDefaultAsync(query, ct);
         if (existing == null) return false;
 
-        await dac.DeleteAsync(existing, ct);
+        await EntityDeleteBatchAsync(new[] { existing.Id }, ct);
         return true;
     }
 }

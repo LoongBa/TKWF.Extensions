@@ -342,7 +342,7 @@ public class FeatureManagementInitializerTests
         public Task SetValueAsync(string name, string value, string providerName, string? providerKey, CancellationToken ct = default)
             => Task.CompletedTask;
 
-        public Task SetValueAsync<T>(string name, T value, string providerName, string providerKey, CancellationToken ct = default)
+        public Task SetValueAsync<T>(string name, T value, string providerName, string? providerKey, CancellationToken ct = default)
             => Task.CompletedTask;
 
         public Task DeleteValueAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)

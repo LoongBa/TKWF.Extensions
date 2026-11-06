@@ -521,7 +521,6 @@ public sealed class AuthCenterWebExtensionTests
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["TKWF:AuthCenter:Web:RoutePrefix"] = "/custom",
             ["TKWF:AuthCenter:Web:SmsLoginEndpointEnabled"] = "false",
             ["TKWF:AuthCenter:Web:ExternalLoginEndpointEnabled"] = "false",   // T5 新开关（替代 WechatLoginEndpointEnabled）
             ["TKWF:AuthCenter:Web:TokenVerifyEndpointEnabled"] = "false",   // V0.8.0 新开关
@@ -532,7 +531,6 @@ public sealed class AuthCenterWebExtensionTests
         var options = new AuthCenterEndpointOptions();
         config.GetSection("TKWF:AuthCenter:Web").Bind(options);
 
-        Assert.Equal("/custom", options.RoutePrefix);
         Assert.False(options.SmsLoginEndpointEnabled);      // 配置覆盖
         Assert.False(options.ExternalLoginEndpointEnabled); // T5 配置覆盖
         Assert.False(options.TokenVerifyEndpointEnabled);   // V0.8.0 新开关配置覆盖
@@ -563,9 +561,9 @@ public sealed class AuthCenterWebExtensionTests
         Assert.DoesNotContain(webProps, p => p.Name == nameof(AuthCenterOptions.EnabledAuthTypes));
         Assert.DoesNotContain(webProps, p => p.Name == nameof(AuthCenterOptions.LoginProtection));
 
-        // 领域 Options 不得含暴露面属性（RoutePrefix——防双源）
+        // 领域 Options 不得含暴露面属性（RoutePrefix——防双源；V0.12.0 起过时，MapGenerated 组路径由 TKWF:Api:Modules 控制）
         var domainProps = typeof(AuthCenterOptions).GetProperties();
-        Assert.DoesNotContain(domainProps, p => p.Name == nameof(AuthCenterEndpointOptions.RoutePrefix));
+        Assert.DoesNotContain(domainProps, p => p.Name == "RoutePrefix");
     }
 
     // ═══════════════════ B3b 新增：errorCode 存活断言（Oracle1 核心） ═══════════════════

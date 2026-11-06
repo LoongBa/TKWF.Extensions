@@ -36,10 +36,6 @@ partial class CalendarEventEntityDataService(IDomainUser user, IEntityDAC<Calend
         => EntitySelectAsync(BuildRecurringFilterPredicate(calendarId, fromUtc, toUtc), skip, take,
             q => q.OrderBy(e => e.StartUtc).ThenBy(e => e.Id), ct);
 
-    /// <summary>按 Id 查事件实体（Manager 更新/删除定位用）。</summary>
-    public Task<CalendarEventEntity?> GetByIdAsync(long id, CancellationToken ct = default)
-        => EntityGetAsync(e => e.Id == id, ct);
-
     /// <summary>按日历查全部事件（删除保护/审计用）。</summary>
     public Task<List<CalendarEventEntity>> GetByCalendarIdAsync(long calendarId, CancellationToken ct = default)
         => EntitySelectAsync(e => e.CalendarId == calendarId, 0, MaxBatchRead, null, ct);
@@ -55,10 +51,6 @@ partial class CalendarEventEntityDataService(IDomainUser user, IEntityDAC<Calend
     /// <summary>更新事件（全字段更新，返回更新后实体）。</summary>
     public Task<CalendarEventEntity> UpdateAsync(CalendarEventEntity entity, CancellationToken ct = default)
         => EntityUpdateAsync(entity, ct);
-
-    /// <summary>按 Id 批量物理删除（hasSoftDelete:false）。</summary>
-    public Task<int> DeleteBatchAsync(IEnumerable<long> ids, CancellationToken ct = default)
-        => EntityDeleteBatchAsync(ids, ct);
 
     /// <summary>单次分支谓词（C1）：RecurrenceRule==null + CalendarId + StartUtc &lt; to。
     /// <para><b>EndUtc 重叠判定不下推（SQLite 参数/列墙钟语义在恰等边界不可靠——AllDay 次日 00:00 边界

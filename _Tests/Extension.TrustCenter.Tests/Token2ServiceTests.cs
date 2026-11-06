@@ -60,7 +60,6 @@ public class Token2ServiceTests
         var issued = await service.IssueToken2Async(new Token2IssueRequest("u-100", "app-1", null), TestContext.Current.CancellationToken);
 
         // 直接构造 kid=unknown 的 header（签名部分原样——kid 白名单先于签名校验拒绝）
-        var forgedHeader = "{\"alg\":\"ES256\",\"typ\":\"JWT\",\"kid\":\"unknown-kid\"}";
         var parts = issued.Token.Split('.');
         var forged = SignatureHeader(parts[1]);
 

@@ -107,12 +107,11 @@ public class TemplateManagerTests
         await manager.DraftAsync("k", "first draft", ct: TestContext.Current.CancellationToken);
         var result = await manager.DraftAsync("k", "updated draft", ct: TestContext.Current.CancellationToken);
 
-        // 单 Draft：upsert 而非新增
+// 单 Draft：upsert 而非新增
         var all = await manager.ListVersionsAsync("k", CancellationToken.None);
-        Assert.Equal(1, all.Count);
+        Assert.Single(all);
         Assert.Equal("updated draft", result.Content);
 
-        Assert.Single(all);
         Assert.Equal("updated draft", all[0].Content);
     }
 

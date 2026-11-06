@@ -35,10 +35,6 @@ partial class TagRuleEntityDataService(IDomainUser user, IEntityDAC<TagRuleEntit
         string dimension, string tagName, string pattern, CancellationToken ct = default)
         => EntityGetAsync(r => r.Dimension == dimension && r.TagName == tagName && r.Pattern == pattern, ct);
 
-    /// <summary>按 Id 查实体（UpdateAsync 定位用）。</summary>
-    public Task<TagRuleEntity?> GetByIdAsync(long id, CancellationToken ct = default)
-        => EntityGetAsync(r => r.Id == id, ct);
-
     /// <summary>幂等创建（业务键已存在返回既有；否则插入返回新实体）。</summary>
     public async Task<TagRuleEntity> CreateOrGetAsync(TagRuleEntity entity, CancellationToken ct = default)
     {

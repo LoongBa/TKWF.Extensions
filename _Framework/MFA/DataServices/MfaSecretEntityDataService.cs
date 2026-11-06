@@ -43,10 +43,6 @@ partial class MfaSecretEntityDataService(IDomainUser user, IEntityDAC<MfaSecretE
     public Task<MfaSecretEntity> UpdateAsync(MfaSecretEntity entity, CancellationToken ct = default)
         => EntityUpdateAsync(entity, ct);
 
-    /// <summary>物理删除绑定（Disable 解绑）。</summary>
-    public Task DeleteAsync(long id, CancellationToken ct = default)
-        => EntityDeleteBatchAsync(new[] { id }, ct);
-
     /// <summary>查询批量上限（防高频用户全量拉取——单用户绑定数极少，此限为兜底）。</summary>
     private const int MaxQuerySize = 1000;
 }

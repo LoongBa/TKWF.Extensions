@@ -34,7 +34,7 @@
 | `IPageContributor` 接口本体 | ❌ **未落地**（v4.10.73 明示待实现：接口本体 + TS codegen + `@tkwf/reference-components`） | 页面贡献机制基建缺口（框架侧后续，落地后另行通知） |
 | R2 路径（消费方自研前端直连 REST） | ✅ 可用兜底 | GUI 在 IPageContributor 落地前用此路径，待机制可用后声明式贡献（§八 4） |
 
-**处置**：微信域 GUI 按 R2 路径起步（消费方自研前端直连 `[GenerateController]` 端点）；IPageContributor 落地后按 `Tkwf.Page` 形态声明式贡献（不阻塞、可演进——零破坏切换）。
+**处置**：微信域 GUI 按 R2 路径起步（消费方自研前端直连 `[GenerateController]` 端点）；IPageContributor 落地后按 `Tkwf.Page` 形态声明式贡献（不阻塞、可演进——零破坏切换）。**⚠️ R2 增长上限（Oracle2 C4）**：`IPageContributor` 落地后，**新页面必须用声明式贡献**，既有 R2 页面按迁移计划迁离——R2 不得用于新页面（防漂移为 de-facto 标准，P5 显式决策锁定）。
 
 ---
 
@@ -55,6 +55,7 @@
 | 菜单管理 | 菜单树可视化编辑（raw JSON 自由形态）+ 发布链（快照/版本/审计）+ 当前菜单反查 | `IMenuService` | 同上 |
 | 订阅统计 | 按日趋势/汇总卡（新增/取消/净增/累计） | `ISubscriptionStatService` / `IWeChatOperationsStatusService` | 同上 |
 | 交互日志 | 日志检索 + 匹配过程明细（MatchTraceJson）+ 转发日志 | `ILogQueryService` / `IMessageForwardDispatcher` 对账面 | `WeChatOperations.Query` |
+| **网关管理** | **路由规则编辑器（CRUD + 排序 + 启用）/ 转发端点管理 / 熔断状态查看 / 运行时开关** | `IMessageGatewayService` `/gateway/*`（rules×3 + endpoints×3 + status + enabled + forward-logs，**Oracle2 C1 补齐**） | `WeChatOperations.Manage` |
 | 状态卡 | 网关状态/规则命中/端点健康聚合 | `IWeChatOperationsStatusService` | `WeChatOperations.Query` |
 
 > 页面清单以既有门面契约为准（不新增图面 API——缺能力走转达框架组/扩展组补契约原语，禁止 GUI 直连 DB/ORM/微信）。
@@ -65,7 +66,7 @@
 
 1. **只消费 REST**：GUI 页面仅经 `[GenerateController]` 端点（`User.Use<T>` 同一路径，DI004）——**不直连微信、不读 DB、不引平台库 DLL、不注 ORM**
 2. **自备前端资产**：SPA 静态资源（StaticWebAssets/RCL——ADR106 决策 5 许可路径）、消费方自研前端直连 REST（R2 路径）
-3. **装配一行**：`UseWebExtensions(e => e.Add<PageAssemblyWebExtension>())` + 页面静态路由；Domain 白名单双声明（WeChatChannels + WeChatOperations——**漏声明 WeChatChannels → keyed provider 缺失 → 运行时 throw**，拆分方案 O4 警示）
+3. **装配一行**：`UseWebExtensions(e => e.Add<PageAssemblyWebExtension>())` + 页面静态路由；Domain 白名单双声明（WeChatChannels + WeChatOperations——**漏声明 WeChatChannels → keyed provider 缺失 → 运行时 throw**，WeChatChannels 拆分方案 O4 警示）
 4. **界面装配机制**：IPageContributor 未落地 → R2 兜底；落地后 `Tkwf.Page` 声明式贡献（零破坏演进）
 5. **菜单 poco 共享**：GUI 不引平台库 DLL——菜单结构 raw JSON（编辑器自由形态，不类型化）；如需类型化拆 Abstractions 契约包（Oracle P2 待触发）
 6. **安全红线继承**：凭证即错即脱敏（DTO 投影不含凭证 + 出站日志脱敏）；页面不落明文
@@ -95,9 +96,11 @@
 ### 7.2 拆回条件（自运营方案 §八 扩充）
 
 1. **IPageContributor 落地**（页面贡献机制可用——框架侧缺口的驱动信号）
-2. **GUI 稳定**：DMP 侧 N 次迭代验证（页面清单 §四 全量实现 + 无契约缺口返工）
+2. **GUI 稳定**（Oracle2 C2 具象化——P5 显式决策，替代原"N 次迭代"）：(a) §四 全量页面（含 C1 网关管理页）已实现并上线生产；(b) 无 P0/P1 UI 缺陷 open；(c) 最近 2 次迭代**转达环静默**（无契约缺口返工）
 3. **资产可迁移**：消费方前端资产与扩展包 StaticWebAssets 形态对齐（转换路径验证）
 4. **转达闭环**：DMP 实现中暴露的模式缺口（装配机制/契约原语）已转达并按需修复
+5. **契约稳定性**（Oracle2 C4）：最近 K 次迭代门面契约（REST 端点/DTO/权限键）无破坏性变更——回归即冻结不稳定契约
+6. **权限键定稿**（Oracle2 C4）：`WeChatChannels.Query/Manage` / `WeChatOperations.Query/Manage` 回归前定稿（回归后变更须破坏性版本）
 
 ### 7.3 回收动作
 
@@ -117,9 +120,10 @@
 ## 九、评审纪律与变更记录
 
 1. **本方案 Oracle 评审**（实施前必做——本期交付物为方案本身）
-2. DMP 实现完成后：code-reviewer 迭代审核 → 回收验收（§七）→ 审核报告
+2. DMP 实现完成后：code-reviewer 迭代审核 → 回收验收（§七）→ 审核报告；**拆回时另起 `WeChatOperations.UI` 开发方案 → Oracle 评审（实施前必做，Oracle2 C3——新建扩展循 AGENTS §3 步骤 3）→ 实施 → code-reviewer 审核 → 审核报告**
 3. 主框架 `总览和跟踪.md` 微信域状态勾选；WEB GUI 拆回时更新根 README 版本表
 
 | 日期 | 变更 |
 |------|------|
 | 2026-11-06 | 初稿：履约 2026-10-18 方案交付物 6——§八 扩充为独立方案 + 2026-11-06 分工裁定（模式归扩展组/实现归消费方）纳入 + 页面清单（平台/租户双表）+ 回收验收扩充 |
+| 2026-11-06 | **Oracle2 PASS WITH CONDITIONS 复审（C1-C6）→ 修订闭环**：C1 页面清单补**网关管理页**（9 `/gateway/*` 端点 CRUD/端点/熔断/开关——转达 doc 已列"转发网关页"）；C2 "N 次迭代"具象化（全量页面上线 + 无 P0/P1 + 转达环静默 2 迭代）；C3 §九 显式要求**拆回时另起 `WeChatOperations.UI` 开发方案 + Oracle 评审**（循 AGENTS §3）；C4 R2 **增长上限**条款（IPageContributor 落地后新页面必须声明式）+ 拆回条件补契约稳定性/权限键定稿 2 项；C5/C6 通用指南同步（见通用指南 §四之三）；小瑕疵 O4 归属措辞修正（→WeChatChannels 拆分方案 O4） |

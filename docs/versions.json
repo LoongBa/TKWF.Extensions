@@ -221,8 +221,8 @@
       "created": "2026-10-04"
     },
     "Permissions": {
-      "version": "0.9.8",
-      "tag": "Permissions/v0.9.8",
+      "version": "0.9.9",
+      "tag": "Permissions/v0.9.9",
       "created": "2026-11-07"
     },
     "Permissions.Abstractions": {

@@ -1,14 +1,15 @@
 # AGENTS 路由指南
 
-> 本文档是 Agents 的默认上下文。遇到以下问题时，去读对应文档。
+> 本文档是 Agent 的**路由导航**。遇到以下问题时，去读对应文档。
+> **开发规则（必读）**：仓库根 [`Agents_TKWF_Ext.md`](../Agents_TKWF_Ext.md)（OpenCode 经 `opencode.json` instructions 自动注入）——本文件仅做问题→文档的路由，不自持规则。
 
 ---
 
 ## 项目总览
 
 - 仓库：TKWF.Extensions — TKWF 业务扩展包仓库
-- 定位：`TKWF.Ext.*` 扩展（Tags/Permissions/Navigation 等）独立开发、独立版本，不进入主框架 slnx
-- 主框架：`../_TKWF/`（TKW.Framework，经 `$(TKWFSourceRoot)` ProjectReference 引用）
+- 定位：`TKWF.Ext.*` 扩展（Tagging/Permissions/Navigation 等）独立开发、独立版本，不进入主框架 slnx
+- 主框架：`../_TKWF/`（TKW.Framework，经 **PackageReference** 引用主框架**发布的 NuGet 包**（CPM 集中 `Directory.Packages.props`；本地联调为 DLL 模式 `UseLocalFw=true` 引用部署根 `build\refs\`）——2026-09-15 迁移，独立于主框架源码构建）
 - 扩展进度：主框架私有 `docs/03_扩展模块/总览和跟踪.md`（扩展迭代/跟踪不公开；公开仓库存代码/指南/**设计文档**）
 - 本仓库文档：`docs/`（设计文档/指南/模板/规则）
 - 设计思路与 ABP 兼容策略：`docs/扩展模块设计思路与ABP兼容策略.md`（公开——最优设计为默认，兼容 ABP 为特殊需求）
@@ -24,7 +25,7 @@
 | 设计思路 / ABP 兼容策略？ | `docs/扩展模块设计思路与ABP兼容策略.md` |
 | 扩展机制基座（TKWFExtension/三钩子/扩展包发现）？ | 主框架 `_TKWF/docs/D17-*.md` + `ADR37-39` |
 | 扩展通用接入/启用/接线（消费方视角、公共内容单一事实源）？ | `docs/扩展模块通用指南.md` |
-| 某个扩展怎么用？ | `_Framework/{扩展名}/README.md`（Tags）；`docs/{扩展名}/`（使用指南） |
+| 某个扩展怎么用？ | `_Framework/{扩展名}/README.md`（技术规范）；`docs/{扩展名}/`（使用指南） |
 | 架构决策记录（为什么选 X 不选 Y）？ | `docs/{扩展名}/ADR/`（新，公开）；主框架私有 `../_TKWF/docs/03_扩展模块/{扩展名}/ADR/`（历史） |
 | 文档模板？ | `docs/模板/` |
 | 讨论中未定稿？ | `docs/草稿/` |
@@ -36,7 +37,7 @@
 ## 核心规则（简要）
 
 - **扩展 = 独立单元**：项目 + 测试 + 文档 + 版本各自独立；`TKWF.Extensions.slnx` 统一注册，**不进** `TKW.Framework.slnx`
-- **跨仓库引用**：主框架用 `$(TKWFSourceRoot)`（`Directory.Build.props` 定义 = `../_TKWF/`）；扩展间用 ProjectReference（编译期依赖）
+- **跨仓库引用**：主框架经 **PackageReference**（CPM 集中版本，`Directory.Packages.props`；`UseLocalFw=true` DLL 模式引用部署根 refs；`false` NuGet 发布模式走 nuget.org）；扩展间用 ProjectReference（编译期依赖），跨扩展消费契约走 `.Abstractions`（L2 门控 `TKWF0022`）
 - **MinVer 版本**：`V{major}.{minor}.{patch}`，tag 前缀 `v`，扩展版本独立于主框架
 - **扩展 ADR 命名**：`ADR-{扩展名称}-{title}.md`（不走主框架 ADR01-39 序号），三问必填
 - **Commit 纪律**：避免频繁，积累后统一提交（一次迭代 1-4 个）

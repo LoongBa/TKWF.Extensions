@@ -1,6 +1,6 @@
 # TKWF.Federation.Alipay 支付宝开放平台连接器技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.1.0（N4 协议实现落地） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `TKWF.Utility`（RSA2 签名核心 `AlipaySignUtil`/`RsaUtil`——`TKW.Framework.Utility.Cryptography`）+ `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.3.1（契约包切 Abstractions + I2-1 契约迁移收口） | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Abstractions`（ISsoChannel 契约；消费方编排另引 Federation 主包）+ `TKWF.Domain` + `TKWF.Utility`（RSA2 签名核心 `AlipaySignUtil`/`RsaUtil`——`TKW.Framework.Utility.Cryptography`）+ `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**——AGENTS §8：`TKWF.Ext.*`=扩展（有装配/持久化）/ `TKWF.*`=库（纯逻辑））/ **零持久化零 Store**（tkwf-extension 铁律）/ **出站-only 精简形态**（支付宝无入站回调——组件 1/2/5/6/7/8，信任根降级以出站换取链为准）/ **RSA2 双向签名**（商户私钥签请求 + 支付宝公钥验签响应——**信任根完备/强双向签名**，N4 §3.2）/ **凭证自持**（`AlipayOptions`——Oracle P2-4，私钥/公钥 PEM 文件路径配置，生产 fail-fast 缺钥拒）/ **不引 AspNetCore**（Oracle 评审点 5——库纯逻辑 + HttpClient，入站端点归 Federation 扩展/消费方装配层）
 
@@ -59,7 +59,7 @@ services.AddAlipayFederationChannels();   // 内部 TryAddEnumerableConstructibl
             "AppId": "2021000000000000",            // 支付宝开放平台 AppId（凭证解析键）
             "PrivateKeyPath": "C:\\keys\\alipay-app-private.pem",     // 商户私钥 PEM（PKCS8——签请求 RSA2，chmod 600）
             "AlipayPublicKeyPath": "C:\\keys\\alipay-public.pem",    // 支付宝公钥 PEM（验签响应/通知）
-            "EnableMobile": false                   // 手机号可选增强（企业资质 + 申请 mobile 字段审核；默认 false）
+            "EnableMobile": false                   // 预留：手机号可选增强的预留规划（当前零消费——mobile 权限开通后实现裁剪；默认 false）
           }
         ]
       }
@@ -149,5 +149,9 @@ Federation 扩展按 channel 类型路由：`alipay_oauth` → 装配层构造�
 | 版本 | 内容 |
 |------|------|
 | V0.1.0（2026-10-08） | N4 协议实现落地：`AlipayApiClient`（gateway.do RSA2 签名调用——oauth.token 无 biz_content/auth_code 顶层 + user.info.share auth_token 顶层 + refresh 续期封装 + BuildAuthorizeUrl）/ `AlipaySignService`（双向签名——请求签名委托框架 AlipaySignUtil + **同步响应自实现验签** + 通知验签 rsaCheckV1 等价）/ `AlipayOauthChannel`（alipay_oauth：code→user_id + 缺 code/redirect_uri 拒 + AuthLevel=2 + 用户级 token 不缓存）/ `AlipayChannelSource`（组件 8.5 多通道投影）/ `AlipayUserInfo`/`AlipayTokenResult` 响应裁剪 / `AddAlipayFederationChannels()` 注册 / 测试全绿（生产路径通道正负 + 协议结构断言 + 验签信任根正负） |
+| V0.1.1（2026-10-10） | 联动 bump——三层架构重定位（TrustCenter 剥离 v4.10.70 适配，依赖线收口；无本库独立功能） |
+| V0.2.0（2026-10-11） | 联动 bump——v4.10.71 OAuth 资源服务器中间件适配 + CPM lockstep（被动） |
+| V0.3.0（2026-10-18） | **契约包切 Abstractions（④ 联动）**——依赖 Federation 主包 → `Federation.Abstractions`（IChannelRegistry/IChannelSource/ChannelConfig 契约收口独立契约包，namespace 不变零 using 迁移；消费方编排另引 Federation 主包） |
+| V0.3.1（2026-10-21） | **I2-1 契约迁移联动**——ISsoChannel 契约迁入 `Federation.Abstractions`（通道契约归属纠正）+ I2 复查修复 bump |
 
 <!-- EOF -->

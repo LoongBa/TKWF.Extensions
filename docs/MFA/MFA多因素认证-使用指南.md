@@ -10,9 +10,9 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（+ **V0.1.2** V4.10.53 领域自治根治 / **V0.1.3** V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂 / **V0.2.0** E4 密钥管理抽象——删 `MfaSecretKeyStore`、`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`） |
+| 版本 | v0.1.0（+ **V0.1.2** V4.10.53 领域自治根治 / **V0.1.3** V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂 / **V0.2.0** E4 密钥管理抽象——删 `MfaSecretKeyStore`、`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider` / **V0.2.1** v4.10.67 IRateLimitCheck 迁移 / **V0.2.2** v4.10.66 表名前缀 `TKWF_*`） |
 | 依赖 | 主框架 `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖**（短信渠道经消费方抽象 `IMfaSmsSender` 注入） |
-| 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
+| 数据 | 表 `TKWF_MfaSecret` + `TKWF_MfaChallenge` + `TKWF_MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 | 职责 | 第二因素验证服务（绑定管理 + 挑战验证 + 频控 + 恢复码）；**不签发令牌、不维护登录状态、不做主认证** |
 
 ## 2. 启用与配置
@@ -182,6 +182,8 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 
 | 日期 | 版本 | 变更内容 |
 |------|------|---------|
+| 2026-11-08 | V0.2.2 | **表名前缀对齐（v4.10.66 框架批次）**：实体表名 `MfaSecret`/`MfaChallenge`/`MfaRecoveryCode` → `TKWF_MfaSecret`/`TKWF_MfaChallenge`/`TKWF_MfaRecoveryCode`，索引 `UX_*`/`IX_*` → `TKWFIX_*`——消费方零配置变更（框架 `SyncTables` 统一建表） |
+| 2026-11-08 | V0.2.1 | **频控 Contract 迁移（v4.10.67 IRateLimitCheck）**：验证尝试/发码频控改经 DI 注入 `IRateLimitCheck`（Initializer fallback `MemoryRateLimitCheck` 滑动窗口），消费方显式注册 `SqlCountRateLimitCheck` 时窗口边界行为由 sliding 变为 fixed（差异见指南 §6/README 注记） |
 | 2026-10-06 | V0.2.0 | **E4 密钥管理抽象（框架 v4.10.61 配套）**：删 `MfaSecretKeyStore` 静态密钥类——`TotpMfaMethod` ctor 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`，消费点即注入点）；`MfaService` 构造不再有 Initialize 密钥副作用；测试去反射（`ResetMfaSecretKeyStore` 改注入式 internal Reset）；修正 `MfaSecretEntityDataService` 陈旧注释；AES-GCM 单段规范格式（AeadEncryptionUtil）。消费方零配置变更。65 用例全绿 |
 | 2026-10-01 | v0.1.0 | 首版——TOTP（RFC 6238 自研）+ 短信验证码双方法：绑定/解绑 + 挑战-验证流 + 尝试频控 + 恢复码；独立扩展零依赖（消费方编排）；Oracle 评审 PASS WITH CONDITIONS 11 条件全吸收（方案 `docs/MFA/MFA多因素认证-开发方案.md`） |
 | 2026-10-01 | —（v0.1.0 后置补丁） | Oracle7 审核 C1 修复 + C2/C3 文档对齐——SMS 发送失败清理孤儿挑战行（`SendCodeAsync` 发送 try/catch → 物理删除挑战 + 再抛，防 TTL 内孤儿阻塞重发）；新增 2 测试用例（失败清理无残留 + 渠道恢复立即重发）；文档修正解密异常语义（`CryptographicException`/`FormatException`）并补充 TTL 重发 TOCTOU 边界 |

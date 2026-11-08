@@ -1,6 +1,6 @@
 # TKWF.Ext.Dashboard 仪表盘数据服务扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (Metrics 展示层数据服务) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.2 (Metrics 展示层数据服务) | **框架**: .NET 10
 
 > **V4.10.53 领域自治评估（2026-10-04）**：`DashboardDataService`（实现 `IDashboardDataService : IDomainService`）判定为**接线型保留**——ctor（`DashboardSpecFileProvider` + `IEnumerable<IDashboardDataProvider>` + `IServiceProvider` + `ILogger`）零 IDomainUser 依赖（数据源由消费方注册，Metrics 经 `GetService<IMetricCalculatorFactory>` 可空判定）；注册保持 `TryAddScoped`（消费方 `User.Use<IDashboardDataService>()` AOP 解析普通描述符）。`DashboardSpecFileProvider` 同判定（Singleton 纯文件加载）。**零代码改动**。
 
@@ -28,7 +28,7 @@ Metrics v0.1.0 已提供复合业务指标计算能力（复购率/留存/漏斗
 ### 2. 关键设计
 
 - **取数 → 计算链式**（Oracle 建议 2）：Widget 必须声明 `dataSource`（必选）；`metricRef` 可选——声明则对 dataSource 返回的数据行做 Metrics 计算。非互斥二选一，是链式组合。
-- **双规格根目录**（Oracle C1）：Dashboard 定义走 `TKWF:Dashboard:SpecRoot`（`{SpecRoot}/{group}/{dashKey}.json`）；Metrics 指标规格走 `TKWF:Metrics:SpecRoot`（IConfiguration 直读，不引 Metrics 扩展项目——ADR50 L2 门控零违规）。
+- **双规格根目录**（Oracle C1）：Dashboard 定义走 `TKWF:Dashboard:SpecRoot`（`{SpecRoot}/{dashKey}.json`，dashKey = "group/name" 复合形式，group 作路径子目录）；Metrics 指标规格走 `TKWF:Metrics:SpecRoot`（IConfiguration 直读，不引 Metrics 扩展项目——ADR50 L2 门控零违规）。
 - **运行期依赖 fail-fast**（Oracle C9/建议 1）：metricRef Widget 依赖 `IMetricCalculatorFactory`（Metrics 扩展注册）——未启用时首次查询抛 `DashboardDefinitionException`（清晰消息注明启用方式）。
 - **严格失败**：定义缺失/JSON 损坏/Widget 名重复/dataSource 缺失/metricRef 格式非法 → `DashboardDefinitionException`（对齐 Metrics 失败哲学）。
 
@@ -53,7 +53,7 @@ Metrics v0.1.0 已提供复合业务指标计算能力（复购率/留存/漏斗
 消费方 UI ──GetWidgetDataAsync(dashKey, widgetName, filters)──▶ DashboardDataService
      │
      ├─① 定义加载：DashboardSpecFileProvider.LoadDashboard(dashKey)
-     │     └─ {TKWF:Dashboard:SpecRoot}/{group}/{dashKey}.json（git-tracked 描述符）
+     │     └─ {TKWF:Dashboard:SpecRoot}/{dashKey}.json（git-tracked 描述符；dashKey = "group/name" 复合形式，group 作为路径子目录）
      │
      ├─② 数据源取数：IDashboardDataProvider.GetDataAsync(widgetName, filters)
      │     └─ 返回 (IReadOnlyList<object> Rows, Func<object,string,object?> Accessor)
@@ -94,7 +94,7 @@ Metrics v0.1.0 已提供复合业务指标计算能力（复购率/留存/漏斗
 
 ## 六、Dashboard 定义文件 (Definition Files)
 
-目录：`{SpecRoot}/{group}/{dashKey}.json`（group 缺省 = 扁平 `{SpecRoot}/{dashKey}.json`）。
+> **dashKey 复合语义（D-03）**：dashKey = **"group/name" 复合形式**（如 `"operations/business-overview"`）——group 段作为 `SpecRoot` 下子目录前缀（`{SpecRoot}/operations/business-overview.json`），同名无 group 前缀则为扁平 `{SpecRoot}/business-overview.json`。**dashKey 本身携带 group 路径段**（经 `ResolveDashboardPath` 按 '/' 拆分），JSON 描述符内的 `group` 字段仅供消费方展示归类，**不参与路径解析**（非自动发现）。
 
 ```json
 {
@@ -126,17 +126,22 @@ Metrics v0.1.0 已提供复合业务指标计算能力（复购率/留存/漏斗
 }
 ```
 
-**契约校验**（加载时一次）：name 非空 / widgets 非空 / Widget 名唯一 / `dataSource` 非空（必选）/ `width` ∈ [1,6] / `metricRef` 格式合法。
+**契约校验**（加载时一次，`ValidateWidgets`）：name 非空 / widgets 非空 / Widget 名唯一 / `dataSource` 非空（必选）/ `width` ∈ [1,6]。**`metricRef` 格式不在此列**——其在**首次查询时**经 `ParseMetricRef` 校验（`DashboardDataService`）：坏描述符（如缺 `domain/specKey` 非法格式）延迟到首次查询才失败，与加载校验分离（见 §三 数据流 ③ Metrics 计算入口）。
 
 ## 七、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0
 - 定义模型 + `IDashboardDataService` + `IDashboardDataProvider` + `WidgetDataResult`
 - Metrics 消费接线（`IMetricCalculator` 直连，规避泛型摩擦）
 - 双规格路径（Dashboard 定义 + Metrics 指标规格，IConfiguration 直读）
 - 运行期依赖 fail-fast + 严格失败
-- 25/25 测试全绿
+- 26/26 测试全绿
 - **不引入图表库/不做 UI/不做布局持久化**（ADR 裁定）
+
+### V0.1.1 / V0.1.2（构建/CI 迁移 bump，无功能变更）
+- v0.1.1：`xCodeGen.json` TemplatesPath 环境变量统一（`%TKWF_FRAMEWORK_PATH%` → `%TKWFDeployPath%`）
+- v0.1.2：CI publish 迁移 Trusted Publishing（移除 NUGET_API_KEY 长期 secret）+ ci-publish.yml YAML 缩进修复
+- 已发布：tag `Dashboard/v0.1.1` / `Dashboard/v0.1.2`
 
 ### V0.2.0（候选，能力完善）
 - 布局持久化 + 操作者可编辑（DB 存储 + 管理 UI + 权限管理）
@@ -151,4 +156,4 @@ Metrics v0.1.0 已提供复合业务指标计算能力（复购率/留存/漏斗
 
 ---
 
-**文档信息**: V0.1.0 | 2026-09-06 | 关联：ADR-Dashboard-定位与数据契约.md、v0.1.0-Dashboard-仪表盘数据服务-开发方案.md（主框架私有）、[仪表盘扩展-使用指南](../../docs/Dashboard/仪表盘扩展-使用指南.md)
+**文档信息**: V0.1.2 | 2026-09-06（v0.1.1/v0.1.2 bump 2026-09-15） | 关联：ADR-Dashboard-定位与数据契约.md、v0.1.0-Dashboard-仪表盘数据服务-开发方案.md（主框架私有）、[仪表盘扩展-使用指南](../../docs/Dashboard/仪表盘扩展-使用指南.md)

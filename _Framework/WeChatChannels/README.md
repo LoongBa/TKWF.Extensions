@@ -1,6 +1,6 @@
 # TKWF.Ext.WeChatChannels 微信通道底座扩展技术规范
 
-**状态**: 业务扩展（实体型——通道底座，平台模式装配，零运营依赖） | **版本**: V0.1.0（2026-11-05 自 WeChatOperations 拆分下沉首发） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.WeChatChannels.Abstractions`（契约包/L2）+ `TKWF.Federation.Abstractions`（通道编排契约）+ `TKWF.Federation.WeChat`（凭证解析契约）+ `TKWF.Ext.Permissions.Abstractions`（权限标注）+ `TKWF.Domain` + FreeSql
+**状态**: 业务扩展（实体型——通道底座，平台模式装配，零运营依赖） | **版本**: V0.1.1（V0.1.0 首发 + V0.1.1 密钥键收口） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.WeChatChannels.Abstractions`（契约包/L2）+ `TKWF.Federation.Abstractions`（通道编排契约）+ `TKWF.Federation.WeChat`（凭证解析契约）+ `TKWF.Ext.Permissions.Abstractions`（权限标注）+ `TKWF.Domain` + FreeSql
 
 **核心约束**: 门面继承 `DomainServiceBase` + `AddConstructibleService` 注册（ADR90）/ DataService 经 `User.Use<T>()` 懒加载（DI004）/ 禁手写 Store / 凭证 AES-GCM 密文落库（keyed `ISymmetricKeyProvider`——明文不入库不进日志）/ **非 Web 扩展形态**（不引 AspNetCore——端点由消费方 SG2 按 ADR47 生成控制器，对齐 Identity/Notifications/AuditLogging 先例）
 
@@ -23,7 +23,7 @@
 ## 二、安装与接线
 
 ```xml
-<PackageReference Include="TKWF.Ext.WeChatChannels" Version="0.1.0" />
+<PackageReference Include="TKWF.Ext.WeChatChannels" Version="0.1.1" />
 ```
 
 ```csharp

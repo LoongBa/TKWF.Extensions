@@ -9,9 +9,9 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.AuthSurface` |
-| 版本 | V0.1.0（独立起点——2026-10-07 立项，Oracle4 评审 PASS WITH CONDITIONS）+ **v0.2.0 候选（兑换码附加信息——核验场景，2026-10-09 转告落档待办，已实施未发布）** |
+| 版本 | V0.1.0（独立起点——2026-10-07 立项，Oracle4 评审 PASS WITH CONDITIONS）+ **v0.2.0（兑换码附加信息——核验场景，2026-10-10 已发布）** |
 | 依赖 | `TKWF.Domain`（CPM）+ `TKWF.Utility`（v4.10.67 `IRateLimitCheck` 点检查原语——兑换频控）+ `TKWF.CodeGeneration`（SG1 纯 Analyzer）+ FreeSql——**DTO 归本扩展主包**（`Contracts/AuthSurfaceDtos.cs`：`RedemptionRecordDto`/`UserAppDto`，零跨扩展契约依赖） |
-| 数据 | 表 `RedemptionCode` + `AuthApp`（本扩展）；视图 `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`（跨扩展 JOIN AuthCenter `TKWF_AuthAccount`/`TKWF_AuthGrant`——视图归本扩展，P3） |
+| 数据 | 表 `TKWF_RedemptionCode` + `TKWF_AuthApp`（本扩展）；视图 `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`（跨扩展 JOIN AuthCenter `TKWF_AuthAccount`/`TKWF_AuthGrant`——视图归本扩展，P3） |
 | 边界 | **零扩展间实现依赖**（ViewSql 字符串跨扩展引用 AuthCenter 表名，无代码引用——L2 零 TKWF0022） |
 
 ## 架构分层
@@ -40,7 +40,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 | API | 说明 |
 |-----|------|
-| `CreateCodeAsync(productName, targetAppId, validity?, ct, payload?)` | 创建兑换码（单码——v0.1.0 无批次管理端）——CSPRNG 生成 `EDU-XXXX-XXXX-XXXX`（12 位 base32 去易混淆字符，熵约 30bit）；**明文一次性返回**（不落库不日志），库中仅存 `CodeHash`（SHA256 十六进制 64 唯一）+ `CodeMasked`（脱敏展示）；**v0.2.0 核验场景**：`payload`（可选——核验业务信息明文如购买人/权益明细 JSON）经 keyed `ISymmetricKeyProvider` AES-GCM 加密落 `PayloadEncrypted`（**明文不落库**；null=无附加信息，兼容 v0.1.0） |
+| `CreateCodeAsync(productName, targetAppId, validity?, ct, payload?)` | 创建兑换码（单码——v0.1.0 无批次管理端）——CSPRNG 生成 `EDU-XXXX-XXXX-XXXX`（12 位 base32 去易混淆字符，**熵 60bit（32 字符集 × 12 位，CSPRNG 无模偏差）**）；高熵随机码值，**SHA256 无需加盐**；**明文一次性返回**（不落库不日志），库中仅存 `CodeHash`（SHA256 十六进制 64 唯一）+ `CodeMasked`（脱敏展示）；**v0.2.0 核验场景**：`payload`（可选——核验业务信息明文如购买人/权益明细 JSON）经 keyed `ISymmetricKeyProvider` AES-GCM 加密落 `PayloadEncrypted`（**明文不落库**；null=无附加信息，兼容 v0.1.0） |
 | `RedeemAsync(userId, codeInput)` | 兑换——**必须已登录**（Oracle4 P1-1 裁定 A：userId 必填，频控按 userId 维度；未登录无法兑换，匿名兑换 v0.2.0 评估）；校验（无效/已兑/过期）→ **CAS 原子兑换**（`EntityUpdateWhereAsync` 单语句 WHERE 谓词 `Id==id && Status==0 && 未过期`——防并发双兑，败者重查判定）→ 返回 `RedemptionRecordDto`（已脱敏 + **v0.2.0 `Payload` 明文取回**——人工核验展示/自动核验匹配） |
 
 失败业务异常（`AuthenticationException`，错误码见 `RedemptionErrorCodes`）：`REDEMPTION_CODE_INVALID` / `_USED` / `_EXPIRED` / `REDEMPTION_TOO_MANY_ATTEMPTS`（HTTP 映射归装配实例）。
@@ -49,8 +49,8 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 | API | 说明 |
 |-----|------|
-| `IUserAppsQueryService.GetAppsAsync(userId)` | 我的应用——`TKWFV_UserApps` 视图（JOIN `TKWF_AuthGrant` + `TKWF_AuthAccount` + `AuthApp` LEFT JOIN 取 AppName）；**有效过滤在 DataService**（Status=Active 且 ValidUntil 未过——C# 侧 UtcNow 无方言风险）；返回 `UserAppDto`（`UsageSummary` 恒 null——儿童数据红线） |
-| `IRedemptionQueryService.GetRedemptionsAsync(userId)` | 兑换历史——`TKWFV_UserRedemptionHistory` 视图（JOIN `RedemptionCode` + `TKWF_AuthAccount`——INNER JOIN 天然排除未兑换行）；返回 `RedemptionRecordDto`（code 已脱敏透传） |
+| `IUserAppsQueryService.GetAppsAsync(userId)` | 我的应用——`TKWFV_UserApps` 视图（JOIN `TKWF_AuthGrant` + `TKWF_AuthAccount` + `TKWF_AuthApp` LEFT JOIN 取 AppName）；**有效过滤在 DataService**（Status=Active 且 ValidUntil 未过——C# 侧 UtcNow 无方言风险）；返回 `UserAppDto`（`UsageSummary` 恒 null——儿童数据红线） |
+| `IRedemptionQueryService.GetRedemptionsAsync(userId)` | 兑换历史——`TKWFV_UserRedemptionHistory` 视图（JOIN `TKWF_RedemptionCode` + `TKWF_AuthAccount`——INNER JOIN 天然排除未兑换行）；返回 `RedemptionRecordDto`（code 已脱敏透传） |
 
 > ⚠️ **v0.1.0 业务语义（Oracle4 P1-3 明示）**：兑换成功后应用**不会**出现在"我的应用"列表——v0.1.0 兑换不写 `AuthGrant`（`Source=redeem` 预留 v0.2.0）；兑换历史可见。消费方页面应区分"兑换记录"与"应用授权"两栏。
 
@@ -69,7 +69,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 频控实现：框架 `IRateLimitCheck` 点检查原语（v4.10.67——`MemoryRateLimitCheck` fallback 经 `TryAddSingleton`；R2 `SqlCountRateLimitCheck`（RateLimiting 扩展）落地后可替换，TryAdd 语义）。key 规范化 `redemption:redeem:{userId}`；流程 = 前置只读 `GetRemaining <= 0` 拦截（不计数）→ 无效路径 `TryAcquire` 计失败 → 成功兑换不计数。
 
-> **v0.2.0 核验场景（兑换码附加信息）**：`CreateCodeAsync(payload:)` 传入核验业务信息明文 → 门面加密落库（`PayloadEncrypted` AES-GCM 单段 base64(nonce‖cipher‖tag)，`AeadEncryptionUtil` 规范格式）→ `RedeemAsync` 兑换时解密取回（`RedemptionRecordDto.Payload`）。核验方式（人工核验——核销人出示码比对附带信息 / 自动核验——系统校验附带信息匹配）由业务层决定；核验业务信息含 PII（购买人信息）必须走加密路径，明文不落库。兑换历史读模型（`TKWFV_UserRedemptionHistory`）**不含 payload 列**——核验信息仅在兑换时一次性取回（历史列表不重复展示核验信息）。
+> **v0.2.0 核验场景（兑换码附加信息）**：`CreateCodeAsync(payload:)` 传入核验业务信息明文 → 门面加密落库（`PayloadEncrypted` AES-GCM 单段 base64(nonce‖cipher‖tag)，`AeadEncryptionUtil` 规范格式）→ `RedeemAsync` 兑换时解密取回（`RedemptionRecordDto.Payload`）。核验方式（人工核验——核销人出示码比对附带信息 / 自动核验——系统校验附带信息匹配）由业务层决定；核验业务信息含 PII（购买人信息）必须走加密路径，明文不落库。兑换历史读模型（`TKWFV_UserRedemptionHistory`）**不含 payload 列**——核验信息仅在兑换时一次性取回（历史列表不重复展示核验信息）。**payload 容量上限 2800 字符**（`PayloadEncrypted` 密文列 VARCHAR(4000) 保障——ASCII 2800 字符加密后 base64 约 3740 ≤ 4000；超限 `CreateCodeAsync` 抛 `ArgumentException`）。
 
 ## 约束与语义
 
@@ -78,7 +78,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 - **兑换码安全**：明文不落库（SHA256 哈希唯一）——防库泄露即任意兑换；`CodeMasked` 脱敏透传（本扩展 DTO `RedemptionRecordDto.CodeMasked`，明文不落库）；**v0.2.0 核验信息亦明文不落库**（`PayloadEncrypted` AES-GCM 密文，`ISymmetricKeyProvider` keyed 加解密——密钥键 `SymmetricKeyProviderKeys.AuthSurface`（v4.10.69 已并入主框架，C11 第 4 扩展边界兑现；原扩展侧自建 `AuthSurfaceKeyProviderKeys` 已删除））。
 - **并发双兑**：CAS 原子兑换（ADR89 单语句 WHERE 谓词）——败者重查判定（已兑/过期）。
 - **视图前缀**：`TKWFV_` 暂用（前置裁定 P3 / ADR C.16——框架组前缀批次核查后视情况 rename，不影响实体/ViewSql 设计）。
-- **表名快照**：ViewSql 引用 `AuthGrant`/`TKWF_AuthAccount`（AuthCenter V0.9.0 身份域重构——ADR100 表名别名落地；`AuthAccount` 已改 `TKWF_AuthAccount` 凭据白名单列，档案列迁 `UserProfileEntity`）。
+- **表名快照**：ViewSql 引用 `TKWF_RedemptionCode`/`TKWF_AuthApp`（本扩展）+ `TKWF_AuthGrant`/`TKWF_AuthAccount`（AuthCenter V0.9.0 身份域重构——ADR100 表名别名落地；`AuthAccount` 已改 `TKWF_AuthAccount` 凭据白名单列，档案列迁 `UserProfileEntity`）。
 - **SQLite 测试已知限制**（2026-10-07 实证）：FreeSql SQLite provider 对 UTC DateTime 列读回偏移（+7h）——过期场景门面 C# 判定受偏移影响不走进度翻转分支，但 **CAS 谓词（SQL 侧）兜底拒绝**——生产 PG/SQL Server 无偏移（门面判定 + CAS 一致）。
 - **删除语义**：无软删除（`hasSoftDelete:false`——兑换码/应用目录物理操作，运营侧经门面）。
 
@@ -87,7 +87,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 ```csharp
 using TKWF.Ext.AuthSurface;
 
-// ⚠️ 依赖认证中心（vm 视图 JOIN AuthGrant/TKWF_AuthAccount 基表）——同时白名单声明
+// ⚠️ 依赖认证中心（视图 JOIN TKWF_AuthGrant/TKWF_AuthAccount 基表）——同时白名单声明
 [TKWFEnabledExtension(typeof(AuthSurfaceExtensionInitializer<>))]
 [TKWFEnabledExtension(typeof(AuthCenterExtensionInitializer<>))]
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
@@ -110,19 +110,19 @@ public class RedeemService : DomainServiceBase
 ## 数据模型
 
 ```sql
-RedemptionCode(id BIGINT PK, code_hash VARCHAR(64) UNIQUE, code_masked VARCHAR(32), product_name VARCHAR(100),
-               target_app_id VARCHAR(100), status INT,            -- 0 Available / 1 Redeemed / 2 Expired
-               expire_at_utc DATETIME NULL, redeemed_by_uid VARCHAR(32) NULL,   -- 行级 FK=AuthAccount.UId
-               redeemed_at_utc DATETIME NULL, create_time, update_time,
-               payload_encrypted VARCHAR(4000) NULL)              -- v0.2.0 核验信息密文（AES-GCM 单段，明文不落库）
-AuthApp(id BIGINT PK, app_id VARCHAR(100) UNIQUE, app_name VARCHAR(100), icon VARCHAR(512) NULL,
-        is_enabled BOOLEAN, create_time, update_time)
+TKWF_RedemptionCode(id BIGINT PK, code_hash VARCHAR(64) UNIQUE, code_masked VARCHAR(32), product_name VARCHAR(100),
+                    target_app_id VARCHAR(100), status INT,        -- 0 Available / 1 Redeemed / 2 Expired
+                    expire_at_utc DATETIME NULL, redeemed_by_uid VARCHAR(32) NULL,   -- 行级 FK=AuthAccount.UId
+                    redeemed_at_utc DATETIME NULL, create_time, update_time,
+                    payload_encrypted VARCHAR(4000) NULL)          -- v0.2.0 核验信息密文（AES-GCM 单段，明文不落库）
+TKWF_AuthApp(id BIGINT PK, app_id VARCHAR(100) UNIQUE, app_name VARCHAR(100), icon VARCHAR(512) NULL,
+             is_enabled BOOLEAN, create_time, update_time)
 -- 视图（跨扩展——生产 DBA 手动建，依赖 AuthCenter 表）
-TKWFV_UserRedemptionHistory  = RedemptionCode INNER JOIN TKWF_AuthAccount (RedeemedByUId = UId)
-TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserId = UId) LEFT JOIN AuthApp (AppId)
+TKWFV_UserRedemptionHistory  = TKWF_RedemptionCode INNER JOIN TKWF_AuthAccount (RedeemedByUId = UId)
+TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserId = UId) LEFT JOIN TKWF_AuthApp (AppId)
 ```
 
-- 索引：`UX_RedemptionCode_CodeHash`（唯一——一码一兑）/ `UX_AuthApp_AppId`（唯一）。
+- 索引：`TKWFIX_RedemptionCode_CodeHash`（唯一——一码一兑）/ `TKWFIX_AuthApp_AppId`（唯一）。
 - 生产建表：框架 `SyncTables` 托管本扩展表（ADR49）；**视图生产需 DBA 手动执行 ViewSql**（依赖扩展表清单见使用指南 §六）。
 
 ## 与认证中心 / 用户中心划界
@@ -136,10 +136,12 @@ TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserI
 
 批次管理端（批量生成/分销/导出/作废——`BatchId` 列 + 管理门面 + `[GenerateController]`）；**兑换授权写入 AuthGrant（Source=redeem）**；分布式频控（SqlCountRateLimitCheck/Redis）；分页查询；兑换尝试日志持久化（审计回溯）；授权快照/verify 聚合；匿名兑换（兑换创建账号）。
 
-> **✅ v0.2.0 候选——兑换码附加信息（核验场景，2026-10-09 转告落档待办）已实施（未发布）**：`PayloadEncrypted` 列 + `CreateCodeAsync(payload:)` 加密落库 + `RedeemAsync` 解密取回 + keyed 密钥基础设施。随 v0.2.0 业务需求立项后统一发布（tag 须用户同意）。
+> **✅ v0.2.0 已发布（2026-10-10——兑换码附加信息，核验场景，2026-10-09 转告落档待办）**：`PayloadEncrypted` 列 + `CreateCodeAsync(payload:)` 加密落库 + `RedeemAsync` 解密取回 + keyed 密钥基础设施。
 
 ## 测试基线
 
-`Extension.AuthSurface.Tests`——**20 用例全绿**（兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成（ProjectReference + 双白名单，Oracle4 P1-2 契约兑现）**）。
+`Extension.AuthSurface.Tests`——**23 用例全绿**（兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成（ProjectReference + 双白名单，Oracle4 P1-2 契约兑现）**）。
+
+> ⚠️ **v0.2.0 包（2026-10-10）ViewSql 含 `ac."AuthLevel"` 投影**——与 AuthCenter V0.11.0+ 组合部署建视图存在列失配风险，请升级至含修复的后续版本。
 
 <!-- EOF -->

@@ -1,6 +1,6 @@
 # TKWF.Ext.Identity 身份管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.1 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露 + 领域自治根治 ADR90 + **Development 启动崩溃修复 V0.5.1——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参，同 AuthCenter V0.5.4 defect 复制链**) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.5.3 (用户与角色管理 + VEntity 跨表 JOIN + 能力完善 + REST 直接暴露 + 领域自治根治 ADR90 + **Development 启动崩溃修复 V0.5.1——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参，同 AuthCenter V0.5.4 defect 复制链**；v0.5.2 = Settings 配置分层配套（删 SettingsOptions.IsEnabled 死字段，跨扩展合计入账）；v0.5.3 = Federation F8 docs 配套；已发布 tag 至 `Identity/v0.5.3`) | **框架**: .NET 10
 
 **核心约束**: 用户/角色持久化、PasswordHasher 凭据验证、FreeSql 存储、异常静默处理、SG1 声明式实体
 
@@ -113,12 +113,13 @@ public class AuthService(IUserManager userManager)
 {
   "TKWF": {
     "Identity": {
-      "PasswordMinLength": 6,
-      "IsEnabled": true
+      "PasswordMinLength": 6
     }
   }
 }
 ```
+
+> ⚠️ `IsEnabled` 为**预留未消费**（当前版本未实现关闭语义——扩展一经白名单启用即全部接线，配置不改变任何行为，勿依赖）。
 
 ### 4. 登录衔接（消费方 UserHelper）
 
@@ -159,7 +160,7 @@ V0.5.0 起三接口为 AddConstructibleService 注册。消费方自定义实现
 
 ## 五、实体表结构 (Entity Schema)
 
-`UserEntity` → `IdentityUser` 表：
+`UserEntity` → `TKWF_IdentityUser` 表：
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
@@ -174,9 +175,11 @@ V0.5.0 起三接口为 AddConstructibleService 注册。消费方自定义实现
 | CreateTime | DATETIMEOFFSET | 创建时间 |
 | UpdateTime | DATETIMEOFFSET | 更新时间 |
 
-`RoleEntity` → `IdentityRole` 表：Id / Name / DisplayName / IsSystemRole / CreateTime / UpdateTime
+`RoleEntity` → `TKWF_IdentityRole` 表：Id / Name / DisplayName / IsSystemRole / CreateTime / UpdateTime
 
-`UserRoleEntity` → `IdentityUserRole` 表：Id / UserId / RoleId
+`UserRoleEntity` → `TKWF_IdentityUserRole` 表：Id / UserId / RoleId
+
+> 表名自 v4.10.66 框架批次起统一 `TKWF_` 前缀（`TKWF_IdentityUser`/`TKWF_IdentityRole`/`TKWF_IdentityUserRole`）；角色视图 `TKWFV_UserRoleView`（VEntity，`[Table(Name="TKWFV_UserRoleView")]`）——DBA 建视图/查表请以实体 `[Table]` 为准。
 
 ---
 
@@ -208,7 +211,7 @@ V0.5.0 起三接口为 AddConstructibleService 注册。消费方自定义实现
   `GET /api/identity/user-roles` 返回**当前登录用户**角色视图（`UserRoleViewDto`——含 DisplayName/IsSystemRole 完整 JOIN 字段，替代"视图行映射回原实体"保守形态）
 - **仅本人防护（防 IDOR）**：userId 从 `IDomainUser` 解析（服务端上下文），不信任客户端传参；用户上下文无效 → `UnauthorizedAccessException`；管理员全量查询另设 `[RequirePermission]` 守卫端点（留待管理需求）
 - **门面链路零改动**：`IUserManager.GetUserRolesAsync` 仍返回 `RoleEntity`（`IdentityRoleProvider`/`IdentityUserHelperBase` 业务消费不变）；`UserRoleViewDataService` public 化（公开 ctor 依赖 + 只读查询面可注入）
-- **生产部署**：`vw_UserRoleView` 视图 ViewSql 沿用 V0.2.0（生产 DBA 手动建视图）
+- **生产部署**：`TKWFV_UserRoleView` 视图 ViewSql 沿用 V0.2.0（生产 DBA 手动建视图——**注意视图名/基表名均为 `TKWF_`/`TKWFV_` 前缀**，见 §五）
 
 ### V0.5.0（已实施：V4.10.53 领域自治根治，ADR90——正确路线）
 - **三接口 Store/Manager 继承 `DomainServiceBase`**（`UserStore`/`RoleStore`/`UserManager`）——经基类 `User` 获取用户上下文（**IDomainUser 永不注册 DI**，旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败——v0.3.3 同根缺陷）；`[DiContractIgnore]` 豁免 DI001；DataService/Store 仍经 `User.Use<具体类>()` NoAop / `User.Use<接口>()` AOP 懒加载（DI004 零豁免）

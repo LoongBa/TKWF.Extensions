@@ -1,8 +1,8 @@
 # TKWF.Ext.PrintTemplates 打印模板引擎与版本化扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (Scriban 沙箱渲染 + 模板版本化 + VEntity 读模型) + **V0.3.0（领域自治根治，ADR90）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0（Scriban 沙箱渲染 + 模板版本化 + VEntity 读模型 + 领域自治根治 ADR90） | **框架**: .NET 10
 
-**核心约束**: Scriban 沙箱契约（操作者可编辑安全）、Draft/Active/Archived 版本生命周期、`{Key}@{Version}` 审计固定渲染、存储异常传播不静默（审计关键）、SG1 声明式实体、**V0.2.0 读路径 VEntity 化（`vw_PrintTemplateVersionView` JOIN 单查询 + 敏感视图经门面）**
+**核心约束**: Scriban 沙箱契约（操作者可编辑安全）、Draft/Active/Archived 版本生命周期、`{Key}@{Version}` 审计固定渲染、存储异常传播不静默（审计关键）、SG1 声明式实体、**V0.2.0 读路径 VEntity 化（`TKWFV_PrintTemplateVersionView` JOIN 单查询 + 敏感视图经门面）**
 
 ---
 
@@ -106,7 +106,7 @@ Draft（草稿）──── Publish ────→ Active（唯一）──�
 ## 七、架构演进路线 (Architecture Roadmap)
 
 ### V0.2.0（已发布，VEntity 化）
-- **读路径 VEntity 化（02 倒推优化方案）**：`GetVersionAsync`/`GetActiveVersionAsync`/`ListVersionsAsync`/`RenderAsync` 经 `vw_PrintTemplateVersionView`（JOIN 版本→模板，12 投影列含 **Key/TemplateName 核心收益**）单查询下推 DB——**2 次往返 → 1 次**（真消除往返）；返回类型 `PrintTemplateVersionEntity` → `PrintTemplateVersionView`（C3 签名变更，用户裁定内部测试无历史负担接受）
+- **读路径 VEntity 化（02 倒推优化方案）**：`GetVersionAsync`/`GetActiveVersionAsync`/`ListVersionsAsync`/`RenderAsync` 经 `TKWFV_PrintTemplateVersionView`（JOIN 版本→模板，12 投影列含 **Key/TemplateName 核心收益**）单查询下推 DB——**2 次往返 → 1 次**（真消除往返）；返回类型 `PrintTemplateVersionEntity` → `PrintTemplateVersionView`（C3 签名变更，用户裁定内部测试无历史负担接受）
 - **敏感视图经门面**：`ExposeGraphqlQuery = false`（含模板正文 Content 商业资产；ADR-PrintTemplates-敏感视图经门面暴露策略）；数据访问统一经 `ITemplateManager`
 - **写路径零触碰**：`PublishAsync`/`DraftAsync`/`ArchiveAsync` 仍经 Store 实体读方法（VEntity 只读禁写——Status/Content 回写需实体，oracle3 C-high-2）
 - **生产部署**：`SyncViewsAsync` 仅开发自动建视图；生产需 DBA 手动执行 ViewSql（PG 方言 + SQLite 开发变体）
@@ -145,4 +145,4 @@ Draft（草稿）──── Publish ────→ Active（唯一）──�
 
 ---
 
-**文档信息**: V0.2.0 | 2026-10-01 | 关联：ADR-PrintTemplates-模板引擎选型与版本化.md、ADR-PrintTemplates-敏感视图经门面暴露策略.md（v0.2.0）、02-倒推优化方案（docs/框架实战教学/）、v0.1.0-PrintTemplates-打印模板引擎与版本化-开发方案.md（主框架私有）、[打印模板扩展-使用指南](../../docs/PrintTemplates/打印模板扩展-使用指南.md)
+**文档信息**: V0.3.0 | 2026-10-04 | 关联：ADR-PrintTemplates-模板引擎选型与版本化.md、ADR-PrintTemplates-敏感视图经门面暴露策略.md（v0.2.0）、02-倒推优化方案（docs/框架实战教学/）、v0.1.0-PrintTemplates-打印模板引擎与版本化-开发方案.md（主框架私有）、[打印模板扩展-使用指南](../../docs/PrintTemplates/打印模板扩展-使用指南.md)

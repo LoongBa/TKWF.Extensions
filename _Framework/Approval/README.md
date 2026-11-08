@@ -2,7 +2,7 @@
 
 **状态**: P1 差异化模块 (Differentiation Module) | **版本**: V0.3.0（VEntity 化）+ **V0.4.0（领域自治根治，ADR90——正确路线）** | **框架**: .NET 10
 
-**核心约束**: 三实体模型（流程定义/审批实例/审批任务）+ 内置自建状态机（Draft→Pending→Approved/Rejected/Withdrawn）+ 审批人解析抽象（User 内置 + Role 消费方）+ 完成事件回调（ILocalEventBus post-commit）+ 顺序步骤链 + 或签/会签 + **v0.2.0 深化：委派（Flowable 两阶段）/加签（运行时追加）/抄送（仅通知）/超时自动处理（5 动作）** + **v0.3.0 VEntity 化：任务链查询经 `vw_ApprovalTaskView` JOIN 下推 DB（敏感视图经门面暴露）**；不依赖外部工作流引擎（Elsa/WorkflowCore）。
+**核心约束**: 三实体模型（流程定义/审批实例/审批任务）+ 内置自建状态机（Draft→Pending→Approved/Rejected/Withdrawn）+ 审批人解析抽象（User 内置 + Role 消费方）+ 完成事件回调（ILocalEventBus post-commit）+ 顺序步骤链 + 或签/会签 + **v0.2.0 深化：委派（Flowable 两阶段）/加签（运行时追加）/抄送（仅通知）/超时自动处理（5 动作）** + **v0.3.0 VEntity 化：任务链查询经 `TKWFV_ApprovalTaskView` JOIN 下推 DB（敏感视图经门面暴露）**；不依赖外部工作流引擎（Elsa/WorkflowCore）。
 
 ---
 
@@ -20,14 +20,14 @@
 
 | 实体 | 表名 | 职责 |
 |------|------|------|
-| `ApprovalFlowEntity` | `ApprovalFlow` | 审批流定义——Code 唯一 + 步骤链 JSON + 启用/禁用 |
-| `ApprovalInstanceEntity` | `ApprovalInstance` | 审批实例——业务弱关联（BusinessType+BusinessId）+ 状态机 + 唯一约束防重复 |
-| `ApprovalTaskEntity` | `ApprovalTask` | 审批任务——步骤级待办（审批/驳回/转交载体） |
+| `ApprovalFlowEntity` | `TKWF_ApprovalFlow` | 审批流定义——Code 唯一 + 步骤链 JSON + 启用/禁用 |
+| `ApprovalInstanceEntity` | `TKWF_ApprovalInstance` | 审批实例——业务弱关联（BusinessType+BusinessId）+ 状态机 + 唯一约束防重复 |
+| `ApprovalTaskEntity` | `TKWF_ApprovalTask` | 审批任务——步骤级待办（审批/驳回/转交载体） |
 
 ### 唯一约束
 
-- **UX_ApprovalFlow_Code**：`Code` 唯一（审批流编码不可重复）
-- **UX_ApprovalInstance_Active**：`BusinessType+BusinessId+IsActive` 唯一（活动实例同业务唯一防重复；终态 IsActive=false 释放约束允许重新提交）
+- **TKWFIX_ApprovalFlow_Code**：`Code` 唯一（审批流编码不可重复）
+- **TKWFIX_ApprovalInstance_Active**：`BusinessType+BusinessId+IsActive` 唯一（活动实例同业务唯一防重复；终态 IsActive=false 释放约束允许重新提交）
 
 ---
 
@@ -169,7 +169,7 @@ public class MyRoleResolver(IEntityDAC<UserRoleEntity> dac) : IApprovalAssigneeR
 - ✅ **抄送**（ApprovalCCEntity + Start/Finish 位置 + ApprovalCcNotifiedEvent——投递组装 Notifications 归消费方）
 - ✅ **超时自动处理**（步骤级 TimeoutMinutes + Remind/Transfer/Jump/Approve/Reject 5 动作 + IApprovalTimeoutService 后台触发 + 系统身份审计 system:timeout + 扫描占位防重）
 - ✅ 遗留修复（DB 级分页 total 独立 count / 步骤判定上限 int.MaxValue / WithdrawAsync 事务包裹 / RejectedAt 验证）
-- ✅ **V0.3.0 VEntity 化**——`GetInstanceDetailAsync` 任务链查询经 `vw_ApprovalTaskView`（JOIN 任务→实例，21 投影列含 Instance 列）单查询下推 DB；`ExposeGraphqlQuery=false`（敏感视图经门面，ADR-Approval-敏感视图经门面暴露策略）；实例查询保留 `EntityGetAsync` 取 BusinessDataJson 全量（大字段不进 JOIN 视图）；生产 DBA 手动建视图
+- ✅ **V0.3.0 VEntity 化**——`GetInstanceDetailAsync` 任务链查询经 `TKWFV_ApprovalTaskView`（JOIN 任务→实例，21 投影列含 Instance 列）单查询下推 DB；`ExposeGraphqlQuery=false`（敏感视图经门面，ADR-Approval-敏感视图经门面暴露策略）；实例查询保留 `EntityGetAsync` 取 BusinessDataJson 全量（大字段不进 JOIN 视图）；生产 DBA 手动建视图
 
 ### 不包含（v0.4.0 候选）
 
@@ -225,4 +225,4 @@ var processed = await timeoutService.ProcessTimeoutTasksAsync();
 
 ---
 
-**文档信息**: V0.3.0 | 2026-10-01 | 关联：ADR-Approval-轻量审批引擎-数据模型与状态机.md（v0.1.0）、ADR-Approval-v0.2.0-委派加签抄送与超时.md、ADR-Approval-敏感视图经门面暴露策略.md（v0.3.0）、02-倒推优化方案（docs/框架实战教学/）、v0.2.0-Approval-委派加签抄送与超时-开发方案.md（主框架私有）
+**文档信息**: V0.4.0 | 2026-10-04 | 关联：ADR-Approval-轻量审批引擎-数据模型与状态机.md（v0.1.0）、ADR-Approval-v0.2.0-委派加签抄送与超时.md、ADR-Approval-敏感视图经门面暴露策略.md（v0.3.0）、02-倒推优化方案（docs/框架实战教学/）、v0.2.0-Approval-委派加签抄送与超时-开发方案.md（主框架私有）

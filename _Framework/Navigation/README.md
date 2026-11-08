@@ -1,6 +1,6 @@
 # TKWF.Ext.Navigation 导航扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.0 (菜单数据模型与贡献机制) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (菜单数据模型与贡献机制 + 多菜单分区——MenuName 精确过滤 + DefaultMenuName 驱动；2026-09-17 实施，Oracle PASS WITH CONDITIONS 4 条件全闭环，测试 11 项落地) | **框架**: .NET 10
 
 > **V4.10.53 领域自治评估（2026-10-04）**：`MenuManager<TUserInfo>`（实现 `IMenuManager : IDomainService`）判定为**接线型保留**——ctor（`IMenuDefinitionRepository` + `IServiceProvider` + `IOptions<NavigationOptions>`）零 IDomainUser 依赖（权限过滤经 `GetService<IPermissionChecker>()` 可空解析，checker 未注册降级不过滤）；注册保持 `TryAddSingleton`（消费方 `User.Use<IMenuManager>()` AOP 解析普通描述符）。**零代码改动**。
 
@@ -80,7 +80,7 @@ public class MainMenuContributor : IMenuContributor
 {
     public void ConfigureMenu(MenuConfigurationContext context)
     {
-        // 顶级菜单
+        // 顶级菜单（不设 MenuName = 归入默认 "Main" 菜单组）
         context.Add(new MenuItemDefinition
         {
             Name = "Orders",
@@ -98,6 +98,16 @@ public class MainMenuContributor : IMenuContributor
             DisplayName = "待处理订单",
             Url = "/orders/pending",
             Parent = "Orders",
+            Order = 1
+        });
+
+        // V0.2.0 多菜单分区：显式归入 "Admin" 菜单组
+        context.Add(new MenuItemDefinition
+        {
+            Name = "Admin.Users",
+            DisplayName = "用户管理",
+            Url = "/admin/users",
+            MenuName = "Admin",
             Order = 1
         });
     }
@@ -118,10 +128,14 @@ public class NavMenuViewComponent(IMenuManager menuManager)
         var items = await menuManager.GetMainMenuAsync();
         return items;
     }
+
+    // V0.2.0：按菜单组分区读取（Main/Admin/Mobile）
+    public Task<MenuItemDefinition[]> GetAdminMenuAsync()
+        => menuManager.GetMenuAsync("Admin");
 }
 ```
 
-**返回形态**：扁平 `MenuItemDefinition[]`，按 `(深度, Order)` 排序——顶层优先、父子相邻，便于 UI 层线性渲染建树。
+**返回形态**：扁平 `MenuItemDefinition[]`，按 `(深度, Order)` 排序——顶层优先、父子相邻，便于 UI 层线性渲染建树。`GetMenuAsync(menuName)` 按 `MenuName` **精确过滤**（Ordinal）——只返回该菜单组的项；`GetMainMenuAsync()` 读 `NavigationOptions.DefaultMenuName`（默认 `"Main"`）。
 
 ### 4. 配置选项
 
@@ -131,12 +145,14 @@ public class NavMenuViewComponent(IMenuManager menuManager)
 {
   "TKWF": {
     "Navigation": {
-      "DefaultMenuName": "Main",
-      "MaxMenuDepth": 4
+      "DefaultMenuName": "Main"
     }
   }
 }
 ```
+
+- `DefaultMenuName`：`GetMainMenuAsync()` 读的菜单组名（默认 `"Main"`；未配置 = 默认）。
+- ⚠️ `MaxMenuDepth` 为**预留未消费**（默认 4——当前版本未实现深度限制，配置不改变任何行为，勿依赖）。
 
 亦可在 `ConfigureExtensions` 中 `services.Configure<NavigationOptions>(o => ...)` 覆盖。
 
@@ -172,6 +188,7 @@ public class NavMenuViewComponent(IMenuManager menuManager)
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | Name | string | 菜单项唯一标识（层级关联用，必填） |
+| MenuName | string | **所属菜单名（V0.2.0 多菜单分区）**——默认 `"Main"`（对齐 `NavigationOptions.DefaultMenuName`）；贡献者不设置 = 归入默认菜单（零迁移）；设置 `"Admin"`/`"Mobile"` 等 = 归入对应菜单组；不可为 null/空白（`MenuConfigurationContext.Add` 校验 fail-fast）；`init` 不可变（分区键）。**用法**：`GetMenuAsync(menuName)` 经 `Ordinal` 精确过滤该分区菜单项——Main/Admin/Mobile 多菜单组开箱即用 |
 | DisplayName | string | 显示名（支持 i18n key） |
 | Url | string? | 导航 URL（如 "/orders"） |
 | Icon | string? | 图标标识（前端图标库 key） |
@@ -188,18 +205,20 @@ public class NavMenuViewComponent(IMenuManager menuManager)
 
 ## 六、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前）
+### V0.1.0（已实施）
 - 菜单数据模型 + 贡献机制（`IMenuContributor` 接口判定 + `Contributors["Menu"]` 统一清单，A+ 阶段 2）
 - 权限过滤（All/Any + checker 缺失降级不过滤）
 - 扁平排序 + 循环检测
 - 配置选项（`TKWF:Navigation`）
 
-### V0.2.0（规划）
-- 多菜单组分区（`DefaultMenuName` 生效，Main/Admin/Mobile 分组）
-- 菜单持久化（FreeSql 存储自定义仓库示例）
-- 菜单缓存（基于权限组合的缓存 key）
+### V0.2.0（已实施：多菜单分区，2026-09-17）
+- **多菜单组分区**：`MenuItemDefinition.MenuName`（默认 `"Main"`，`Add()` fail-fast 校验非空）+ `GetMenuAsync(menuName)` 按 `MenuName` **精确过滤**（Ordinal，替代单一集合全部返回）——Main/Admin/Mobile 多菜单组开箱即用；`GetMainMenuAsync()` 读 `NavigationOptions.DefaultMenuName`（替代硬编码 `"Main"`，未配置 = 默认 Main）
+- 贡献者不设置 MenuName = 归入默认菜单（**零迁移**）；`init` 不可变（分区键）
+- 测试 11 项落地（分区过滤/默认组/校验/管理端解析 + 既有全绿）；Oracle PASS WITH CONDITIONS 4 条件全闭环（commit 74ce6b5）
 
 ### V0.3.0（规划）
+- 菜单持久化（FreeSql 存储自定义仓库示例）
+- 菜单缓存（基于权限组合的缓存 key）
 - 菜单项动态显隐（运行时按业务条件控制）
 - 与 Tagging/DataDictionary 联动（菜单项标签过滤）
 - 管理 UI

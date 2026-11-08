@@ -30,11 +30,8 @@
 // 1. 引用 + 白名单（消费方领域初始化器）
 [TKWFEnabledExtension(typeof(NotificationsSignalRExtensionInitializer<>))]
 
-// 2. Web 装配（消费方 UseWebExtensions 处）
-app.UseWebExtensions(builder =>
-{
-    builder.UseNotificationsHubSignalR();   // NotificationsHubWebExtension
-});
+// 2. Web 装配（消费方 UseWebExtensions 处）——NotificationsHubWebExtension 一次声明
+app.UseWebExtensions(e => e.Add<NotificationsHubWebExtension>());   // AddSignalR（幂等）+ Options + MapHub 全部内聚
 ```
 
 配置节（可选）：

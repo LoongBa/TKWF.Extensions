@@ -1,6 +1,6 @@
 # TKWF.Federation.QQ QQ 互联连接器技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.1.0（N3 T2-T6 落地；preview 0.1.1-preview.0.1 为 N1 骨架） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.4.1（契约包切 Abstractions + I2-1 契约迁移收口） | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Abstractions`（ISsoChannel 契约；消费方编排另引 Federation 主包）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**——AGENTS §8：`TKWF.Ext.*`=扩展（有装配/持久化）/ `TKWF.*`=库（纯逻辑））/ **零持久化零 Store**（tkwf-extension 铁律）/ **出站-only 精简形态**（QQ 无事件推送——组件 1/2/5/6/7/8，信任根降级以出站换取链为准）/ **凭证自持**（`QqOptions`——Oracle P2-4，复不复用 Authentication `IPlatformCredentialService`）/ **trust root 降级**（QQ 无回调验签——安全重心 = 出站 code 一次性 + state CSRF + client_secret 换取 + redirect_uri 一致性）/ **不引 AspNetCore**（Oracle 评审点 5——库纯逻辑 + HttpClient，入站端点归 Federation 扩展/消费方装配层）
 
@@ -93,6 +93,7 @@ Federation 扩展按 channel 类型路由：`qq_oauth` → 302 QQ authorize（gr
 | `QqOptions` + `QqChannelConfig` | `TKWF:Federation:QQ` 节——`Channels` 列表（ChannelId/AppId/AppSecret/EnableUnionId）；凭证自持（P1-1） | ✅ 已实现（T1，N1 骨架） |
 | `QqUserInfo` + `QqMeResult` | `get_user_info` 响应裁剪 record（OpenId/Nickname/Avatar/Gender/Province/City）+ `/me` 换取结果（OpenId/UnionId） | ✅ 已实现（T2） |
 | `QqOauthChannel` | `ISsoChannel`（`ChannelType="qq_oauth"`）——回调 code→openid（code 缺拒 / redirect_uri 缺拒 / API 错误负路径），AuthLevel=2，不感知 state（P1-3），external_uid 恒 = openid（P1-2） | ✅ 已实现（T3） |
+| `QqChannelSource` | **多通道静态来源（组件 8.5，v0.3.0）**——多通道联邦 `IChannelSource`：`QqOptions.Channels` 投影统一 `ChannelConfig`（公共列 ChannelId/Alias/AppId/AppSecret + Extra{EnableUnionId}——N3 P1-2 unionid 开关），`PlatformType="qq"`（开放注册表 qq 平台段），Priority 默认；`AddQqFederationChannels()` 内 `TryAddEnumerable<IChannelSource>` 注册（普通 DI 集合——非 IDomainService 无守卫工厂语义；凭证自持 P2-4 不失效，仅投影形态统一） | ✅ 已实现（v0.3.0 多通道联邦） |
 | `AddQqFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel, QqOauthChannel>`——ADR92 集合版守卫工厂，channel 业务参数经 Options 注入不占 ctor `IDomainUser` 槽） | ✅ 已实现（T4，N1 骨架） |
 
 ## 四、通道契约
@@ -143,6 +144,12 @@ QQ **无入站回调**（无事件推送）——P5 一票否决**不适用**（
 | 版本 | 内容 |
 |------|------|
 | V0.1.0（2026-10-06） | N3 协议实现落地：`QqApiClient`（code→token→/me→openid + fmt=json + JSONP 剥壳 + redirect_uri 一致性 P1-4 + 用户级 token 不缓存 P1-5 + GetMeAsync unionid + get_user_info ret/msg 裁剪）/ `QqOauthChannel`（qq_oauth：code→openid + 缺 code 拒 + 缺 redirect_uri 拒 + AuthLevel=2 + 不感知 state P1-3）/ `QqUserInfo`/`QqMeResult` 响应裁剪 / `AddQqFederationChannels()`（保留 T4）/ 测试 16 用例全绿（生产路径通道正负 + QqApiClient 直构单测 + 协议结构断言 + unionid 开关 + StripJsonp 剥壳） |
+| V0.2.0（2026-10-08） | 联动 bump——跟随 Federation 迭代（被动版本演进，本库无独立功能变更） |
+| V0.2.1（2026-10-10） | 联动 bump——跟随 Federation ChannelAlias 等 Phase 3 设施迭代（被动；QqChannelSource 投影对齐 Alias 公共列） |
+| V0.2.2（2026-10-10） | 联动 bump——三层架构重定位（TrustCenter 剥离 v4.10.70 适配，依赖线收口；被动） |
+| V0.3.0（2026-10-11） | **多通道联邦（Phase 1）**——`QqChannelSource`（`IChannelSource` 投影 `QqOptions.Channels` → 统一 `ChannelConfig`：ChannelId/Alias/AppId/AppSecret 公共列 + Extra{EnableUnionId}，`PlatformType="qq"`，Priority 默认）+ `AddQqFederationChannels()` 内 `TryAddEnumerable<IChannelSource>` 注册 + ChannelConfig 选区集成（ChannelRegistry 替代 FirstOrDefault；回调路由带 channelId 段精确选区） |
+| V0.4.0（2026-10-18） | **契约包切 Abstractions（④ 联动）**——依赖 Federation 主包 → `Federation.Abstractions`（IChannelRegistry/IChannelSource/ChannelConfig 契约收口独立契约包，namespace 不变零 using 迁移；消费方编排另引 Federation 主包） |
+| V0.4.1（2026-10-21） | **I2-1 契约迁移联动**——ISsoChannel 契约迁入 `Federation.Abstractions`（通道契约归属纠正，依赖线稳定）+ I2 复查修复 bump |
 | 0.1.1-preview.0.1（2026-10-06） | N1 骨架（T1/T4 注册壳 + 通道骨骼）作为 preview 首发——`AuthenticateAsync` 抛 `NotImplementedException`（协议未实现），N3 落地后稳定版覆盖 |
 
 <!-- EOF -->

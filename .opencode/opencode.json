@@ -2,5 +2,16 @@
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
     "Agents_TKWF_Ext.md"
-  ]
+  ],
+  "mcp": {
+    "dotnet-analyzer": {
+      "type": "local",
+      "command": [
+        "dotnet-analyzer",
+        "mcp",
+        "serve"
+      ],
+      "enabled": true
+    }
+  }
 }

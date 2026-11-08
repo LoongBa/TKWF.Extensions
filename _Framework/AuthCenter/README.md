@@ -50,7 +50,7 @@
 
 ```xml
 <!-- 消费方 .csproj -->
-<ProjectReference Include="..\..\_Framework\Authentication\TKWF.Ext.AuthCenter.csproj" />
+<ProjectReference Include="..\..\_Framework\AuthCenter\TKWF.Ext.AuthCenter.csproj" />
 <!-- ⚠️ V0.6.0 契约包拆分（SSO 消费面）：使用 Federation/SSO 联邦契约（ISsoAccountQueryService /
      ISsoChannelMapService / ISsoAccountLinkService + 不可变 DTO）的消费方须**同时**引用独立契约包
      TKWF.Ext.AuthCenter.Abstractions——SSO 契约已迁出主 DLL，只引主 DLL 会致接口继承解析断裂误报
@@ -66,18 +66,23 @@ using TKWF.Ext.AuthCenter;
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 {
     // 自动注册（V4.10.53 领域自治根治，ADR90——正确路线三态；V4.10.55 ADR92/T3 闭环增强）：
-    //   门面（AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory，消费方 User.Use<接口>() 解析）：
-    //       ITokenService / IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService /
-    //       IPlatformCredentialService / IPlatformAccountMapService / ITokenVerifier /
-    //       IAuthAccountQueryService / IAuthAccountService
+    //   门面（AddConstructibleService——接口可构造守卫工厂 + 实现类 throw-factory，消费方 User.Use<接口>() 解析；
+    //     共 24 个，与 AuthCenterExtensionInitializer.ConfigureServices 逐一对应【2026-11-08 对齐核校】）：
+    //       基础门面：ITokenService / IAuthLoginAttemptService / IOAuthTicketService / ISmsVerificationService /
+    //         IPlatformCredentialService / IPlatformAccountMapService / ITokenVerifier /
+    //         IAuthAccountQueryService / IAuthAccountService
+    //       + SSO 账号快照（V0.6.0，契约包）：ISsoAccountQueryService（实现复用 AuthAccountQueryService）
     //       + 应用授权双门面（V0.8.0）：IAuthGrantQueryService / IAuthGrantCommandService
     //       + 登录编排门面（V0.5.0/V0.9.0/T5/V0.10.0）：ISmsLoginService / IPasswordLoginService / IExternalIdpLoginService /
-//         IFederatedLoginOrchestrator（V0.10.0 共享编排——code 通道 + 票据通道统一委托）/
-//         IExternalTicketLoginService（V0.10.0 票据 SPA 兑现——POST {prefix}/login/ticket）
-    //       + D03 1.4（L2 预置 + 档案合并 + 弱身份清理）：IExternalIdentityProvisioningService / IWeakIdentityCleanupService
+    //         IFederatedLoginOrchestrator（V0.10.0 共享编排——code 通道 + 票据通道统一委托）/
+    //         IExternalTicketLoginService（V0.10.0 票据 SPA 兑现——POST {prefix}/login/ticket）
+    //       + 身份域门面（V0.9.0/V0.11.0）：IPasswordResetService（找回多通道 B.10/B.11）/ IAuthFactorService（认证因素权威）/
+    //         IFreezeService（多原因冻结）/ IFreezeStateProvider（帧内快照缓存）/ IExternalIdentityService
+    //         （V0.11.0 合并契约——实现 PlatformAccountMapService，四方法全委托 IAuthFactorService）
+    //       + D03 1.4（V0.13.0，L2 预置 + 档案合并 + 弱身份清理）：IExternalIdentityProvisioningService / IWeakIdentityCleanupService
     //         ——控制器经此编排，禁 [FromServices] 集合（T5：IWechatLoginService 已删，外部 IdP 经 IExternalIdpLoginService 桥接）
     //   多 Provider（TryAddEnumerableConstructible——V0.5.0 集合版守卫工厂）：IAuthenticationProvider（短信 + 密码）
-    //   + 12 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
+    //   + 15 实体 DataService（ADR61 消费方聚合自动注册——Initializer 零手动注册）
 }
 ```
 
@@ -234,26 +239,31 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
 - **DMP 微信凭证存量**：生产 DBA 执行 `DELETE FROM TKWF_PlatformCredential WHERE Platform='wechat'`（AuthCenter 侧微信凭证已无消费者——凭证迁移至 `Federation.WeChat` `WeChatOptions` 自持，平台库共用底座保留）。
 - **既有测试宿主**：白名单声明补 `FederationExtensionInitializer<>`（桥接契约由 Federation 注册——端到端验证见 `ExternalIdpLoginServiceTests`）。
 
-## 五、实体表结构（12 张——**全部 `TKWF_` 前缀**，ADR100 表前缀批次，迁移范围以源码 `[Table]` 为准）
+## 五、实体表结构（15 张——**全部 `TKWF_` 前缀**，ADR100 表前缀批次，迁移范围以源码 `[Table]` 为准）
+
+> 每表标注**最后变更版本**（依据各实体源码 `[Table]`/`[Column]`/索引定义——2026-11-08 全表核校）；§四之三破坏性变更段与 §八 V0.11.0 迁移记录为历史记录，§五 只写当前真实状态。索引名当前均为 `TKWFIX_` 前缀（ADR100）。
 
 | 表 | 关键列/约束 |
 |----|-----------|
-| `TKWF_AuthAccount`（**V0.9.0 改名**） | UId(32 唯一)/Phone(20 **可空**唯一——微信便捷账号无手机号)/PasswordHash?（**SecurePassword 协议 AES-GCM 密文**——ADR-密码策略 决策 1，服务端零明文；组装格式 `{iterations}.{b64salt}.{b64hash}` 经 `ICredentialProtector` 保护）/**FederationAnchorOpenId?**（V0.6.0 联盟锚点——联邦 SSO 账号锚定列，**唯一**）/**AuthLevel**（V0.9.0 泛化 1=手机号级/2=联邦快捷——剔 3=教师核实）/**IsFrozen + FreezeEnd?**（V0.9.0 密码策略 决策 3——账号冻结；FreezeEnd=null 永久冻结）/**MustChangePassword**（初始密码强制改密——认证成功返回信号）/TokenVersion/IsEnabled；**⚠️ V0.9.0 瘦身（A.1/A.8）**：删 Nickname/Avatar/TeacherVerified（迁 `TKWF_UserProfile`）+ WechatMpOpenId/WechatWebOpenId/UnionId（联邦归一化迁 `PlatformAccountMap`）——凭据白名单表；索引 `TKWFIX_` 前缀（ADR100） |
-| `TKWF_UserProfile`（**V0.9.0 新增**） | UId(32 **唯一 1:1**——凭据/档案表级分离 A.1)/Nickname/Avatar/Birthday?/Gender?（宽松自由文本 max32——A.7）/Email?（联系方式角色——非登录凭据，A.5/A.6） |
-| `TKWF_PasswordResetCode`（**V0.9.0 新增**） | UId(32)/Channel(SMS/Email——找回多通道 B.10)/CodeHash(SHA256 不存明文)/ExpireAt（**v0.9.1 TTL 配置化**——`PasswordPolicyOptions.ResetCodeValidityMinutes` 默认 30）/IsConsumed——**UId-keyed 自建链路**（Account PasswordResetCode 为 userName-keyed，平行不互认） |
-| `TKWF_PasswordHistory`（**V0.9.0 密码策略 决策 5 新增**） | UId(32)/ClientHash(明文组装格式——防重用比对源，服务端不接触密码明文)/CreateTime——**只增表**（保留最近 `PasswordPolicyOptions.HistoryRetentionCount` 代，门面 TrimHistoryAsync 清理；密码历史防重用 `PASSWORD_REUSE_REJECTED`） |
-| `TKWF_AuthLoginAttempt` | UserIdentity(100)+AuthType(20)+IsSuccess+IpAddress?+FailReason?+AttemptTime；索引 (UserIdentity,AuthType,AttemptTime) |
-| `TKWF_SmsRecord` | Phone+Scene+CodeHash(SHA256 不存明文)+IsVerified+ExpireAt；索引 (Phone,Scene,CreateTime)/(IpAddress,CreateTime) |
-| `TKWF_AuthRefreshToken` | Jti/UserId+TokenHash(SHA256 唯一)/TokenVersion/ExpiresAt/IsRevoked/RevokedAt?；索引 (UserId,TokenVersion) |
-| `TKWF_AuthTokenBlacklist` | Jti(唯一)/UserId/ExpiresAt/RevokedAt/Reason——条目 TTL=token 自然过期 |
-| `TKWF_OAuthTicket` | Ticket(唯一高熵)/TicketType(login/bind)/AppId/RedirectUri/State?/CodeVerifierHash?/UserId?/ExpiresAt/IsConsumed |
-| `TKWF_AuthGrant`（**V0.8.0**） | UserId(50)/AppId(100)/Scopes(500 逗号分隔)/**ValidUntil?（应用授权有效期——null=持续至吊销，非会话有效期）**/Source(20：login/redeem)/Status(int 0 Active/1 Revoked)/CreateTime/UpdateTime；**唯一索引 `UX_AuthGrant_User_App_Source(UserId,AppId,Source)`**（防并发 exchange 重复 grant 行——写入门面 upsert 以此复合键冲突判定） |
-| `TKWF_PlatformAccountMap` | PlatformAccountId+BusinessAppId+BusinessLocalId(唯一)/UnionId?/**ChannelId?+ExternalUserId?**（V0.6.0 联邦通道映射——IdP 通道 + 外部用户 Id；新索引 `UX_PlatformAccountMap_Channel`，既有 UX 保留；**V0.9.0 A.8 起微信 openid 绑定归一化落此列**） |
-| `TKWF_PlatformCredential` | Platform+AppType+AppId(唯一)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore 不外泄)/IsEnabled |
+| `TKWF_AuthAccount`（最后变更 **V0.11.0**——认证关系模型：凭据/冻结/认证强度因子化） | Id(自增主键)/UId(32 **唯一**——`TKWFIX_AuthAccount_UId`)/TokenVersion（密码/绑定变更自增 → 旧 Refresh 失效闭环）/IsEnabled/CreateTime/UpdateTime——**仅 6 列：凭据白名单锚点**（原始身份证锚；手机号/密码/联邦绑定归 `TKWF_AuthFactor`，冻结归 `TKWF_AuthAccountFreeze`，档案归 `TKWF_UserProfile`） |
+| `TKWF_AuthFactor`（**V0.11.0 新增**） | Id/UId(32)/FactorType(1=Password/2=Sms/3=Email/4=Federated/5=Totp 预留/6=Passkey 预留)/Identifier(256 规范化：Password=UId、Sms=E.164、Email=小写 trim、Federated=`{channelId}\|{externalUserId}`)/SecretHash?(512——PBKDF2/AES-GCM blob，服务端零明文)/SecretUpdatedAt?/State(0=Active/1=Unverified——解绑=物理删除无 Revoked 态)/MustChange（初始密码强制改密标记）/BoundAt?/VerifiedAt?/LastUsedAt?/Metadata?(1024 扩展 JSON **不参与查询**)/CreateTime/UpdateTime；索引 `TKWFIX_AuthFactor_Type_Identifier`(FactorType,Identifier **唯一**) + `TKWFIX_AuthFactor_UId`(UId,FactorType) |
+| `TKWF_AuthFactorEvent`（**V0.11.0 新增**） | Id/UId(32)/FactorType/Identifier(256 标识快照——解绑后可追溯)/EventType(1=Bind/2=Unbind/3=Verify/4=Reset)/Source(1=Manual/2=Business/3=Policy/4=Provisioning)/OccurredAt/ReceivedAt/OperatorUId?(32)/OperatorName?(64)/DedupeKey?(256 幂等去重)**append-only 只增表**；索引 `TKWFIX_AuthFactorEvent_UId`(UId,OccurredAt) + `TKWFIX_AuthFactorEvent_Dedupe`(DedupeKey **唯一**，NULL 多行放行) |
+| `TKWF_AuthAccountFreeze`（**V0.11.0 新增**） | Id/UId(32)/Reason(64 机器可读键 manual/wechat_unfollow/risk_control/arrears/violation)/Scope(0=Account 全站登录——V0.11.0 恒 0，1=Login/2=Feature 预留)/Source(32 触发方标识)/FreezeEnd?(自动到期，null=永久)/ReleasedAt?(解冻时刻，null=冻结中)/ReleasedBy?(64)/CreatedAt/CreatedBy?(64)/Note?(512)；**活跃判据 `ReleasedAt == null && (FreezeEnd == null \|\| FreezeEnd > UtcNow)`**——解冻软释放留审计行；索引 `TKWFIX_AuthAccountFreeze_UId`(UId,ReleasedAt) |
+| `TKWF_UserProfile`（V0.9.0 新增；最后变更 **V0.13.0**——D03 1.4 增档案来源列） | UId(32 **唯一 1:1**——`TKWFIX_UserProfile_UId`)/Nickname?(128)/Avatar?(512 URL)/Birthday?/Gender?(32 宽松自由文本)/Email?(64 联系方式角色——非登录凭据)/**ProfileSource?(32** user_filled/oauth_userinfo/event/merchant_set——V0.13.0)**/LastProfileSourceAt?（V0.13.0）/CreateTime/UpdateTime |
+| `TKWF_PasswordResetCode`（**V0.9.0 新增**） | UId(32——**UId-keyed 自建链路**，Account PasswordResetCode 为 userName-keyed 平行不互认)/Channel(20 SMS/Email/OAuthTicket)/CodeHash(64 SHA256 不存明文)/ExpireAt（v0.9.1 起 `PasswordPolicyOptions.ResetCodeValidityMinutes` 配置化，默认 30）/IsConsumed；索引 `TKWFIX_PasswordResetCode_UId`(UId) |
+| `TKWF_PasswordHistory`（**V0.9.0 密码策略 决策 5 新增**） | UId(32)/ClientHash(512 `{iterations}.{b64salt}.{b64hash}` 组装格式——防重用比对源，服务端零明文)/CreateTime——**只增表**（最近 `PasswordPolicyOptions.HistoryRetentionCount` 代保留，门面裁剪；最近改密时间承载：强制轮换判定查最新行）；索引 `TKWFIX_PasswordHistory_UId`(UId) |
+| `TKWF_AuthLoginAttempt`（最后变更 **V0.1.0**；值域 T5 2026-10-09 更新） | UserIdentity(100)/AuthType(20 sms/federated/password/redeem——T5 federated 替代 wechat)/IsSuccess/IpAddress?(45)/UserAgent?(500)/FailReason?(100)/AttemptTime；索引 `TKWFIX_AuthLoginAttempt_UserAuthTime`(UserIdentity,AuthType,AttemptTime)——**只增语义** |
+| `TKWF_SmsRecord`（最后变更 **V0.1.0**） | Phone(20)/Scene(20 login/register/bind/reset)/CodeHash(64 SHA256 不存明文)/IsVerified/IpAddress?(45)/ExpireAt/CreateTime；索引 `TKWFIX_SmsRecord_PhoneSceneTime`(Phone,Scene,CreateTime) + `TKWFIX_SmsRecord_IpTime`(IpAddress,CreateTime)——**只增语义** |
+| `TKWF_AuthRefreshToken`（最后变更 **V0.1.0**；值域 T5 更新） | Jti(64)/UserId(32)/AuthType(20)/TokenHash(64 SHA256 **唯一**——`TKWFIX_AuthRefreshToken_TokenHash`)/TokenVersion（刷新时校验不匹配拒绝）/ExpiresAt/IsRevoked/RevokedAt?/DeviceInfo?(200)/CreateTime；索引 `TKWFIX_AuthRefreshToken_UserVersion`(UserId,TokenVersion)——**只增语义** |
+| `TKWF_AuthTokenBlacklist`（最后变更 **V0.1.0**） | Jti(64 **唯一**——`TKWFIX_AuthTokenBlacklist_Jti`)/UserId(32)/ExpiresAt/RevokedAt/Reason?(50 logout/revoke/security)——条目 TTL=token 自然过期；**只增语义** |
+| `TKWF_OAuthTicket`（最后变更 **V0.1.0**；V0.8.0 补绑定语义） | Ticket(64 **唯一**高熵——`TKWFIX_OAuthTicket_Ticket`)/TicketType(20 login/bind)/AppId(64)/RedirectUri(512)/State?(128)/CodeVerifierHash?(64 PKCE)/UserId?(32 签发即绑 V0.8.0)/ExpiresAt/IsConsumed/ConsumedAt?/CreateTime |
+| `TKWF_AuthGrant`（**V0.8.0 新增**） | UserId(50)/AppId(100)/Scopes(500 逗号分隔)/**ValidUntil?（应用授权有效期——null=持续至吊销，非会话有效期）**/Source(20 login/redeem)/Status(0 Active/1 Revoked)/CreateTime/UpdateTime；**唯一索引 `TKWFIX_AuthGrant_User_App_Source`(UserId,AppId,Source)**（防并发 exchange 重复 grant 行） |
+| `TKWF_PlatformAccountMap`（最后变更 **V0.11.0**——删 ChannelId/ExternalUserId/UnionId 三列，回归纯业务映射） | PlatformAccountId(32)/BusinessAppId(64)/BusinessLocalId(128)/CreateTime/UpdateTime；**唯一索引 `TKWFIX_PlatformAccountMap`(PlatformAccountId,BusinessAppId,BusinessLocalId)**——联邦通道绑定归 `TKWF_AuthFactor`(Federated) 因素行 |
+| `TKWF_PlatformCredential`（最后变更 **V0.1.0**；V0.7.0 加密边界上移） | Platform(20 wechat/douyin/alipay)/AppType(20)/AppId(128)/AppName?(128)/AppSecretEncrypted(AES-GCM 密文——服务层 `PlatformCredentialService` 经 keyed `ISymmetricKeyProvider` 加解密，DtoFieldIgnore+JsonIgnore 不外泄)/IsEnabled/CreateTime/UpdateTime；**唯一索引 `TKWFIX_PlatformCredential`(Platform,AppType,AppId)** |
 
-> ⚠️ **V0.9.0 破坏性迁移提示（消费方适配）**：`AuthAccount` **表名变更**（→ `TKWF_AuthAccount`）+ **删 6 列**（档案 3 列迁 `TKWF_UserProfile` + 微信 3 列归一化 `PlatformAccountMap`）+ `teacher_verified` claim 移除——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA：RENAME 表 + 迁档案数据 + 回填 PlatformAccountMap 微信绑定）；`EnabledAuthTypes` fail-closed 生效（显式配 `["sms"]` 但用 wechat 的消费方须加 `"wechat"`）。
+> ⚠️ **V0.11.0 破坏性迁移提示（消费方适配）**：`AuthAccount` **删 7 列**（Phone/PasswordHash/FederationAnchorOpenId/AuthLevel/IsFrozen/FreezeEnd/MustChangePassword——凭据/冻结/认证强度因子化）+ `PlatformAccountMap` **删 3 列**（ChannelId/ExternalUserId/UnionId）——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA：Phone/PasswordHash/FederationAnchorOpenId 迁 `TKWF_AuthFactor` 行（Sms/Password/Federated 因素）、冻结迁 `TKWF_AuthAccountFreeze` 行、通道绑定迁 Federated 因素 `{channelId}\|{externalUserId}` 行；`AuthLevel`/`Phone` 等派生值改经 `IAuthFactorService` 读取）。
 
-> ⚠️ **V0.6.0 升级迁移提示（EduPlatform 实证 2026-10-05）**：`AuthAccount` 新增 `FederationAnchorOpenId` 列、`PlatformAccountMap` 新增 `ChannelId`/`ExternalUserId` 列（+ `UX_PlatformAccountMap_Channel` 索引）——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA），否则 Federation 联邦流 sms/login 相关路径 500（列缺失）。
+> ⚠️ **V0.9.0 破坏性迁移提示（消费方适配，历史）**：`AuthAccount` **表名变更**（→ `TKWF_AuthAccount`）+ **删 6 列**（档案 3 列迁 `TKWF_UserProfile` + 微信 3 列归一化 `PlatformAccountMap`——V0.11.0 后通道绑定再迁 `TKWF_AuthFactor`）+ `teacher_verified` claim 移除——**旧表升级需迁移**（SyncStructure 开发环境自动；生产走迁移脚本/DBA：RENAME 表 + 迁档案数据 + 回填 PlatformAccountMap 微信绑定）；`EnabledAuthTypes` fail-closed 生效（显式配 `["sms"]` 但用 wechat 的消费方须加 `"wechat"`）。
 
 ## 六、安全边界
 

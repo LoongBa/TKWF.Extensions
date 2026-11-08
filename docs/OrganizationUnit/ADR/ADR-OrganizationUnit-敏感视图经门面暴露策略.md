@@ -6,13 +6,13 @@
 
 ## 一、目的与目标
 
-确立 OrganizationUnit 扩展 VEntity 读模型（`vw_UserOrganizationUnitView`）的暴露策略：**敏感视图（含用户-OU 归属关系）默认关闭 GraphQL 直连，数据访问统一经既有门面（`IOrganizationUnitManager`）暴露**。读者应在 3 句话内明白：OrganizationUnit V0.2.0 引入的用户归属 JOIN 视图（JOIN `OrganizationUnitUser` → `OrganizationUnit`）含用户-OU 归属明细（私密关系），`ExposeGraphqlQuery = false` 显式关闭（对照 VEntity 默认 `true`）；消费方访问用户归属仍走 `IOrganizationUnitManager.GetUserIdsInOrganizationUnitAsync`（门面内已有引用守卫/双模式语义）；未来需 GraphQL 直读时按安全评估再开。
+确立 OrganizationUnit 扩展 VEntity 读模型（`TKWFV_UserOrganizationUnitView`）的暴露策略：**敏感视图（含用户-OU 归属关系）默认关闭 GraphQL 直连，数据访问统一经既有门面（`IOrganizationUnitManager`）暴露**。读者应在 3 句话内明白：OrganizationUnit V0.2.0 引入的用户归属 JOIN 视图（JOIN `TKWF_OrganizationUnitUser` → `TKWF_OrganizationUnit`）含用户-OU 归属明细（私密关系），`ExposeGraphqlQuery = false` 显式关闭（对照 VEntity 默认 `true`）；消费方访问用户归属仍走 `IOrganizationUnitManager.GetUserIdsInOrganizationUnitAsync`（门面内已有引用守卫/双模式语义）；未来需 GraphQL 直读时按安全评估再开。
 
 ## 二、问题
 
 ### 问题现象
 
-- VEntity 默认 `ExposeGraphqlQuery = true`（`QueryExposureDefaults.cs`）——`vw_UserOrganizationUnitView` 含 `UserId`（用户 Id）与 OU 归属关系，不显式关闭即裸暴露。
+- VEntity 默认 `ExposeGraphqlQuery = true`（`QueryExposureDefaults.cs`）——`TKWFV_UserOrganizationUnitView` 含 `UserId`（用户 Id）与 OU 归属关系，不显式关闭即裸暴露。
 - 用户-OU 归属是**私密关系数据**（组织归属可推导组织架构/汇报线/权限范围）——GraphQL 直连绕过门面引用守卫（已删 OU 查询拒绝）与业务语义。
 - `includeDescendants` 双模式语义（oracle3 C-5/M2）在 `IOrganizationUnitManager` 内（`true` 视图 Path 前缀 / `false` junction 单查）——GraphQL 直连无此语义。
 
@@ -42,7 +42,7 @@
 
 ### 选项 A（采纳）：`ExposeGraphqlQuery = false`（敏感视图经门面）
 
-- 描述：`vw_UserOrganizationUnitView` 声明 `ExposeGraphqlQuery = false`；`GetUserIdsInOrganizationUnitAsync(includeDescendants: true)` 经 `UserOrganizationUnitViewDataService` 委托（Store 中间层，Manager 门面消费）；`includeDescendants=false` 保留 junction 单查（双模式，oracle3 C-5/M2）。
+- 描述：`TKWFV_UserOrganizationUnitView` 声明 `ExposeGraphqlQuery = false`；`GetUserIdsInOrganizationUnitAsync(includeDescendants: true)` 经 `UserOrganizationUnitViewDataService` 委托（Store 中间层，Manager 门面消费）；`includeDescendants=false` 保留 junction 单查（双模式，oracle3 C-5/M2）。
 - 优点：用户-OU 归属（私密关系）不经 GraphQL 裸暴露；消费方路径单一（门面）；单表下推（`GetSubTreeAsync`/`GetAncestorsAsync` 精确前缀/Code IN）不新增视图（"无必要勿增 SG"判据，oracle3 C-1）。
 - 缺点：需 GraphQL 直读用户归属时需先安全评估再开（当前无此需求）。
 
@@ -58,7 +58,7 @@
 
 ## 五、结论
 
-采纳**选项 A**：`vw_UserOrganizationUnitView` 声明 `ExposeGraphqlQuery = false`（C4 裁定），数据访问统一经 `IOrganizationUnitManager` 门面。实施：`UserOrganizationUnitView.cs` `[DomainGenerateCode(IsView=true, ..., ExposeGraphqlQuery=false)]`；`UserOrganizationUnitViewDataService` 不标 `[GenerateController(FromDataService=true)]`（REST 经门面）；Store 中间层委托 + Manager 双模式消费；测试宿主建真实视图验证 JOIN 下推。**F12 回收注记（oracle3 C-7/L1）**：单表手写下推 `GetByPathPrefixAsync`/`GetByCodesAsync`（`OrganizationUnitEntityDataService`）在框架 **F12（物化路径树形查询模板）** 落地后可回收为模板生成——避免永久双轨，F12 落地时评估回收。关联：04 倒推优化方案（OU/DataDict 内存拼装优化）C-1/C-4/C-5 裁定；框架演进候选 F4（OwnerFilter）/F11（默认收敛）/F12（物化路径树形查询模板）。
+采纳**选项 A**：`TKWFV_UserOrganizationUnitView` 声明 `ExposeGraphqlQuery = false`（C4 裁定），数据访问统一经 `IOrganizationUnitManager` 门面。实施：`UserOrganizationUnitView.cs` `[DomainGenerateCode(IsView=true, ..., ExposeGraphqlQuery=false)]`；`UserOrganizationUnitViewDataService` 不标 `[GenerateController(FromDataService=true)]`（REST 经门面）；Store 中间层委托 + Manager 双模式消费；测试宿主建真实视图验证 JOIN 下推。**F12 回收注记（oracle3 C-7/L1）**：单表手写下推 `GetByPathPrefixAsync`/`GetByCodesAsync`（`OrganizationUnitEntityDataService`）在框架 **F12（物化路径树形查询模板）** 落地后可回收为模板生成——避免永久双轨，F12 落地时评估回收。关联：04 倒推优化方案（OU/DataDict 内存拼装优化）C-1/C-4/C-5 裁定；框架演进候选 F4（OwnerFilter）/F11（默认收敛）/F12（物化路径树形查询模板）。
 
 ## 六、变更记录
 

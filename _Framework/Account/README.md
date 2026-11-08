@@ -146,8 +146,8 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 |----------|---------|------------|
 | **`IAccountLockoutPolicy`** | 账户锁定策略（主框架扩展点） | `FreeSqlAccountLockoutPolicy`（本扩展） |
 | **`IPasswordResetFlow`** | 密码重置流程（主框架扩展点） | `DefaultPasswordResetFlow`（本扩展） |
-| **`IAccountLockoutStore`** | 锁定状态存储抽象 | `FreeSqlAccountLockoutStore`（本扩展） |
-| **`IPasswordResetStore`** | 重置码存储抽象 | `FreeSqlPasswordResetStore`（本扩展） |
+| **`IAccountLockoutStore`** | 锁定状态存储抽象 | `AccountLockoutStore`（本扩展，继承 `DomainServiceBase`，AddConstructibleService 注册） |
+| **`IPasswordResetStore`** | 重置码存储抽象 | `PasswordResetStore`（本扩展，继承 `DomainServiceBase`，AddConstructibleService 注册） |
 | **`IAccountPasswordManager`** | 密码落地抽象 | 消费方实现（适配 Identity IUserManager） |
 | **`ILoginHistoryService`** | 登录历史与异常检测查询（V0.3.0——消费 SecurityLog 扩展查询 API，不重复建表） | `LoginHistoryService`（本扩展，V0.5.x 升门面继承 `DomainServiceBase`——经基类 `User.Use<SecurityLog 契约>()` AOP 路径解析） |
 | **`AccountLockoutEntity`** | 锁定记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
@@ -160,7 +160,7 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 
 ## 五、实体表结构 (Entity Schema)
 
-`AccountLockoutEntity` → `AccountLockout` 表：
+`AccountLockoutEntity` → `TKWF_AccountLockout` 表：
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
@@ -172,7 +172,9 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
 | CreateTime | DATETIMEOFFSET | 创建时间 |
 | UpdateTime | DATETIMEOFFSET | 更新时间 |
 
-`PasswordResetCodeEntity` → `PasswordResetCode` 表：Id / UserName / ResetCode / ExpireTime（DATETIME，本地时间语义）/ IsUsed / CreateTime
+`PasswordResetCodeEntity` → `TKWF_Acct_PasswordResetCode` 表：Id / UserName / ResetCode / ExpireTime（DATETIME，本地时间语义）/ IsUsed / CreateTime
+
+> **表名前缀注记**：v4.10.66 框架批次统一 `TKWF_` 前缀——本扩展 `AccountLockout` 表用标准 `TKWF_AccountLockout`；`PasswordResetCode` 表因撞名自声明用中缀 `TKWF_Acct_PasswordResetCode`（头标 §8.3 自声明，撞名追尾方全责）。DBA 查表/迁移以实体 `[Table]` 为准。
 
 ---
 
@@ -202,3 +204,9 @@ TryAdd 语义确保消费方实现优先；`IAccountLockoutStore` / `IPasswordRe
   - **划界**：SecurityLog 是登录历史唯一数据源（不重复建表）；SecurityLog 契约经 `IServiceProvider` 延迟解析（C1 模式，对齐 NotificationPublisher）——**未启用 SecurityLog 扩展 → 调用抛 `InvalidOperationException` 明确提示**；查询失败 → Warning + 空结果
   - **V0.4.0 依赖倒置**：SecurityLog 契约现经 `TKWF.Ext.SecurityLog.Abstractions`（ADR48 D7）引用，不再直引 SecurityLog 本体（原 NoWarn 债务已清偿）
 - 管理 UI（账户锁定/解锁/重置审计）——规划（本次迭代不做）
+
+### V0.3.1 / V0.4.0 ~ V0.4.2（已实施：配套发布行）
+- **v0.3.1**：CI 发布管线修复（publish job YAML 缩进——394ffc1 两次 main CI 失败根因）。
+- **v0.4.0**：SecurityLog Abstractions 契约包落地（ADR48 D7 第 5 次——跨扩展引用债项闭环）。
+- **v0.4.1**：手写门面接口补 `IDomainService` 契约（EduPlatform 转告 + 跨扩展同类裁定）。
+- **v0.4.2**：XML 注释转义修复（CS1570——Oracle 复审可选项收尾）。

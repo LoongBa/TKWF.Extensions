@@ -1,7 +1,7 @@
 # ADR-Federation.WeChat-菜单出站API与凭证解析可插拔
 
 > **版本**：v0.2（Oracle 评审 PASS WITH CONDITIONS 意见吸收——P1×2）
-> **状态**：草稿（Oracle 评审已完成，P1 已吸收——待实施）
+> **状态**：已实施（V0.4.1，2026-10-18）
 > **关联**：开发方案 `docs/WeChatOperations/微信公众号运营扩展-开发方案.md`（平台库增强 §3.2）；`ADR-Federation-平台特定事件回复Handler基类与二级分发.md`（事件回复底座，既有）；`docs/AuthCenter/ADR/ADR-AuthCenter-归层与命名.md`（四层归层——`TKWF.Federation.{平台}` = 大使馆/纯库）
 > **Oracle 评审**：PASS WITH CONDITIONS（2026-10-17）——P1×2（DI 注册缺省非 ctor fallback / CompositeChannelRegistry 聚合机制）已吸收
 > **日期**：2026-10-17

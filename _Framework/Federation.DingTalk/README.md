@@ -1,6 +1,6 @@
 # TKWF.Federation.DingTalk 钉钉开放平台网关库技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.4.1 | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Abstractions`（ISsoChannel 契约——I2-1 迁入 FA；消费方编排另引 Federation 主包）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**——AGENTS §8：`TKWF.Ext.*`=扩展（有装配/持久化）/ `TKWF.*`=库（纯逻辑））/ **零持久化零 Store**（tkwf-extension 铁律——纯内存态企业 token 缓存）/ **双向**（OAuth 身份获取 + 事件订阅推送验签）/ **凭证自持**（`DingTalkOptions`——Oracle P2-4，不复用 Authentication `IPlatformCredentialService`）/ **三道闸门信任根**（signature 验签 + AES 解密 + **receiveid=corpId 校验——Oracle 评审 P1-1：forged org-change event 可授予企业访问权，敏感度高于微信消息事件**）/ **1200ms 硬约束**（库 `AuthenticateAsync` CPU-only 无出站 <50ms，落库即返 success 归装配层 persist-then-ack——Oracle 评审 P1-2）/ **不引 AspNetCore**（Oracle 评审点 5——库纯逻辑 + HttpClient，入站端点归 Federation 扩展/消费方装配层，库只提供验签逻辑类）
 
@@ -32,8 +32,10 @@
 ```xml
 <!-- 源码模式 -->
 <ProjectReference Include="..\_TKWF.Extensions\_Framework\Federation.DingTalk\TKWF.Federation.DingTalk.csproj" />
-<ProjectReference Include="..\_TKWF.Extensions\_Framework\Federation\TKWF.Ext.Federation.csproj" />  <!-- 组合式：Federation 扩展（ISsoChannel 契约 + 窄适配编排） -->
+<ProjectReference Include="..\_TKWF.Extensions\_Framework\Federation\TKWF.Ext.Federation.csproj" />  <!-- 组合式：Federation 扩展（窄适配编排） -->
 ```
+
+> **注**：库本身引 `Federation.Abstractions`（`ISsoChannel` 契约——I2-1 迁入 FA）；消费方实现联邦登录另引 Federation 主包做编排。
 
 ### 2. 注册通道（T6 已实现——库提供 `AddDingTalkFederationChannels()`）
 
@@ -92,6 +94,7 @@ Federation 扩展按 channel 类型路由：`dingtalk_oauth` → 302 钉钉 auth
 | `DingTalkOauthChannel` | `ISsoChannel`（`ChannelType="dingtalk_oauth"`）——回调 code→openId/unionId（AuthenticateAsync 内 userAccessToken 换）；**external_uid 恒 = openId（P1-4 两步流）** | 对外（上游 IdP 适配） | ✅ 已实现（T3） |
 | `DingTalkEventChannel` + `DingTalkEventCrypto` | `ISsoChannel`（`ChannelType="dingtalk_event"`）——事件推送三道闸门（signature 验签 + AES 解密 + **receiveid=corpId 校验 P1-1**）+ FromUserId→openId；CPU-only <50ms | 对外（上游 IdP 适配） | ✅ 已实现（T4/T5） |
 | `AddDingTalkFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel>`——channel 业务参数经 Options 注入，不占 ctor `IDomainUser` 槽，ADR92 兼容） | 装配 | ✅ 已实现（T6） |
+| `DingTalkChannelSource` | `IChannelSource` 通道投影（多通道联邦 v0.3.0 Phase 1）——`DingTalkOptions.Channels` → 统一 `ChannelConfig`（`ChannelId`→`ChannelId`/`AppSecret`→`AppSecret` 公共列；`CorpId`/`AppKey`/`Token`/`EncodingAESKey` 进 `Extra` 平台字段），`PlatformType="dingtalk"`，Priority 默认 | 装配 | ✅ 已实现（v0.3.0） |
 
 ## 四、双通道契约（T3/T5 已实现）
 
@@ -144,5 +147,11 @@ Federation 扩展按 channel 类型路由：`dingtalk_oauth` → 302 钉钉 auth
 | 版本 | 内容 |
 |------|------|
 | V0.1.0（2026-10-06） | M3 钉钉平台网关库全量落地：`DingTalkApiClient` 出站（userAccessToken 一次性 + 新旧双企业 token L1 缓存并发锁提前刷新 + getbyunionid 供装配层 + /contact/users 裁剪）+ `DingTalkOptions`/`DingTalkChannelConfig`（凭证自持含 CorpId）+ `DingTalkUserInfo`（两步填充）+ `DingTalkOauthChannel`（dingtalk_oauth——external_uid 恒=openId）+ `DingTalkEventChannel` + `DingTalkEventCrypto`（三道闸门含 receiveid=corpId 校验，CPU-only <50ms）+ `AddDingTalkFederationChannels()`；纯库（无 Initializer 无 `[TKWFExtension]`），csproj 引 Federation 扩展实现 ISsoChannel + `Microsoft.Extensions.Http`；测试 23 用例全绿（生产路径 + 探针门面 + 信任根正负路径 + receiveid 篡改拒）；slnx 接线 + 全量回归 38 测试项目全绿 |
+| V0.2.0（2026-10-08） | CPM lockstep/联动（被动 bump） |
+| V0.2.1（2026-10-10） | CPM lockstep/联动（被动 bump） |
+| V0.2.2（2026-10-10） | CPM lockstep/联动（被动 bump） |
+| V0.3.0（2026-10-11） | 多通道联邦：`DingTalkChannelSource` 投影（DingTalkOptions.Channels → ChannelConfig）+ ChannelConfig 选区 + FromChannel 重建 |
+| V0.4.0（2026-10-18） | 契约收口：csproj 改引 `Federation.Abstractions`（7 平台库联动改引契约包，依赖拓扑切 Abstractions） |
+| V0.4.1（2026-10-21） | I2 契约迁移联动（Federation I2 复查修复发布） |
 
 <!-- EOF -->

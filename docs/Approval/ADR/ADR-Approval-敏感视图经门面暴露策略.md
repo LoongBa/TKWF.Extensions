@@ -6,14 +6,14 @@
 
 ## 一、目的与目标
 
-确立 Approval 扩展 VEntity 读模型（`vw_ApprovalTaskView`）的暴露策略：**敏感视图默认关闭 GraphQL 直连，数据访问统一经既有门面（`IApprovalQueryService`）鉴权暴露**。读者应在 3 句话内明白：Approval V0.3.0 引入的任务链 JOIN 视图含审批人明细/审批意见等敏感列，`ExposeGraphqlQuery = false` 显式关闭（对照 VEntity 默认 `true`）；消费方访问审批数据仍走门面（门面内已有状态机/权限语义）；未来需 GraphQL 直读时按安全评估再开。
+确立 Approval 扩展 VEntity 读模型（`TKWFV_ApprovalTaskView`）的暴露策略：**敏感视图默认关闭 GraphQL 直连，数据访问统一经既有门面（`IApprovalQueryService`）鉴权暴露**。读者应在 3 句话内明白：Approval V0.3.0 引入的任务链 JOIN 视图含审批人明细/审批意见等敏感列，`ExposeGraphqlQuery = false` 显式关闭（对照 VEntity 默认 `true`）；消费方访问审批数据仍走门面（门面内已有状态机/权限语义）；未来需 GraphQL 直读时按安全评估再开。
 
 ## 二、问题
 
 ### 问题现象
 
 - VEntity 默认 `ExposeGraphqlQuery = true`（`QueryExposureDefaults.cs`：`ResolveGraphql → IsView(entity)`）——新建视图不显式关闭即裸暴露。
-- `vw_ApprovalTaskView` 投影列含 `ApproverUserId`（审批人 ID）/`ApprovedBy`（审批通过人）/`Comment`（审批意见）/`TransferredTo`（转交目标）等审批敏感明细——经 GraphQL 直连绕过业务鉴权。
+- `TKWFV_ApprovalTaskView` 投影列含 `ApproverUserId`（审批人 ID）/`ApprovedBy`（审批通过人）/`Comment`（审批意见）/`TransferredTo`（转交目标）等审批敏感明细——经 GraphQL 直连绕过业务鉴权。
 - 审批语义含"仅本人/审批人可见"（`GetPendingTasksAsync` 按 `ApproverUserId` 过滤）与状态机约束（`Pending→Approved/Rejected`）——框架当前无"仅本人"过滤（`IGlobalQueryFilter` 仅 `TenantGlobalQueryFilter`，OwnerFilter 为框架演进候选 F4），GraphQL 直连无此保护。
 
 ### 触发场景
@@ -42,7 +42,7 @@
 
 ### 选项 A（采纳）：`ExposeGraphqlQuery = false`（敏感视图经门面）
 
-- 描述：`vw_ApprovalTaskView` 声明 `ExposeGraphqlQuery = false`；数据访问统一经 `IApprovalQueryService`（门面内已有状态机/权限语义）；`ApprovalTaskViewDataService` 仅作 QueryService 内部委托。
+- 描述：`TKWFV_ApprovalTaskView` 声明 `ExposeGraphqlQuery = false`；数据访问统一经 `IApprovalQueryService`（门面内已有状态机/权限语义）；`ApprovalTaskViewDataService` 仅作 QueryService 内部委托。
 - 优点：审批敏感列（ApproverUserId/ApprovedBy/Comment）不经 GraphQL 裸暴露；消费方路径单一（门面）；与 UserCenter C3 方案 B 同模式。
 - 缺点：需 GraphQL 直读审批数据时需先安全评估再开（当前无此需求）。
 
@@ -58,7 +58,7 @@
 
 ## 五、结论
 
-采纳**选项 A**：`vw_ApprovalTaskView` 声明 `ExposeGraphqlQuery = false`（C4 裁定），数据访问统一经 `IApprovalQueryService` 门面。实施：`ApprovalTaskView.cs` `[DomainGenerateCode(IsView=true, ..., ExposeGraphqlQuery=false)]`；`ApprovalTaskViewDataService` 不标 `[GenerateController(FromDataService=true)]`（REST 经门面）；测试宿主建真实视图验证 JOIN 下推。关联：02 倒推优化方案（Approval/PrintTemplates VEntity 化）C4 裁定；框架演进候选 F4（OwnerFilter）/F11（默认收敛）。
+采纳**选项 A**：`TKWFV_ApprovalTaskView` 声明 `ExposeGraphqlQuery = false`（C4 裁定），数据访问统一经 `IApprovalQueryService` 门面。实施：`ApprovalTaskView.cs` `[DomainGenerateCode(IsView=true, ..., ExposeGraphqlQuery=false)]`；`ApprovalTaskViewDataService` 不标 `[GenerateController(FromDataService=true)]`（REST 经门面）；测试宿主建真实视图验证 JOIN 下推。关联：02 倒推优化方案（Approval/PrintTemplates VEntity 化）C4 裁定；框架演进候选 F4（OwnerFilter）/F11（默认收敛）。
 
 ## 六、变更记录
 

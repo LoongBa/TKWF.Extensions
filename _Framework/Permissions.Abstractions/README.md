@@ -11,7 +11,8 @@ Permissions 扩展的公共契约——**实现项目与 Navigation / Notificati
 | 类型 | 说明 |
 |------|------|
 | `IPermissionChecker` | 权限检查器——`IsGrantedAsync(string)` / `IsGrantedAsync(params string[])`（批量返回 权限名 → 是否授予 字典）。由 `[RequirePermission]` 过滤器在 PreProceed 阶段调用 |
-| `IPermissionStore` | 权限授予值持久化——`GetAsync(permissionName, providerName, providerKey)` / `SetAsync(...)`；按 provider 批量 `GetGrantedPermissionNamesAsync(...)`（V0.8.1 N+1 优化，内存 fail-closed 判定） |
+| `IPermissionBatchChecker` | **多用户批量检查器（V0.9.0）**——`IsGrantedAsync(IReadOnlyList<long> userIds, string permissionName)` 单权限 × 多用户，返回 用户ID → 是否授予；与 `IPermissionChecker`（当前用户检查）独立接口（多用户按 userId 逐用户评估，供 Notifications v0.3.0 逐用户权限门控） |
+| `IPermissionStore` | 权限授予值持久化——4 方法：`GetAsync(permissionName, providerName, providerKey)` / `SetAsync(...)` / `GetGrantedPermissionNamesAsync(...)`（V0.8.1 N+1 优化，返回扁平并集）/ `GetGrantedPermissionsByProviderKeyAsync(...)`（**V0.9.0，按 providerKey 分组归因**——多用户批量检查的数据源） |
 | `IRoleProvider<TUserInfo>` | 角色提供者——为检查器解析用户角色列表（`where TUserInfo : class, IUserInfo, new()`；默认 `DefaultRoleProvider{TUserInfo}` 读 `IUserInfo.Roles`，消费方可替换） |
 | `IPermissionDefinitionRepository` | 权限定义仓库——`GetAll()`（只读快照）/ `Contains(name)` / `AddRange(...)`；供检查器校验未知权限名（fail-closed） |
 | `IPermissionDefinitionContributor` | 权限定义贡献者——业务模块实现 `Define(context)` 声明权限，SG1 经接口继承发现（v4.10.31 A+ 阶段 3 起，不再用 `[PermissionContributor]` 特性） |

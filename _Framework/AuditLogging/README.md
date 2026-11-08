@@ -1,6 +1,6 @@
 # TKWF.Ext.AuditLogging 审计日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.4.2（管理 API + 聚合 SQL 下推）+ **V0.5.0（领域自治根治，ADR90——V0.4.3 为既有 tag，整改发布版升 V0.5.0）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: v0.5.1（已发布 tag `AuditLogging/v0.5.1`；沿革：V0.4.0 管理 API（5 REST 端点）→ V0.4.1 ci → V0.4.2 IDomainService 补标 → V0.4.3 领域自治根治（ADR90）→ V0.5.0 CPM lockstep → V0.5.1 F8 配套 + 表名 `TKWF_` 前缀批次，详见 §七） | **框架**: .NET 10
 
 **核心约束**: 方法级审计日志持久化、查询 API、统计聚合 + 保留天数清理、**管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD）**、异常静默处理、ORM 无关存储抽象、SG1 声明式实体
 
@@ -36,7 +36,7 @@
 
 - **查询抽象 (`IAuditLogQueryService`)**：V0.2.0 新增，扩展侧自建接口（不修改主框架）。按条件分页查询审计日志，返回 DTO 列表。
 
-- **持久化实现 (`FreeSqlAuditLogStore`)**：将 `AuditLogEntry` 映射为 `AuditLogEntity` 并持久化。异常静默处理（不阻塞业务）。
+- **持久化实现 (`AuditLogStore`)**：将 `AuditLogEntry` 映射为 `AuditLogEntity` 并持久化。异常静默处理（不阻塞业务）。
 
 - **查询实现 (`AuditLogQueryService`)**：V0.2.0 新增，internal sealed，FreeSql 查询 + 异常静默（Warning 日志 + 返回空结果）。
 
@@ -57,7 +57,7 @@
 ### 3. 与主框架的关系
 
 - `IAuditLogStore` + `AuditLogEntry` + `AuditLogFilterAttribute` 由主框架定义（不动）。
-- 本扩展提供 `FreeSqlAuditLogStore` 实现 + `IAuditLogQueryService` 查询服务 + `AuditLoggingExtensionInitializer` 注册。
+- 本扩展提供 `AuditLogStore` 实现 + `IAuditLogQueryService` 查询服务 + `AuditLoggingExtensionInitializer` 注册。
 - 消费方通过 `FilterBuilder.AddAuditLog()` 启用审计日志过滤器。
 
 ---
@@ -150,7 +150,7 @@ services.Configure<AuditLoggingOptions>(configuration.GetSection("TKWF:AuditLogg
 
 ### 5. 自定义 IAuditLogStore
 
-若需替换 `FreeSqlAuditLogStore`（如写文件、发送到 SIEM）：
+若需替换 `AuditLogStore`（如写文件、发送到 SIEM）：
 
 ```csharp
 // 消费方 ConfigureServices 中
@@ -161,18 +161,24 @@ TryAdd 语义确保消费方实现优先。
 
 ### 6. 统计聚合（V0.3.0）
 
-注入 `IAuditLogAnalyticsService`（V0.4.3 起 `AddConstructibleService` 注册——经 `User.Use<IAuditLogAnalyticsService>()` 解析）：
+`IAuditLogAnalyticsService`（V0.4.3 起 `AddConstructibleService` 注册——**经 `User.Use<IAuditLogAnalyticsService>()` 解析，禁构造注入（DI004 零豁免）**）：
 
 ```csharp
-public class AuditDashboardService(IAuditLogAnalyticsService analytics)
+public class AuditDashboardService : DomainServiceBase
 {
-    // 调用次数 TopN（按服务名/用户名，窗口相对 UtcNow；null = 全量）
-    var topServices = await analytics.GetTopServicesAsync(topN: 10, window: TimeSpan.FromDays(7));
-    var topUsers = await analytics.GetTopUsersAsync(topN: 10);
+    public AuditDashboardService(IDomainUser user) : base(user) { }
 
-    // SQL 级统计（Total/Succeeded/Failed/AvgDurationMs/MaxDurationMs）
-    var stats = await analytics.GetStatsAsync(window: TimeSpan.FromHours(24));
-    var failureRate = stats.Total > 0 ? stats.Failed / (double)stats.Total : 0;
+    public async Task ShowTopAsync()
+    {
+        var analytics = User.Use<IAuditLogAnalyticsService>();   // 域内解析（AddConstructibleService 守卫工厂）
+        // 调用次数 TopN（按服务名/用户名，窗口相对 UtcNow；null = 全量）
+        var topServices = await analytics.GetTopServicesAsync(topN: 10, window: TimeSpan.FromDays(7));
+        var topUsers = await analytics.GetTopUsersAsync(topN: 10);
+
+        // SQL 级统计（Total/Succeeded/Failed/AvgDurationMs/MaxDurationMs）
+        var stats = await analytics.GetStatsAsync(window: TimeSpan.FromHours(24));
+        var failureRate = stats.Total > 0 ? stats.Failed / (double)stats.Total : 0;
+    }
 }
 ```
 
@@ -185,8 +191,13 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 ```
 
 - 分批大小 `CleanupBatchSize`（默认 500）——每批最多删除条数，循环至清完，防大表一次性删爆事务
-- 时间锚点 `ExecutionTime` 已有索引（`IX_AuditLog_ExecutionTime`）
+- 时间锚点 `ExecutionTime` 已有索引（`TKWFIX_AuditLog_ExecutionTime`）
 - **决策记录**：保留清理引入**物理删除**路径——合规留存窗口（默认 90 天）下过期日志必须可回收，否则无限膨胀。限定：① 仅 `AuditLogEntityDataService.DeleteExpiredAsync` 单点物理删（`hasSoftDelete:false`，绝不走 `EntitySoftDeleteAsync`——对未启用软删实体抛 InvalidOperationException）；② 无管理端点/单条删除；③ 聚合仍只读。以代码注释 + 本 README 承担决策记录职责。
+  > ✅ **② 已推翻（V0.4.0）**：管理 API 已实施（5 REST 端点含 `DeleteAsync` 单条物理删除 + `GetDetailAsync` 含 ArgumentsJson 的详情读取）——决策记录见 ADR-AuditLogging-管理API与删除端点（本仓 docs/ 或主框架 `03_扩展模块/AuditLogging/`）。
+- **双清理路径差异（AL-12）**：本扩展存在两条保留清理路径，行为差异如下——
+  - `IAuditLogAnalyticsService.CleanupExpiredAsync()`（门面，V0.3.0）：`while(true)` 循环**无轮次上限**，逐批删除直至清完（`deleted <= 0` 或不足一批即停）；外层 try/catch **异常静默**（失败记 Warning 返回 0）。供消费方后台任务每日调度。
+  - `AuditLogEntityDataService.CleanupAsync()`（管理 API 端点，V0.4.0）：**`maxRounds = 100` 死循环保护** + 循环内 `ct.ThrowIfCancellationRequested()`，同样分批删除（`deleted < batchSize` 提前退出）——上限保护下即使极端持续有数据也最多 100 轮；**不吞异常**（取消/失败自然传播，HTTP 面可见）。
+  - 两者共享 `DeleteExpiredAsync(cutoffUtc, batchSize)` 单点删除，仅循环策略与异常语义不同：后台门面低频可静默；管理端点重试有限且失败可见（运维可感知）。
 - 扩展**不内建调度器**——由消费方经 BackgroundJob/Quartz/Hangfire 定时调用。
 
 ---
@@ -195,7 +206,7 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
-| **`IAuditLogStore`** | 审计日志存储抽象（主框架定义） | `FreeSqlAuditLogStore`（本扩展） |
+| **`IAuditLogStore`** | 审计日志存储抽象（主框架定义） | `AuditLogStore`（本扩展） |
 | **`IAuditLogQueryService`** | 审计日志查询服务（V0.2.0，扩展侧自建） | `AuditLogQueryService`（本扩展） |
 | **`IAuditLogAnalyticsService`** | 统计聚合 + 保留天数清理（V0.3.0，扩展侧自建） | `AuditLogAnalyticsService`（internal sealed，委托 DataService + IOptions + ILogger，异常静默） |
 | **`AuditLogEntry`** | 审计日志数据模型（主框架定义） | record 类型 |
@@ -214,7 +225,7 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 
 ## 五、实体表结构 (Entity Schema)
 
-`AuditLogEntity` 映射到 `AuditLog` 表：
+`AuditLogEntity` 映射到 `TKWF_AuditLog` 表：
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
@@ -231,7 +242,7 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 | CorrelationId | NVARCHAR(128) | 关联 ID（分布式链路追踪） |
 | CreateTime | DATETIMEOFFSET | 记录创建时间 |
 
-**索引**：`IX_AuditLog_ExecutionTime` / `IX_AuditLog_UserName` / `IX_AuditLog_CorrelationId` / `IX_AuditLog_ServiceName`（均为非唯一索引；V0.2.0 补建前 3 个，V0.3.0 补 ServiceName——服务聚合查询的 WHERE/排序下推）。
+**索引**：`TKWFIX_AuditLog_ExecutionTime` / `TKWFIX_AuditLog_UserName` / `TKWFIX_AuditLog_CorrelationId` / `TKWFIX_AuditLog_ServiceName`（均为非唯一索引；V0.2.0 补建前 3 个，V0.3.0 补 ServiceName——服务聚合查询的 WHERE/排序下推；命名随 v4.10.66 `TKWF_`/`TKWFIX_` 前缀批次）。
 
 ---
 

@@ -55,7 +55,7 @@
 利用 `DomainAppBuilder` 扩展方法，引擎会自动关联 `DomainOptions` 中的 `TagRules` 配置，并支持高度灵活的流式组装。
 
 ```csharp
-// 基础用法：使用默认分词器和内置的 5 种匹配器
+// 基础用法：使用默认分词器和内置的 6 种匹配器
 builder.UseTagService(); 
 
 // 高级用法 A：使用自定义分词器 (如接入中文 NLP)
@@ -136,7 +136,7 @@ public class AnalysisService(TagService tagService)
 ### 1. V0.3.0 持久化（已实施，2026-09-07）
 
 - **三接口落地**：`ITagRuleStore`（规则 CRUD——幂等创建/业务键更新/按维度查询，供给 `ITagService.LoadRules`）+ `ITagHitStore`（批量单事务落库 + 分页 + 原文快照）+ `ITagAnalysisService`（频次 TopN / 趋势分桶 / 维度分布）
-- **SG1 实体**：`TagRuleEntity`（表 TagRule，唯一约束 UX_TagRule_Dimension_TagName_Pattern）+ `TagHitRecordEntity`（表 TagHit，索引 IX_TagHit_Dimension_Time/IX_TagHit_TagName）；`[DomainGenerateCode]` 不指定 UserType（ADR42 D4）
+- **SG1 实体**：`TagRuleEntity`（表 `TKWF_TagRule`，唯一约束 `TKWFIX_TagRule_Dimension_TagName_Pattern`）+ `TagHitRecordEntity`（表 `TKWF_TagHit`，索引 `TKWFIX_TagHit_Dimension_Time`/`TKWFIX_TagHit_TagName`）；`[DomainGenerateCode]` 不指定 UserType（ADR42 D4）
 - **红线合规**：3 Store 委托 DataService 业务方法（聚合在 DataService 内内存 GroupBy——DAC 接口边界所致，WHERE 下推 + `Take(100_000)` 上限）
 - **关键发现**：FreeSql SQLite 对 DateTime 本地化存取（UTC 12:00 存 → 20:00 Unspecified 读）——`BucketKey` 对 Unspecified 视为已 UTC；测试时间断言用容错（对齐 Notifications `AssertRecent`）；生产 PG 存 UTC 无偏移
 - Oracle 方案 + 代码双审 PASS WITH CONDITIONS（方案 6 P1 + 4 P2 / 代码 2 CONDITION + 6 P2 全部落实）；16 测试 + 全量 577 回归

@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.FeatureManagement` |
-| 版本 | **V0.4.4（V4.10.55 多实现集合守卫工厂——4 Provider TryAddEnumerableConstructible + 继承 DomainServiceBase，ADR92/T3 闭环）**：修复 FeatureManager 集合枚举生产失败（T3 转达 V0.4.0 边界保留组收编） |
+| 版本 | **V0.4.4（V4.10.55 多实现集合守卫工厂——4 Provider TryAddEnumerableConstructible + 继承 DomainServiceBase，ADR92/T3 闭环）**：修复 FeatureManager 集合枚举生产失败（T3 转达 V0.4.0 边界保留组收编） + **V0.4.5（2026-10-21 v4.10.66 表名前缀批次——TKWF_ 实体表前缀 + TKWFIX_ 索引；FeatureManagementApiService 注册改由消费方 SG#2 接管——Development ValidateOnBuild 崩溃修复）** + **V0.4.6（2026-10-25 B1-c 端点契约化——5 非 Web 扩展补 ExtensionModule 消除 EXTMODULE001 防转 Error）** |
 | 依赖 | `TKWF.Domain`（含框架 `IFeatureChecker`/`RequireFeature`/`AddFeatureCheck`/`ILocalEventBus`/`IDistributedEventBus` 基座）+ SG1（接口判定收集，v4.10.31 A+ 阶段 3） |
 | 数据 | 表 `FeatureValue`（框架 `SyncTables` 统一建表；`Value` 列 v0.3.0 起无界） |
 
@@ -153,7 +153,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 | `IFeatureValueStore` | `FeatureValueStore`（继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IFeatureValueStore>()` |
 | `IFeatureManager` | `FeatureManager`（继承 `DomainServiceBase`） | **`AddConstructibleService`** | `User.Use<IFeatureManager>()` |
 | `IFeatureChecker` | `FeatureChecker<TUserInfo>` | **接线型普通 DI**（TryAddScoped，ctor IServiceProvider + C1 延迟解析 Manager——无 IDomainUser） | 框架 `FeatureFilterAttribute` 经 `GetService` 解析 |
-| `IFeatureValueProvider` ×4 | User/Role/Tenant/Global | **TryAddEnumerable**（多实现集合，边界保留） | `FeatureManager` 构造注入集合 |
+| `IFeatureValueProvider` ×4 | User/Role/Tenant/Global | **`TryAddEnumerableConstructible`**（集合版守卫工厂，V4.10.55 ADR92） | `FeatureManager` 构造注入集合（帧内枚举） |
 
 跨实例失效 handler（`DistributedFeatureChangedHandler`）由消费方 SG4 编译期自动注册（`[DomainEventHandler]`）——零手动接线。
 

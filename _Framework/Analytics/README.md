@@ -1,6 +1,6 @@
 # TKWF.Ext.Analytics 分析服务扩展技术规范
 
-**状态**: 业务分析扩展 (Analytics Extension) | **版本**: V0.1.0 (骨架——门面/Options/Initializer) | **框架**: .NET 10
+**状态**: 业务分析扩展 (Analytics Extension) | **版本**: V0.1.1 (骨架——门面/Options/Initializer + DI003 豁免) | **框架**: .NET 10
 
 > **V4.10.53 领域自治评估（2026-10-04）**：`AnalyticsQueryService`（实现 `IAnalyticsQueryService : IDomainService`）判定为**接线型保留**——ctor 仅 `AnalyticsSpecLoader`（主框架 Utility 类型，普通 DI 可解析）、零 IDomainUser 依赖、无持久化；注册保持 `TryAddSingleton`（消费方 `User.Use<IAnalyticsQueryService>()` AOP 路径经 GetRequiredService 解析普通描述符，无需守卫）。
 >
@@ -28,7 +28,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 - **JsonDocument 透传**：spec JSON 原样返回，不镜像强类型——flint schema 是单一真相（D20B §4.3），杜绝双 schema 漂移。
 - **路径安全**：`domain`/`specKey` 命名正则（`AnalyticsSpecConstants`）+ chartType 文件名消毒——防路径遍历（Oracle P0-3）。
 - **manifest 状态校验**：stale → `SpecStaleException`（强制重生）；deprecated → 放行（前端读 status 展示警告）；`GetManifestAsync` 不校验 status（状态展示载体，P1-4）。
-- **flint 不硬编码**：核心不内置 47 模板名（第三真相源，P1-2）——chartType ∉ 注册表由前端 flint assemble 抛错；快照文档 `docs/D20-附-flint模板注册表快照.md` 作设计期参考。
+- **flint 不硬编码**：核心不内置 48 模板名（第三真相源，P1-2）——chartType ∉ 注册表由前端 flint assemble 抛错；快照文档（主框架 `docs/AC-Kit/references/D20-附-flint模板注册表快照.md`，2026-11-07 自 `docs/` 迁入）作设计期参考。
 - **一数多图归 flint pivot**：spec 只声明主图 + 可选 pivot-hint；可切换图型由 flint 前端按数据形态门控裁决（D20B §5.2 删除候选推导）。
 
 ## 三、核心组件清单 (Component List)
@@ -37,7 +37,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 |----------|---------|------------|
 | **`IAnalyticsQueryService`** | 门面——GetSemanticTypes / GetChartSpec / ListPivotChartTypes / GetManifest（domain+specKey 双参） | `AnalyticsQueryService`（组合 Loader，Singleton 无状态） |
 | **`AnalyticsOptions`** | 扩展配置（`TKWF:Analytics` 节，继承 `AnalyticsSpecOptions` + SpecRoot） | 本扩展 |
-| **`AnalyticsExtensionInitializer`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + 三钩子 TryAddScoped + 工厂 lambda 桥接 Options→POCO） | 本扩展 |
+| **`AnalyticsExtensionInitializer`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + 三钩子 TryAddSingleton + 工厂 lambda 桥接 Options→POCO） | 本扩展 |
 | **`AnalyticsSpecLoader`** | spec 加载 + JSON 解析（核心） | 主框架 Utility |
 | **`AnalyticsSpecValidator`** | manifest 状态校验（核心） | 主框架 Utility |
 | **`SpecStaleException`** / **`ChartSpecLoadException`** / **`DataShapeMismatchException`** | 三类异常（结构化属性；DataShapeMismatch 仅定义不抛出） | 主框架 Utility |
@@ -97,13 +97,18 @@ public class SalesAnalyticsService(IAnalyticsQueryService analytics)
 
 ## 七、架构演进路线 (Architecture Roadmap)
 
-### V0.1.0（当前：骨架）
+### V0.1.0
 - 核心层（主框架 Utility.Analytics，v4.10.27 发布：Loader/Validator/Options/3 异常/Constants + 30 测试）
 - 集成层（门面 4 方法 + Options + Initializer + 11 测试）
-- flint 模板注册表快照（0.5.1：47 chartType + 5 后端矩阵 + 44 SemanticType + pivot 门控）
+- flint 模板注册表快照（0.5.1：48 chartType + 5 后端矩阵 + 44 SemanticType + pivot 门控）
 - tkwf-analytics-view skill 骨架（产物契约）
 - **Oracle 评审**：主框架 v4.10.27 方案 4 P0 + 6 P1 + 4 P2 全吸收
 - **已发布**：tag `Analytics/v0.1.0`（2026-09-19，CI 发布闭环）
+
+### V0.1.1（DI003 豁免）
+- `AnalyticsQueryService` 标 `[DiContractIgnore]`——接线型门面无 SG1 实体聚合通道（纯运行时扩展无 `[DomainGenerateCode]` 信号），消费方编译时 DI003（扩展聚合遗漏）误报；标注豁免（诊断码总表 D18A 豁免路径）
+- csproj 补 `TKWF.CodeGeneration.Abstractions` 双模式引用（特性所在程序集，对齐 AuthCenter 接线型门面先例）
+- **已发布**：tag `Analytics/v0.1.1`（CI 发布闭环；README 同步）
 
 ### V0.2.0+（候选）
 - DMP-Lite 端到端样例：消费方接线（`[TKWFEnabledExtension]` + Domain Service + AdminWeb React flint 渲染）
@@ -118,4 +123,4 @@ public class SalesAnalyticsService(IAnalyticsQueryService analytics)
 
 ---
 
-**文档信息**: V0.1.0 | 2026-09-16 | 关联：D20-TKWF分析服务设计方案.md（主框架私有）、D20B-分析服务开源对标与语义层定位.md（主框架私有）、[v0.1.0-Analytics-分析服务-开发方案.md（公开）](../../docs/Analytics/v0.1.0-Analytics-分析服务-开发方案.md)、[分析服务扩展-使用指南](../../docs/Analytics/分析服务扩展-使用指南.md)、v4.10.27-D20分析服务Stage1落地-开发方案.md（主框架私有）
+**文档信息**: V0.1.1 | 2026-09-16（v0.1.1 2026-10-27） | 关联：D20-TKWF分析服务设计方案.md（主框架私有）、D20B-分析服务开源对标与语义层定位.md（主框架私有）、[v0.1.0-Analytics-分析服务-开发方案.md（公开）](../../docs/Analytics/v0.1.0-Analytics-分析服务-开发方案.md)、[分析服务扩展-使用指南](../../docs/Analytics/分析服务扩展-使用指南.md)、v4.10.27-D20分析服务Stage1落地-开发方案.md（主框架私有）

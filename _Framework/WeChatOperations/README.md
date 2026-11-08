@@ -55,7 +55,7 @@
 public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ```
 
-启用后三钩子自动接线：9 门面（7 运营 + 2 网关）`AddConstructibleService` + handler `TryAddEnumerableConstructible` + keyed `ISymmetricKeyProvider` + `DbWeChatCredentialResolver` + `WeChatChannelRegistrySource`（D03 1.7——Priority=100 DB 权威源，含 disabled 全行投影 S3 判据）+ 网关装配（`DownstreamForwardClient` typed client + `WeChatMessageForwardJob` 作业注册 + 系统用户桥）。
+启用后三钩子自动接线：10 门面（5 运营 + 2 网关 + Status + OpsConfig×2）`AddConstructibleService` + handler `TryAddEnumerableConstructible`；通道面（keyed `ISymmetricKeyProvider`/`DbWeChatCredentialResolver`/`WeChatChannelRegistrySource`/`IChannelConfigService`）已下沉 WeChatChannels（V0.9.0 拆分，消费方双白名单）+ 网关装配（`DownstreamForwardClient` typed client + `WeChatMessageForwardJob` 作业注册 + 系统用户桥）。
 
 > ⚠️ **异步抄送前置**：网关 AsyncCopy 分支经 `IBackgroundJobManager` 持久化队列投递（TKWF_JobRecord 重启续投 + 重试 MaxRetryCount + SystemActor 帧自动绑定）——消费方须在领域初始化器装配 **`AddBackgroundJobs<TUserInfo>()`**。缺接线时入队失败经网关 fail-safe 降级（本地回复不受影响不 500，转发日志 Fail 行留痕可对账）。
 
@@ -66,8 +66,6 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
   "TKWF": {
     "WeChatOperations": {
       "DefaultReplyText": "感谢您的关注，请稍后再试。",   // 未命中关键词默认兜底文案
-      "SecretEncryptionKeyPath": "<AES-GCM 密钥文件路径>", // 生产必配（缺钥 fail-fast）；开发随机兜底
-      "IsProduction": true,                             // 生产 true / 开发 false
       "Gateway": {                                      // 消息路由转发网关（配置分层——领域安全/转发决策归本节，Web 层无对应开关）
         "GatewayEnabled": false,                        // 网关全局开关——默认 false（fail-closed 默认关，未启用时 handler 零回归不查库不转发）
         "IdempotencyRetentionDays": 7,                  // 幂等保留天数（覆盖微信全部重试窗口 + 对账余量；0/负数 = 不清理；仅清理终态记录）
@@ -75,14 +73,15 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
         "AsyncForwardRetryCount": 3,                    // 异步抄送投递重试次数（BackgroundJob 队列 MaxRetryCount；下游须幂等——IdempotencyKey 透传自去重）
         "BackoffSeconds": 2,                            // 异步抄送失败退避秒数（指数退避 2^RetryCount 秒基础值）
         "DefaultSyncTimeoutSeconds": 2                  // 同步透传默认超时秒数（上限强制 ≤3 防运维误配吞兜底窗口；V0.3.0 SyncProxy 落地——端点 TimeoutSeconds 缺省回落本节）
-      },
-      "Web": {                                          // 表现层暴露面（配置分层）
-        "RoutePrefix": "/api/wechat-ops"
       }
     }
   }
 }
 ```
+
+> **凭证 AES-GCM 密钥配置**（`SecretEncryptionKeyPath`/`IsProduction`）**已随 V0.9.0 拆分下沉 `TKWF:WeChatChannels` 节**（WeChatChannels 扩展——本扩展经 keyed `ISymmetricKeyProvider` 消费同一键，跨扩展同一信任域）。
+>
+> **无 `Web.RoutePrefix`**（V0.4.0 已删 `WeChatOperationsEndpointOptions`——路由经 `[ApiExpose(RestRoute)]` 显式常量 + `[assembly: ExtensionModule("WeChatOperations","wechat-ops")]` 前缀单一真源，防表现层绕过）。
 
 **凭证来源**（两源并存）：① `WeChatChannelConfigEntity`（DB——AES-GCM 密文，权威）；② `WeChatOptions.Channels`（`TKWF:Federation:WeChat` 节——降级）。DB 命中解密返回，未命中回退 Options；**出站解析的域用户取 ambient 帧**（`StaticDomainInterceptor.CurrentContext?.DomainUser`）——门面/事件帧内 DB 优先生效，非 AOP 帧自动降级 Options（Warning 留痕，不中断出站）。**下游端点鉴权令牌**（`DownstreamEndpointEntity.AuthTokenCipher`）同为 AES-GCM 密文落库——明文仅出站瞬时。
 
@@ -107,7 +106,7 @@ var status = await statusService.GetStatusSummaryAsync("wechat-mp-main", ct);   
 
 | 组件 | 形态 | 状态 |
 |------|------|------|
-| 11 实体（7 运营 + 4 网关——**V0.5.0 删 `SubscriptionStatEntity`（订阅统计改派生关注域）**：7 运营 = `WeChatChannelConfigEntity` 渠道配置/`MaterialEntity` 素材/`ReplyRuleEntity` 回复规则/`MenuSnapshot`+`MenuVersion` 菜单基准与版本/`InteractionLog`+`MenuPublishLog` 日志审计 + 4 网关 = `MessageRouteRuleEntity` 路由规则/`DownstreamEndpointEntity` 下游端点/`MessageForwardLogEntity` 转发流水/`WeChatMessageIdempotencyEntity` 幂等键） | SG1 声明式 + xCodeGen 生成物入库 | ✅ |
+| 15 实体（11 运营 + 4 网关——**V0.9.0 拆分 `WeChatChannelConfigEntity` 迁 WeChatChannels（通道面下沉）**；V0.5.0 删 `SubscriptionStatEntity`（订阅统计改派生关注域）；V0.7.0 增 5 运营配置实体：11 运营 = `MaterialEntity` 素材/`ReplyRuleEntity` 回复规则/`MenuSnapshot`+`MenuVersion` 菜单基准与版本/`InteractionLog`+`MenuPublishLog` 日志审计 + 5 OpsConfig（`ArticleReplyOpsConfigEntity`/`ReplyTextOpsConfigEntity`/`DegradeOpsConfigEntity`/`WeakIdentityOpsConfigEntity`/`TicketOpsConfigEntity`——`TKWF_OpsConfig_*`）+ 4 网关 = `MessageRouteRuleEntity` 路由规则/`DownstreamEndpointEntity` 下游端点/`MessageForwardLogEntity` 转发流水/`WeChatMessageIdempotencyEntity` 幂等键） | SG1 声明式 + xCodeGen 生成物入库 | ✅ |
 | `WeChatOperationsExtensionInitializer<TUserInfo>` | `[TKWFExtension]` 三钩子——9 门面/handler/keyed 密钥/两源并存/网关装配 | ✅ |
 | `IChannelConfigService` | 公众号配置 CRUD（凭证加密落库 + DTO 投影无凭证） | ✅ |
 | `IMenuService` | 拉取/发布（事务：快照+版本+审计）/回滚/删除 + **click key 收集 `GetClickKeysAsync`**（菜单树递归收集 click 类型按钮 Key——快照空/解析失败 → 空列表） | ✅ |
@@ -126,7 +125,7 @@ var status = await statusService.GetStatusSummaryAsync("wechat-mp-main", ct);   
 | `WeChatCircuitBreaker`（熔断接线） | 运行库熔断状态机——Initializer `AddSingleton` 进程内单例接线（**V0.3.0**，每 EndpointId 独立状态，进程重启即清零）；`MessageGatewayService` SyncProxy 出站熔断注入（开闸期直接 LocalFallback 不转发） | ✅ |
 | `DbWeChatCredentialResolver` | 凭证两源解析（DB 解密 + Options 降级）——**出站解析经 ambient 域用户**（`StaticDomainInterceptor.CurrentContext?.DomainUser` → `user.Use<DataService>()`，门面/事件帧内 DB 优先）；非 AOP 帧（裸后台任务直调）→ Warning + Options 降级（不抛出） | ✅ |
 | `WeChatChannelRegistrySource` | 通道配置 DB 投影（D03 1.7——Priority=100 高优先（DB 权威）；ChannelForm/Verification/Capabilities 派生 + Alias 双键 + 全行投影（含 disabled，S3 判据）；**Token/EncodingAESKey 投影期解密为明文进 Extra**（与静态源同语义——事件验签直接消费）、**AppSecret 不进公共列**（出站经 `DbWeChatCredentialResolver`）；经 `IUserBoundChannelSource` 由 Composite 构造时绑定域用户） | ✅ |
-| ~~`WeChatOperationsWebExtension<TUserInfo>`~~（**V0.6.0 重建，V0.4.0 曾删除**） | **端点形态三阶段**：V0.4.0 删手写 WebExtension → 门面 `[GenerateController]`+`[ApiExpose]` 锁 `/api/wechat-ops/*`；**V0.6.0 重建**（B1-c 修复——框架 B4 后扩展落入 `ExtensionEndpointRegistrations` 发射分支、消费方 SG2 结构性让路，删 WebExtension 致 25 端点 404）：`DeclareEndpoints` + `MapGenerated` 挂载 8 门面 + `[assembly: ExtensionModule("WeChatOperations","wechat-ops")]` 前缀。**⚠️ SG3 客户端声明纠正（2026-10-27，DMP 复核实证）**：V0.4.0 声称"SG1b 生成端点 + SG3 客户端 DTO/代理"中**端点部分成立**（B4 后经 MapGenerated 挂载），**SG3 客户端部分在 B4 分支下结构性不成立**——扩展带 `[assembly: ExtensionEndpointRegistrations]` → SG2 让路（`ApiServiceGenerator.cs:709`）→ 扩展门面不进 ApiMetadata → SG3 只读 ApiMetadata 无输入即无输出（DMP 编译实证 55 客户端零 WeChatOperations）。框架组议题已发（`_TKWF/docs/03_扩展模块/转达/转达-ADR112让路守卫破坏SG2-SG3元数据传播-请框架组裁决.md`，主案 D：SG2 让路精细化——挂载让路保持、元数据传播恢复 + ApiMetadata 增 RestRoute/RestMethod + SG3 客户端 REST 传输分支）；**裁决前消费方手写客户端保留为过渡**（扩展 gate 26 端点黑盒已兜底契约漂移）。**✅ v4.10.92 修复（2026-10-28，ADR117/ADR118 闭环）**：SG1b `GenerateControllerCatalog.InterfaceNames` 符号回填真名（废弃 `.Controllers` 拼接假名——扩展门面真实命名空间 `TKWF.Ext.WeChatOperations` 无 `.Controllers` 子命名空间）+ 手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）→ **扩展门面重新进消费方 ApiMetadata → SG3 客户端 DTO/代理恢复生成，手写客户端可退役**（消费方 CPM lockstep 4.10.92 + 重编 Domain/WebApi 后验证；替换标准动作：`AddRestApiClient` + `ModulePrefixResolver` + `RestTypeInfoRegistrar` v4.10.90 起零配置）。**端点总表（25 端点）**：运营 15（channels/menu/rules/materials/subscription-stats×2/status/logs×2）+ 网关 9（rules×3 + endpoints×3 + status + enabled + forward-logs）；`RouteAsync`/`RecordAsync` 等内部入口 `[ApiExpose(ExposeRest=false)]` 不暴露 | ✅ |
+| ~~`WeChatOperationsWebExtension<TUserInfo>`~~（**V0.6.0 重建，V0.4.0 曾删除**） | **端点形态三阶段**：V0.4.0 删手写 WebExtension → 门面 `[GenerateController]`+`[ApiExpose]` 锁 `/api/wechat-ops/*`；**V0.6.0 重建**（B1-c 修复——框架 B4 后扩展落入 `ExtensionEndpointRegistrations` 发射分支、消费方 SG2 结构性让路，删 WebExtension 致 25 端点 404）：`DeclareEndpoints` + `MapGenerated` 挂载 8 门面 + `[assembly: ExtensionModule("WeChatOperations","wechat-ops")]` 前缀。**⚠️ SG3 客户端声明纠正（2026-10-27，DMP 复核实证）**：V0.4.0 声称"SG1b 生成端点 + SG3 客户端 DTO/代理"中**端点部分成立**（B4 后经 MapGenerated 挂载），**SG3 客户端部分在 B4 分支下结构性不成立**——扩展带 `[assembly: ExtensionEndpointRegistrations]` → SG2 让路（`ApiServiceGenerator.cs:709`）→ 扩展门面不进 ApiMetadata → SG3 只读 ApiMetadata 无输入即无输出（DMP 编译实证 55 客户端零 WeChatOperations）。框架组议题已发（`_TKWF/docs/03_扩展模块/转达/转达-ADR112让路守卫破坏SG2-SG3元数据传播-请框架组裁决.md`，主案 D：SG2 让路精细化——挂载让路保持、元数据传播恢复 + ApiMetadata 增 RestRoute/RestMethod + SG3 客户端 REST 传输分支）；**裁决前消费方手写客户端保留为过渡**（扩展 gate 26 端点黑盒已兜底契约漂移）。**✅ v4.10.92 修复（2026-10-28，ADR117/ADR118 闭环）**：SG1b `GenerateControllerCatalog.InterfaceNames` 符号回填真名（废弃 `.Controllers` 拼接假名——扩展门面真实命名空间 `TKWF.Ext.WeChatOperations` 无 `.Controllers` 子命名空间）+ 手写门面判定放宽（`IAopContract` 或 `IDomainService` 均接受）→ **扩展门面重新进消费方 ApiMetadata → SG3 客户端 DTO/代理恢复生成，手写客户端可退役**（消费方 CPM lockstep 4.10.92 + 重编 Domain/WebApi 后验证；替换标准动作：`AddRestApiClient` + `ModulePrefixResolver` + `RestTypeInfoRegistrar` v4.10.90 起零配置）。**端点总表（22 端点）**（V0.9.0 拆分后实际挂载——channels×2 随通道面迁 WeChatChannels `/api/wechat-channels/*`）：运营 13（menu×4 + rules×2 + materials×2 + subscription-stats×2 + status + logs×2）+ 网关 9（rules×3 + endpoints×3 + status + enabled + forward-logs）；**（WO-1 补 ops-config 10 端点后应 32——待 B 档）**；`RouteAsync`/`RecordAsync` 等内部入口 `[ApiExpose(ExposeRest=false)]` 不暴露 | ✅ |
 
 ## 四、安全边界
 

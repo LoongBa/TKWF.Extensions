@@ -1,6 +1,6 @@
 # TKWF.Federation.Microsoft Microsoft Entra ID 平台网关技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——纯库无装配无持久化) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Oidc`（M1 通用 OIDC 基座——继承配置驱动）+ `TKWF.Domain`（CPM）
+**状态**: 平台网关库 (Platform Gateway Library——纯库无装配无持久化) | **版本**: V0.3.1 | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Oidc`（M1 通用 OIDC 基座——继承配置驱动）+ `TKWF.Domain`（CPM）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**）/ **零持久化零 Store** / **不引 AspNetCore** / 凭证自持（Oracle P2-4）/ 单向依赖（`Microsoft → Oidc 基座 → Federation → AuthCenter.Abstractions`）
 
@@ -18,7 +18,7 @@
 
 **组合矩阵**：Federation + Oidc + Microsoft = Microsoft 企业/学校联邦登录。
 
-**不包含**：`private_key_jwt` 证书认证（企业场景——config 预留 `ClientAssertionSigningKeyPath`，M2 先支持 client_secret，证书认证归后续迭代，Oracle P2-1）。
+**不包含**：`private_key_jwt` 证书认证——**基座 Oidc 已实现**（RFC 7523，`OidcChannelConfigKeys.ClientAssertionSigningKeyPath`——基座流内联支持）；**Microsoft 库 Options 形态未投影该键**（`MicrosoftChannelConfig` 无该字段、`MicrosoftChannelSource` 不写 Extra）——企业证书认证场景经 DB registry `Extra["ClientAssertionSigningKeyPath"]` 手动配置或走 `OidcConfiguredChannel` 直配；M2 先支持 client_secret，证书认证归后续迭代（Oracle P2-1）。
 
 ## 二、安装与接线
 
@@ -91,6 +91,11 @@ builder.Services.AddMicrosoftFederationChannels(o =>
 
 | 版本 | 内容 |
 |------|------|
+| V0.3.1（2026-10-21） | **I2 复查适配**（Federation v0.11.0 发布链联动）：I2-1 `ISsoChannel` 契约迁入 `Federation.Abstractions`（引目标改契约包）+ 复查修复对齐 |
+| V0.3.0（2026-10-18） | **多通道联邦 v0.3.0 改造**（`Federation.Abstractions` 契约包 v0.1.0 同日首发联动）：通道 ctor 改收 `ChannelConfig?`（工厂预取，null = 集合模板实例）；`MicrosoftChannelSource` 投影统一 `ChannelConfig`（ClientId/ClientSecret → 公共列 AppId/AppSecret、Tenant/TokenIssuers 进 Extra JSON）+ `EffectiveConfig` 覆写按 `Extra["Tenant"]`（缺省 common）模板化端点 + `FromChannel` 合并；`AddMicrosoftFederationChannels` 增 `TryAddEnumerable<IChannelSource>`；依赖拓扑切 `Federation.Abstractions` |
+| V0.2.2（2026-10-10） | TrustCenter 剥离三层架构收尾 + CPM 4.10.70 lockstep + 平台库 v0.2.2 发布 |
+| V0.2.1（2026-10-08） | ChannelAlias 对外别名双键——`MicrosoftChannelConfig.Alias` 可空字段 + `MicrosoftChannelSource` 投影 `ChannelConfig.Alias` + `IChannelRegistry.GetByAliasOrIdAsync` 统一解析 |
+| V0.2.0（2026-10-07） | 多通道联邦 Phase 1 平台库对齐——`MicrosoftChannelSource` 静态通道来源（`IChannelSource`——Options Channels 投影统一 `ChannelConfig`，凭证模型公共列 AppId/AppSecret + Extra）+ ChannelRegistry 集成选区替代 `Channels.FirstOrDefault()` 枚举（6 平台库收敛） |
 | V0.1.0（2026-10-06） | M2 Microsoft 平台网关：MicrosoftOidcChannel（pairwise 复合编码 `microsoft_oidc:{client_id}` + tenant 配置化端点模板 + TokenIssuer 正则白名单）+ MicrosoftOptions/MicrosoftChannelConfig（Tenant 字段）+ AddMicrosoftFederationChannels（经 Oidc 基座）；11 测试全绿（pairwise 复合编码断言/tenant iss 含 GUID 正则匹配/OAuth 正负/evil iss 拒/注册枚举）；slnx 已接线。**OIDC 归并配套（2026-10-06，基座 V0.2.0）**：ctor 类型同步 `OidcAuthFlow` → `OidcChannelFlow`（委托引擎薄层）——API 不变，行为委托 `Utility.OAuthClient` |
 
 <!-- EOF -->

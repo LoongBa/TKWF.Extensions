@@ -1,6 +1,6 @@
 # TKWF.Ext.Permissions 权限扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.9 (**暴露面收敛补全——`GetGrantedNamesByProviderAsync`（HashSet 返回）亦经 `ExcludeMethods` 排除出 ExtI/管理面（V0.9.9，DMP 裁定）；V0.9.8 = GEN007/WARN007 同源修复——`GetGrantedNamesByProviderKeyAsync` 排除 + v4.10.113 ADR129 后回退纯 ExcludeMethods；V0.9.4 = 建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化；V0.9.1 领域自治根治 ADR90——删 EntityDACPermissionStore，PermissionChecker 继承 DomainServiceBase<TUserInfo> + AddConstructibleService；V0.9.3 = 既有 v0.9.2 tag 后的整改发布版；V0.9.4 = Development 启动崩溃修复——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.9.9（已发布 tag `Permissions/v0.9.x`，v0.9.0~v0.9.9 沿革：**V0.9.0** = 多用户批量权限检查（`IPermissionBatchChecker` 单权限×多用户 + `GetGrantedPermissionsByProviderKeyAsync` 按 ProviderKey 分组归因）；**V0.9.1** = 领域自治根治 ADR90——删 `EntityDACPermissionStore`，`PermissionChecker` 继承 `DomainServiceBase<TUserInfo>` + `AddConstructibleService`；**V0.9.2/0.9.3** = IDomainService 契约补标 / CPM lockstep 配套发布版；**V0.9.4** = Development 启动崩溃修复——`InitializeAsync` 的 `BeginSystemScopeAsync(sp)` 传 root 不建子 scope → 改不传参；**V0.9.7/0.9.8** = GEN007/WARN007 同源暴露面修复——`GetGrantedNamesByProviderKeyAsync` 排除 + v4.10.113 ADR129 后回退纯 ExcludeMethods；**V0.9.9**（2026-11-07）= 暴露面收敛补全——`GetGrantedNamesByProviderAsync`（HashSet 返回）亦经 `ExcludeMethods` 排除出 ExtI/管理面（DMP 裁定）；早期功能线 V0.7.0（建表迁移工具 + 消费方集成验证 + Admin.All 种子高级化）沿革见 §六.1d） | **框架**: .NET 10
 
 **核心约束**: 细粒度权限、fail-closed 安全语义、ORM 无关持久化、SG1 声明式实体
 
@@ -16,7 +16,7 @@
 
 - **持久化耦合**：权限授予存储直接依赖特定 ORM（FreeSql/EF Core），扩展无法做到 ORM 无关。
 
-- **配置割裂**：权限配置（默认策略、缓存 TTL）散落在代码中，无法通过 `appsettings.json` 统一管理。
+- **配置割裂**：权限配置（默认策略、缓存 TTL 等运行时参数）散落在代码中，无法通过 `appsettings.json` 统一管理。注：`PermissionOptions.DefaultPolicy`/`CacheTtlSeconds` 目前为**预留未消费**（全仓零消费，勿依赖），实际生效配置项仅 `SeedAdminRoleName`（见 §四）。
 
 ---
 
@@ -28,7 +28,7 @@
 
 - **声明级 (`IPermissionDefinitionContributor`)**：业务模块实现贡献者接口，`Define()` 方法声明权限定义（名称 + 显示名 + 分组）。SG1 编译期接口判定（v4.10.31 A+ 阶段 3 起不再用 `[PermissionContributor]` 特性）→ 生成 `GeneratedPermissionContributors` → 启动时实例化收集。
 
-- **检查级 (`IPermissionChecker`)**：运行时判断当前用户是否拥有指定权限。默认 `PermissionChecker<TUserInfo>` 经 `DomainUserContext.CurrentAopUser` 解析当前用户，调 `IPermissionStore.GetAsync` 真实判定。fail-closed：未知权限名 → 拒绝。
+- **检查级 (`IPermissionChecker`)**：运行时判断当前用户是否拥有指定权限。默认 `PermissionChecker<TUserInfo>` 继承 `DomainServiceBase<TUserInfo>`（V0.9.1 ADR90 领域自治），经基类 `User` 取当前用户上下文；**V0.8.1 起批量加载 + Scoped 授权集缓存**——按 provider 一次性批量查询已授予权限名（用户级 + 角色级各 1 次），后续检查 `HashSet.Contains` 内存判定（角色变更需新请求生效）。fail-closed：未知权限名 → 拒绝。
 
 - **持久化级 (`IPermissionStore`)**：权限授予的 CRUD 抽象。扩展自带 `NoOpPermissionStore`（默认回退，读恒拒绝）——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store 层，职责与 `PermissionGrantEntityDataService` 重叠）；真实持久化由消费方实现 `IPermissionStore`（继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4）或自定义 `IEntityDAC<T>`。
 
@@ -153,14 +153,14 @@ public class MyService
 |----------|---------|------------|
 | **`IPermissionDefinitionContributor`** | 业务模块声明权限定义的接口 | 消费方实现接口（v4.10.31 A+ 阶段 3 起纯接口判定，无特性） |
 | **`IPermissionDefinitionRepository`** | 权限定义仓库（查询/校验） | `InMemoryPermissionDefinitionRepository`（内部） |
-| **`IPermissionChecker`** | 运行时权限检查（fail-closed） | `PermissionChecker<TUserInfo>`（内部，泛型化） |
+| **`IPermissionChecker`** | 运行时权限检查（fail-closed；V0.8.1 批量加载 + Scoped 授权集缓存） | `PermissionChecker<TUserInfo>`（内部，泛型化，继承 `DomainServiceBase<TUserInfo>`） |
 | **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ **消费方自定义实现**（V0.9.1 起 `EntityDACPermissionStore` 已删除——继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4） |
 | **`PermissionFilterAttribute<TUserInfo>`** | 方法级权限门（`[RequirePermission]`） | 内置，注册到 Tier-S |
 | **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 | **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]`（SubDomain=Permissions） |
 | **`PermissionGrantEntityDto`** | 权限授予 DTO（xCodeGen 生成 record） | 内置，`IDomainDto<PermissionGrantEntity>` 实现 |
 | **`PermissionGrantEntityDataService`** | 权限管理 DataService（CRUD + 自定义查询 + REST 管理 API；**V0.9.7/V0.9.9 暴露面收敛**——`GetGrantedNamesByProviderKeyAsync`（Dictionary 返回）+ `GetGrantedNamesByProviderAsync`（HashSet 返回，V0.9.9 DMP 裁定）经 `ExcludeMethods` 排除：GraphQL 不可映射（消费方 GEN007）+ 内部归因查询本不应对管理面暴露；v4.10.113 ADR129 后纯 ExcludeMethods 生效；消费方 Store 经 `User.Use<...>()` 直调不受影响） | 内置，`DomainDataServiceBase<,>` 非泛型版 + `[GenerateController(FromDataService=true)]` |
-| **`PermissionOptions`** | 配置（`TKWF:Permissions` 节，含 `SeedAdminRoleName`） | 内置，SG1 `GeneratedOptionsBindings` 自动绑定 |
+| **`PermissionOptions`** | 配置（`TKWF:Permissions` 节，含 `SeedAdminRoleName`；⚠️ `DefaultPolicy`/`CacheTtlSeconds` 为**预留未消费**（全仓零消费，勿依赖）） | 内置，SG1 `GeneratedOptionsBindings` 自动绑定 |
 | **`IRoleProvider<TUserInfo>`** | 角色提供者——为权限检查器解析用户角色列表（V0.6.0） | `DefaultRoleProvider<TUserInfo>`（内部，从 `IUserInfo.Roles` 解析；消费方可 DI 覆盖） |
 | **`PermissionNames`** | 系统权限名常量（V0.7.0，含 `Admin.All` 通配） | 内置，静态常量 |
 
@@ -246,7 +246,7 @@ CREATE TABLE [PermissionGrant] (
 ### 1e. V0.8.1：权限检查 N+1 优化（已实施）
 
 - **问题**：`PermissionChecker` 每次检查逐权限名 × 逐角色单条查询（用户级 1 + 每角色 1）——批量 `IsGrantedAsync(params[])` 对 N 权限 × M 角色 = N×(2+M) 次 DB 往返（热点路径放大）。
-- **方案**：`IPermissionStore` 新增 `GetGrantedPermissionNamesAsync(providerName, providerKeys?)` 批量接口（返回已授予权限名集合）；`EntityDACPermissionStore` 委托 `PermissionGrantEntityDataService.GetGrantedNamesByProviderAsync`（一次查询）；`PermissionChecker` 懒加载 **Scoped 授权集缓存**（用户级 + 角色级各 1 次批量查询，后续检查 `HashSet.Contains` 内存判定）。
+- **方案**：`IPermissionStore` 新增 `GetGrantedPermissionNamesAsync(providerName, providerKeys?)` 批量接口（返回已授予权限名集合）；`PermissionChecker` 懒加载 **Scoped 授权集缓存**（用户级 + 角色级各 1 次批量查询，后续检查 `HashSet.Contains` 内存判定）——默认装配下批量查询经 `User.Use<PermissionGrantEntityDataService>()` 直调 `GetGrantedNamesByProviderKeyAsync`/`GetGrantedNamesByProviderAsync`（V0.9.1 起 `EntityDACPermissionStore` 伪 Store 层已删除，消费方自定义 `IPermissionStore` 同样以委托 DataService 形态实现）。
 - **语义保持**：fail-closed（未定义权限拒绝 / 未认证拒绝 / Admin.All 放行）不变；角色变更需新请求（Scoped）生效——与 Identity V0.3.0 `IdentityRoleProvider` Scoped 缓存一致。
 - **性能**：批量检查从 N×(2+M) → 常数 2 次批量查询（与权限名/角色数无关）；46→49 测试（+2 N+1 专项：批量查询次数 + 缓存命中）。
 
@@ -269,7 +269,7 @@ CREATE TABLE [PermissionGrant] (
 | **成员级权限（Member provider）** | `IPermissionStore` 已支持任意 provider；`PermissionChecker` 扩展成员级判定 | 低 |
 | **默认角色授权映射** | 角色→权限的种子配置化（`PermissionOptions` 支持） | 低 |
 | **Navigation 迁出** | Navigation 依赖 Permissions，待 Permissions 稳定后迁出至扩展仓库（主框架 `总览和跟踪.md` §3.2） | 待定 |
-| **发布 tag** | V0.1.0~V0.6.0 已发布；后续迭代完成须征得同意后打 tag | — |
+| **发布 tag** | 已发布 v0.9.9（v0.1.0~v0.6.0 早期线 + v0.9.0~v0.9.9 整改线，见 §八.7）；后续迭代完成须征得同意后打 tag | — |
 
 ---
 
@@ -302,10 +302,10 @@ CREATE TABLE [PermissionGrant] (
 | 文件 | 角色 | 入库 | 覆盖策略 |
 |------|------|:---:|---------|
 | `Entities/**/*.biz.cs`、`DataServices/*.cs` | 业务扩展骨架（partial） | ✅ 入库 | **仅首次生成，绝不覆盖**（`xCodeGen.Core/Engine.cs` L203-204 双保险：存在即跳过 + `Write(overwrite:false)`） |
-| `**/*.g.cs` | 机械 CRUD/DTO 逻辑 | ❌ 不入库（`.gitignore` 含 `*.g.cs`） | 每次 Debug 构建经 `_XCG_Run`（`TKWF.Domain.targets` AfterBuild）按需重新生成 |
+| `**/*.g.cs` | 机械 CRUD/DTO 逻辑（xCodeGen 生成物） | ✅ 入库 | 本仓库源码库政策（2026-09-14 裁定）：`.g.cs` 作为提交组成部分入库，fresh clone / CI 无前置步骤可构建 |
 
 - **业务方法只写在 `.cs` 骨架**，禁止改 `.g.cs`（会被覆盖）。
-- `.g.cs` 缺失时 Debug 构建自动补全；Release/无 `_XCG_ConfigPath` 时不生成（骨架文件已入库不受影响）。
+- **重生成纪律**：实体/模板变更后运行 `pwsh .xCodeGen/run-xcodegen.ps1 -Ext Permissions`（配置 `.xCodeGen/extensions/permissions.xCodeGen.json`），将更新的 `.g.cs` 一并提交——**禁止**只改实体不重新生成/提交生成物（源码与生成物漂移）。
 - 手动强制重新生成：`dotnet run --project "$TKWFSourceRoot_xCodeGen\xCodeGen.Cli" -- gen -j .xCodeGen\permissions.xCodeGen.json --force`。
 
 ### 2. DataService 关键约束
@@ -330,12 +330,12 @@ CREATE TABLE [PermissionGrant] (
 
 ### 6. 测试基线
 
-- **50/50 通过**（xunit.v3）：单元测试 50（初始化器 6 + PermissionChecker 10——含 V0.8.1 N+1 专项 2 + PermissionCheckerRoleTests 13 + BatchCheckerTests 8 + DataService 9 + Seed 5）+ 消费方集成验证 5。**V4.10.53（ADR90）：`EntityDACPermissionStore` 及其 9 测试删除；checker 继承 `DomainServiceBase<TUserInfo>`（真实 DomainUser + BindScope 生产路径测试）。**
+- **51+5 全绿**（xunit.v3）：单元测试 51（初始化器 + PermissionChecker（含 V0.8.1 N+1 专项）+ PermissionCheckerRoleTests + BatchCheckerTests + DataService + Seed）+ 消费方集成验证 5（`_Tests/Extension.Permissions.Consumer`）。**V4.10.53（ADR90）：`EntityDACPermissionStore` 及其 9 测试删除；checker 继承 `DomainServiceBase<TUserInfo>`（真实 DomainUser + BindScope 生产路径测试）。**
 - 测试桩 `InMemoryEntityDac`/`StubDomainUser` 是各测试文件私有内部类——新增测试可复用但需自行内嵌。
 
 ### 7. 版本与发布
 
-- 扩展独立版本（MinVer），tag 前缀 `v`，**须征得同意**才打 tag。当前未打 tag（V0.3.0/V0.4.0 未发布）。
+- 扩展独立版本（MinVer），tag 前缀 `Permissions/v`，**须征得同意**才打 tag。**已发布 v0.9.9**——既有 tag 沿革：v0.1.0~v0.6.0（早期线，README §六.4 历史表述）→ v0.9.0~v0.9.9（V0.9.x 整改线，10 个 `Permissions/v0.9.x` tag，见 §一 状态行逐版说明）。
 - 生产建表：`PermissionGrant` 建表由主框架 `SyncTables` 统一托管（V4.9.92 ADR49），生产 DDL 仍建议走迁移脚本（见 §五.4）。
 
 ### 文档信息

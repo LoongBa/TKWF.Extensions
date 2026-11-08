@@ -1,6 +1,6 @@
 # TKWF.Ext.BackgroundJobs.Quartz 扩展技术规范
 
-**状态**: BackgroundJobs 扩展 Part C（Quartz AdoJobStore 一键封装） | **版本**: V0.1.0 | **框架**: .NET 10
+**状态**: BackgroundJobs 扩展 Part C（Quartz AdoJobStore 一键封装） | **版本**: V0.1.1 | **框架**: .NET 10
 
 ---
 

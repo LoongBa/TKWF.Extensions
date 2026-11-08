@@ -6,13 +6,13 @@
 
 ## 一、目的与目标
 
-确立 PrintTemplates 扩展 VEntity 读模型（`vw_PrintTemplateVersionView`）的暴露策略：**敏感视图（含模板正文 Content 商业资产）默认关闭 GraphQL 直连，数据访问统一经既有门面（`ITemplateManager`）暴露**。读者应在 3 句话内明白：PrintTemplates V0.2.0 引入的模板-版本 JOIN 视图含模板正文（商业资产），`ExposeGraphqlQuery = false` 显式关闭（对照 VEntity 默认 `true`）；消费方读取模板/版本仍走 `ITemplateManager`（门面内已有版本生命周期语义）；读路径从 2 次 DB 往返降为 1 次（真消除往返）。
+确立 PrintTemplates 扩展 VEntity 读模型（`TKWFV_PrintTemplateVersionView`）的暴露策略：**敏感视图（含模板正文 Content 商业资产）默认关闭 GraphQL 直连，数据访问统一经既有门面（`ITemplateManager`）暴露**。读者应在 3 句话内明白：PrintTemplates V0.2.0 引入的模板-版本 JOIN 视图含模板正文（商业资产），`ExposeGraphqlQuery = false` 显式关闭（对照 VEntity 默认 `true`）；消费方读取模板/版本仍走 `ITemplateManager`（门面内已有版本生命周期语义）；读路径从 2 次 DB 往返降为 1 次（真消除往返）。
 
 ## 二、问题
 
 ### 问题现象
 
-- VEntity 默认 `ExposeGraphqlQuery = true`——`vw_PrintTemplateVersionView` 含 `Content`（模板正文，商业资产——客户发票/单据格式）与模板键/描述，不显式关闭即裸暴露。
+- VEntity 默认 `ExposeGraphqlQuery = true`——`TKWFV_PrintTemplateVersionView` 含 `Content`（模板正文，商业资产——客户发票/单据格式）与模板键/描述，不显式关闭即裸暴露。
 - 模板正文是**操作者可编辑的 Scriban 资产**（PrintTemplates V0.1.0 安全契约：非进程级沙箱，模板仅限受信后台编辑）——GraphQL 直连读取正文绕过门面/后台权限门控。
 - 版本生命周期语义（Draft/Active/Archived 状态过滤 + `RenderAsync` 固定版本渲染）在 `ITemplateManager` 内——GraphQL 直连无此语义。
 
@@ -42,7 +42,7 @@
 
 ### 选项 A（采纳）：`ExposeGraphqlQuery = false`（敏感视图经门面）
 
-- 描述：`vw_PrintTemplateVersionView` 声明 `ExposeGraphqlQuery = false`；`ITemplateManager` 三读方法 + `RenderAsync` 经 `PrintTemplateVersionViewDataService` 委托；写路径（Publish/Draft/Archive）仍经 Store 实体读方法（VEntity 只读禁写，oracle3 C-high-2）。
+- 描述：`TKWFV_PrintTemplateVersionView` 声明 `ExposeGraphqlQuery = false`；`ITemplateManager` 三读方法 + `RenderAsync` 经 `PrintTemplateVersionViewDataService` 委托；写路径（Publish/Draft/Archive）仍经 Store 实体读方法（VEntity 只读禁写，oracle3 C-high-2）。
 - 优点：模板正文（商业资产）不经 GraphQL 裸暴露；读路径单查询 JOIN 下推（2 往返→1 往返）；消费方路径单一。
 - 缺点：需 GraphQL 直读时先安全评估再开（当前无此需求）。
 
@@ -58,7 +58,7 @@
 
 ## 五、结论
 
-采纳**选项 A**：`vw_PrintTemplateVersionView` 声明 `ExposeGraphqlQuery = false`（C4 裁定），数据访问统一经 `ITemplateManager` 门面。实施：`PrintTemplateVersionView.cs` `[DomainGenerateCode(IsView=true, ..., ExposeGraphqlQuery=false)]`；`ITemplateManager` 三读方法返回类型变更 `PrintTemplateVersionEntity` → `PrintTemplateVersionView`（C3，用户已裁定内部测试无历史负担、直接采用最优形态）；Store 实体读方法保留供写路径；测试宿主建真实视图验证（SQLite 方言 DateTimeOffset 列 NULL 占位——FreeSql SQLite provider 不支持 DateTimeOffset 建表，Identity 先例注释确认）。关联：02 倒推优化方案 C3/C4 裁定；框架演进候选 F4（OwnerFilter）/F11（默认收敛）。
+采纳**选项 A**：`TKWFV_PrintTemplateVersionView` 声明 `ExposeGraphqlQuery = false`（C4 裁定），数据访问统一经 `ITemplateManager` 门面。实施：`PrintTemplateVersionView.cs` `[DomainGenerateCode(IsView=true, ..., ExposeGraphqlQuery=false)]`；`ITemplateManager` 三读方法返回类型变更 `PrintTemplateVersionEntity` → `PrintTemplateVersionView`（C3，用户已裁定内部测试无历史负担、直接采用最优形态）；Store 实体读方法保留供写路径；测试宿主建真实视图验证（SQLite 方言 DateTimeOffset 列 NULL 占位——FreeSql SQLite provider 不支持 DateTimeOffset 建表，Identity 先例注释确认）。关联：02 倒推优化方案 C3/C4 裁定；框架演进候选 F4（OwnerFilter）/F11（默认收敛）。
 
 ## 六、变更记录
 

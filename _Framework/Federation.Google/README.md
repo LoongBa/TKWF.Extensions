@@ -1,6 +1,6 @@
 # TKWF.Federation.Google Google 平台网关技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——纯库无装配无持久化) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Oidc`（M1 通用 OIDC 基座——继承配置驱动）+ `TKWF.Domain`（CPM）
+**状态**: 平台网关库 (Platform Gateway Library——纯库无装配无持久化) | **版本**: V0.3.1 | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Oidc`（M1 通用 OIDC 基座——继承配置驱动）+ `TKWF.Domain`（CPM）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**）/ **零持久化零 Store** / **不引 AspNetCore** / 凭证自持（Oracle P2-4）/ 单向依赖（`Google → Oidc 基座 → Federation → AuthCenter.Abstractions`）
 
@@ -14,7 +14,7 @@
 |------|------|
 | `GoogleOidcChannel` | `google_oidc` 通道——public sub 跨 App 相同 → `google_oidc:*` 通配（同一用户经不同 Google App 登录映射同 uid）；`Defaults()` 填 Google 端点（authorize/token/userinfo/JWKS/Discovery）；凭证/覆盖经 `GoogleOptions.Channels` 选区合并 |
 | `GoogleOptions`/`GoogleChannelConfig` | `TKWF:Federation:Google` 节——ClientId/ClientSecret（Google 仅两凭证——Oracle P1-1）/TokenIssuers 白名单 |
-| `AddGoogleFederationChannels()` | DI 注册扩展——`AddOptions().Configure` + `AddOidcDerivedChannels<GoogleOidcChannel>`（基座注册 OidcAuthFlow/JwksManager/Validator + 通道入集合） |
+| `AddGoogleFederationChannels()` | DI 注册扩展——`AddOptions().Configure` + `AddOidcDerivedChannels<GoogleOidcChannel>`（基座注册 `OidcChannelFlow`——typed client，OIDC 原语委托 `Utility.OAuthClient` 引擎 + 通道入集合）+ `TryAddEnumerable<IChannelSource, GoogleChannelSource>` 静态投影 |
 
 **组合矩阵**：Federation + Oidc + Google = Google 联邦登录（V5 国外客户消费形态）。
 
@@ -89,6 +89,11 @@ builder.Services.AddGoogleFederationChannels(o =>
 
 | 版本 | 内容 |
 |------|------|
+| V0.3.1（2026-10-21） | **I2 复查适配**（Federation v0.11.0 发布链联动）：I2-1 `ISsoChannel` 契约迁入 `Federation.Abstractions`（引目标改契约包）+ 复查修复对齐 |
+| V0.3.0（2026-10-18） | **多通道联邦 v0.3.0 改造**（`Federation.Abstractions` 契约包 v0.1.0 同日首发联动）：通道 ctor 改收 `ChannelConfig?`（工厂预取，null = 集合模板实例）；`GoogleChannelSource` 投影统一 `ChannelConfig`（ClientId/ClientSecret → 公共列 AppId/AppSecret、TokenIssuers 进 Extra JSON）+ `EffectiveConfig = FromChannel(_channel)` 重建 + `Defaults()`（Google 固定端点）合并；`AddGoogleFederationChannels` 增 `TryAddEnumerable<IChannelSource>`；依赖拓扑切 `Federation.Abstractions` |
+| V0.2.2（2026-10-10） | TrustCenter 剥离三层架构收尾 + CPM 4.10.70 lockstep + 平台库 v0.2.2 发布 |
+| V0.2.1（2026-10-08） | ChannelAlias 对外别名双键——`GoogleChannelConfig.Alias` 可空字段 + `GoogleChannelSource` 投影 `ChannelConfig.Alias` + `IChannelRegistry.GetByAliasOrIdAsync` 统一解析 |
+| V0.2.0（2026-10-07） | 多通道联邦 Phase 1 平台库对齐——`GoogleChannelSource` 静态通道来源（`IChannelSource`——Options Channels 投影统一 `ChannelConfig`，凭证模型公共列 AppId/AppSecret + Extra）+ ChannelRegistry 集成选区替代 `Channels.FirstOrDefault()` 枚举（6 平台库收敛） |
 | V0.1.0（2026-10-06） | M2 Google 平台网关：GoogleOidcChannel（public sub 通配 `google_oidc:*` + Defaults 填 Google 端点 + MergeConfig 凭证合并）+ GoogleOptions/GoogleChannelConfig + AddGoogleFederationChannels（经 Oidc 基座）；9 测试全绿（OAuth 正负/id_token 篡改拒/public 通配断言/注册枚举）；slnx 已接线。**OIDC 归并配套（2026-10-06，基座 V0.2.0）**：ctor 类型同步 `OidcAuthFlow` → `OidcChannelFlow`（委托引擎薄层）——API 不变，行为委托 `Utility.OAuthClient` |
 
 <!-- EOF -->

@@ -20,7 +20,7 @@
 
 ### 1. 分层结构
 
-- **核心运行库** `TKW.Framework.Utility.DataPort`（主框架 Utility，编入 TKWF.Utility.dll）——导入/导出流程算法：列映射 → 类型转换（委托缓存）→ 验证三态（Keep/Skip/Terminate）→ **批次切分**（每 BatchSize 行回调 onBatch）→ 错误收集（行级 `ImportFailure` + 批次级 `BatchFailure`）。
+- **核心运行库** `TKWF.Utility.DataPort`（主框架 Utility 独立项目）——导入/导出流程算法：列映射 → 类型转换（委托缓存）→ 验证三态（Keep/Skip/Terminate）→ **批次切分**（每 BatchSize 行回调 onBatch）→ 错误收集（行级 `ImportFailure` + 批次级 `BatchFailure`）。<br>**⚠️ 独立包（非编入 TKWF.Utility.dll）**——扩展经 **PackageReference** 引用（CPM 集中版本，见 `Directory.Packages.props`）。
 - **MiniExcel Provider** `TKWF.Utility.DataPort.Providers.MiniExcel`（Apache-2.0 读写引擎，可选引入）——流式读 xlsx/csv → `ImportRow`（非泛型，Provider 不感知 T）；列表 → xlsx/csv 写流。只读场景可不引用。
 - **扩展模块**（本包）——`DataPortExtensionInitializer`（DI 接线）+ `DataPortOptions`（`TKWF:DataPort`）+ `DataImportRecordEntity`（SG1 实体）+ `IDataImportTaskService`（导入执行 + 批次记录落库 + FileHash 幂等 + 状态跟踪）。
 
@@ -30,6 +30,7 @@
 - **模板方法模式（R2'）**：`ImportAdapterBase<T>` 基类——不同导入各一派生类（如 `PaymentImportAdapter : ImportAdapterBase<PaymentLog>`），便于管理与维护；改善 ExcelTools 静态工具类 + 接口混职责问题。
 - **幂等检查（R3）**：`FileHash`（SHA256）唯一索引——同文件二次导入 → Processing/Succeeded 返回已有批次（拒绝）；Failed 批次 → 重置为 Processing 允许重导。`BatchNo` 为消费方回滚钩子入口。
 - **状态跟踪**：Processing → Succeeded / Failed / PartiallySucceeded（`BatchFailures.Count > 0`），错误摘要取前 5 个批次失败消息拼接。
+- **异常语义**：核心导入失败统一抛 **`DataImportException`**（核心运行库导出的导入异常类型——含批量失败明细）；消费方可捕获该异常并据 `BatchNo` 回滚（§三.5）。
 
 ### 3. 与主框架的关系
 
@@ -81,12 +82,17 @@ public sealed class PaymentImportAdapter : ImportAdapterBase<PaymentLog>
 ```
 
 ```csharp
-// 注入 + 执行（批次记录落库 + 幂等检查 + 状态跟踪）
-public class PaymentImporter(IDataImportTaskService taskService)
+// ⚠️ 禁构造注入 IDataImportTaskService——AddConstructibleService 守卫工厂，域作用域外解析必抛（DI004）
+// 正确形态：DomainServiceBase 派生 + 内部经 User.Use<IDataImportTaskService>() 解析
+public class PaymentImporter : DomainServiceBase
 {
+    public PaymentImporter(IDomainUser user) : base(user) { }
+
     public async Task<DataImportTaskResult> ImportAsync(string filePath)
     {
-        var result = await taskService.ImportAsync(filePath, new PaymentImportAdapter(_db));
+        // 批次记录落库 + FileHash 幂等（同文件二次导入 → 返回已有批次）+ 状态跟踪
+        var result = await User.Use<IDataImportTaskService>()
+            .ImportAsync(filePath, new PaymentImportAdapter(_db));
         // result.RecordId / result.BatchNo / result.ImportResult（SuccessCount + Failures + BatchFailures）
         return result;
     }
@@ -110,6 +116,8 @@ public class PaymentExporter(IExportService exportService)
     }
 }
 ```
+
+> ⚠️ **导出公式注入边界（安全）**：导出单元格以 `=` 开头的内容可能被 Excel 解释执行（CSV/公式注入）——**数据源自用户输入时注意消毒**（如首字符 `=`/`+`/`-`/`@` 前置 `'` 或空格）。
 
 ### 5. 回滚（消费方钩子，R3）
 
@@ -138,7 +146,8 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 |------|------|------|
 | **`DefaultBatchSize`** | 500 | 默认批次大小（每批处理行数，≥1） |
 | **`StopOnBatchFailure`** | false | 批次回调异常时是否终止（false = 继续下一批） |
-| **`DefaultProvider`** | "miniexcel" | 默认 Provider 注册名（IImportProvider/IExportProvider） |
+
+> **`ImportBatchOptions`（核心运行库，导入时按次覆盖）**：构造参数 `(BatchSize, StopOnBatchFailure, SkipValidationErrors)`——第三个参数 `SkipValidationErrors`（bool，默认 `true`：Skip 行收集 failure 继续；`false` 时**首个 Skip 行即终止导入**）。**`DataPortOptions` 无此配置项**——消费方经 `ImportBatchOptions` 显式传（如 `new ImportBatchOptions(BatchSize: 500, StopOnBatchFailure: false, SkipValidationErrors: true)`）。
 
 ## 四、核心组件清单 (Component List)
 
@@ -149,13 +158,13 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | **`IImportProvider`** | 读取引擎抽象（流式行，非泛型；只读场景可仅注册） | `MiniExcelImportProvider`（MiniExcel Provider） |
 | **`IExportProvider`** | 写入引擎抽象（IEnumerable 懒求值） | `MiniExcelExportProvider`（MiniExcel Provider） |
 | **`IDataImportTaskService`** | 批次任务：导入执行 + 批次记录落库 + FileHash 幂等 + 状态跟踪 | `DataImportTaskService`（本扩展——V0.1.4 继承 `DomainServiceBase` + `[DiContractIgnore]`，`AddConstructibleService` 注册，消费方 `User.Use<IDataImportTaskService>()`） |
-| **`DataImportRecordEntity`** | 导入批次记录实体（批次号/FileHash 唯一/状态/统计/错误摘要/CreatedBy） | SG1 声明式实体 → `DataImportRecord` 表 |
+| **`DataImportRecordEntity`** | 导入批次记录实体（批次号/FileHash 唯一/状态/统计/错误摘要/CreatedBy） | SG1 声明式实体 → `TKWF_DataImportRecord` 表 |
 | **`DataPortOptions`** | 配置（`TKWF:DataPort` 节） | 内置 |
 | **`DataPortExtensionInitializer<TUserInfo>`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + 三钩子 DI 接线） | 本扩展 |
 
 ## 五、实体表结构 (Entity Schema)
 
-`DataImportRecordEntity` 映射到 `DataImportRecord` 表：
+`DataImportRecordEntity` 映射到 `TKWF_DataImportRecord` 表：
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
@@ -163,7 +172,7 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | BatchNo | NVARCHAR(64) | 批次号（GUID，唯一，回滚入口） |
 | FileHash | NVARCHAR(128) | 文件哈希（SHA256，唯一索引——幂等检查） |
 | FileName | NVARCHAR(512) | 原始文件名 |
-| ProviderName | NVARCHAR(128) | Provider 名称（如 "miniexcel"） |
+| ProviderName | NVARCHAR(128) | Provider/适配器名称（实际存 adapter 类型名，如 `PaymentImportAdapter`——`adapter.GetType().Name`） |
 | Status | NVARCHAR(64) | 导入状态（Processing/Succeeded/Failed/PartiallySucceeded） |
 | SuccessCount | INT | 验证通过数（独立于批次持久化） |
 | FailedCount | INT | 行级失败数 |
@@ -175,7 +184,7 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | CreateTime | DATETIME | 创建时间 |
 | UpdateTime | DATETIME | 更新时间 |
 
-**索引**：`IX_dir_filehash`（FileHash 唯一）+ `IX_dir_batchno`（BatchNo 唯一）。
+**索引**：`TKWFIX_Dir_Filehash`（FileHash 唯一）+ `TKWFIX_Dir_Batchno`（BatchNo 唯一）。
 
 ## 六、架构演进路线 (Architecture Roadmap)
 

@@ -32,7 +32,7 @@
 
 - **记录存储抽象 (`IEmailRecordStore`)**：定义邮件记录的 CRUD 操作。扩展提供 FreeSql 默认实现。
 
-- **持久化实现 (`FreeSqlEmailRecordStore`)**：将 `EmailRecordEntity` 持久化到数据库。异常静默处理。
+- **持久化实现 (`EmailRecordStore`)**：将 `EmailRecordEntity` 持久化到数据库。异常静默处理。
 
 - **声明式实体 (`EmailRecordEntity`)**：SG1 化实体，`partial class` + `[DomainGenerateCode]`，FreeSql `[Column]` 特性。
 
@@ -46,7 +46,7 @@
 
 ### 3. 与主框架的关系
 
-- 本扩展提供 `SmtpEmailSender` + `FreeSqlEmailRecordStore` 实现 + `EmailingExtensionInitializer` 注册。
+- 本扩展提供 `SmtpEmailSender` + `EmailRecordStore` 实现 + `EmailingExtensionInitializer` 注册。
 - 消费方通过 `IEmailSender` 发送邮件，无需关心 SMTP 细节。
 
 ---
@@ -62,7 +62,7 @@
 public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ... }
 ```
 
-白名单声明后自动注册：`IEmailSender`（默认 `SmtpEmailSender`）+ `IEmailRecordStore`（默认 `FreeSqlEmailRecordStore`）。
+白名单声明后自动注册：`IEmailSender`（默认 `SmtpEmailSender`，TryAddScoped）+ `IEmailRecordStore`（默认 `EmailRecordStore`，AddConstructibleService——见下注记）。
 
 ### 2. 发送邮件
 
@@ -98,6 +98,7 @@ public class MyService(IEmailSender emailSender)
       "SmtpUser": "user@example.com",
       "SmtpPassword": "your-password",
       "DefaultFrom": "noreply@example.com",
+      "UseSsl": false,
       "IsEnabled": true,
       "RetryCount": 2,
       "RetryBaseDelayMilliseconds": 1000
@@ -106,7 +107,7 @@ public class MyService(IEmailSender emailSender)
 }
 ```
 
-`RetryCount`（默认 0 = 不重试）= 失败后额外重试次数，总尝试 = `RetryCount + 1`；`RetryBaseDelayMilliseconds`（默认 1000）= 指数退避基数，第 i 次重试前等待 `base * 2^(i-1)` 毫秒（如 1000 → 1s、2s、4s…）。
+`RetryCount`（默认 0 = 不重试）= 失败后额外重试次数，总尝试 = `RetryCount + 1`；`RetryBaseDelayMilliseconds`（默认 1000）= 指数退避基数，第 i 次重试前等待 `base * 2^(i-1)` 毫秒（如 1000 → 1s、2s、4s…）。`UseSsl`（默认 false，V0.1.1 起）：true = `SslOnConnect`（465 端口隐式 SSL），false = `StartTls`（587 标准）。
 
 ### 4. 自定义 IEmailSender
 
@@ -126,7 +127,7 @@ TryAdd 语义确保消费方实现优先。
 | **组件** | **职责** | **默认实现** |
 |----------|---------|------------|
 | **`IEmailSender`** | 邮件发送抽象 | `SmtpEmailSender`（本扩展） |
-| **`IEmailRecordStore`** | 邮件记录存储抽象 | `FreeSqlEmailRecordStore`（本扩展） |
+| **`IEmailRecordStore`** | 邮件记录存储抽象 | `EmailRecordStore`（本扩展，V0.3.0 起 `AddConstructibleService` 注册） |
 | **`EmailMessage`** | 邮件消息模型 | record 类型 |
 | **`EmailRecordEntity`** | 邮件记录表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]` |
 | **`EmailingUserInfo`** | 扩展专用用户类型（继承 SimpleUserInfo） | 内置 |
@@ -160,15 +161,19 @@ TryAdd 语义确保消费方实现优先。
 ## 六、架构演进路线 (Architecture Roadmap)
 
 ### V0.2.0（已实施）
-- **发送重试策略（指数退避）**——`EmailingOptions.RetryCount`（默认 0）+ `RetryBaseDelayMilliseconds`（默认 1000）配置化：失败按 `base * 2^(i-1)` 退避重试，取消不重试，最终失败异常静默保存 `Failed`（`record.RetryCount` 记录实际失败次数）
+- **发送重试策略（指数退避）**——`EmailingOptions.RetryCount`（默认 0）+ `RetryBaseDelayMilliseconds`（默认 1000）配置化：失败按 `base * 2^(i-1)` 退避重试，取消不重试，最终失败异常静默保存 `Failed`（`record.RetryCount` 记录重试次数，不含首次尝试）
 - **拆包 Abstractions（ADR48 D7）**——`IEmailSender` / `EmailMessage` 契约迁至 `TKWF.Ext.Emailing.Abstractions`，命名空间 `TKWF.Ext.Emailing` 零破坏
 
-### V0.1.0（当前基线）
+### V0.1.0（已实施）
 - SMTP 邮件发送（MailKit）
 - FreeSql 邮件记录存储
 - 异常静默处理
 
-### V0.3.0（规划）
+### V0.3.0（已实施：v4.10.53 领域自治整改，ADR90）
+- `EmailRecordStore` 继承 `DomainServiceBase` + 注册改 `AddConstructibleService`（接口守卫工厂 + 实现 throw-factory）——消费方经 `User.Use<IEmailRecordStore>()` 解析（旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）
+- `SmtpEmailSender` 内部接线型（`IEmailRecordStore` 经 C1 延迟解析——帧外发邮件先经 `User.Use<IEmailSender>()` 或 DomainServiceBase 基类 `User` 建立 AOP 帧，见 §三.2 注记）
+
+### V0.4.0（规划）
 - 邮件模板引擎
 - 批量发送支持
 - 多 SMTP 提供者支持

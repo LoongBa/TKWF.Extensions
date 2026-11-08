@@ -10,7 +10,7 @@
 | 包名 | `TKWF.Ext.OrganizationUnit` |
 | 版本 | v0.2.0（VEntity 下推）+ **V0.5.0（V4.10.53 领域自治根治，ADR90——正确路线：OrganizationUnitStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ OrganizationUnitManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.5.0）** |
 | 依赖 | `TKWF.Domain` + SG1（框架既有） |
-| 数据 | 表 `OrganizationUnit` + `OrganizationUnitUser`（框架 `SyncTables` 统一建表） |
+| 数据 | 表 `TKWF_OrganizationUnit` + `TKWF_OrganizationUnitUser`（框架 `SyncTables` 统一建表） |
 
 ## 架构分层
 
@@ -47,7 +47,7 @@ OrganizationUnitEntity / OrganizationUnitUserEntity     # SG1 声明式实体（
 |-----|------|
 | `AssignUserAsync(ouId, userId)` | 分配用户；重复分配 → 业务异常"该用户已在此组织单元"（唯一约束转换） |
 | `UnassignUserAsync(ouId, userId)` | 解除（幂等，不存在静默成功） |
-| `GetUserIdsInOrganizationUnitAsync(ouId, includeDescendants)` | 双向查询①：OU（含/不含子孙）下用户 Id 列表——**V0.2.0 双模式**：`includeDescendants=true` 走 `vw_UserOrganizationUnitView` 视图单查询（JOIN OU→OUUser + OUPath 精确前缀，替代两步）；`false` 保留 junction 单查 |
+| `GetUserIdsInOrganizationUnitAsync(ouId, includeDescendants)` | 双向查询①：OU（含/不含子孙）下用户 Id 列表——**V0.2.0 双模式**：`includeDescendants=true` 走 `TKWFV_UserOrganizationUnitView` 视图单查询（JOIN OU→OUUser + OUPath 精确前缀，替代两步）；`false` 保留 junction 单查 |
 | `GetOrganizationUnitIdsForUserAsync(userId)` | 双向查询②：用户所属 OU Id 列表 |
 
 ## 约束与语义
@@ -81,21 +81,21 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ## 数据模型
 
 ```sql
-OrganizationUnit(id BIGINT PK, code VARCHAR(128) UNIQUE, parent_id BIGINT NULL, name VARCHAR(128),
+TKWF_OrganizationUnit(id BIGINT PK, code VARCHAR(128) UNIQUE, parent_id BIGINT NULL, name VARCHAR(128),
                  sort_order INT, level INT, path VARCHAR(1024), is_enabled BOOL,
                  create_time TIMESTAMPTZ, update_time TIMESTAMPTZ)
-OrganizationUnitUser(id BIGINT PK, organization_unit_id BIGINT, user_id VARCHAR(128),
+TKWF_OrganizationUnitUser(id BIGINT PK, organization_unit_id BIGINT, user_id VARCHAR(128),
                      create_time TIMESTAMPTZ, update_time TIMESTAMPTZ,
                      UNIQUE(organization_unit_id, user_id))
 ```
 
 - `parent_id` 自引用（null=根）；`level`/`path` 为物化路径冗余（写入维护，读取零写）。
 - `UserId` 为 **string**（对齐 `IUserInfo.UserIdString`，跨 Identity 兼容）。
-- 唯一约束：`UX_OrganizationUnit_Code`（Code）+ `UX_OrganizationUnitUser_User_OU`（防重复关联）。
-- 生产建表：两业务表框架 `SyncTables` 统一托管（V4.9.92 ADR49），**无手工 DDL 前置**；`vw_UserOrganizationUnitView` 视图（V0.2.0）框架 `SyncViewsAsync` **仅开发环境自动建**——**生产需 DBA 手动执行 ViewSql**（见 `UserOrganizationUnitView.ViewSql` / `ViewSqlSQLite`）。
+- 唯一约束：`TKWFIX_OrganizationUnit_Code`（Code）+ `TKWFIX_OrganizationUnitUser_User_OU`（防重复关联）。
+- 生产建表：两业务表框架 `SyncTables` 统一托管（V4.9.92 ADR49），**无手工 DDL 前置**；`TKWFV_UserOrganizationUnitView` 视图（V0.2.0）框架 `SyncViewsAsync` **仅开发环境自动建**——**生产需 DBA 手动执行 ViewSql**（见 `UserOrganizationUnitView.ViewSql` / `ViewSqlSQLite`）。
 
 ## 后续演进（v0.3.0+ 候选）
 
 OU 软删除 + 回收站；多租户隔离；岗位/职级语义；`DeleteAsync` 子节点计数改 `CountByParentIdAsync` 下推（语义确认后）。
 
-> **v0.2.0 已实施**：`vw_UserOrganizationUnitView` VEntity（JOIN OU→OUUser，7 投影列，`ExposeGraphqlQuery=false` 敏感视图经门面）+ `GetSubTreeAsync`/`GetAncestorsAsync` 单表 SQL 下推（物化路径精确前缀/Code IN——P3 实证：FreeSql `StartsWith` SQLite 走 `instr` 无通配符歧义、PG 翻译未实证可能走 LIKE，故统一改 `substr`/`substring` 精确比较保证双方言安全）+ `GetUserIdsInOrganizationUnitAsync` 双模式（oracle3 C-5/M2）。**生产部署**：框架 SyncViewsAsync 仅开发环境建视图；**生产需 DBA 手动执行 ViewSql**（见 `UserOrganizationUnitView.ViewSql` / `ViewSqlSQLite`）。
+> **v0.2.0 已实施**：`TKWFV_UserOrganizationUnitView` VEntity（JOIN OU→OUUser，7 投影列，`ExposeGraphqlQuery=false` 敏感视图经门面）+ `GetSubTreeAsync`/`GetAncestorsAsync` 单表 SQL 下推（物化路径精确前缀/Code IN——P3 实证：FreeSql `StartsWith` SQLite 走 `instr` 无通配符歧义、PG 翻译未实证可能走 LIKE，故统一改 `substr`/`substring` 精确比较保证双方言安全）+ `GetUserIdsInOrganizationUnitAsync` 双模式（oracle3 C-5/M2）。**生产部署**：框架 SyncViewsAsync 仅开发环境建视图；**生产需 DBA 手动执行 ViewSql**（见 `UserOrganizationUnitView.ViewSql` / `ViewSqlSQLite`）。

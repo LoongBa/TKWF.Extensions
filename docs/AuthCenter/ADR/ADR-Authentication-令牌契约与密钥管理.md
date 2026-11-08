@@ -8,6 +8,8 @@
 
 冻结认证中心**令牌契约（JWT 最小化 + 生命周期 + 回调承载）**与**密钥管理方案（持久化 RSA + kid 轮换 + 黑名单落库）**，确立「参考业界成熟设计 + 摒弃 DMP-Lite 内存态/未闭环缺陷」的技术基线。读者应在 3 句话内明白：JWT 只带 `sub`（平台内部 id）+ 认证声明、**不含业务角色**；RSA 密钥持久化 + `kid` 轮换 + 黑名单落库（多实例一致、重启不丢）；Refresh Token rotation 落库 + `TokenVersion` 闭环（DMP 未消费缺口补上）。
 
+> **⚠️ 交叉引用（2026-10-07 V0.9.0 契约变更）**：本 ADR 冻结的令牌契约已于 V0.9.0 发生变更——`teacher_verified` claim 移除（A.4）、`channel_type` claim 增补（T5 2026-10-09）、`aud` claim 条件增补（Iter-6 v4.10.71）——当前契约状态以 [ADR-AuthCenter-身份域数据模型与密码能力边界](./ADR-AuthCenter-身份域数据模型与密码能力边界.md) 与本仓库 `_Framework/AuthCenter/README.md` §二（令牌契约）为准，本 ADR 保留历史基线。
+
 ## 二、问题
 
 ### 问题现象
@@ -73,7 +75,7 @@
 理由：
 1. **多实例/重启一致性**：密钥/黑名单落库是认证中心高可用部署的硬前提（需求 §11 风险"统一身份源单一故障点"→ 高可用缓解）。
 2. **业界成熟**：kid 轮换（JWK RFC 7517）、Refresh Rotation（OAuth 2.0 BCP）、TokenVersion 失效（DMP PlatformAdmin 已有字段但未闭环——本方案补上）。
-3. **令牌最小化落实**：JWT 载荷按需求 §3.1 冻结（sub/userId/authType/auth_level/teacher_verified/exp/iat/jti/kid，**无业务角色**）——DMP `mid`/`role` 剔除。
+3. **令牌最小化落实**：JWT 载荷按需求 §3.1 冻结（sub/userId/authType/auth_level/~~teacher_verified~~/exp/iat/jti/kid，**无业务角色**）——DMP `mid`/`role` 剔除。**⚠️ 已废弃（2026-10-07 V0.9.0 A.4）**：`teacher_verified` claim 已移除——令牌不再携带业务声明（教师核实迁出至教育线业务扩展），变更详见 ADR-身份域数据模型与密码能力边界。
 4. **红线合规**：`AuthRefreshTokenEntityDataService` 委托（不直注入 IEntityDAC）——消除 DMP 红线违规。
 5. **零第三方依赖**：手写 RS256（对齐 DMP 新版语义 + 扩展仓库原则）。
 
@@ -110,3 +112,4 @@
 | 日期 | 变更内容 |
 |------|---------|
 | 2026-09-30 | 初始版本——JWT 最小化契约冻结（无业务角色）；RSA 持久化 + kid 轮换；黑名单落库；Refresh rotation + TokenVersion 闭环；手写 RS256 零第三方依赖；摒弃 DMP 内存态三缺陷 |
+| 2026-11-08 | 补交叉引用标注——V0.9.0（2026-10-07）契约变更见 ADR-身份域数据模型与密码能力边界（`teacher_verified` 段标注已废弃、当前契约以 README §二为准） |

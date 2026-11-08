@@ -1,6 +1,6 @@
 # TKWF.Federation.Oidc 通用 OIDC 通道基座技术规范
 
-**状态**: 平台网关基座库 (Platform Gateway Base Library——纯库无装配无持久化) | **版本**: V0.2.0（2026-10-06——OIDC 原语委托引擎：删扩展侧 JwksManager/OidcIdTokenValidator 内联，OidcAuthFlow → OidcChannelFlow 薄层；authorize/code/userinfo/discovery/验签全部委托 `Utility.OAuthClient` 引擎 v4.10.64） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + **`TKWF.Utility`（OIDC 引擎——OIDC 归并方案 §3.4）** + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关基座库 (Platform Gateway Base Library——纯库无装配无持久化) | **版本**: V0.3.1（多通道联邦 v0.3.0：通道 ctor 收 `ChannelConfig`（工厂预取）+ `{平台}ChannelSource` 投影 + `FromChannel` 重建；OIDC 原语委托 `Utility.OAuthClient` 引擎 `OidcChannelFlow` 薄层——完整演进见 §五 版本记录） | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + **`TKWF.Utility`（OIDC 引擎——OIDC 归并方案 §3.4）** + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**）/ **零持久化零 Store**（tkwf-extension 铁律）/ **最小职责 = channel 适配 + 配置驱动**（OIDC 原语已委托 `Utility.OAuthClient` 引擎——OIDC 归并方案 v0.1.1 实施闭环，F1 终态）/ **不引 AspNetCore**（入站端点归装配层）/ 凭证自持（Oracle P2-4）
 
@@ -55,13 +55,17 @@ builder.Services.AddOidcFederationChannel("keycloak-corp", o =>
 ```csharp
 public sealed class GoogleOidcChannel : OidcChannelBase
 {
-    public GoogleOidcChannel(IDomainUser user, OidcChannelFlow flow, IOptions<GoogleOptions> options) : base(user, flow) { ... }
+    // 通道 ctor 收 ChannelConfig?（工厂预取——POCO 非域服务规避 DI004；null = 集合模板实例，不直接认证）
+    public GoogleOidcChannel(IDomainUser user, OidcChannelFlow flow, ChannelConfig? channel = null)
+        : base(user, flow, channel) { }
     public override string ChannelType => "google_oidc";
     protected override string BuildChannelId(OidcPlatformConfig config) => $"{ChannelType}:*";   // public 通配
-    protected override OidcPlatformConfig EffectiveConfig => /* 平台 Options 选区 + Defaults 合并 */;
+    // EffectiveConfig 基座默认 = FromChannel(_channel)（Extra 重建 OidcPlatformConfig）+ Defaults() 合并——派生通常不需要覆写
     protected override OidcPlatformConfig Defaults() => new() { AuthorizeUri = "...", TokenUri = "...", ... };
+    // 派生需定制组装时覆写 EffectiveConfig（先例：Microsoft 按 Extra["Tenant"] 模板化端点）：
+    // protected override OidcPlatformConfig EffectiveConfig => MergeConfig(Defaults(), FromChannel(_channel!));
 }
-// 平台库注册扩展（自行注册 Options + AddOidcDerivedChannels<GoogleOidcChannel>）
+// 平台库注册扩展（AddOptions().Configure + {平台}ChannelSource 投影统一 ChannelConfig + AddOidcDerivedChannels<GoogleOidcChannel>）
 ```
 
 ### 3. 配置 `TKWF:Federation:Oidc`（直配场景）
@@ -102,7 +106,7 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ## 三、安全边界
 
 - **信任根 = id_token JWKS 验签**（出站-only——OIDC 平台无入站回调，P13）：alg 强制 RS256（拒 none/HS256）/ kid 精确匹配 + JWKS 重取 / iss 白名单（通配/正则——Microsoft common tenant iss 含实际租户 GUID）/ aud 含 client_id（数组场景 azp）/ exp·iat leeway 30s + nbf / sub 必存 / Base64Url 边界 + FixedTimeEquals。
-- **JWKS 端点篡改防护**（Oracle P2-4）：HTTPS 强制 + kid 白名单（首次见到入白名单 + 配置预置兜底）+ JWKS 缓存 TTL 1h + 响应大小钳制（512KB）+ RSA <2048 拒。
+- **JWKS 端点篡改防护**（Oracle P2-4）：HTTPS 强制 + kid 白名单（首次见到入白名单 + 配置预置兜底）+ JWKS 缓存 TTL 1h（**单请求内有效**——flow 为 Transient typed client，`_jwksCache` 跨请求重建，每次联邦登录各拉取一次 JWKS；安全无影响，新拉取更鲜）+ 响应大小钳制（512KB）+ RSA <2048 拒。
 - **凭证自持**（Oracle P2-4）：ClientSecret/private_key 从 `OidcPlatformConfig` 解析——生产 AES-GCM 密文或装配注入；**绝不落日志**（id_token 仅记 sub+iss+kid+exp——PII redaction）。
 - **redirect_uri 一致性**（RFC 6749 §4.1.3）：code→token 时发回授权时同名 redirect_uri——防 code 窃取换 token。
 - **PKCE S256**（OAuth 2.1）：`UsePkce` 默认启用——verifier 缺失/不匹配拒（Stub 服务端比对）。
@@ -120,6 +124,10 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 
 | 版本 | 内容 |
 |------|------|
+| V0.3.1（2026-10-21） | **I2 复查适配**（Federation v0.11.0 发布链联动）：I2-1 通道契约归属纠正——`ISsoChannel` 自 TrustCenter.Abstractions 迁入 `Federation.Abstractions`（namespace 保持 `TKWF.Ext.Federation` 跨程序集同零 using 迁移——引目标改契约包）；复查修复对齐（排序守卫/免登 TTL 启动期 fail-fast 联动） |
+| V0.3.0（2026-10-18） | **多通道联邦改造**（`Federation.Abstractions` 契约包 v0.1.0 同日首发联动）：通道 ctor 改收 `ChannelConfig?`（工厂预取——POCO 非域服务规避 DI004；null = 集合模板实例，不认证返回 CHANNEL_NOT_FOUND/CHANNEL_DISABLED）；`{平台}ChannelSource` 投影统一 `ChannelConfig`（ClientId/ClientSecret → 公共列 AppId/AppSecret；平台字段进 `Extra`——键见 `OidcChannelConfigKeys` 单一事实源）+ `EffectiveConfig = FromChannel(_channel)`（Extra 重建 `OidcPlatformConfig`）+ `Defaults()` 合并（受保护虚方法——派生覆写定制组装，如 Microsoft 按 `Extra["Tenant"]` 模板化端点）；`AddOidcDerivedChannels` 注册形态 = `AddHttpClient<OidcChannelFlow>`（typed client）+ `TryAddEnumerableConstructible<ISsoChannel, TChannel>`；依赖拓扑切 `Federation.Abstractions` |
+| V0.2.2（2026-10-10） | TrustCenter 剥离三层架构收尾（Phase 5）——`ISsoChannel` 契约迁 TrustCenter.Abstractions 后依赖收口 + CPM 4.10.70 lockstep；平台库 v0.2.2 发布 |
+| V0.2.1（2026-10-08） | ChannelAlias 对外别名双键（Phase 3 实施闭环）——`OidcPlatformConfig.Alias` 可空字段（缺省 null = 对外用 ChannelId，存量零迁移）+ `IChannelRegistry.GetByAliasOrIdAsync` 先 alias 再 ChannelId 选区 |
 | V0.2.0（2026-10-06） | **OIDC 原语归并引擎实施闭环**（OIDC 归并方案 v0.1.1 + 框架 v4.10.64）：删扩展侧 `JwksManager.cs`/`OidcIdTokenValidator.cs` 内联重复（引擎 `JwksManager`/`IdTokenDecoder`——kid 路由/墓园 Dispose/512KB 钳制/RSA≥2048/iss 通配正则/azp/leeway/nbf/exp 强校验）；`OidcAuthFlow` → `OidcChannelFlow` 薄层（authorize/code/userinfo 委托引擎 `OAuthClient`；验签委托 `IdTokenDecoder.ValidateAsync` + 流自持 JwksManager 按 jwksUri 键缓存；discovery 委托引擎 `OidcDiscoveryClient`（容忍语义保留——失败降级 null 回退显式端点）；保留内联仅 private_key_jwt P1-8）；`OidcIdTokenValidationResult` record 移入 OidcChannelFlow.cs；csproj 补 `TKWF.Utility` 条件引用（CPM 4.10.61 桥接——4.10.64 发布后 lockstep）；Oidc 17 / Google 9 / Microsoft 11 测试全绿 + 全量回归 39 项目零失败 |
 | V0.1.0（2026-10-06） | M1 通用 OIDC 通道基座：OidcChannelBase（DomainServiceBase, ISsoChannel——BuildChannelId 复合编码 + Defaults 派生）/ OidcAuthFlow（Discovery 配置驱动 + code→token（client_secret post / private_key_jwt + redirect_uri 一致性 + PKCE S256）+ userinfo）/ JwksManager（kid 精确匹配 + L1 缓存 + 轮换重取）/ OidcIdTokenValidator（RS256 + iss 白名单通配/正则 + aud/azp + exp/iat/nbf + sub）/ OidcConfiguredChannel（自托管 IdP 直配）+ AddOidcFederationChannel / AddOidcDerivedChannels 注册；18 测试全绿（验签正负/issuer 容错/pairwise 复合编码/PKCE/Discovery/multi-IdP 枚举）；slnx 已接线；Oracle 评审 P0×1（注册抽象基类→OidcConfiguredChannel）+ P1×7 落实 |
 

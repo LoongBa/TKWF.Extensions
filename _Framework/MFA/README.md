@@ -8,9 +8,9 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析）** + **V0.1.3（V4.10.55 ADR92/T3 闭环——2 Method 改 `TryAddEnumerableConstructible` + 继承 DomainServiceBase，集合版守卫工厂帧内供给）** + **V0.2.0（E4 密钥管理抽象——删 `MfaSecretKeyStore`；`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`）；MfaService 不再 Initialize 密钥副作用；修正 DataService 陈旧注释；格式统一单段）** |
+| 版本 | v0.1.0（独立起点）+ **V0.1.2（V4.10.53 ADR90 领域自治根治，V0.1.1 已为既有 tag——`MfaService` 继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ 注册改 `AddConstructibleService`（接口可构造守卫工厂），消费方统一 `User.Use<IMfaService>()` 解析）** + **V0.1.3（V4.10.55 ADR92/T3 闭环——2 Method 改 `TryAddEnumerableConstructible` + 继承 DomainServiceBase，集合版守卫工厂帧内供给）** + **V0.2.0（E4 密钥管理抽象——删 `MfaSecretKeyStore`；`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`）；MfaService 不再 Initialize 密钥副作用；修正 DataService 陈旧注释；格式统一单段）** + **V0.2.1（v4.10.67 IRateLimitCheck 迁移——频控契约迁 DI 注入 `IRateLimitCheck`，Initializer fallback `MemoryRateLimitCheck`）** + **V0.2.2（v4.10.66 表名前缀——`TKWF_MfaSecret`/`TKWF_MfaChallenge`/`TKWF_MfaRecoveryCode` + `TKWFIX_*` 索引）** |
 | 依赖 | `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖** |
-| 数据 | 表 `MfaSecret` + `MfaChallenge` + `MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
+| 数据 | 表 `TKWF_MfaSecret` + `TKWF_MfaChallenge` + `TKWF_MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 
 ## 架构分层
 
@@ -115,15 +115,15 @@ public class LoginService : DomainServiceBase
 ## 数据模型
 
 ```sql
-MfaSecret(id BIGINT PK, user_id VARCHAR(128), method VARCHAR(20), secret_encrypted VARCHAR(512) NULL,
+TKWF_MfaSecret(id BIGINT PK, user_id VARCHAR(128), method VARCHAR(20), secret_encrypted VARCHAR(512) NULL,
           phone VARCHAR(32) NULL, is_confirmed BOOLEAN, enroll_token_hash VARCHAR(64) NULL,
           enroll_expire_at TIMESTAMP NULL, create_time TIMESTAMP, update_time TIMESTAMP)
-MfaChallenge(id BIGINT PK, user_id VARCHAR(128), method VARCHAR(20), code_hash VARCHAR(64) NULL,
+TKWF_MfaChallenge(id BIGINT PK, user_id VARCHAR(128), method VARCHAR(20), code_hash VARCHAR(64) NULL,
              expire_at TIMESTAMP, is_consumed BOOLEAN, create_time TIMESTAMP)
-MfaRecoveryCode(id BIGINT PK, user_id VARCHAR(128), code_hash VARCHAR(64), is_consumed BOOLEAN, create_time TIMESTAMP)
--- 索引：UX_MfaSecret_User_Method（user_id,method 联合唯一）/ IX_MfaSecret_User
---      IX_MfaChallenge_User_Method / IX_MfaChallenge_Expire
---      UX_MfaRecovery_User_CodeHash（user_id,code_hash 联合唯一）/ IX_MfaRecovery_User
+TKWF_MfaRecoveryCode(id BIGINT PK, user_id VARCHAR(128), code_hash VARCHAR(64), is_consumed BOOLEAN, create_time TIMESTAMP)
+-- 索引：TKWFIX_MfaSecret_User_Method（user_id,method 联合唯一）/ TKWFIX_MfaSecret_User
+--      TKWFIX_MfaChallenge_User_Method / TKWFIX_MfaChallenge_Expire
+--      TKWFIX_MfaRecovery_User_CodeHash（user_id,code_hash 联合唯一）/ TKWFIX_MfaRecovery_User
 ```
 
 - 删除语义：**物理删除**（不声明 `IsDeleted`，`hasSoftDelete:false`）——Disable 解绑删绑定 + 未消费挑战 + 恢复码（级联）。

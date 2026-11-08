@@ -10,11 +10,11 @@
 
 ```
 用户 在目标 H5 应用 点击"QQ 登录"
-  → 应用跳 /sso/login?target_app_id=X
+  → 应用跳联邦授权入口 POST /feberation/authorize/start（子应用委托协议——路由形态以联邦互联指南为权威）
   → Federation 按 channel 路由 qq_oauth → 302 QQ authorize（graph.qq.com/oauth2.0/authorize）
        (client_id + redirect_uri + scope=get_user_info 默认 + state 必填绑定会话防 CSRF + display)
        —— authorize 构造归装配层（Federation/消费方持 HTTP 上下文），本库通道不感知 state（N3 P1-3）
-  → QQ 授权页（跳转；无扫码；APP 内嵌 H5 不支持）→ 回调 /sso/oauth/qq/callback?code=&state=
+  → QQ 授权页（跳转；无扫码；APP 内嵌 H5 不支持）→ 回调 GET /feberation/qq/oauth/{channelId}/callback?code=&state=
   → 验 state（装配层）→ 回调 context 注入 redirect_uri（与授权时一致，P1-4）
   → QqOauthChannel.AuthenticateAsync：code 缺拒 / redirect_uri 缺拒
        → QqApiClient: code+client_secret+redirect_uri → access_token（fmt=json）→ /me → openid（+unionid 可选）
@@ -56,8 +56,9 @@ QQ **无入站回调**（无事件推送）→ 无 P5 验签面（非违规）�
 
 | 端点 | 方法 | 功能 | 归属 |
 |------|------|------|------|
-| `/sso/login?target_app_id=X` | GET | OAuth 代理入口（按 channel 路由：qq_oauth → 302 QQ authorize——state 生成+会话绑定） | Federation 装配映射 |
-| `/sso/oauth/qq/callback` | GET | QQ OAuth 回调（验 state → 注入 redirect_uri → channel.AuthenticateAsync → uid → 签 token2 → 302 `#t=`） | Federation/消费方装配 |
+| 授权入口 + QQ OAuth 回调 | POST / GET | OAuth 代理入口（按 channel 路由：qq_oauth → 302 QQ authorize——state 生成+会话绑定）+ QQ 回调（验 state → 注入 redirect_uri → `AuthenticateAsync` → uid → 签 token2 → 302 `#t=`） | Federation 装配层 |
+
+> **路由形态以[联邦互联指南 §3.5「路由定形」](../Federation/联邦互联-使用指南.md)为权威**（V0.7.0 对外路由命名空间——`/feberation` + 平台段 + authorize/start 委托协议：现行入口 `POST /feberation/authorize/start`（Federation 经通道 `BuildAuthorizeUrlAsync` 构造 QQ authorize URL）→ 回调 `GET /feberation/qq/oauth/{channelId}/callback`；前缀经 `TKWF:Federation:Web:RoutePrefix` 可配）。本指南不复制装配层端点细节，避免双源漂移。
 
 ---
 

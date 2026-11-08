@@ -1,6 +1,6 @@
 # TKWF.Ext.Settings 设置管理扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0 (分层读写 + 内存缓存 + Options 绑定修复 + **V0.3.0 领域自治根治 ADR90——删 ISettingStore/SettingStore，SettingManager 继承 DomainServiceBase + AddConstructibleService**) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: v0.3.1 (分层读写 + 内存缓存 + Options 绑定修复 + **领域自治根治 ADR90（V0.3.0 功能线，整改发布版升 v0.3.1——删 ISettingStore/SettingStore，SettingManager 继承 DomainServiceBase + AddConstructibleService**) | **框架**: .NET 10
 
 **核心约束**: 分层键值对存储、FreeSql 持久化、异常静默处理、SG1 声明式实体、内存缓存
 
@@ -71,7 +71,8 @@ public class XxxDomainInitializer : DomainHostInitializerBase<XxxUserInfo> { ...
 // V0.3.0：领域服务门面经 User.Use<ISettingManager>() 解析（禁构造注入——DI004 零豁免）
 public class MyService : DomainServiceBase
 {
-    public MyService(IDomainUser user) : base(user) { }
+    private readonly IDomainUser _user;
+    public MyService(IDomainUser user) : base(user) { _user = user; }
 
     public async Task<string> GetThemeAsync()
     {
@@ -81,11 +82,13 @@ public class MyService : DomainServiceBase
 
     public async Task<int> GetMaxRetriesAsync()
     {
+        var settingManager = User.Use<ISettingManager>();
         return await settingManager.GetAsync("MaxRetries", 3);
     }
 
     public async Task SetThemeAsync(string theme)
     {
+        var settingManager = User.Use<ISettingManager>();
         await settingManager.SetAsync("Theme", theme);
     }
 }
@@ -99,12 +102,13 @@ public class MyService : DomainServiceBase
 {
   "TKWF": {
     "Settings": {
-      "DefaultSettingValueProvider": "Global",
       "CacheExpirationSeconds": 300
     }
   }
 }
 ```
+
+> ⚠️ `DefaultSettingValueProvider` 为**预留未消费**（全仓零消费，配置不改变任何行为，勿依赖）。
 
 > **Options 绑定（V0.2.0）**：`SettingsOptions` 标注 `[Options("TKWF:Settings")]`——SG1 在消费方生成
 > `GeneratedOptionsBindings`，宿主启动期经 `RegisterOptionsBindings` 自动执行
@@ -133,7 +137,7 @@ public class MyService : DomainServiceBase
 
 ## 五、实体表结构 (Entity Schema)
 
-`SettingEntity` 映射到 `Setting` 表：
+`SettingEntity` 映射到 `TKWF_Setting` 表（v4.10.66 起 `TKWF_` 前缀）：
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
@@ -185,13 +189,17 @@ V0.2.0 引入 `IMemoryCache` 读缓存：
 - 基础 CRUD + Global 层读取
 - 异常静默处理
 
-### V0.2.0（当前）
+### V0.2.0（已实施）
 - 完整分层（User → Tenant → Global → 默认值）
 - 内存缓存（IMemoryCache + 过期策略 + 写后失效）
 - Options 绑定修复（`[Options("TKWF:Settings")]` SG1 自动绑定 + `CacheExpirationSeconds`）
 - 匿名降级（IsAuthenticated == false 跳过 User/Tenant 层）
 
-### V0.3.0（规划）
+### V0.3.0（已实施：领域自治根治，ADR90——v0.3.1 为整改发布版）
+- 删 `ISettingStore`/`SettingStore` 伪 DataService 层（职责与 `SettingEntityDataService` 完全重叠）；门面继承 `DomainServiceBase`（经基类 `User` 取上下文）+ 注册改 `AddConstructibleService`（接口守卫工厂 + 实现 throw-factory）；消费方统一 `User.Use<ISettingManager>()` 解析（DI004 零豁免）
+- 数据访问一律经 SG1 DataService（数据访问红线合规）
+
+### V0.4.0（规划）
 - 管理 UI（设置编辑界面）
 - 批量导入/导出
 - 设置变更审计日志

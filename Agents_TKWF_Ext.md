@@ -1,4 +1,4 @@
-# AGENTS — TKWF.Extensions 开发规则
+# Agents_TKWF_Ext — TKWF.Extensions 开发规则
 
 > 本仓库的**开发规则**。所有 Agent（AI）与人工开发者在本仓库内执行任何开发、文档、版本操作时，必须遵守本文件。
 > 本文件由 OpenCode 自动加载（见项目 `opencode.json` 的 instructions 配置）。

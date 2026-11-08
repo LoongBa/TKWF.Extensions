@@ -1,6 +1,6 @@
 # TKWF.Ext.BackgroundJobs 后台任务持久化增强技术规范
 
-**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.3.0（V0.1.0 持久化增强——执行历史审计 + 业务结果追踪；V0.2.0 历史清理——RetentionDays 落地；**V0.4.0（V4.10.53 领域自治根治，ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.4.0）**；**V0.4.1（V4.10.55 ADR92/T3——JobExecutionRecorder 泛型化 + ctor 移除 IDomainUser，经 IDomainUserAccessor SystemUser 落库）**） | **框架**: .NET 10
+**状态**: 核心基础设施 (Core Infrastructure) | **版本**: V0.4.1（历史线 V0.1.0~V0.4.0——V0.1.0 持久化增强（执行历史审计 + 业务结果追踪）；V0.2.0 历史清理（RetentionDays 落地）；V0.4.0 领域自治根治（V4.10.53 ADR90——正确路线：4 门面 AddConstructibleService + 测试宿主生产路径）；V0.4.1（V4.10.55 ADR92/T3——JobExecutionRecorder 泛型化 + ctor 移除 IDomainUser，经 IDomainUserAccessor SystemUser 落库）） | **框架**: .NET 10
 
 **定位**（ADR-BackgroundJobs-持久化增强与执行追踪架构）：补齐主框架三实现（内置 `TKWF.BackgroundJobs` / `TKWF.BackgroundJobs.Hangfire` / `TKWF.BackgroundJobs.Quartz`）的持久化缺口：
 - **执行历史审计**：`JobExecution` 实体——每次执行一行（耗时/重试/异常归档），经统一 `IBackgroundJobExecutionListener` 同步回调自动落库
@@ -15,8 +15,15 @@
 ```
 _Framework/BackgroundJobs/
 ├── TKWF.Ext.BackgroundJobs.csproj        # 引 TKWF.BackgroundJobs + FreeSql + SG1 接线 ①-⑤
-├── JobExecutionEntity.cs                  # SG1 实体：执行历史（每次执行一行）
-├── JobResultEntity.cs                     # SG1 实体：业务结果
+├── JobExecutionEntity.cs                  # SG1 实体（手写声明部）：执行历史（每次执行一行）
+├── JobResultEntity.cs                     # SG1 实体（手写声明部）：业务结果
+├── Entities/                              # SG1 生成物（入库随 xCodeGen 重跑——实体/模板变更后运行 pwsh .xCodeGen/run-xcodegen.ps1 -Ext BackgroundJobs，禁止直改）
+│   ├── JobExecutionEntity.g.cs            # 生成：IDomainEntity 实现 + 列映射
+│   ├── JobResultEntity.g.cs               # 生成：IDomainEntity 实现 + 列映射
+│   ├── JobExecutionEntity.biz.cs          # 生成骨架：OnBusinessValidate 业务验证分部
+│   ├── JobResultEntity.biz.cs             # 生成骨架：OnBusinessValidate 业务验证分部
+│   ├── DTOs/                              # 实体 DTO（.g.cs 基座 + 手写分部 .cs）
+│   └── Conditions/                        # 查询条件（.g.cs，含 TKWFIX_ 索引组合条件）
 ├── JobExecutionRecorder.cs               # IBackgroundJobExecutionListener 实现 → DataService 落库
 ├── IJobResultRecorder.cs                 # 作业内显式记录业务产出接口
 ├── JobResultRecorder.cs                  # IJobResultRecorder 实现
@@ -29,8 +36,8 @@ _Framework/BackgroundJobs/
 ├── BackgroundJobsPersistenceOptions.cs   # TKWF:BackgroundJobs 配置（RetentionDays 已启用 + CleanupBatchSize）
 ├── BackgroundJobsExtensionInitializer.cs # [TKWFExtension] + AddConstructibleService 三钩子（V0.3.0）
 ├── DataServices/
-│   ├── JobExecutionEntityDataService.cs  # partial 业务方法（分页过滤 + SQL 级聚合 + DeleteExpiredAsync）
-│   └── JobResultEntityDataService.cs     # partial 业务方法（分页 + 按 JobId 查最新 + DeleteExpiredAsync）
+│   ├── JobExecutionEntityDataService.cs  # partial 业务方法（分页过滤 + SQL 级聚合 + DeleteExpiredAsync）——构造器 + 标准 CRUD 基座在 .g.cs
+│   └── JobResultEntityDataService.cs     # partial 业务方法（分页 + 按 JobId 查最新 + DeleteExpiredAsync）——构造器 + 标准 CRUD 基座在 .g.cs
 └── README.md
 ```
 
@@ -123,7 +130,7 @@ public class HistoryCleanupTask : DomainServiceBase   // V0.3.0：继承 DomainS
 ```
 
 - 分批大小 `CleanupBatchSize`（默认 500）——每轮每表最多删除条数，循环至不足一批/清空，防大表一次性删爆事务
-- 时间锚点均有索引：`IX_JobExecution_StartedAt` / `IX_JobResult_CreateTime`（v0.2.0 补齐）
+- 时间锚点均有索引：`TKWFIX_JobExecution_StartedAt` / `TKWFIX_JobResult_CreateTime`（v0.2.0 补齐）
 - 异常静默——单表清理失败 LogWarning，不阻断另一表
 
 ## 四、数据模型
@@ -146,7 +153,7 @@ public class HistoryCleanupTask : DomainServiceBase   // V0.3.0：继承 DomainS
 | TenantId | long? | 租户 Id |
 | CreateTime | DateTime | 创建时间 UTC |
 
-索引：IX_JobExecution_JobId / IX_JobExecution_Provider_Success / IX_JobExecution_StartedAt
+索引：TKWFIX_JobExecution_JobId / TKWFIX_JobExecution_Provider_Success / TKWFIX_JobExecution_StartedAt
 
 ### JobResult（业务结果）
 
@@ -159,7 +166,7 @@ public class HistoryCleanupTask : DomainServiceBase   // V0.3.0：继承 DomainS
 | Summary | string(512)? | 摘要 |
 | CreateTime | DateTime | 创建时间 UTC |
 
-索引：IX_JobResult_JobId / IX_JobResult_CreateTime（v0.2.0——历史清理时间锚点）
+索引：TKWFIX_JobResult_JobId / TKWFIX_JobResult_CreateTime（v0.2.0——历史清理时间锚点）
 
 ## 五、架构决策
 

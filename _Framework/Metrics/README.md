@@ -1,6 +1,6 @@
 # TKWF.Ext.Metrics 业务指标计算引擎扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (指标结果持久化契约——IMetricResultStore) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.1（PackageReference 迁移 tag——行为零变更）/ V0.2.0（指标结果持久化契约——IMetricResultStore） | **框架**: .NET 10
 
 > **V4.10.53 领域自治评估（2026-10-04）**：`MetricsSpecFileProvider`（规格文件加载，Singleton）判定为**接线型保留**——ctor 零 IDomainUser 依赖（纯文件系统读取 + IConfiguration 直读），注册保持 `TryAddSingleton`。**零代码改动**。
 
@@ -30,7 +30,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 
 - **非泛型计算器 + MetricRow 委托访问**：`IMetricCalculator.Calculate(IReadOnlyList<MetricRow>, MetricDefinition)`——零反射实例化，字段名来自规格文件本就运行时配置；引擎按类型 T 构建期编译字段访问委托并缓存（运行期零反射）。
 - **静态注册表零反射**：`CalculatorFactory` 用编译期已知的 `Dictionary<string, IMetricCalculator>` 纯查找，无 `MakeGenericType`/`Activator.CreateInstance`。
-- **顺序执行**：`foreach` 顺序计算（删 `Task.Run`+`WaitAll`，AOT 友好）；引擎无状态 → Singleton 安全，定义校验/访问器缓存跨请求复用。
+- **顺序执行**：`foreach` 顺序计算（删 `Task.Run`+`WaitAll`，AOT 友好）；引擎无状态 → Singleton 安全，字段访问委托（TypeAccessor）静态缓存跨请求复用——**定义不缓存**（`MetricsSpecFileProvider.Load` 每次调用直接读盘，规格改动下次调用即生效，见 §六）。
 - **规格驱动 + 严格失败**：`metric-definitions.json`（git-tracked）驱动计算；`MissingCalculatorBehavior.Throw`/`MissingFieldBehavior.Throw` 默认——规格错误显式暴露，运行时失败优于静默产出错误指标。
 
 ## 三、核心组件清单 (Component List)
@@ -104,7 +104,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 }
 ```
 
-校验（加载时一次 + 引擎内缓存）：计算器名存在 / 指标名唯一 / JSON 合法 + `$schema` 匹配 / 字段名引用（`*Field` 值匹配数据行）/ 聚合值 ∈ {sum,count,avg}；D20 manifest 状态校验占位（`tk` 依赖 D20 落地）。
+校验（每次调用 `Load` 时执行——规格文件直接读盘，引擎无定义缓存）：计算器名存在 / 指标名唯一 / JSON 合法 + `$schema` 匹配 / 字段名引用（`*Field` 值匹配数据行）/ 聚合值 ∈ {sum,count,avg}；D20 manifest 状态校验占位（依赖 D20 落地，尚未实施）。
 
 ## 七、指标结果持久化（V0.2.0）
 
@@ -182,11 +182,13 @@ partial class SalesMetricResultEntityDataService(IDomainUser user, IEntityDAC<Sa
     }
 }
 
-// ③ 实现 IMetricResultStore（行→实体映射 + 委托 DataService public 方法——红线合规）
-public sealed class SalesMetricResultStore : IMetricResultStore
+// ③ 实现 IMetricResultStore（领域服务形态——继承 DomainServiceBase：IDomainUser 经基类 User，
+//     DataService 经 User.Use<T>() 懒加载解析——DataService 禁构造注入（DI004 零豁免），红线合规）
+public sealed class SalesMetricResultStore(IDomainUser user) : DomainServiceBase(user), IMetricResultStore
 {
-    private readonly SalesMetricResultEntityDataService _ds;
-    public SalesMetricResultStore(SalesMetricResultEntityDataService ds) => _ds = ds;
+    private SalesMetricResultEntityDataService? _dataService;
+    private SalesMetricResultEntityDataService DataService
+        => _dataService ??= User.Use<SalesMetricResultEntityDataService>();
 
     public async Task<int> SaveAsync(IReadOnlyList<MetricResultRow> rows, CancellationToken ct = default)
     {
@@ -200,13 +202,13 @@ public sealed class SalesMetricResultStore : IMetricResultStore
             },
             Unit = r.Unit, DimensionsJson = r.DimensionsJson, CalculatedAtUtc = r.CalculatedAtUtc
         }).ToList();
-        await _ds.CreateBatchAsync(entities, ct);
+        await DataService.CreateBatchAsync(entities, ct);
         return entities.Count;
     }
 
     public async Task<IReadOnlyList<MetricResultRow>> QueryAsync(MetricResultQuery query, CancellationToken ct = default)
     {
-        // Take 钳制到 [1,200] 静默（P4）→ 映射到 _ds.QueryByMetricAsync(query.SpecKey, query.Name,
+        // Take 钳制到 [1,200] 静默（P4）→ 映射到 DataService.QueryByMetricAsync(query.SpecKey, query.Name,
         //   query.FromUtc, query.ToUtc, skip, take, ct) → 实体 → 行
         throw new NotImplementedException();
     }
@@ -214,7 +216,7 @@ public sealed class SalesMetricResultStore : IMetricResultStore
     public Task<long> CountAsync(MetricResultQuery query, CancellationToken ct = default) => /* 同条件计数 */ throw new NotImplementedException();
 
     public Task<int> CleanupExpiredAsync(int retentionDays, int batchSize = 500, CancellationToken ct = default)
-        => _ds.DeleteBeforeAsync(DateTime.UtcNow.AddDays(-retentionDays), batchSize, ct);
+        => DataService.DeleteBeforeAsync(DateTime.UtcNow.AddDays(-retentionDays), batchSize, ct);
 }
 
 // ④ DI 注册（扩展不注册默认实现——消费方自行 TryAddScoped）
@@ -246,7 +248,7 @@ services.TryAddScoped<IMetricResultStore, SalesMetricResultStore>();
 - **`IMetricResultStore` 契约**（保存/查询/计数/清理四类标准化操作，签名围绕 `MetricResultRow`/`MetricResultQuery`，无实体类型）+ **`MetricResultMapper` 静态映射器**（1:1 投影 + DimensionsJson 序列化 + `calculatedAtUtc` 注入）+ **`MetricResultRow`/`MetricResultQuery` 契约 DTO**
 - **实体归消费方（ADR 决策 1）**：扩展不内建实体/不注册默认 Store 实现/不做建表 CRUD；消费方 `[DomainGenerateCode]` 实体 + DataService public 委托方法 + Store 行映射即接上标准落库路径
 - **3C+5P 全部落实**（Oracle 评审 PASS WITH CONDITIONS）：C1 引擎已扁平化 Mapper 不处理 MetricSlice / C2 测试项目 SG1/FreeSql 接线 / C3 CleanupExpired 循环分批清完 + 竞态容忍 / P1 DimensionFilter 可选降级 / P2 calculatedAtUtc 注入 / P3 Value 后引擎标量不变量 / P4 Take 钳制 [1,200] / P5 DimensionsJson 序列化约定 + JsonOptions 复用
-- **测试**：84/84 全绿（v0.1.0 70 + v0.2.0 14——MapperTests 6 + StoreTests 8，SQLite 内存全链路）
+- **测试**：85/85 全绿（实测 [Fact] 计数：v0.1.0 70 + v0.2.0 15——MapperTests 6 + StoreTests 9，SQLite 内存全链路）
 - **政策**：v0.1.0 自落库路径继续可用，不强制迁移
 
 ### V0.2.1+（候选）

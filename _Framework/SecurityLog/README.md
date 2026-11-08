@@ -1,6 +1,6 @@
 # TKWF.Ext.SecurityLog 安全日志扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.1（契约拆包 + 聚合 SQL 下推）+ **V0.4.0（领域自治根治，ADR90）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.3.0（契约拆包）+ V0.3.1（聚合 SQL 下推）+ V0.3.2（ADR88 A 批整改）+ **V0.4.0（领域自治根治，ADR90）** | **框架**: .NET 10
 
 **核心约束**: 认证/授权安全事件自动记录（AOP 过滤器采集，不改主框架）+ 只增不改（append-only）+ 数据访问红线合规（全走 SG1 DataService）+ 异常静默 + 查询 API（列表 DTO 不含 Detail）
 
@@ -120,10 +120,11 @@ public class SecurityAuditService : DomainServiceBase
 | Logout | `LogoutAsync` | 正常返回 = Success |
 | PasswordChange | `ChangePasswordSecureAsync` | 返回值 `RegisterResult.Success` |
 | PasswordReset | `InitiateResetAsync` / `CompleteResetAsync`（`IPasswordResetFlow` 实现） | 返回值 `bool` / `ResetResult.Success` |
-| Lockout | `LoginByContextAsync` 锁定分支 | **判定（C4）**：`AuthenticationException` 消息含"锁定"关键字 |
+| Lockout | `LoginByContextAsync` 锁定分支 | **判定（C4）**：`AuthenticationException` 消息含"锁定"关键字（**异常消息文案耦合——主框架改文案需回归，无守卫测试**） |
 | Register | `RegisterSecureAsync` | 返回值 `RegisterResult.Success` |
 | Challenge | `RequestChallengeAsync` | 正常返回 = Success |
 | **Freeze / Unfreeze** | **（扩展直写——非过滤器采集）** AuthCenter 冻结/解冻门面经 `User.Use<ISecurityLogStore>()` 直写（ADR-AuthCenter-密码策略与口令协议 决策 7——`UserName` 填被冻结账号，操作者在 `Detail`） | 直写方自控 |
+| **Bind / Unbind** | **（扩展直写——非过滤器采集，V0.11.0）** AuthCenter `AuthFactorService` 认证因素绑定/解绑直写审计副本（领域事实源 `AuthFactorEvent`，ADR-AuthCenter-认证因素模型与冻结解绑） | 直写方自控 |
 
 **Result 判定细则**：
 - 异常路径仅 `AuthenticationException` 记 Failed；**其他异常不记录**（保持原异常语义，不吞不遮蔽）。
@@ -136,18 +137,18 @@ public class SecurityAuditService : DomainServiceBase
 
 - `SecurityLogEntity` / `SecurityLogEntityDataService` **无 Update/Delete 业务方法**、**不标 `[GenerateController(FromDataService=true)]`**——不生成任何管理端点。
 - 写路径一（过滤器采集主路径）：`SecurityLogFilterAttribute` → `ISecurityLogStore.SaveAsync` → `SecurityLogEntityDataService.EntityCreateAsync`（追加写）。
-- 写路径二（扩展直写——V0.3.1+，ADR-AuthCenter-密码策略与口令协议 决策 6/7）：扩展可经 `User.Use<ISecurityLogStore>()` 直写安全事件（须自读 `IOptions<SecurityLoggingOptions>` 门控：`Enabled=false` 或 `EventTypes` 非空且不含目标事件类型时跳过写入——绕过过滤器内 `SecurityLogFilterAttribute` L110 门控，补齐语义对齐）。先例：AuthCenter 冻结/解冻门面直写 `Freeze`/`Unfreeze` 事件。
+- 写路径二（扩展直写——V0.3.1+，ADR-AuthCenter-密码策略与口令协议 决策 6/7）：扩展可经 `User.Use<ISecurityLogStore>()` 直写安全事件（须自读 `IOptions<SecurityLoggingOptions>` 门控：`Enabled=false` 或 `EventTypes` 非空且不含目标事件类型时跳过写入——绕过过滤器内 `SecurityLogFilterAttribute` L110 门控，补齐语义对齐）。先例：AuthCenter 冻结/解冻门面直写 `Freeze`/`Unfreeze` 事件、认证因素绑定/解绑直写 `Bind`/`Unbind` 事件（V0.11.0，ADR-AuthCenter-认证因素模型与冻结解绑）。
 - `CreateTime` 列 `[Column(CanUpdate = false)]` 列级兜底。
 - 数据访问红线合规：Store/QueryService **不注入 IFreeSql / IEntityDAC**，全走 SG1 DataService。
 
 ## 五、实体表结构
 
-`SecurityLogEntity` → `SecurityLog` 表：
+`SecurityLogEntity` → `TKWF_SecurityLog` 表：
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
 | Id | BIGINT (PK, Identity) | 主键 |
-| EventType | NVARCHAR(32) | Login/Logout/PasswordChange/PasswordReset/Lockout/Register/Challenge/Freeze/Unfreeze（后二者扩展直写） |
+| EventType | NVARCHAR(32) | Login/Logout/PasswordChange/PasswordReset/Lockout/Register/Challenge/Freeze/Unfreeze/Bind/Unbind（后四者**扩展直写**——事件表直写语义：扩展门面经 `ISecurityLogStore` 直写审计副本、写入方自控，见 §三/§四） |
 | EventCategory | NVARCHAR(32) | Authentication（v0.1.0 均为 Authentication） |
 | UserName | NVARCHAR(128) | 尝试用户名（登录失败 = 请求输入） |
 | UserId | BIGINT? | 认证成功后回填 |
@@ -158,7 +159,7 @@ public class SecurityAuditService : DomainServiceBase
 | CorrelationId | NVARCHAR(64) | 关联 ID（链路追踪） |
 | CreateTime | DATETIME (UTC) | 记录创建时间 |
 
-**索引**：`IX_SecurityLog_UserEventTime`（UserName+EventType+CreateTime）/ `IX_SecurityLog_IpTime`（IpAddress+CreateTime）
+**索引**：`TKWFIX_SecurityLog_UserEventTime`（UserName+EventType+CreateTime）/ `TKWFIX_SecurityLog_IpTime`（IpAddress+CreateTime）
 
 > 注：Detail 用 `StringLength = -1`（nvarchar(max) 等价，跨 Provider 映射），对齐 JobResultEntity 先例。
 
@@ -172,6 +173,7 @@ public class SecurityAuditService : DomainServiceBase
 
 - ✅ **异常检测聚合**（失败次数 TopN by 用户名/来源 IP）——v0.2.0 已实施（`ISecurityLogAnalyticsService`：GetTopFailedUsersAsync / GetTopFailedIpsAsync，内存 GroupBy 范式，对齐 Tagging GetFrequencyAsync）
 - ✅ **保留天数清理**——v0.2.0 已实施（`SecurityLoggingOptions.RetentionDays` 默认 90 + `CleanupBatchSize` 默认 500；`ISecurityLogAnalyticsService.CleanupExpiredAsync` 分批清完）
+  > **运维语义**：清理经 DataService 物理删除，受**域用户全局查询过滤器**影响——属**系统运维操作**，调用方建议在**系统帧/无域用户过滤器上下文**执行（如后台作业宿主），非普通用户请求内触发。
   > **决策记录（打破"只增不改" Oracle C2）**：保留清理引入**物理删除**路径——合规留存窗口（默认 90 天）下过期记录必须可回收，否则日志无限膨胀。限定：① 仅 `DeleteExpiredAsync` 单点物理删（`hasSoftDelete:false`，绝不走 `EntitySoftDeleteAsync`——对未启用软删实体抛 InvalidOperationException）；② 无管理端点/单条删除；③ `CreateTime` 仍 `CanUpdate=false`（列级不可改）、聚合仍只读。**主框架 ADR 待用户许可后补录**，本次以代码注释 + 本 README 承担决策记录职责。
 - ❌ 安全事件实时推送（WebSocket/SignalR）——v0.2.0 之后（超出后端扩展范围）
 - ❌ Account"登录历史"UI/接口——Account V0.3.0 消费本扩展查询

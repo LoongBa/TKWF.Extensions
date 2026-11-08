@@ -1,6 +1,6 @@
 # TKWF.Federation.WeCom 企业微信网关库技术规范
 
-**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.1.0 | **框架**: .NET 10 | **依赖**: `TKWF.Ext.Federation`（实现其 `ISsoChannel` 契约——Oracle P1-1 单向依赖）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
+**状态**: 平台网关库 (Platform Gateway Library——大使馆/纯库) | **版本**: V0.4.1 | **框架**: .NET 10 | **依赖**: `TKWF.Federation.Abstractions`（ISsoChannel 契约——I2-1 迁入 FA；消费方编排另引 Federation 主包）+ `TKWF.Domain` + `Microsoft.Extensions.Http`（`IHttpClientFactory`）
 
 **核心约束**: 无 Initializer 无 `[TKWFExtension]`（**纯库判据**——AGENTS §8：`TKWF.Ext.*`=扩展（有装配/持久化）/ `TKWF.*`=库（纯逻辑））/ **零持久化零 Store**（tkwf-extension 铁律——纯内存态 access_token 缓存）/ **双向**（OAuth 身份获取 + 通讯录/事件回调验签）/ **凭证自持**（`WeComOptions`——Oracle P2-4，不复用 Authentication `IPlatformCredentialService`）/ **三道闸门信任根**（msg_signature 验签 + AES 解密 + **ReceiveId=corpid/suiteid 校验——Oracle 评审 P1-1：防跨企业回调混串**）/ **无独立 token 端点**（code 直接换身份）/ **external_uid 双策略**（三方成员 `open_userid` / 自建成员 `{CorpId}:{userid}` 复合 / 非成员 `openid`——Oracle 评审 P0-1）/ **不引 AspNetCore**（Oracle 评审点 5——库纯逻辑 + HttpClient，入站端点归 Federation 扩展/消费方装配层，库只提供验签逻辑类）
 
@@ -93,6 +93,7 @@ Federation 扩展按 channel 类型路由：`wecom_oauth` → 302 企业微信 a
 | `WeComEventChannel` + `WeComEventCrypto` | `ISsoChannel`（`ChannelType="wecom_event"`）——通讯录/事件回调三道闸门（msg_signature 验签 + AES 解密 + **ReceiveId=corpid/suiteid 校验 P1-1**）+ XML 身份提取；**URL 验证 echostr 原语（P1-6）** | 对外（上游 IdP 适配） | ✅ 已实现（T4/T5） |
 | `WeComAuthorizeUrlBuilder` | authorize URL 构造辅助（静态纯字符串——**双授权流 URL 模板 P1-3/P2-4**：Webview `#wechat_redirect` vs 扫码 `login_type`；agentid 条件拼接） | 装配辅助 | ✅ 已实现（T3） |
 | `AddWeComFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel>`——channel 业务参数经 Options 注入，不占 ctor `IDomainUser` 槽，ADR92 兼容） | 装配 | ✅ 已实现（T6） |
+| `WeComChannelSource` | `IChannelSource` 通道投影（多通道联邦 v0.3.0 Phase 1）——`WeComOptions.Channels` → 统一 `ChannelConfig`（`ChannelId`→`ChannelId` 公共列；**平台特有字段全进 `Extra`**：`CorpId`/`CorpSecret`/`AgentId`/`IsThirdParty`/`EnableSensitiveInfo`/`Token`/`EncodingAESKey` + Options 级 `DefaultScope` 兜底投影到每通道），`PlatformType="wecom"`，Priority 默认 | 装配 | ✅ 已实现（v0.3.0） |
 
 ## 四、双通道契约（T3/T5 已实现）
 
@@ -161,5 +162,11 @@ external_uid 选取策略：
 | 版本 | 内容 |
 |------|------|
 | V0.1.0（2026-10-06） | M4 企业微信平台网关库全量落地：`WeComApiClient` 出站（gettoken 双用途缓存键 P1-2 + getuserinfo/getuserinfo3rd 三路径双策略 P0-1 + getuserdetail 敏感信息即用即弃 P1-4）+ `WeComOptions`/`WeComChannelConfig`（凭证自持含 IsThirdParty/EnableSensitiveInfo + DefaultScope 兜底）+ `WeComUserInfo`/`WeComSensitiveInfo`（敏感标注 P2-3）+ `WeComOauthChannel`（wecom_oauth——external_uid 双策略 + AgentId fail-fast P1-5）+ `WeComEventChannel` + `WeComEventCrypto`（DecryptAndVerify ReceiveId 校验 P1-1 + VerifyAndDecryptEcho P1-6）+ `WeComAuthorizeUrlBuilder`（双流 URL 模板 P1-3/P2-4）+ `AddWeComFederationChannels()`；纯库（无 Initializer 无 `[TKWFExtension]`），csproj 引 Federation 扩展实现 ISsoChannel + `Microsoft.Extensions.Http`；测试 41 用例全绿（生产路径 + 三路径双策略 + 信任根正负 + receiveid 篡改拒 + echostr 握手）；slnx 接线 + 全量回归 39 测试项目全绿 |
+| V0.2.0（2026-10-08） | CPM lockstep/联动（被动 bump） |
+| V0.2.1（2026-10-10） | CPM lockstep/联动（被动 bump） |
+| V0.2.2（2026-10-10） | CPM lockstep/联动（被动 bump） |
+| V0.3.0（2026-10-11） | 多通道联邦：`WeComChannelSource` 投影（WeComOptions.Channels → ChannelConfig——CorpId/CorpSecret/AgentId/**IsThirdParty**/**EnableSensitiveInfo**/Token/EncodingAESKey/**DefaultScope** 进 Extra 平台字段）+ ChannelConfig 选区 + FromChannel 重建 |
+| V0.4.0（2026-10-18） | 契约收口：csproj 改引 `Federation.Abstractions`（7 平台库联动改引契约包，依赖拓扑切 Abstractions） |
+| V0.4.1（2026-10-21） | I2 契约迁移联动（Federation I2 复查修复发布） |
 
 <!-- EOF -->

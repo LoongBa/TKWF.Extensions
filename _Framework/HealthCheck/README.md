@@ -1,6 +1,6 @@
 # TKWF.Ext.HealthCheck 系统健康探测扩展技术规范
 
-**状态**: 基础设施接线扩展 (Wiring Extension) | **版本**: V0.2.0 (系统健康探测 + 内置 DB 探针) | **框架**: .NET 10
+**状态**: 基础设施接线扩展 (Wiring Extension) | **版本**: V0.3.0 (v4.10.45 Web 装配钩子收敛——`HealthCheckWebExtension`；内置 DB 探针；v0.3.0 起 Detailed 组件级输出移除——框架恒摘要 writer) | **框架**: .NET 10
 
 **核心约束**: **接线型扩展**——net10 内置 HealthChecks（`Microsoft.Extensions.Diagnostics.HealthChecks`）聚合 + `/health` 端点映射、**零第三方依赖**、**V0.2.0 内置 DB 连通性探针**（经 `IEntityReadOnlyDAC<T>` 轻量表级探测——红线合规路径）、复用 D04 框架生命线 `/health` 认证豁免
 
@@ -8,7 +8,7 @@
 
 ## 一、需求分析 (Demand Analysis)
 
-系统/服务健康状态探测是基础设施生命线的第一环（对标 OrchardCore.HealthCheck）：LB/编排/K8s 探活需要统一、免认证的 `/health` 端点，输出应用总体健康状态；生产诊断需要可开关的组件级细节输出。TKWF 主框架 D04 已豁免 `/health`/`/healthz` 认证（框架生命线自动追加），本扩展补齐 **HealthChecks 聚合 + 端点映射 + 配置** 接线，不重复造轮子。
+系统/服务健康状态探测是基础设施生命线的第一环（对标 OrchardCore.HealthCheck）：LB/编排/K8s 探活需要统一、免认证的 `/health` 端点，输出应用总体健康状态（注：v0.3.0 起组件级细节输出已移除，框架恒摘要 writer——见 §二）。TKWF 主框架 D04 已豁免 `/health`/`/healthz` 认证（框架生命线自动追加），本扩展补齐 **HealthChecks 聚合 + 端点映射 + 配置** 接线，不重复造轮子。
 
 - **消费场景**：DMP-Lite 等业务领域启用扩展后，`GET /health` 返回 `{"status":"Healthy"}`；消费方注册自定义组件探针（DB/Redis/存储连通性）后聚合为 OverallStatus。
 - **差异化定位**：TKWF HealthCheck = **内置 HealthChecks 的 TKWF 接线层**（Options + 端点 + 白名单启用），探针全部归消费方——零内置假设，规避扩展内置 DB 探针的数据访问红线（见 §七边界）。
@@ -25,7 +25,7 @@
 ### 2. 关键设计
 
 - **命名避让（Oracle P1-1）**：扩展 Options 命名 `HealthCheckEndpointOptions`（非 HealthCheckOptions）——避开 ASP.NET Core 内置 `Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions` 类型名冲突；端点映射内部用内置 `HealthCheckOptions`（全限定）。
-- **Detailed 响应控制**：`Detailed=false`（默认）自定义 ResponseWriter 输出仅 `{"status":"..."}`——不泄露组件细节（内置默认 writer 会输出 entries）；`Detailed=true` 输出组件级 JSON（名称/状态/耗时/异常）。
+- **响应输出（恒摘要）**：框架 `MapHealthCheckCore` 恒用摘要 writer 输出仅 `{"status":"..."}`——不泄露组件细节；`Detailed` **组件级输出已随方案 A（f8425d4）移除**（v0.3.0），Options 属性为死配置键（保留仅兼容，设置不再生效）。
 - **Options 可靠解析**：`HealthCheckWebExtension.ConfigureEndpoints` 优先 `IOptions<HealthCheckEndpointOptions>`（消费方经 ConfigureServices / SG1 [Options] 绑定 / AddOptions 任一注册路径），未注册时兜底 `IConfiguration` 直读 `TKWF:HealthCheck` 节，再兜底默认值。
 - **聚合语义**：消费方注册多个 `IHealthCheck` 后，扩展聚合全部检查项返回 OverallStatus（最差状态胜出：Unhealthy > Degraded > Healthy）；探针异常 → 该项 Unhealthy（不抛 500、不崩溃）；**多探针并行执行，各探针独立 scope 解析 DAC——并发安全**（P2-5）。
 - **`AllowCachingResponses = false`**：健康探测结果实时，不参与 HTTP 缓存。
@@ -35,8 +35,8 @@
 
 | **组件** | **职责** | **默认** |
 |----------|---------|---------|
-| **`HealthCheckEndpointOptions`** | 端点配置（`TKWF:HealthCheck` 节：Path/Enabled/Detailed/AllowAnonymous） | 本扩展 |
-| **`HealthCheckWebExtension`** | Web 装配扩展（v4.10.45）——`ConfigureServices`（AddHealthChecks + Options + fluent 探针收集）+ `ConfigureEndpoints`（MapHealthChecks + Detailed/AllowAnonymous 控制） | 本扩展 |
+| **`HealthCheckEndpointOptions`** | 端点配置（`TKWF:HealthCheck` 节：Path/Enabled/AllowAnonymous——Detailed 已删除，框架恒摘要） | 本扩展 |
+| **`HealthCheckWebExtension`** | Web 装配扩展（v4.10.45）——`ConfigureServices`（AddHealthChecks + Options + fluent 探针收集）+ `ConfigureEndpoints`（MapHealthChecks + AllowAnonymous 控制——恒摘要 writer） | 本扩展 |
 | **`HealthCheckBuilderExtensions`** | `AddDatabaseHealthCheck<TEntity>`（V0.2.0）——内置 DB 连通性探针注册 | 本扩展 |
 | **`DatabaseHealthCheck<TEntity>`** | DB 探针实现（V0.2.0，internal sealed）——`IEntityReadOnlyDAC<TEntity>` 表级探测 + 默认超时 | 本扩展 |
 | **`HealthCheckExtensionInitializer<TUserInfo>`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + Options 接线） | 本扩展 |
@@ -65,7 +65,7 @@ builder.ConfigWebAppDomain<MyUserInfo, MyDomainInitializer, DomainWebOptions>(..
     .UseWebSession()
     .UseWebExtensions(e => e.Add<HealthCheckWebExtension>(x =>
     {
-        // ② 内置 DB 连通性探针（IEntityReadOnlyDAC 表级探测；Options 默认：/health，Enabled=true，Detailed=false，AllowAnonymous=true）
+        // ② 内置 DB 连通性探针（IEntityReadOnlyDAC 表级探测；Options 默认：/health，Enabled=true，AllowAnonymous=true——Detailed 已删除，恒摘要输出）
         x.AddDatabaseHealthCheck<UserEntity>("db");
         // ②b 或消费方注册自定义组件探针（ASP.NET Core 标准路径）
         // x.AddCheck("redis", () => redis.IsConnected() ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("redis down"));
@@ -102,43 +102,32 @@ e.Add<HealthCheckWebExtension>(x =>
     "HealthCheck": {
       "Path": "/health",
       "Enabled": true,
-      "Detailed": false,
       "AllowAnonymous": true
     }
   }
 }
 ```
 
+> 注：`Detailed` 配置键已随 v0.3.0 删除（方案 A f8425d4）——框架恒摘要输出，配置不再生效。
+
 | 键 | 默认 | 说明 |
 |----|------|------|
 | **`Path`** | `/health` | 端点路径（D04 已豁免认证；改路径后若需匿名请保持 AllowAnonymous=true） |
 | **`Enabled`** | `true` | `false` 时不映射端点（`GET /health` → 404） |
-| **`Detailed`** | `false` | `true` 时输出组件级状态 JSON（生产建议关闭，避免泄露组件细节） |
 | **`AllowAnonymous`** | `true` | 端点追加 AllowAnonymous 元数据（与 D04 /health 豁免一致）；`false` 时遵循应用认证管线 |
 
 ## 六、响应示例 (Responses)
 
 > **状态码语义**：Healthy/Degraded → 200；Unhealthy → **503**（ASP.NET Core 内置 `HealthCheckOptions.ResultStatusCodes` 默认——探针语义，LB/编排依据状态码判定，无需自定义）。
 
-**默认（Detailed=false）**——仅状态，不泄露组件细节：
+**响应（恒摘要 writer）**——仅状态，不泄露组件细节：
 
 ```json
 // GET /health
 { "status": "Healthy" }
 ```
 
-**Detailed=true**——组件级状态：
-
-```json
-{
-  "status": "Unhealthy",
-  "totalDuration": "00:00:00.0123456",
-  "entries": {
-    "db":  { "status": "Healthy",   "description": null,  "duration": "00:00:00.0012345", "exception": null,  "data": null },
-    "redis": { "status": "Unhealthy", "description": "redis down", "duration": "00:00:00.0012345", "exception": null, "data": null }
-  }
-}
-```
+> 📌 **v0.3.0 起不再提供组件级输出**——`Detailed` 组件级详情已随方案 A（f8425d4）移除，框架 `MapHealthCheckCore` 恒用摘要 writer；以上即为 `/health` 的全部响应形态（Unhealthy 时 503，仅状态无 entries）。
 
 ## 七、边界与演进 (Boundaries & Roadmap)
 
@@ -157,4 +146,5 @@ e.Add<HealthCheckWebExtension>(x =>
 
 ---
 
-**文档信息**: V0.2.0 | 2026-09-10 | 关联：`v0.2.0-HealthCheck-DB探针-开发方案.md`（主框架私有，Oracle 评审修订 P1-1/2/3 + P2-1~5）、D04 框架生命线
+**版本记录**: v0.1.0（2026-09-09，基础设施三件套）/ v0.2.0（2026-09-11，内置 DB 探针）/ v0.2.1（2026-09-15，CI 修复）/ **v0.3.0（2026-10-02，v4.10.45 Web 装配钩子收敛——`HealthCheckWebExtension`；2026-10-24 方案 A f8425d4：Detailed 组件级输出移除——框架恒摘要 writer）**
+**文档信息**: V0.3.0 | 2026-10-02 | 关联：`v0.2.0-HealthCheck-DB探针-开发方案.md`（主框架私有，Oracle 评审修订 P1-1/2/3 + P2-1~5）、D04 框架生命线

@@ -178,6 +178,14 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     /// <para><b>URL 验证握手（echostr——微信回调 URL 验证契约，GET）</b>：query 含 echostr 即验证请求 →
     /// 通道 <c>VerifyUrlAsync</c> 双模式验签（安全 msg_signature 4 参 + AES 解密 echostr / 明文 signature 3 参）
     /// → 回显明文 echostr（text/plain）。安全模式回显密文必失败（微信后台统一"token 验证失败"）。</para>
+    /// <para><b>门扩展（I2-2 2026-11-09，§3.6——DingTalk check_url 可达 + 业务事件恒回加密信封，P1-1/P1-2/P1-5）</b>：
+    /// 非 echostr 门入站（POST 业务/check_url）<b>先试 <c>channel.VerifyUrlAsync</c></b>——WeChat/WeCom 无 echostr →
+    /// 通道守卫 null 秒退（行为零变化，每笔 POST 多一次方法调用——P1-4 开销已声明）；<b>DingTalk 任意合法入站
+    /// （check_url 或业务事件）→ 加密 JSON 应答信封</b>（P0-2，非明文 success）——保存供<b>段 4 恒回信封</b>（不短路，
+    /// 业务事件仍落回 AuthenticateAsync→OrchestrateAsync 编排路径，P1-5 分派语义）；验签/解密失败/缺参 → null →
+    /// 既有失败语义（400）。编排后对 <c>cfg.PlatformType == "dingtalk"</c> 恒回段 1 保存的加密信封
+    /// （<c>application/json</c>）——<b>handler 回复被忽略</b>（钉钉协议不承载业务自由文本，P1-1）；WeChat/WeCom
+    /// 保持既有回显（handler reply / 200 空兜底）。</para>
     /// <para><b>微信 5 秒超时约束（外部身份联邦 E3）</b>：handler 委托为空 → 200 空回复（text/xml）兜底——
     /// 异步客服消息机制归 Phase 2/消费方（本端点不实现客服 API）。</para></summary>
     private static async Task<IResult> HandleEvent(HttpContext ctx, string platformId, string? channelId, CancellationToken ct)
@@ -273,6 +281,27 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
                     : Results.Text(echoPlain, contentType: "text/plain");
             }
 
+            // 段 1（新增——门扩展，§3.6）：非 echostr 门入站（POST 业务/check_url）→ 先试 VerifyUrlAsync。
+            // WeChat/WeCom：无 echostr → 通道守卫 null 秒退（行为零变化，每笔 POST 多一次方法调用——P1-4 已声明）；
+            // DingTalk：任意合法入站（check_url 或业务事件）→ 加密 JSON 应答信封（P0-2）——保存供段 4 恒回，不短路
+            //（业务事件仍落回 AuthenticateAsync→OrchestrateAsync 编排路径，P1-5 分派语义）；
+            // 验签/解密失败/缺参 → null → 段 2 既有失败语义。
+            string? dingTalkEnvelope = null;
+            try
+            {
+                var urlVerify = await channel.VerifyUrlAsync(new ChannelInboundContext(parameters), ct);
+                if (!string.IsNullOrEmpty(urlVerify)
+                    && string.Equals(cfg.PlatformType, "dingtalk", StringComparison.Ordinal))
+                {
+                    dingTalkEnvelope = urlVerify;   // 加密应答信封——段 4 回显
+                }
+                // 非 dingtalk 平台：VerifyUrlAsync 结果忽略（POST 场景守卫 null——行为零变化）
+            }
+            catch (Exception) when (ct.IsCancellationRequested is false)
+            {
+                // 通道侧已 catch 归一 null；此处兜底不阻断事件路径（防通道实现回归抛异常炸端点）
+            }
+
             // 验签（信任根一票否决——平台库通道内部完成）；失败 → FailReason 映射 4xx
             var result = await channel.AuthenticateAsync(new SsoChannelAuthContext(parameters), ct);
             if (!result.Success)
@@ -284,6 +313,11 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
             // 事件编排（uid 只读查询 + 平台化回复 + handler first-non-null-wins）→ 微信 XML 被动回复（text/xml）
             var reply = await GetGuest(ctx).Use<IEventOrchestrator>()
                 .OrchestrateAsync(cfg.ChannelId, $"{cfg.PlatformType}_event", new ChannelInboundContext(parameters), ct);
+
+            // 段 4（新增——P1-1）：DingTalk 恒回加密应答信封（handler 回复被忽略——钉钉协议不承载业务自由文本；
+            // check_url/组织事件经 P1-2 放行 success(null) 亦达此处——200 加密信封闭环，不再 400）
+            if (string.Equals(cfg.PlatformType, "dingtalk", StringComparison.Ordinal) && !string.IsNullOrEmpty(dingTalkEnvelope))
+                return Results.Text(dingTalkEnvelope, contentType: "application/json");
 
             // 平台化回复（微信 XML text/xml）/ 空回复 200 兜底（微信 5 秒超时——异步客服消息归 Phase 2/消费方）
             return reply is null
@@ -300,13 +334,51 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     // ─────────────────────────── 子应用消费方委托端点（ISsoSubAppBridge 编排，2026-10-11） ───────────────────────────
 
     /// <summary>发起外部认证（POST {prefix}/authorize/start，匿名）——<see cref="ISsoSubAppBridge.StartAsync"/>：
-    /// redirect 白名单 + state 票据 + 通道授权 URL 构造。CallbackBaseUrl 由本 handler 用 Request.Scheme/Host
-    /// <b>服务端可信填充</b>（OAuth redirect_uri 落点，防子应用伪造回调域）。建议消费方对前缀配 RateLimitingWebExtension
-    /// IP 限流（Oracle 条件 5——匿名端点防滥用）。</summary>
+    /// redirect 白名单 + state 票据 + 通道授权 URL 构造。CallbackBaseUrl 由本 handler 服务端可信填充为
+    /// <b>回调端点全 URL</b>（{mount}/{platformId}/oauth[/{channelId}]/callback——挂载前缀从当前请求路径 Ordinal
+    /// 推导 + platformId 经 channel registry 选区；OAuth redirect_uri 落点，防子应用伪造回调域）。
+    /// 建议消费方对前缀配 RateLimitingWebExtension IP 限流（Oracle 条件 5——匿名端点防滥用）。</summary>
     private static async Task<IResult> HandleAuthorizeStart(HttpContext ctx, [FromBody] AuthorizeStartRequest req, CancellationToken ct)
     {
-        // 服务端可信回调基址（请求体值被覆盖——防子应用把 IdP 回调导向任意域）
-        var request = req with { CallbackBaseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}" };
+        // ① 挂载前缀推导（P0-1 闭环）——不用 Options.RoutePrefix：默认 /feberation 为"链接组装前缀（非挂载）"，
+        //    端点实际挂载 = 框架 Module 前缀模型（basePath /api + [assembly: ExtensionModule("Federation","feberation")]
+        //    = /api/feberation/...）。handler 仅在被挂载的 authorize/start 端点上被调用 → 当前请求路径恒为
+        //    {mount}/authorize/start——Ordinal 去除尾部 /authorize/start 段即真实挂载前缀（含 PathBase/basePath），
+        //    与回调侧（HandleOAuthCallback 当前请求 URL 注入）天然逐字节一致。
+        var mountPrefix = (ctx.Request.PathBase + ctx.Request.Path).Value![..^"/authorize/start".Length];
+
+        // ② platformId 解析（P1-2 闭环）——channel registry 选区（GetByAliasOrIdAsync 双键 / 默认通道降级，
+        //    语义对齐回调侧 ResolveChannelAsync：多活跃通道省略 channelId → CHANNEL_REQUIRED、0 活跃 →
+        //    CHANNEL_NOT_FOUND、==1 → 唯一通道——无通道段形态 /{platformId}/oauth/callback 仍需 platformId 段；
+        //    解析失败拒绝授权 fail-closed）
+        var registry = GetGuest(ctx).Use<IChannelRegistry>();
+        ChannelConfig? channel;
+        if (!string.IsNullOrWhiteSpace(req.ChannelId))
+        {
+            channel = await registry.GetByAliasOrIdAsync(req.ChannelId, ct);   // 双键：alias/内部键
+            if (channel is null)
+                return MapFailReason("CHANNEL_NOT_FOUND");
+            if (!channel.IsEnabled)
+                return MapFailReason("CHANNEL_DISABLED");
+        }
+        else
+        {
+            var active = (await registry.GetAllAsync(ct)).Where(c => c.IsEnabled).ToList();
+            if (active.Count != 1)
+                return MapFailReason(active.Count == 0 ? "CHANNEL_NOT_FOUND" : "CHANNEL_REQUIRED");
+            channel = active[0];
+        }
+
+        // ③ 回调端点全 URL 落点（B4 收口——请求体 CallbackBaseUrl 值仍被覆盖为服务端可信回跳目标）：
+        //    完整落点 {mount}/{platformId}/oauth[/{channelId}]/callback（契约注释 ISsoSubAppBridge.cs L48-49
+        //    预期形态）；发起侧 ChannelId 已知则带通道段（精确选区），null（默认通道）则无通道段形态
+        //    （回调侧单活跃降级同语义）。该 URL 仅供 IdP 回跳与换取校验，与开放重定向无关（子应用回跳仍经 state 票据）。
+        string callbackPath = $"{mountPrefix}/{channel.PlatformType}/oauth"
+            + (!string.IsNullOrWhiteSpace(req.ChannelId) ? $"/{req.ChannelId}/callback" : "/callback");
+        var request = req with
+        {
+            CallbackBaseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}{callbackPath}",
+        };
         var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().StartAsync(request, ct);
         if (!result.Success)
             return MapFailReason(result.FailReason);
@@ -314,8 +386,9 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
     }
 
     /// <summary>OAuth 回调落地（GET {prefix}/{platformId}/oauth[/{channelId}]/callback，匿名——<b>GET</b>：IdP 302 重定向语义，
-    /// Oracle 条件 1）——query 原样包参数字典 → <see cref="ISsoSubAppBridge.CompleteOAuthAsync"/>（验 state 票据 →
-    /// ISsoLogin 纯通道认证 → 签 accesscode expectedClaimant=app_id）→ 302 跳回子应用（code + sub_state）。
+    /// Oracle 条件 1）——query 包参数字典后 <b>服务端可信注入</b>（redirect_uri = 当前请求完整 URL，覆盖 query 伪造值——
+    /// QQ-1/AL-1 P0 修复 + auth_code → code 归一，支付宝进程语义）→ <see cref="ISsoSubAppBridge.CompleteOAuthAsync"/>
+    /// （验 state 票据 → ISsoLogin 纯通道认证 → 签 accesscode expectedClaimant=app_id）→ 302 跳回子应用（code + sub_state）。
     /// 无通道段形态（{prefix}/{platformId}/oauth/callback）→ 单通道降级 / 多通道 CHANNEL_REQUIRED（B 守卫，Oracle 评审条件 1）。</summary>
     private static async Task<IResult> HandleOAuthCallback(HttpContext ctx, string platformId, string? channelId, CancellationToken ct)
     {
@@ -327,6 +400,17 @@ public sealed class FederationWebExtension<TUserInfo> : IWebExtension
         var parameters = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var (key, value) in ctx.Request.Query)
             parameters[key] = value.ToString();
+        // 服务端可信注入（对齐 HandleEvent base_url L243-245 + HandleAuthorizeStart 同款注入语义——响应式注入）：
+        // ① redirect_uri = 当前请求完整 URL（Scheme://Host + PathBase + Path，不含 query）——IdP 授权时收到的
+        //    回跳目标即本端点，天然与授权时一致（RFC 6749 §4.1.3）；最后写覆盖 query——攻击者
+        //    query 注入 ?redirect_uri= 不得覆盖服务端权威值（防伪造回调域，QQ-1/AL-1 P0 闭环）。
+        parameters["redirect_uri"] = $"{ctx.Request.Scheme}://{ctx.Request.Host}{ctx.Request.PathBase}{ctx.Request.Path}";
+        // ② auth_code 归一：支付宝回调授权码键名 → 通道统一 "code" 键（通道契约语义——通道仅读 code；
+        //    auth_code 原键保留，QQ/OIDC 天然 code 键零影响；Alipay 通道另做 code ?? auth_code 双键防御）
+        if (parameters.TryGetValue("auth_code", out var authCode)
+            && !string.IsNullOrWhiteSpace(authCode)
+            && !parameters.ContainsKey("code"))
+            parameters["code"] = authCode;
 
         var result = await GetGuest(ctx).Use<ISsoSubAppBridge>().CompleteOAuthAsync(cfg.ChannelId, parameters, ct);
         if (!result.Success)

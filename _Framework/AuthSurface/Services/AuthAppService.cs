@@ -30,7 +30,8 @@ public interface IAuthAppService : IDomainService
     /// <summary>更新应用（AppId 不存在抛 InvalidOperationException("AUTHAPP_NOT_FOUND")；可空参数 = 不更新）。</summary>
     Task<AuthAppDto> UpdateAppAsync(string appId, string? appName = null, string? icon = null, CancellationToken ct = default);
 
-    /// <summary>软禁用/启用（false = 应用不出现在"我的应用"聚合语义由目录状态承载——不物理删除）。</summary>
+    /// <summary>软禁用/启用（false = 应用不出现在"我的应用"聚合语义由目录状态承载——不物理删除；
+    /// 聚合排除语义已兑现：视图 IsEnabled 列 + DataService 过滤，v0.2.1）。</summary>
     Task SetEnabledAsync(string appId, bool isEnabled, CancellationToken ct = default);
 }
 

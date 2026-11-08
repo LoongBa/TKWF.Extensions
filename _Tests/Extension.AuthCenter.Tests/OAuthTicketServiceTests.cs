@@ -24,7 +24,7 @@ public class OAuthTicketServiceTests
     }
 
     /// <summary>已认证用户桩变体（BindTicketAsync 已认证帧测试）——返回 stub 供 CAS 并发第二服务共享。</summary>
-    private static (OAuthTicketService Service, StubDomainUser Stub) CreateServiceWithUser(AuthCenterOptions options, StubDomainUser user)
+private static (OAuthTicketService Service, StubDomainUser Stub) CreateServiceWithUser(AuthCenterOptions options, StubDomainUser user)
     {
         var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
         var stub = AuthenticationTestHost.CreateStub(fsql, user, (services, u) =>
@@ -39,7 +39,16 @@ public class OAuthTicketServiceTests
             // V0.8.0：应用授权写入门面（ExchangeAsync 成功落登录授权——生产路径经 User.Use<IAuthGrantCommandService>()）
             services.AddSingleton<IAuthGrantCommandService>(new AuthGrantCommandService(u));
             services.AddSingleton<IAuthGrantQueryService>(new AuthGrantQueryService(u, new FakeTokenVerificationContext("u-123")));
+
+            // V0.13.1（AC-04）：票据换发双守卫（ACCOUNT_DISABLED/ACCOUNT_FROZEN）——冻结判定链（FreezeStateProvider
+            // 内部 User.Use<IFreezeService>()）+ 只读账号查询面（IFreezeStateProvider/IFreezeService/IAuthFactorService 经
+            // AddAuthRelationSupport 统一注册——与 TokenServiceTests 同款）
+            AuthenticationTestHost.AddAuthRelationSupport(services, u);
+            services.AddSingleton<IAuthAccountQueryService>(new AuthAccountQueryService(u));
         });
+        // V0.13.1（AC-04）：双守卫账号启用判定需持久化账号锚点——种子既有 Exchange 用例共用账号 "u-123"
+        //（IsEnabled=true 默认——非禁用/非冻结路径零变化；fsql 同步插入避免 sync-over-async）
+        fsql.Insert(new AuthAccountEntity { UId = "u-123" }).ExecuteAffrows();
         var service = new OAuthTicketService(stub, Options.Create(options), NullLogger<OAuthTicketService>.Instance);
         return (service, stub);
     }
@@ -258,7 +267,7 @@ public class OAuthTicketServiceTests
         }
     }
 
-    /// <summary>Bind 捕获辅助——成功 null / 失败错误码（AuthenticationException.Message）。</summary>
+/// <summary>Bind 捕获辅助——成功 null / 失败错误码（AuthenticationException.Message）。</summary>
     private static async Task<string?> CaptureBind(Task bindTask)
     {
         try
@@ -270,5 +279,117 @@ public class OAuthTicketServiceTests
         {
             return ex.Message;
         }
+    }
+
+    // ── AC-04（V0.13.1）：票据换发冻结/禁用双守卫（评审 P1-2——对齐 Refresh L240-241 双检语义） ──
+
+    [Fact]
+    public async Task Exchange_FrozenUser_ACCOUNT_FROZEN()
+    {
+        // 冻结账号持有效票换发 → 400 ACCOUNT_FROZEN（token 未签发、票未消费——插入点在 (h) 消费前）
+        var (service, stub) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new StubDomainUser());
+        var freezeDs = stub.Use<AuthAccountFreezeEntityDataService>();
+        await freezeDs.EntityCreateAsync(new AuthAccountFreezeEntity
+        {
+            UId = "u-123",
+            Reason = "manual",
+            Scope = 0,
+            Source = "test",
+            CreatedAt = DateTime.UtcNow,
+        }, ct: TestContext.Current.CancellationToken);
+
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"), ct: TestContext.Current.CancellationToken);
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null), ct: TestContext.Current.CancellationToken));
+        Assert.Equal("ACCOUNT_FROZEN", ex.ErrorCode);
+
+        // 票未被 (h) 消费——冻结解除后同票仍可用
+        var row = await stub.Use<OAuthTicketEntityDataService>().GetByTicketAsync(ticket, ct: TestContext.Current.CancellationToken);
+        Assert.False(row!.IsConsumed);
+    }
+
+    [Fact]
+    public async Task Exchange_NotFrozen_Unchanged()
+    {
+        // 非冻结正常换发 200（既有语义逐 bit 保持——双守卫仅拦截禁用/冻结）
+        var (service, _) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new StubDomainUser());
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"), ct: TestContext.Current.CancellationToken);
+        var result = await service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null), ct: TestContext.Current.CancellationToken);
+        Assert.NotNull(result.AccessToken);
+        Assert.NotNull(result.RefreshToken);
+    }
+
+    [Fact]
+    public async Task BindTicket_Frozen_StillAllowed()
+    {
+        // 已认证补绑不受冻结/禁用影响（BindTicketAsync 无令牌发放——账号状态语义不适用，锁定行为）
+        var (service, stub) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new AuthenticatedStubUser("u-123"));
+        var freezeDs = stub.Use<AuthAccountFreezeEntityDataService>();
+        await freezeDs.EntityCreateAsync(new AuthAccountFreezeEntity
+        {
+            UId = "u-123",
+            Reason = "manual",
+            Scope = 0,
+            Source = "test",
+            CreatedAt = DateTime.UtcNow,
+        }, ct: TestContext.Current.CancellationToken);
+
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri), ct: TestContext.Current.CancellationToken);
+        await service.BindTicketAsync(ticket, ct: TestContext.Current.CancellationToken);   // 冻结中补绑成功
+        var row = await stub.Use<OAuthTicketEntityDataService>().GetByTicketAsync(ticket, ct: TestContext.Current.CancellationToken);
+        Assert.Equal("u-123", row!.UserId);
+    }
+
+    [Fact]
+    public async Task Exchange_DisabledUser_ACCOUNT_DISABLED()
+    {
+        // 禁用账号（IsEnabled=false）持有效票换发 → 400 ACCOUNT_DISABLED（token 未签发、票未消费——评审 P1-2）
+        var (service, stub) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new StubDomainUser());
+        var accountDs = stub.Use<AuthAccountEntityDataService>();
+        var account = await accountDs.GetByUIdAsync("u-123", ct: TestContext.Current.CancellationToken);
+        account!.IsEnabled = false;
+        account.UpdateTime = DateTime.UtcNow;
+        await accountDs.UpdateAsync(account, ct: TestContext.Current.CancellationToken);
+
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"), ct: TestContext.Current.CancellationToken);
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null), ct: TestContext.Current.CancellationToken));
+        Assert.Equal("ACCOUNT_DISABLED", ex.ErrorCode);
+
+        var row = await stub.Use<OAuthTicketEntityDataService>().GetByTicketAsync(ticket, ct: TestContext.Current.CancellationToken);
+        Assert.False(row!.IsConsumed);
+    }
+
+    // ── AC-10（V0.13.1）：票据换发保留原始 authType（签发方归因落票 → 换发沿用） ──
+
+    [Fact]
+    public async Task Exchange_PreservesIssuedAuthType()
+    {
+        // IssueAsync(AuthType: "redeem") → 换发 token authType=="redeem" + refresh 行 AuthType=="redeem"
+        var (service, stub) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new StubDomainUser());
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123", AuthType: "redeem"), ct: TestContext.Current.CancellationToken);
+
+        var result = await service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null), ct: TestContext.Current.CancellationToken);
+
+        // access token authType claim（签发即票载归因——审计归因修正）
+        var validation = await stub.Use<ITokenService>().ValidateTokenAsync(result.AccessToken, ct: TestContext.Current.CancellationToken);
+        Assert.Equal("redeem", validation.AuthType);
+        // refresh 行 AuthType（刷新链透传数据源——L257-258 row.AuthType）
+        var refreshRow = await stub.Use<AuthRefreshTokenEntityDataService>()
+            .GetByTokenHashAsync(TokenService.Sha256Hex(result.RefreshToken), ct: TestContext.Current.CancellationToken);
+        Assert.Equal("redeem", refreshRow!.AuthType);
+    }
+
+    [Fact]
+    public async Task Exchange_LegacyTicket_FallbackSms()
+    {
+        // 存量票（AuthType null）→ 回退 sms（与既有行为逐 bit 一致——AC-10 兼容性锁定）
+        var (service, stub) = CreateServiceWithUser(AuthenticationTestHost.CreateOptions(), new StubDomainUser());
+        var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri, UserId: "u-123"), ct: TestContext.Current.CancellationToken);
+
+        var result = await service.ExchangeAsync(new TicketExchangeRequest(ticket, null, "app-1", null), ct: TestContext.Current.CancellationToken);
+
+        var validation = await stub.Use<ITokenService>().ValidateTokenAsync(result.AccessToken, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(AuthTypes.Sms, validation.AuthType);
     }
 }

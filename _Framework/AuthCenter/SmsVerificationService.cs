@@ -4,12 +4,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.AuthCenter;
 
@@ -39,6 +41,8 @@ public sealed class SmsVerificationService : DomainServiceBase, ISmsVerification
 
     private readonly ISmsSender? _sender;
     private readonly IOptions<AuthCenterOptions> _options;
+    private readonly IRateLimitCheck? _rateLimit;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private SmsRecordEntityDataService? _dataService;
     private readonly ILogger<SmsVerificationService> _logger;
 
@@ -48,11 +52,15 @@ public sealed class SmsVerificationService : DomainServiceBase, ISmsVerification
         IDomainUser user,
         ISmsSender? sender,
         IOptions<AuthCenterOptions> options,
-        ILogger<SmsVerificationService> logger)
+        ILogger<SmsVerificationService> logger,
+        IRateLimitCheck? rateLimit = null,
+        IHttpContextAccessor? httpContextAccessor = null)
         : base(user)
     {
         _sender = sender;
         _options = options;
+        _rateLimit = rateLimit;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -76,6 +84,18 @@ public sealed class SmsVerificationService : DomainServiceBase, ISmsVerification
 
             if (await DataService.CountSentAsync(phone, scene, now.AddDays(-1), ct) >= protection.SmsDailyLimitPerPhone)
                 throw new RateLimitedException(0, $"sms:{phone}:{scene}") { ErrorCode = "SMS_DAILY_LIMIT" };
+
+            // AC-02（V0.13.1）：IP 维度点检查（sms-ip:{ip} 单桶——与登录面 SmsLoginService 共用同一配额
+            // SmsHourlyLimitPerIp 默认 20/h；防"换号不换 IP"刷验证码——发送 + 登录任一端口消费同一配额，
+            // 单向打通即双向封口）。IP 经 IHttpContextAccessor.RemoteIpAddress；空白/未注册 → unknown 桶（fail-closed）。
+            // 发送失败码沿用既有发送频控语义（429，SMS_RATE_LIMITED 为 AC-02 登录面新码；本面既有三键码不变）。
+            if (_rateLimit is not null)
+            {
+                var ipAddress = _httpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+                var ipKey = string.IsNullOrWhiteSpace(ipAddress) ? "unknown" : ipAddress;
+                if (!_rateLimit.TryAcquire($"sms-ip:{ipKey}", protection.SmsHourlyLimitPerIp, TimeSpan.FromHours(1), out _))
+                    throw new RateLimitedException(0, $"sms-ip:{ipKey}") { ErrorCode = "SMS_RATE_LIMITED" };
+            }
 
             // (b) 生成 6 位随机码——RandomNumberGenerator（加密安全，禁用 System.Random）
             var code = RandomNumberGenerator.GetInt32((int)Math.Pow(10, CodeLength)).ToString("D6");

@@ -29,6 +29,12 @@ public sealed class DingTalkChannelSource : IChannelSource
     /// <inheritdoc />
     public string PlatformType => "dingtalk";
 
+    /// <summary>能力声明（I2-2 §3.5——钉钉双通道实际能力面）：<c>OAuth | Event</c>——dingtalk_oauth（AuthenticateAsync）
+    /// + dingtalk_event（I2-2 起 HandleEventAsync 真实解析产出 ChannelEvent）。
+    /// <para><b>不声明</b> <c>Follow</c>/<c>FollowQuery</c>——钉钉无"关注"概念（组织变更非关注域订阅语义，记事实不翻状态）、
+    /// 无反查 API 立项（YAGNI）。</para></summary>
+    public ChannelCapabilities Capabilities => ChannelCapabilities.OAuth | ChannelCapabilities.Event;
+
     /// <inheritdoc />
     public IReadOnlyList<ChannelConfig> GetChannels()
         => _options.Value.Channels

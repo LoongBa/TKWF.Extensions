@@ -163,7 +163,10 @@ internal static class DingTalkEventCrypto
     }
 
     /// <summary>
-    /// 测试辅助：AES-256-CBC 加密（构造合法 msg_encrypt 正向样本）——与 <see cref="DecryptMsg"/> 严格对称。
+    /// 应答信封加密/事件回执生产原语（I2-2 V0.4.2 起提升——原"测试辅助"标注废弃）——AES-256-CBC 加密
+    /// 与 <see cref="DecryptMsg"/> 严格对称。双用途：① 构造合法 msg_encrypt 正向测试样本（测试）；
+    /// ② <c>VerifyUrlAsync</c> 加密应答信封生产（P0-2——check_url/业务事件统一回密文信封，非明文 success，见
+    /// <c>DingTalkEventChannel.VerifyUrlAsync</c>）。
     /// <para>明文布局同官方加密侧：<c>[16B 随机][4B 网络序消息长度][JSON][receiveid]</c> + PKCS7。</para>
     /// </summary>
     public static string EncryptMsg(string json, string encodingAESKey, string receiveId)

@@ -52,8 +52,9 @@ internal static class QqTestHost
         bool failOauth = false,
         bool failMe = false,
         bool redirectMismatch = false,
-        bool failUserInfo = false)
-        => new StubQqHandler(openId, unionId, failOauth, failMe, redirectMismatch, failUserInfo);
+        bool failUserInfo = false,
+        string? expectedRedirectUri = null)
+        => new StubQqHandler(openId, unionId, failOauth, failMe, redirectMismatch, failUserInfo, expectedRedirectUri);
 
     /// <summary>构造 SsoChannelAuthContext（IReadOnlyDictionary&lt;string,string?&gt; 参数包）。</summary>
     public static SsoChannelAuthContext CreateContext(params (string Key, string? Value)[] parameters)
@@ -68,8 +69,10 @@ internal static class QqTestHost
         private readonly bool _failMe;           // /me 端点失败（error 模型）
         private readonly bool _redirectMismatch; // token 端点 redirect_uri 一致性比对失败（P1-4）
         private readonly bool _failUserInfo;     // get_user_info 失败（ret/msg 模型）
+        private readonly string? _expectedRedirectUri;   // 期望 redirect_uri（装配层注入值 = 回调端点 URL；null = 测试默认值）
 
-        public StubQqHandler(string openId, string? unionId, bool failOauth, bool failMe, bool redirectMismatch, bool failUserInfo)
+        public StubQqHandler(string openId, string? unionId, bool failOauth, bool failMe, bool redirectMismatch, bool failUserInfo,
+            string? expectedRedirectUri = null)
         {
             _openId = openId;
             _unionId = unionId;
@@ -77,6 +80,7 @@ internal static class QqTestHost
             _failMe = failMe;
             _redirectMismatch = redirectMismatch;
             _failUserInfo = failUserInfo;
+            _expectedRedirectUri = expectedRedirectUri;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -88,7 +92,8 @@ internal static class QqTestHost
             {
                 // 服务端 redirect_uri 一致性比对模拟（N3 P1-4 —— code 换 token 时须与授权时一致）
                 var redirectUri = GetQueryParam(query, "redirect_uri");
-                if (_redirectMismatch || !string.Equals(redirectUri, TestRedirectUri, StringComparison.Ordinal))
+                var expected = _expectedRedirectUri ?? TestRedirectUri;
+                if (_redirectMismatch || !string.Equals(redirectUri, expected, StringComparison.Ordinal))
                     return Json("{\"error\":100030,\"error_description\":\"redirect_uri is not consistent with the authorization request\"}");
                 if (_failOauth)
                     return Json("{\"error\":100016,\"error_description\":\"access token check failed\"}");

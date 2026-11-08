@@ -58,6 +58,9 @@ internal sealed class DataPortTestHost : IDisposable
     /// <summary>门面——生产 AOP 路径：真实 DomainUser&lt;TestUserInfo&gt;.Use&lt;IDataImportTaskService&gt;()（匿名——守卫工厂直建实现）。</summary>
     public IDataImportTaskService TaskService => _domainUser.Use<IDataImportTaskService>();
 
+    /// <summary>DP-05 超时恢复门面（V0.1.5）——生产 AOP 路径：真实 DomainUser.Use&lt;IStaleImportRecoveryService&gt;()（AddConstructibleService）。</summary>
+    public IStaleImportRecoveryService RecoveryService => _domainUser.Use<IStaleImportRecoveryService>();
+
     /// <summary>SG1 DataService（NoAop 路径直建——DataService 禁构造注入，DI004 零豁免；IEntityDAC 从 DI 解析）。</summary>
     public DataImportRecordEntityDataService DataService => _domainUser.Use<DataImportRecordEntityDataService>();
 
@@ -101,6 +104,9 @@ internal sealed class DataPortTestHost : IDisposable
     /// <summary>解析服务（Scoped 服务经根容器解析，生命周期与宿主一致）。</summary>
     public T GetRequiredService<T>() where T : notnull
         => _serviceProvider.GetRequiredService<T>();
+
+    /// <summary>根 ServiceProvider（Initializer.InitializeAsync 直测/System 扫描路径用）。</summary>
+    public IServiceProvider ServiceProvider => _serviceProvider;
 
     /// <summary>
     /// 释放宿主 + 解绑解析作用域。

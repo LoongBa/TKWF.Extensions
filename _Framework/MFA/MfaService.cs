@@ -97,6 +97,12 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
         if (await Secrets.GetActiveSecretAsync(userId, m.Method, ct) is not null)
             return new MfaEnrollResult(m.Method, EnrollToken: "");
 
+        // 替换语义（MF-02 闭环）：滞留 pending（未确认绑定）直接物理删除——重绑不再撞 UX 唯一约束 500；
+        // 重复发起绑定 = 重新开始（pending 遗留自动收敛）；SMS 方法下 TTL 内重绑仍被发码守卫拦截（刻意防发码滥用）
+        var pending = await Secrets.GetPendingSecretAsync(userId, m.Method, ct);
+        if (pending is not null)
+            await Secrets.DeleteAsync(pending.Id, ct);
+
         var request = await m.EnrollAsync(new MfaUser(userId), context ?? new MfaEnrollContext(), ct);
         if (request is null)
             throw new InvalidOperationException($"MFA 方法 {m.Method} 无法发起绑定（上下文不满足——SMS 需提供绑定手机号）");

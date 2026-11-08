@@ -134,7 +134,12 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         // 因素落库（V0.11.0 T5：密码归属 AuthFactor(Password)——标识恒为 UId；写后 TokenVersion++ 使旧 refresh 失效）
         var existing = await FindPasswordFactorAsync(uid, ct);
         if (existing is null)
+        {
+            // AC-14（V0.13.1 收敛）：Bind 分支自持一次 ++（BindAsync 无版本递增语义）；
+            // Reset 分支由 Factors.ResetAsync 内 TokenVersion++（同 UoW）——语义精确一次，防双递增回归
             await Factors.BindAsync(uid, AuthFactorTypes.Password, uid, protectedBlob, mustChange, AuthFactorSources.Manual, ct);
+            await DataService.IncrementTokenVersionAsync(uid, ct);
+        }
         else
             await Factors.ResetAsync(uid, existing.Id, protectedBlob, mustChange, ct);
 
@@ -145,7 +150,6 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
             CreateTime = DateTime.UtcNow,
         }, ct);
         await TrimHistoryAsync(uid, ct);
-        await DataService.IncrementTokenVersionAsync(uid, ct);
         return 1;
     }
 

@@ -75,4 +75,16 @@ public partial class MfaSecretEntity
     /// <summary>更新时间（UTC——激活翻转时更新）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 10)]
     public DateTime UpdateTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// 最近一次验证成功所匹配的 RFC 6238 时间步（MF-01 同窗重放防护记账，V0.3.0）。
+    /// <para>语义：<c>unixSeconds / TotpTimeStepSeconds</c>；时窗容差（±<c>TotpClockSkewWindows</c>）匹配时记录
+    /// <b>匹配步</b>而非当前步；拒绝条件 <c>matchedStep &lt;= LastUsedTotpStep</c>（CAS 递增守卫——同一验证码
+    /// 只接受一次，RFC 6238 §5.2 MUST；<c>null</c> = 从未使用，存量行升级后首验放行；SMS 方法恒 null——零路径消费）。</para>
+    /// <para>内部簿记（时间步计数器）——DTO 忽略（<c>[DtoFieldIgnore]</c>，对齐 <c>EnrollTokenHash</c> 敏感簿记先例；
+    /// 防表面噪声/误用）。不建索引——无按列查询谓词（读写均按主键/用户），随 <c>TKWFIX_MfaSecret_User</c> 走。</para>
+    /// </summary>
+    [FreeSql.DataAnnotations.Column(Position = 11, IsNullable = true)]
+    [DtoFieldIgnore]
+    public long? LastUsedTotpStep { get; set; }
 }

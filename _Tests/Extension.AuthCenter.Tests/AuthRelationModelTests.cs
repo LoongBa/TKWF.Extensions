@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -275,5 +276,82 @@ public class AuthRelationModelTests
             Entries.Add(entry);
             return Task.CompletedTask;
         }
+    }
+
+    // ── AC-14（V0.13.1）：ResetAsync 补 TokenVersion++（同 UoW——旧 Refresh 失效闭环） ──
+
+    [Fact]
+    public async Task ResetFactor_TokenVersionIncremented()
+    {
+        // 直调 IAuthFactorService.ResetAsync（非 WritePasswordAsync 链）→ TokenVersion +1 + Reset 事件写入（同 UoW 原子）
+        var (user, store) = CreateHost();
+        await SeedAccountAsync(user, "u-reset-tv");
+        var before = (await user.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-reset-tv", ct: TestContext.Current.CancellationToken))!.TokenVersion;
+        var factors = user.Use<IAuthFactorService>();
+        var sms = await factors.BindAsync("u-reset-tv", AuthFactorTypes.Sms, "13800002001", ct: TestContext.Current.CancellationToken);
+
+        await factors.ResetAsync("u-reset-tv", sms.Id, "new-secret-hash", ct: TestContext.Current.CancellationToken);
+
+        var after = (await user.Use<AuthAccountEntityDataService>().GetByUIdAsync("u-reset-tv", ct: TestContext.Current.CancellationToken))!.TokenVersion;
+        Assert.Equal(before + 1, after);
+        var events = await user.Use<AuthFactorEventEntityDataService>()
+            .EntitySelectAsync(e => e.UId == "u-reset-tv", ct: CancellationToken.None);
+        Assert.Contains(events, e => e.EventType == (int)AuthFactorEventTypes.Reset);
+        // SecurityLog Reset 副本（审计对等——镜像 Bind/Unbind 调用点）
+        Assert.Contains(store.Entries, e => e.EventType == "Reset");
+    }
+
+    [Fact]
+    public async Task ResetFactor_OldRefreshStale()
+    {
+        // 重置前签发 refresh → 重置后旧 refresh 刷新 → REFRESH_STALE（TokenVersion 闭环实证——TokenService L244 断言行）
+        var (user, _) = CreateHost();
+        await SeedAccountAsync(user, "u-reset-stale");
+        var factors = user.Use<IAuthFactorService>();
+        await factors.BindAsync("u-reset-stale", AuthFactorTypes.Sms, "13800002002", ct: TestContext.Current.CancellationToken);
+
+        // 完整签发链（TokenService 直建——dev 密钥 + RefreshToken/Blacklist DataService 经 stub.Use 直建）
+        var options = AuthenticationTestHost.CreateOptions();
+        var tokenService = new TokenService(user, new TKW.Framework.Utility.Caching.DevKeyCache<TokenService.RsaKeySet>(),
+            Options.Create(options), new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            NullLogger<TokenService>.Instance);
+        tokenService.EnsureKeysLoaded();
+        var issued = await tokenService.IssueTokenAsync(
+            new TokenIssueRequest("u-reset-stale", AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
+
+        // 重置（直调 ResetAsync——外链路径）→ TokenVersion++ → 旧 refresh 失效
+        var smsFactor = (await factors.ListByUIdAsync("u-reset-stale", ct: TestContext.Current.CancellationToken))[0];
+        await factors.ResetAsync("u-reset-stale", smsFactor.Id, "new-secret-hash", ct: TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
+            tokenService.RefreshTokenAsync(new RefreshRequest(issued.RefreshToken), ct: TestContext.Current.CancellationToken));
+        Assert.Equal("REFRESH_STALE", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task WritePassword_ResetPath_SingleBump()
+    {
+        // L148 外层 ++ 删除后的精确一次断言（防双递增回归）——SetPasswordAsync（Bind 分支一次 ++）与
+        // ChangePasswordAsync（Reset 分支由 ResetAsync 内 ++）各恰一次递增
+        var (user, _) = CreateHost();
+        await SeedAccountAsync(user, "u-single-bump");
+        var accountDs = user.Use<AuthAccountEntityDataService>();
+        var accountSvc = user.Use<IAuthAccountService>();
+
+        // SetPasswordAsync（首次——Bind 分支）→ TokenVersion 恰 +1
+        var before1 = (await accountDs.GetByUIdAsync("u-single-bump", ct: TestContext.Current.CancellationToken))!.TokenVersion;
+        var salt = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var clientHash = Convert.ToHexString(Rfc2898DeriveBytes.Pbkdf2("Secret123!", Convert.FromHexString(salt), 600_000, HashAlgorithmName.SHA256, 32));
+        await accountSvc.SetPasswordAsync("u-single-bump", clientHash, salt, ct: TestContext.Current.CancellationToken);
+        var after1 = (await accountDs.GetByUIdAsync("u-single-bump", ct: TestContext.Current.CancellationToken))!.TokenVersion;
+        Assert.Equal(before1 + 1, after1);
+
+        // ChangePasswordAsync（既有因素——Reset 分支，ResetAsync 内 ++）→ TokenVersion 恰 +1（非 +2）
+        var before2 = after1;
+        var newSalt = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var newHash = Convert.ToHexString(Rfc2898DeriveBytes.Pbkdf2("NewSecret456!", Convert.FromHexString(newSalt), 600_000, HashAlgorithmName.SHA256, 32));
+        await accountSvc.ChangePasswordAsync("u-single-bump", clientHash, salt, newHash, newSalt, ct: TestContext.Current.CancellationToken);
+        var after2 = (await accountDs.GetByUIdAsync("u-single-bump", ct: TestContext.Current.CancellationToken))!.TokenVersion;
+        Assert.Equal(before2 + 1, after2);
     }
 }

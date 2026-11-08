@@ -104,9 +104,19 @@ internal static class TotpGenerator
         return otp.ToString("D" + digits);
     }
 
-    /// <summary>时窗验证——当前步 ± skewWindows 任一步匹配（恒定时间比较 <see cref="CryptographicOperations.FixedTimeEquals"/>）。</summary>
+    /// <summary>时窗验证（委托 <see cref="TryValidateWithStep"/>——签名不变兼容；命中返回 true，丢弃匹配步）。</summary>
     public static bool Validate(string code, string base32Secret, long unixSeconds, int timeStepSeconds, int digits, int skewWindows)
+        => TryValidateWithStep(code, base32Secret, unixSeconds, timeStepSeconds, digits, skewWindows, out _);
+
+    /// <summary>
+    /// 时窗验证——当前步 ± skewWindows 任一步匹配（恒定时间比较 <see cref="CryptographicOperations.FixedTimeEquals"/>）。
+    /// 命中即 <paramref name="matchedStep"/> = 匹配的时间步并返回 true；失败 <paramref name="matchedStep"/> = 0。
+    /// <para>V0.3.0（MF-01）：匹配步输出供调用方 last-used-step 记账（<see cref="MfaSecretEntityDataService.TryAdvanceLastUsedTotpStepAsync"/>
+    /// CAS 条件更新——同一验证码只接受一次，RFC 6238 §5.2 MUST）。</para>
+    /// </summary>
+    public static bool TryValidateWithStep(string code, string base32Secret, long unixSeconds, int timeStepSeconds, int digits, int skewWindows, out long matchedStep)
     {
+        matchedStep = 0;
         if (string.IsNullOrWhiteSpace(code) || code.Length != digits)
             return false;
         if (string.IsNullOrWhiteSpace(base32Secret) || timeStepSeconds <= 0 || skewWindows < 0)
@@ -117,7 +127,10 @@ internal static class TotpGenerator
         {
             var expected = ComputeForCounter(base32Secret, step, digits);
             if (CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(code), Encoding.UTF8.GetBytes(expected)))
+            {
+                matchedStep = step;
                 return true;
+            }
         }
         return false;
     }

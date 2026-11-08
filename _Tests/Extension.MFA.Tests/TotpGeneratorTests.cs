@@ -174,4 +174,55 @@ public class TotpGeneratorTests
         Assert.False(TotpGenerator.Validate("12345", secret, now, 30, 6, 1));   // 5 位
         Assert.False(TotpGenerator.Validate("1234567", secret, now, 30, 6, 1)); // 7 位
     }
+
+    // ── V0.3.0 MF-01：TryValidateWithStep 匹配步输出（last-used-step CAS 记账输入） ──
+
+    [Fact]
+    public void TryValidateWithStep_Match_OutputsMatchedStep()
+    {
+        var secret = TotpGenerator.GenerateSecret();
+        const int step = 30;
+        const int digits = 6;
+        const int skew = 1;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var currentStep = now / step;
+
+        // 当前步码 → 命中 + matchedStep = 当前步
+        var code = TotpGenerator.ComputeCode(secret, currentStep * step, step, digits);
+        Assert.True(TotpGenerator.TryValidateWithStep(code, secret, now, step, digits, skew, out var matched));
+        Assert.Equal(currentStep, matched);
+
+        // 时窗内旧步（-1）码 → 命中 + matchedStep = 旧步（记录匹配步而非当前步——拒绝语义精确）
+        var prevCode = TotpGenerator.ComputeCode(secret, (currentStep - 1) * step, step, digits);
+        Assert.True(TotpGenerator.TryValidateWithStep(prevCode, secret, now, step, digits, skew, out var matchedPrev));
+        Assert.Equal(currentStep - 1, matchedPrev);
+    }
+
+    [Fact]
+    public void TryValidateWithStep_NoMatch_MatchedStepZero()
+    {
+        var secret = TotpGenerator.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        // 失败归 0（MF-01：CAS 输入恒安全——错码/格式不匹配统一 false + matchedStep=0）
+        Assert.False(TotpGenerator.TryValidateWithStep("000000", secret, now, 30, 6, 1, out var matched0));
+        Assert.Equal(0L, matched0);
+        Assert.False(TotpGenerator.TryValidateWithStep("", secret, now, 30, 6, 1, out var matchedEmpty));
+        Assert.Equal(0L, matchedEmpty);
+        Assert.False(TotpGenerator.TryValidateWithStep("12345", secret, now, 30, 6, 1, out var matchedShort));
+        Assert.Equal(0L, matchedShort);
+    }
+
+    [Fact]
+    public void Validate_DelegatesToTryValidateWithStep_EquivalentResult()
+    {
+        // V0.3.0：Validate 委托新方法——签名不变、行为等价（既有 Validate 用例零影响 = 兼容契约）
+        var secret = TotpGenerator.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpGenerator.ComputeCode(secret, now, 30, 6);
+
+        Assert.True(TotpGenerator.Validate(code, secret, now, 30, 6, 1));
+        Assert.True(TotpGenerator.TryValidateWithStep(code, secret, now, 30, 6, 1, out var matched));
+        Assert.Equal(now / 30, matched);
+    }
 }

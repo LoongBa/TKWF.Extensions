@@ -21,6 +21,13 @@ public class MfaDtoTests
     }
 
     [Fact]
+    public void MfaSecretEntityDto_LastUsedTotpStep_NotExposed()
+    {
+        // V0.3.0 回归：LastUsedTotpStep 内部簿记（[DtoFieldIgnore]）——不进入 DTO 生成物（防表面噪声/误用）
+        Assert.Null(typeof(MfaSecretEntityDto).GetProperty("LastUsedTotpStep"));
+    }
+
+    [Fact]
     public void MfaChallengeEntityDto_CodeHash_NotExposed()
     {
         Assert.Null(typeof(MfaChallengeEntityDto).GetProperty("CodeHash"));

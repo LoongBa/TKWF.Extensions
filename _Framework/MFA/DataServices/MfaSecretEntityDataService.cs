@@ -43,6 +43,15 @@ partial class MfaSecretEntityDataService(IDomainUser user, IEntityDAC<MfaSecretE
     public Task<MfaSecretEntity> UpdateAsync(MfaSecretEntity entity, CancellationToken ct = default)
         => EntityUpdateAsync(entity, ct);
 
+    /// <summary>
+    /// CAS 更新 last-used-step（MF-01 同窗重放防护记账，V0.3.0）——WHERE id + (null 或递增) 守卫——并发恰一成功；败者 0 行。
+    /// <para>拒绝条件 <c>LastUsedTotpStep &lt; matchedStep</c>（同/更低步已被用 → 0 行 → 调用方统一失败，RFC 6238 §5.2）；
+    /// setColumns 匿名类型（对齐 <see cref="MfaChallengeEntityDataService.MarkConsumedIfActiveAsync"/> ADR89 先例，不构造整实体）。</para>
+    /// </summary>
+    public Task<int> TryAdvanceLastUsedTotpStepAsync(long id, long matchedStep, CancellationToken ct = default)
+        => EntityUpdateWhereAsync(f => f.Id == id && (f.LastUsedTotpStep == null || f.LastUsedTotpStep < matchedStep),
+                                  f => new { LastUsedTotpStep = matchedStep }, ct);
+
     /// <summary>查询批量上限（防高频用户全量拉取——单用户绑定数极少，此限为兜底）。</summary>
     private const int MaxQuerySize = 1000;
 }

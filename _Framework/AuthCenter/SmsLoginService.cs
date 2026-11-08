@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Utility.RateLimitChecks;
 
 namespace TKWF.Ext.AuthCenter;
 
@@ -28,6 +30,8 @@ public sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
 {
     private readonly IReadOnlyList<IAuthenticationProvider> _providers;
     private readonly IOptions<AuthCenterOptions> _options;
+    private readonly IRateLimitCheck? _rateLimit;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly ILogger<SmsLoginService> _logger;
 
     // DI004 铁律：领域服务间调用经 User.Use<T>() 懒加载（禁构造注入——IAuthAccountQueryService/ITokenService 为守卫工厂，
@@ -41,11 +45,15 @@ public sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
         IDomainUser user,
         IEnumerable<IAuthenticationProvider> providers,
         IOptions<AuthCenterOptions> options,
-        ILogger<SmsLoginService> logger)
+        ILogger<SmsLoginService> logger,
+        IRateLimitCheck? rateLimit = null,
+        IHttpContextAccessor? httpContextAccessor = null)
         : base(user)
     {
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _rateLimit = rateLimit;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -64,6 +72,19 @@ public sealed class SmsLoginService : DomainServiceBase, ISmsLoginService
         {
             _logger.LogWarning("短信登录编排失败——SMS Provider 未启用（EnabledAuthTypes 配置缺失 sms）");
             throw new DomainException("SMS_PROVIDER_NOT_ENABLED") { ErrorCode = "SMS_PROVIDER_NOT_ENABLED" };
+        }
+
+        // AC-02（V0.13.1）：IP 维度点检查（sms-ip:{ip} 单桶——与发送面 SmsVerificationService 共用同一配额
+        // SmsHourlyLimitPerIp 默认 20/h；轮换手机号防"换号不换 IP"刷登录——发送打满则登录额度耗尽（反之亦然），
+        // 单向打通即双向封口）。IP 经 IHttpContextAccessor.RemoteIpAddress（服务端获取不可伪造）；空白/未注册 → unknown
+        // 桶（fail-closed 不空放）；共享桶为内存 fallback（MemoryRateLimitCheck）时单机窗口、DB 版跨实例。
+        if (_rateLimit is not null)
+        {
+            var ipAddressSms = _httpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+            var ipKeySms = string.IsNullOrWhiteSpace(ipAddressSms) ? "unknown" : ipAddressSms;
+            if (!_rateLimit.TryAcquire($"sms-ip:{ipKeySms}",
+                    _options.Value.LoginProtection.SmsHourlyLimitPerIp, TimeSpan.FromHours(1), out _))
+                throw new RateLimitedException(0, $"sms-ip:{ipKeySms}") { ErrorCode = "SMS_RATE_LIMITED" };
         }
 
         var result = await provider.AuthenticateAsync(

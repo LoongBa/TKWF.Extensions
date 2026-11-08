@@ -61,10 +61,15 @@ public sealed class AlipayOauthChannel : DomainServiceBase, ISsoChannel
             return new SsoChannelAuthResult(false, null, "CHANNEL_DISABLED", 0);
 
         // 回调参数：支付宝仅保证 auth_code/app_id/scope 有效（回跳参数本身无签名——N4 §3.2 安全重心在签名换取链 + state）。
-        // auth_code 语义映射为 context "code" 键（对齐 QQ "code" 先例；装配层把支付宝回调 auth_code 注入该键）
-        if (context.Parameters == null
-            || !context.Parameters.TryGetValue("code", out var code)
-            || string.IsNullOrWhiteSpace(code))
+        // auth_code 语义映射为统一 "code" 键（对齐 QQ "code" 先例）：主要路径 = 装配层归一（HandleOAuthCallback
+        // 把 auth_code 复制进 code 键——QQ-1/AL-1 P0 闭环）；本通道再 code ?? auth_code 双键兼容作防御兜底
+        // （零装配直调/装配层归一缺失场景仍可用；双键并存时 code 优先——TryGetValue 短路顺序）。
+        if (context.Parameters is null)
+            return new SsoChannelAuthResult(false, null, "ALIPAY_CODE_REQUIRED", 0);
+
+        if (!context.Parameters.TryGetValue("code", out var code))
+            context.Parameters.TryGetValue("auth_code", out code);
+        if (string.IsNullOrWhiteSpace(code))
             return new SsoChannelAuthResult(false, null, "ALIPAY_CODE_REQUIRED", 0);
 
         try

@@ -87,6 +87,10 @@ internal static class WeComTestHost
     public static SsoChannelAuthContext CreateContext(params (string Key, string? Value)[] parameters)
         => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
 
+    /// <summary>构造 ChannelInboundContext（IReadOnlyDictionary&lt;string,string?&gt; 参数包——HandleEventAsync/VerifyUrlAsync，I2-2）。</summary>
+    public static ChannelInboundContext CreateEventContext(params (string Key, string? Value)[] parameters)
+        => new(new Dictionary<string, string?>(parameters.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))));
+
     /// <summary>Stub HttpMessageHandler 实现（路由企业微信 API 路径）。</summary>
     private sealed class StubWeComHandler : HttpMessageHandler
     {

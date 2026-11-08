@@ -71,7 +71,7 @@ INNER JOIN ""TKWF_AuthAccount"" ac ON rc.""RedeemedByUId"" = ac.""UId""");
         fsql.Ado.ExecuteNonQuery(
             @"CREATE VIEW IF NOT EXISTS ""TKWFV_UserApps"" AS
 SELECT g.""Id"", g.""UserId"", g.""AppId"", a.""AppName"", g.""Scopes"", g.""ValidUntil"", g.""Source"", g.""Status"", g.""CreateTime"",
-       ac.""UId""
+       ac.""UId"", a.""IsEnabled""
 FROM ""TKWF_AuthGrant"" g
 INNER JOIN ""TKWF_AuthAccount"" ac ON g.""UserId"" = ac.""UId""
 LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");

@@ -157,17 +157,41 @@ internal sealed class AuthFactorService : DomainServiceBase, IAuthFactorService
     /// <inheritdoc />
     public async Task<AuthFactorEntityDto> ResetAsync(string uid, long factorId, string? newSecretHash, bool? mustChange = null, CancellationToken ct = default)
     {
+        // AC-14（V0.13.1）：重置 = 因素秘密变更路径——补 TokenVersion++（同 UoW，镜像 UnbindAsync L116-125 五步）。
+        // 内链（WritePasswordAsync）已收敛为 ResetAsync 单点 ++；外链（消费方直调 IAuthFactorService.ResetAsync
+        // 管理侧重置）由此闭环——重置后旧 refresh token 失效（REFRESH_STALE），与 SetPasswordAsync/UnbindAsync 语义一致。
+        // 历史不在此耦合（PasswordHistory 只增语义绑定 Password 因素——密码场景内链 WritePasswordAsync 仍追历史）。
         var factor = await FactorDataService.EntityGetAsync(f => f.Id == factorId, ct);
         if (factor is null || factor.UId != uid)
             throw new AuthenticationException(IAuthFactorService.FACTOR_NOT_FOUND);
 
-        factor.SecretHash = newSecretHash;
-        if (mustChange.HasValue) factor.MustChange = mustChange.Value;
-        factor.SecretUpdatedAt = DateTime.UtcNow;
-        factor.UpdateTime = DateTime.UtcNow;
-        factor = await FactorDataService.EntityUpdateAsync(factor, ct);
-
-        await WriteEventAsync(uid, factor.FactorType, factor.Identifier, AuthFactorEventTypes.Reset, AuthFactorSources.Manual, null, ct);
+        // 事务六步（镜像 UnbindAsync——GetOptionalService<ITransactionManager> null 退化为环境 UoW，不硬失败）
+        var transactionManager = User.GetOptionalService<ITransactionManager>();
+        using var scope = transactionManager is null ? (ITransactionScope?)null : await transactionManager.BeginAsync(ct: ct);
+        try
+        {
+            // ① 事件写入（Reset——审计次序前置：先记发生再改数据）
+            await WriteEventAsync(uid, factor.FactorType, factor.Identifier, AuthFactorEventTypes.Reset, AuthFactorSources.Manual, null, ct);
+            // ② 更新因素（SecretHash/MustChange/SecretUpdatedAt）
+            factor.SecretHash = newSecretHash;
+            if (mustChange.HasValue) factor.MustChange = mustChange.Value;
+            factor.SecretUpdatedAt = DateTime.UtcNow;
+            factor.UpdateTime = DateTime.UtcNow;
+            factor = await FactorDataService.EntityUpdateAsync(factor, ct);
+            // ③ TokenVersion++（旧 Refresh 失效闭环——同 UoW）
+            await AccountService.IncrementTokenVersionAsync(uid, ct);
+            // ④ SecurityLog Reset 副本（审计对等——对齐 Bind/Unbind 调用点）
+            await WriteSecurityLogAsync("Reset", uid, factor.FactorType, factor.Identifier, AuthFactorSources.Manual, null, ct);
+            // ⑤ Commit
+            if (scope is not null)
+                await scope.CommitAsync(ct);
+        }
+        catch
+        {
+            if (scope is not null)
+                await scope.RollbackAsync(ct);
+            throw;
+        }
         return AuthFactorEntityDto.FromEntity(factor);
     }
 

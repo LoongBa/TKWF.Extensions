@@ -162,11 +162,17 @@ internal sealed class TotpMfaMethod : DomainServiceBase, IMfaMethod
         if (challenge is null || challenge.UserId != user.UserId || challenge.Method != MethodName)
             return new MfaVerifyResult(false, 0, "挑战不存在/已消费/已过期");
 
-        // 解密 secret → 时窗验证（TOTP 无状态语义——验证不依赖票据码）
+        // 解密 secret → 时窗验证（TOTP 无状态语义——验证不依赖票据码；V0.3.0 MF-01：TryValidateWithStep 输出匹配步供记账）
         var base32Secret = _keys.Decrypt(active.SecretEncrypted);
         var unixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (!TotpGenerator.Validate(code, base32Secret, unixSeconds, opt.TotpTimeStepSeconds, opt.TotpDigits, opt.TotpClockSkewWindows))
+        if (!TotpGenerator.TryValidateWithStep(code, base32Secret, unixSeconds, opt.TotpTimeStepSeconds, opt.TotpDigits, opt.TotpClockSkewWindows, out var matchedStep))
             return new MfaVerifyResult(false, 0, "TOTP 验证码校验失败（码错/过期——统一失败不区分原因）");
+
+        // MF-01 同窗重放防护（RFC 6238 §5.2）——先 CAS 记账 last-used-step（WHERE id + (null 或递增) 守卫——
+        // 并发恰一成功；败者 0 行 → 统一失败（同/更低步已被并发用——保守拒真 < 放重放））
+        var advanced = await Secrets.TryAdvanceLastUsedTotpStepAsync(active.Id, matchedStep, ct);
+        if (advanced != 1)
+            return new MfaVerifyResult(false, 0, "LastUsedTotpStepAlreadyAdvanced");
 
         // 成功——原子单次消费（WHERE IsConsumed=false 守卫——并发验证恰一成功，Oracle C1；败者 0 行 → 统一失败）
         var affected = await Challenges.MarkConsumedIfActiveAsync(challenge.Id, DateTime.UtcNow, ct);

@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -12,12 +12,24 @@ namespace TKWF.Ext.BlobStoring
     /// 本地文件系统 Blob 存储实现——在指定根目录下读写文件。
     /// <para>异常静默处理：文件读写失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
     /// 但用户可控路径（UploadAsync 的 name / DownloadAsync、DeleteAsync、ExistsAsync 的 path）
-    /// 防穿越校验失败时抛 <see cref="ArgumentException"/>（fail-closed，C2 评审修复——不再静默吞掉/返回 null）。</para>
+    /// 防穿越校验失败时抛 <see cref="ArgumentException"/>（fail-closed，C2 评审修复——不再静默吞掉/返回 null）。
+    /// V0.3.1（BL-P0 修复）：校验升级为段级白名单字符集（见 <see cref="SafeRelativePathPattern"/>）+ 规范化前缀双保险。</para>
     /// </summary>
     internal sealed class LocalStorageService : IBlobStorageService
     {
         private readonly IOptions<BlobStoringOptions> _options;
         private readonly ILogger<LocalStorageService> _logger;
+
+        /// <summary>
+        /// 相对路径段级白名单整路径锚定正则（V0.3.1 BL-P0）——段首与段尾必须字母数字，
+        /// 中缀仅允许 <c>.</c>/<c>_</c>/<c>-</c>（文件名点号扩展），段间以 <c>/</c> 分隔；
+        /// <c>\z</c> 严格字符串末尾（尾随换行必败）。白名单 = 不可包含也无需列举
+        /// （前导分隔符/盘符/穿越段/控制字符等一切字符集外形态结构必败）。
+        /// 与 Metrics M-01 / Dashboard D-01 逐段白名单先例同型（整体锚定实现）。
+        /// </summary>
+        private static readonly Regex SafeRelativePathPattern = new(
+            @"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?(?:/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)*\z",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         public LocalStorageService(IOptions<BlobStoringOptions> options, ILogger<LocalStorageService> logger)
         {
@@ -30,7 +42,8 @@ namespace TKWF.Ext.BlobStoring
         {
             if (content == null) throw new ArgumentNullException(nameof(content));
 
-            // C2 防穿越：name 是唯一完全由调用方控制的路径段——Path.Combine(Guid, name) 中 name="../../x" 可逃逸根目录。
+            // C2/V0.3.1 防穿越：name 是唯一完全由调用方控制的路径段——Path.Combine(Guid, name) 中 name="../../x" 可逃逸根目录。
+            // V0.3.1 起校验升级为段级白名单整路径锚定 + 规范化前缀双保险（BL-P0 rooted/UNC 闭环）。
             // 校验失败抛 ArgumentException（fail-closed，不再静默返回 null）。
             EnsureSafeFileName(name);
 
@@ -73,7 +86,8 @@ namespace TKWF.Ext.BlobStoring
         /// </summary>
         public Task<Stream?> DownloadAsync(string path, CancellationToken ct = default)
         {
-            // C2 防穿越：path 为用户可控相对路径，校验失败抛 ArgumentException（安全缺陷 fail-closed）。
+            // C2/V0.3.1 防穿越：path 为用户可控相对路径——V0.3.1 起白名单整路径锚定 + 规范化前缀双保险
+            // （拒绝绝对路径/UNC/盘符/尾点/尾分隔符/尾随换行等），校验失败抛 ArgumentException（安全缺陷 fail-closed）。
             // 合法路径不受影响——BlobStoring 内部生成的 path 形如 {guid}/{name}，可通过校验。
             EnsureSafeRelativePath(path, nameof(path));
 
@@ -99,7 +113,7 @@ namespace TKWF.Ext.BlobStoring
         /// <inheritdoc />
         public Task<bool> DeleteAsync(string path, CancellationToken ct = default)
         {
-            // C2 防穿越：校验失败抛 ArgumentException（安全缺陷 fail-closed）。
+            // C2/V0.3.1 防穿越（白名单 + 规范化前缀双保险）：校验失败抛 ArgumentException（安全缺陷 fail-closed）。
             EnsureSafeRelativePath(path, nameof(path));
 
             try
@@ -123,7 +137,7 @@ namespace TKWF.Ext.BlobStoring
         /// <inheritdoc />
         public Task<bool> ExistsAsync(string path, CancellationToken ct = default)
         {
-            // C2 防穿越：校验失败抛 ArgumentException（安全缺陷 fail-closed）。
+            // C2/V0.3.1 防穿越（白名单 + 规范化前缀双保险）：校验失败抛 ArgumentException（安全缺陷 fail-closed）。
             EnsureSafeRelativePath(path, nameof(path));
 
             try
@@ -147,27 +161,49 @@ namespace TKWF.Ext.BlobStoring
         }
 
         /// <summary>
-        /// 相对路径防穿越校验（C2 评审修复，Download/Delete/Exists 共用）——
-        /// 拒绝空/空白路径、"."/".." 段、盘符（':'）注入。
-        /// <para>只用于用户可控输入路径；BlobStoring 内部生成的合法路径（"{guid}/{name}"）不受影响。
-        /// 校验通过后仍保留 Guid 隔离逻辑（Guid 段防文件名冲突）。</para>
+        /// 规范化前缀双保险第二层（V0.3.1 BL-P0）——<paramref name="fullPath"/> 必须等于 RootPath
+        /// 或以 "RootPath + 目录分隔符" 开头（OrdinalIgnoreCase）；分隔符边界防兄弟目录前缀误判（如 root2）。
         /// </summary>
-        private static void EnsureSafeRelativePath(string path, string paramName)
+        private bool IsUnderRoot(string fullPath)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(path);
-            var safe = path.Replace('\\', '/');
-            var segments = safe.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (segments.Length == 0 || segments.Any(s => s is "." or ".."))
-                throw new ArgumentException("路径包含非法段（. / ..）", paramName);
-            if (segments.Any(s => s.Contains(':')))
-                throw new ArgumentException("路径包含非法盘符", paramName);
+            var root = Path.GetFullPath(_options.Value.RootPath);
+            var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar)
+                ? root : root + Path.DirectorySeparatorChar;
+            return fullPath.Equals(root, StringComparison.OrdinalIgnoreCase)
+                || fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
-        /// 上传文件名校验（C2 评审修复，UploadAsync 专用）——name 须为单段文件名：
-        /// 先过通用相对路径防穿越校验（拒绝 "."/".."/盘符），再拒绝分隔符注入（<see cref="Path.GetFileName(string)"/> 语义）。
+        /// 相对路径防穿越校验（V0.3.1 BL-P0 修复——段级白名单字符集 + 规范化前缀双保险，对齐 Metrics/Dashboard 白名单先例）：
+        /// ① <see cref="SafeRelativePathPattern"/> 整路径锚定——拒绝绝对路径/UNC（前导分隔符）、"."/".." 段、
+        ///    盘符/ADS（':'）、控制字符、空格、尾点/尾分隔符/尾随换行及一切白名单外字符；
+        /// ② <see cref="Path.GetFullPath(string)"/> 规范化后必须位于 RootPath 之下（OrdinalIgnoreCase 前缀，<see cref="IsUnderRoot"/>）——
+        ///    纵深防御（正则误配/未来放宽的兜底）。
+        /// <para>只用于用户可控输入路径；BlobStoring 内部生成的合法路径（"{guid}/{name}"）不受影响。
+        /// 校验失败抛 <see cref="ArgumentException"/>（fail-closed，延续 C2 语义）。</para>
         /// </summary>
-        private static void EnsureSafeFileName(string name)
+        private void EnsureSafeRelativePath(string path, string paramName)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+            var normalized = path.Replace('\\', '/');
+            // 整路径锚定正则（拒绝空段/尾分隔符/尾随换行——RemoveEmptyEntries 在此是陷阱：前导分隔符会被静默吞掉）
+            if (!SafeRelativePathPattern.IsMatch(normalized))
+                throw new ArgumentException(
+                    "路径仅允许 段(首尾字母/数字、中缀./_-) 以 '/' 分隔（拒绝绝对路径/UNC/盘符/穿越段/尾点/尾随换行/空白及控制字符）", paramName);
+
+            // 双保险：规范化后必须位于 RootPath 之下
+            var full = Path.GetFullPath(Path.Combine(_options.Value.RootPath, normalized));
+            if (!IsUnderRoot(full))
+                throw new ArgumentException("路径解析后超出存储根目录", paramName);
+        }
+
+        /// <summary>
+        /// 上传文件名校验（V0.3.1 起依赖白名单 <see cref="EnsureSafeRelativePath"/>，UploadAsync 专用）——
+        /// name 须为单段文件名：先过通用相对路径防穿越校验（拒绝白名单外一切形态），
+        /// 再拒绝分隔符注入（<see cref="Path.GetFileName(string)"/> 语义，防御纵深 + 精确错误消息）。
+        /// </summary>
+        private void EnsureSafeFileName(string name)
         {
             EnsureSafeRelativePath(name, nameof(name));
             if (Path.GetFileName(name) != name)

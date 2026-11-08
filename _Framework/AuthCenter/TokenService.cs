@@ -88,7 +88,11 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         var keys = _keys.Value;
         var now = DateTime.UtcNow;
         var jti = NewTokenId();
-        var exp = now.AddMinutes(_options.Value.AccessTokenExpirationMinutes);
+        // AC-08（V0.13.1）：长时表态——IsLongLived 时 access exp 按 LongLivedTokenExpirationDays（天）签发
+        //（壳端/低敏会话显式请求；默认 false 保持 2h 语义零变化；refresh 生命周期不变——仍是 30d rotation 收权点）
+        var exp = request.IsLongLived
+            ? now.AddDays(_options.Value.LongLivedTokenExpirationDays)
+            : now.AddMinutes(_options.Value.AccessTokenExpirationMinutes);
 
         var payload = new Dictionary<string, object>
         {
@@ -97,6 +101,8 @@ public sealed class TokenService : DomainServiceBase, ITokenService
             ["userId"] = request.UserId,
             ["authType"] = request.AuthType,
             ["auth_level"] = request.AuthLevel,
+            // AC-08（V0.13.1）：长时态标记恒写布尔（验签侧统一读 Claims["long_lived"]="true"/"false"；旧 token 无该键——容缺失）
+            ["long_lived"] = request.IsLongLived,
             ["exp"] = new DateTimeOffset(exp).ToUnixTimeSeconds(),
             ["iat"] = new DateTimeOffset(now).ToUnixTimeSeconds(),
             ["jti"] = jti,
@@ -129,7 +135,10 @@ public sealed class TokenService : DomainServiceBase, ITokenService
             CreateTime = now
         }, ct);
 
-        return new TokenIssueResult(accessToken, refreshToken, _options.Value.AccessTokenExpirationMinutes * 60);
+        return new TokenIssueResult(accessToken, refreshToken,
+            request.IsLongLived
+                ? (int)TimeSpan.FromDays(_options.Value.LongLivedTokenExpirationDays).TotalSeconds
+                : _options.Value.AccessTokenExpirationMinutes * 60);
     }
 
     public async Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default)
@@ -267,7 +276,7 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         }
     }
 
-    public async Task RevokeTokenAsync(string jti, string reason, string? userId = null, CancellationToken ct = default)
+    public async Task RevokeTokenAsync(string jti, string reason, string? userId = null, DateTime? tokenExpiresAt = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(jti)) return;
 
@@ -275,7 +284,10 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         var existing = await BlacklistDataService.GetByJtiAsync(jti, ct);
         if (existing != null) return; // 幂等
 
-        // ExpiresAt = 该 token 自然过期（近似：剩余生命 ≤ 全生命周期——调用方通常先 ValidateToken 后撤销）
+        // AC-08（V0.13.1，评审 P1-3）黑名单 TTL 适配：ExpiresAt 覆盖 token 全生命——
+        //   ① 调用方持验签结果传 token 实际 exp（logout 链路 ambient 已带，L321 透传）= 精准覆盖（含 7d 长时态）；
+        //   ② 缺省（纯 jti 撤销、无载荷）按签发语义保守回退 LongLivedTokenExpirationDays 天
+        //      （任何签发形态均覆盖——黑名单行 jti 唯一只增，多留不早删无副作用，防清理任务提前删除失效行）。
         var now = DateTime.UtcNow;
         await BlacklistDataService.CreateAsync(new AuthTokenBlacklistEntity
         {
@@ -283,7 +295,7 @@ public sealed class TokenService : DomainServiceBase, ITokenService
             // AC-11（B 档）：可选 userId 参数（logout 链路带上下文传入）——黑名单行落真实归属者，
             // 替代原空串（审计留痕受益：UserId 可追溯撤销来源账号）；默认 null 保持既有调用零改动
             UserId = userId ?? "",
-            ExpiresAt = now.AddMinutes(_options.Value.AccessTokenExpirationMinutes),
+            ExpiresAt = tokenExpiresAt ?? now.AddDays(_options.Value.LongLivedTokenExpirationDays),
             RevokedAt = now,
             Reason = reason
         }, ct);
@@ -318,7 +330,8 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         if (ambient is null)
             throw new AuthenticationException("AUTH_REQUIRED"); // 非 Bearer 认证请求——无当前令牌可撤销（应被 401 前置拦截）
 
-        await RevokeTokenAsync(ambient.Jti, "logout", ambient.UserId, ct);
+        // AC-08（V0.13.1，评审 P1-3）：logout 链路 ambient 已带 token exp——透传黑名单行覆盖 token 全生命（含 7d 长时态）
+        await RevokeTokenAsync(ambient.Jti, "logout", ambient.UserId, ambient.ExpiresAtUtc.UtcDateTime, ct);
     }
 
     /// <summary>启动预检（Initializer.InitializeAsync 经系统作用域解析实例后调用）——触发密钥懒加载，生产 fail-fast（缺 Issuer/密钥 → InvalidOperationException）。</summary>

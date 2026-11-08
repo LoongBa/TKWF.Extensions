@@ -210,6 +210,28 @@ public class OidcConfiguredChannelTests : OidcChannelTestHost
     }
 
     [Fact]
+    public async Task AuthenticateAsync_WithInjectedRedirectUri_OutboundExchangeCarriesSameUrl()
+    {
+        // OIDC 同源修复（B3——评审后记 L610 合并立项，通道零代码改动）：装配层注入 redirect_uri =
+        // 当前请求完整 URL（回调端点，oauth回调装配层修复 §4.1）→ OidcChannelBase 软读（L86 TryGetValue）
+        // → 出站换取（ExchangeCodeAsync）携带同一值 → 标准 IdP 比对通过（RFC 6749 §4.1.3）。
+        // stub 捕获换取请求表单断言——零通道代码改动的行为修正证据。
+        const string injectedCallbackUrl = "http://localhost/api/feberation/oidc/oauth/test-oidc/callback";
+        var (_, channel) = await Setup();
+
+        var result = await channel.AuthenticateAsync(
+            OidcTestHost.CreateContext(
+                ("code", "valid-code-2"),
+                ("redirect_uri", injectedCallbackUrl),   // 装配层注入值（= IdP 回跳请求 URL）
+                ("code_verifier", OidcChannelFlow.GenerateCodeVerifier())),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(TestSub, result.ExternalUserId);
+        Assert.Equal(injectedCallbackUrl, Assert.IsType<StubOidcHandler>(TestOidcHandler).LastTokenRequestRedirectUri);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_PkceEnabled_MissingVerifier_Rejected()
     {
         // UsePkce 默认 true——context 无 code_verifier → 拒绝（OidcChannelFlow 校验）

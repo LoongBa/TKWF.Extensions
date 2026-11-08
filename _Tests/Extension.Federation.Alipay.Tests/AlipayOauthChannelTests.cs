@@ -82,6 +82,25 @@ public class AlipayOauthChannelTests : AlipayChannelTestHost
     }
 
     [Fact]
+    public async Task AuthenticateAsync_AuthCodeOnly_DualKeyFallback_Succeeds()
+    {
+        // 防御路径（AL-1 建议②三管齐下——装配层归一 + 通道双键）：仅 auth_code 键（无 code）——
+        // 零装配直调/装配层归一缺失场景 → 通道 code ?? auth_code 双键兼容兜底 → 成功（不依赖装配层）。
+        using var _ = this;
+        var (_, channel) = await Setup();
+
+        var result = await channel.AuthenticateAsync(
+            AlipayTestHost.CreateContext(
+                ("auth_code", "alipay-auth-code-789"),
+                ("redirect_uri", AlipayTestHost.TestRedirectUri)),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(AlipayTestHost.TestUserId, result.ExternalUserId);   // auth_code 双键命中 → 换取成功
+        Assert.Null(result.FailReason);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_MissingRedirectUri_Fails_ALIPAY_REDIRECT_URI_REQUIRED()
     {
         // N4 P1-2：redirect_uri 必填（防开放重定向——与支付宝控制台回调配置一致比对归装配层；通道仅校验注入存在）

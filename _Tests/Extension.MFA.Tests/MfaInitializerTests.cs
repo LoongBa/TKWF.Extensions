@@ -201,6 +201,19 @@ public class MfaInitializerTests
         Assert.NotNull(attr);
         Assert.Equal(typeof(MFAExtensionInitializer<>), attr!.InitializerType);
     }
+
+    [Fact]
+    public void MfaChallengeContext_Phone_IsObsolete_CompileTimeWarning()
+    {
+        // MF-03（P2-2/P2-3）：MfaChallengeContext.Phone 带 [property: Obsolete]——故意使用已废弃槽位得 CS0618 编译警示
+        //（静态导出调用面违约——消费方赋值/读取即见警告）；pragma disable/restore 对夹紧用例体：
+        // 文档性用例不阻断编译、CI 保持 0 警告卫生（警示效果以本注记锚定，xunit 无法断言编译警告）
+#pragma warning disable CS0618   // 故意使用已废弃 Phone 槽位——验证 [property: Obsolete] 生效
+        var ctx = new MfaChallengeContext("13900000104");
+        var phone = ctx.Phone;
+#pragma warning restore CS0618
+        Assert.Equal("13900000104", phone);
+    }
 }
 
 /// <summary>

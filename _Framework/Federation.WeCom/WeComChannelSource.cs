@@ -31,6 +31,12 @@ public sealed class WeComChannelSource : IChannelSource
     /// <inheritdoc />
     public string PlatformType => "wecom";
 
+    /// <summary>能力声明（I2-2 §3.5——企业微信双通道实际能力面）：<c>OAuth | Event</c>——wecom_oauth（AuthenticateAsync）
+    /// + wecom_event（I2-2 起 HandleEventAsync 真实解析产出 ChannelEvent + VerifyUrlAsync echostr 握手）。
+    /// <para><b>不声明</b> <c>Follow</c>/<c>FollowQuery</c>——企微关注应用事件属成员关系非"公众号关注"订阅语义
+    /// （subscribe/unsubscribe 原文透传不翻关注状态，P1-3）、反查未立项（YAGNI）。</para></summary>
+    public ChannelCapabilities Capabilities => ChannelCapabilities.OAuth | ChannelCapabilities.Event;
+
     /// <inheritdoc />
     public IReadOnlyList<ChannelConfig> GetChannels()
     {

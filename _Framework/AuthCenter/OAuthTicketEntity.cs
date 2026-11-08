@@ -69,5 +69,11 @@ namespace TKWF.Ext.AuthCenter
         /// <summary>创建时间（UTC）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 12)]
         public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+
+        /// <summary>原始认证方式归因（AC-10 V0.13.1——签发方落票：口令兑换/redeem 等显式传值；
+        /// null = 存量票未携带，换发回退 sms——审计归因保留，refresh 链自动继承）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 13)]
+        [MaxLength(20)]
+        public string? AuthType { get; set; }
     }
 }

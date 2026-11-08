@@ -128,6 +128,80 @@ public class RedemptionAndAppsQueryServiceTests
         Assert.Null(app.ExpiresAtUtc);                           // ValidUntil null = 持续授权
     }
 
+    // ── AS-04 软禁用语义（V0.2.1 兑现——视图投影 IsEnabled + DataService predicate 排除，方案 §5 T1-T4） ──
+
+    [Fact]
+    public async Task GetAppsAsync_SoftDisabledApp_ExcludedFromAggregation()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
+        await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-soft-disabled", status: 0, validUntil: DateTime.UtcNow.AddDays(365));
+
+        var user = BindUser(sp, "u-1001");
+        await user.Use<IAuthAppService>().CreateAppAsync("app-soft-disabled", "已下线应用", null, CancellationToken.None);
+        await user.Use<IAuthAppService>().SetEnabledAsync("app-soft-disabled", false, CancellationToken.None);
+
+        var list = await user.Use<IUserAppsQueryService>().GetAppsAsync("u-1001", CancellationToken.None);
+
+        Assert.Empty(list);                                      // 软禁用（IsEnabled=false）→ "我的应用"聚合排除
+    }
+
+    [Fact]
+    public async Task GetAppsAsync_ReEnabledApp_ReappearsInAggregation()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
+        await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-re-enabled", status: 0, validUntil: DateTime.UtcNow.AddDays(365));
+
+        var user = BindUser(sp, "u-1001");
+        var appService = user.Use<IAuthAppService>();
+        await appService.CreateAppAsync("app-re-enabled", "恢复应用", null, CancellationToken.None);
+        await appService.SetEnabledAsync("app-re-enabled", false, CancellationToken.None);
+        Assert.Empty(await user.Use<IUserAppsQueryService>().GetAppsAsync("u-1001", CancellationToken.None));
+
+        await appService.SetEnabledAsync("app-re-enabled", true, CancellationToken.None);   // 恢复启用
+
+        var list = await user.Use<IUserAppsQueryService>().GetAppsAsync("u-1001", CancellationToken.None);
+        var app = Assert.Single(list);                           // 重新包含
+        Assert.Equal("app-re-enabled", app.AppId);
+        Assert.Equal("恢复应用", app.AppName);                    // AppName 正确映射回显
+    }
+
+    [Fact]
+    public async Task SoftDisabledApp_StillVisibleInCatalog_NotDeleted()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
+        await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-soft-disabled", status: 0, validUntil: null);
+
+        var user = BindUser(sp, "u-1001");
+        await user.Use<IAuthAppService>().CreateAppAsync("app-soft-disabled", "已下线应用", null, CancellationToken.None);
+        await user.Use<IAuthAppService>().SetEnabledAsync("app-soft-disabled", false, CancellationToken.None);
+
+        var row = fsql.Select<AuthAppEntity>().Where(e => e.AppId == "app-soft-disabled").ToOne();
+        Assert.NotNull(row);                                     // 软禁用 ≠ 物理删除（目录行保留）
+        Assert.False(row.IsEnabled);                             // 状态 = 禁用
+    }
+
+    [Fact]
+    public async Task GetAppsAsync_NoCatalogEntry_NullIsEnabled_NotExcluded()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        await AuthSurfaceTestHost.SeedAccountAsync(fsql, "u-1001");
+        await AuthSurfaceTestHost.SeedGrantAsync(fsql, "u-1001", "app-no-catalog", status: 0, validUntil: null);   // 无 AuthApp 目录行 → 视图 IsEnabled NULL
+
+        var user = BindUser(sp, "u-1001");
+        var list = await user.Use<IUserAppsQueryService>().GetAppsAsync("u-1001", CancellationToken.None);
+
+        var app = Assert.Single(list);
+        Assert.Equal("app-no-catalog", app.AppId);
+        Assert.Null(app.AppName);                                // 目录未录入 ≠ 禁用——NULL 视同启用不排除
+    }
+
     // ── UC-6：我的应用仅本人 ──
 
     [Fact]

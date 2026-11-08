@@ -19,9 +19,11 @@ public class QqOauthChannelTests : QqChannelTestHost
     private const string TestOpenId = "test_openid_1";
     private const string TestChannelId = "qq-main";
 
-    private async Task<(DomainUser<TestUserInfo> User, QqOauthChannel Channel)> Setup(bool failOauth = false, bool failMe = false, bool redirectMismatch = false)
+    private async Task<(DomainUser<TestUserInfo> User, QqOauthChannel Channel)> Setup(
+        bool failOauth = false, bool failMe = false, bool redirectMismatch = false, string? expectedRedirectUri = null)
     {
-        Handler = QqTestHost.CreateStubHandler(TestOpenId, failOauth: failOauth, failMe: failMe, redirectMismatch: redirectMismatch);
+        Handler = QqTestHost.CreateStubHandler(TestOpenId, failOauth: failOauth, failMe: failMe,
+            redirectMismatch: redirectMismatch, expectedRedirectUri: expectedRedirectUri);
         ConfigureOptions = o => o.Channels = [QqTestHost.CreateChannelConfig(channelId: TestChannelId, appId: TestAppId)];
         var (_, user) = BindTestScope();
         // v0.3.0：经 ISsoChannelFactory 按 channelId 构造真实实例（凭证从 registry 懒加载）
@@ -76,6 +78,27 @@ public class QqOauthChannelTests : QqChannelTestHost
         Assert.False(result.Success);
         Assert.Equal("QQ_CODE_REQUIRED", result.FailReason);
         Assert.Null(result.ExternalUserId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_WithInjectedCallbackRedirectUri_Succeeds()
+    {
+        // 装配层注入正用例（QQ-1 P0 修复后契约成立前提——B1 闭环）：回调时装配层服务端可信注入
+        // redirect_uri = 当前请求 URL（/api/feberation 挂载形态——QQ 302 回调仅 code+state 不带该键）→
+        // 通道读取注入键 → 出站换取链携带同一值 → QQ 服务端一致性比对通过（stub 按注入值比对）→ 成功 openid。
+        const string injectedCallbackUrl = "http://localhost/api/feberation/qq/oauth/qq-main/callback";
+        using var _ = this;
+        var (_, channel) = await Setup(expectedRedirectUri: injectedCallbackUrl);   // 桩按注入值比对（注入值 = 服务端权威）
+
+        var result = await channel.AuthenticateAsync(
+            QqTestHost.CreateContext(
+                ("code", "qq-oauth-code-456"),
+                ("redirect_uri", injectedCallbackUrl)),   // 装配层注入的当前请求 URL
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(TestOpenId, result.ExternalUserId);   // 出站链携带注入值 → 换取成功
+        Assert.Null(result.FailReason);
     }
 
     [Fact]

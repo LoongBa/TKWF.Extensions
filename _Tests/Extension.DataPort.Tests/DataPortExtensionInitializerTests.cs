@@ -134,6 +134,51 @@ public class DataPortExtensionInitializerTests
 
         Assert.Equal(500, options.DefaultBatchSize);
         Assert.False(options.StopOnBatchFailure);
+        // V0.1.5（DP-05）：超时治理默认值（超时 60 分钟 + 心跳 1 分钟）
+        Assert.Equal(60, options.ProcessingTimeoutMinutes);
+        Assert.Equal(1, options.HeartbeatIntervalMinutes);
+    }
+
+    [Fact]
+    public void ConfigureServices_RegistersStaleImportRecoveryService_GuardFactory()
+    {
+        var services = new ServiceCollection();
+        new DataPortExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // V0.1.5（DP-05）：AddConstructibleService——接口注册为可构造守卫工厂（非实现映射），Scoped 生命周期
+        var descriptor = services.First(d => d.ServiceType == typeof(IStaleImportRecoveryService));
+
+        Assert.Null(descriptor.ImplementationType);
+        Assert.NotNull(descriptor.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void ConfigureServices_RegistersStaleImportRecoveryService_ThrowFactory()
+    {
+        var services = new ServiceCollection();
+        new DataPortExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+
+        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IStaleImportRecoveryService>() 创建
+        var descriptor = services.First(d => d.ServiceType == typeof(StaleImportRecoveryService));
+        Assert.NotNull(descriptor.ImplementationFactory);
+
+        var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<StaleImportRecoveryService>());
+    }
+
+    [Fact]
+    public void StaleImportRecoveryService_OutsideUseScope_Throws()
+    {
+        // AddConstructibleService 的 CurrentAopUser 守卫——非 User.Use<T>() 调用链内解析即抛（DI004 运行期兜底）
+        var services = new ServiceCollection();
+        new DataPortExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        services.AddLogging();
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IStaleImportRecoveryService>());
+        Assert.Contains("领域架构守卫", ex.Message);
+        Assert.Contains("IStaleImportRecoveryService", ex.Message);
     }
 
     [Fact]

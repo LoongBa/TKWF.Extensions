@@ -34,11 +34,19 @@ public sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
     private OAuthTicketEntityDataService? _dataService;
     private ITokenService? _tokenService;
     private IAuthGrantCommandService? _grantCommandService;
+    private IFreezeStateProvider? _freezeState;
+    private IAuthAccountQueryService? _accountQuery;
     private readonly ILogger<OAuthTicketService> _logger;
 
     private OAuthTicketEntityDataService DataService => _dataService ??= User.Use<OAuthTicketEntityDataService>();
     private ITokenService TokenService => _tokenService ??= User.Use<ITokenService>();
     private IAuthGrantCommandService GrantCommandService => _grantCommandService ??= User.Use<IAuthGrantCommandService>();
+
+    // AC-04（V0.13.1）：票据换发冻结守卫——懒加载镜像 TokenService L54-55 形态（DI004 零豁免）。
+    // 冻结判定经 IFreezeStateProvider（帧内快照 + 写路径失效）；账号启用经 IAuthAccountQueryService 只读面
+    // （GetByUIdAsync 返回完整 AuthAccountEntity——Refresh L240 同款判定来源，评审 P1-2）。
+    private IFreezeStateProvider FreezeState => _freezeState ??= User.Use<IFreezeStateProvider>();
+    private IAuthAccountQueryService AccountQuery => _accountQuery ??= User.Use<IAuthAccountQueryService>();
 
     /// <summary>构造——注入认证中心配置、用户上下文与日志（DataService/TokenService 经 User.Use&lt;T&gt;() 懒加载）。</summary>
     public OAuthTicketService(
@@ -89,6 +97,7 @@ public sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
             State = request.State,
             CodeVerifierHash = codeVerifierHash,
             UserId = request.UserId, // V0.8.0 B5：签发即绑定（authorize 时用户已登录带 UId——非空则落库）
+            AuthType = request.AuthType, // AC-10（V0.13.1）：原始认证方式归因落票（口令兑换/redeem 等签发方显式传值；null=存量零破坏）
             ExpiresAt = DateTime.UtcNow.AddMinutes(_options.TicketExpirationMinutes),
             CreateTime = DateTime.UtcNow
         };
@@ -158,6 +167,16 @@ public sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
                 throw new AuthenticationException("TICKET_NOT_BOUND");
             }
 
+            // (g') AC-04（V0.13.1，评审 P1-2）：票据换令牌 = 认证完成路径——禁用/冻结用户不得换发（对齐
+            // TokenService.RefreshTokenAsync L240-241 双检语义——禁用双检 + 冻结拦截；票不消耗，解冻后仍可用）。
+            // 账号启用经 IAuthAccountQueryService 只读面判定（ACCOUNT_DISABLED 显式语义而非复用 ACCOUNT_NOT_FOUND——
+            // 禁用账号不得换发新令牌）；冻结经 IFreezeStateProvider 帧内快照（ACCOUNT_FROZEN 400）。
+            var acct = await AccountQuery.GetByUIdAsync(entity.UserId, ct);
+            if (acct is null || !acct.IsEnabled)
+                throw new DomainException("ACCOUNT_DISABLED") { ErrorCode = "ACCOUNT_DISABLED" };
+            if (await FreezeState.IsFrozenAsync(entity.UserId, ct: ct))
+                throw new DomainException("ACCOUNT_FROZEN") { ErrorCode = "ACCOUNT_FROZEN" };
+
             // (h) 条件标记已消费（单次消费防重放——Oracle M2：输者抛 TICKET_CONSUMED）
             if (!await DataService.MarkConsumedAsync(entity.Id, DateTime.UtcNow, ct))
             {
@@ -165,12 +184,13 @@ public sealed class OAuthTicketService : DomainServiceBase, IOAuthTicketService
             }
 
             // (i) 签发 JWT 对。
-            // 说明：票据换取是认证完成路径，调用方在签发时已绑定用户；此处认证方式取默认登录方式 sms，
-            //      认证强度取手机号级（AuthLevel.Phone）。V0.9.0：teacher_verified 声明移除（A.4 ——令牌不再携带业务声明）。
+            // AC-10（V0.13.1）：认证方式沿用票载原始归因（entity.AuthType）——口令兑换/redeem 等签发方显式传值；
+            // 存量票（AuthType null）回退默认登录方式 sms（与既有语义逐 bit 一致）。认证强度仍取手机号级
+            // （AuthLevel.Phone——账号级派生不改，审计基线不动）。V0.9.0：teacher_verified 声明移除（A.4）。
             var tokenResult = await TokenService.IssueTokenAsync(
                 new TokenIssueRequest(
                     entity.UserId,
-                    AuthTypes.Sms,
+                    entity.AuthType ?? AuthTypes.Sms,
                     (int)AuthLevel.Phone),
                 ct);
 

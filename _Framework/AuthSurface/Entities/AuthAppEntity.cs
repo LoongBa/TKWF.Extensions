@@ -32,7 +32,8 @@ public partial class AuthAppEntity
     [FreeSql.DataAnnotations.Column(Position = 4, IsNullable = true, StringLength = 512)]
     public string? Icon { get; set; }
 
-    /// <summary>启用标记——false = 软禁用（应用不出现在"我的应用"聚合结果语义由门面保证）。</summary>
+    /// <summary>启用标记——false = 软禁用（应用不出现在"我的应用"聚合结果语义由门面保证；
+    /// 聚合排除已兑现：视图 IsEnabled 列 + DataService 过滤，v0.2.1）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 5)]
     public bool IsEnabled { get; set; } = true;
 

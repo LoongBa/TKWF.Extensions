@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
@@ -195,5 +196,165 @@ public class WeComEventChannelTests : WeComChannelTestHost
         Assert.False(result.Success);
         Assert.Equal("WECOM_EVENT_DECRYPT_FAILED", result.FailReason);
         Assert.Null(result.ExternalUserId);
+    }
+
+    // ═══════════════════ I2-2 契约跟进（V0.4.2——HandleEventAsync/VerifyUrlAsync/Capabilities/P1-3） ═══════════════════
+
+    /// <summary>构造合法事件样本（任意 XML——subscribe/change_contact 等，receiveid=corpId/suiteId）。</summary>
+    private static (string MsgEncrypt, string Timestamp, string Nonce, string Signature) BuildEvent(
+        string xml, string receiveId = TestCorpId)
+    {
+        var msgEncrypt = WeComEventCrypto.EncryptMsg(xml, TestAesKey, receiveId);
+        var timestamp = "1403610513";
+        var nonce = "test-nonce";
+        var signature = WeComEventCrypto.ComputeSignature(TestToken, timestamp, nonce, msgEncrypt);
+        return (msgEncrypt, timestamp, nonce, signature);
+    }
+
+    /// <summary>W-1：HandleEventAsync 正向（change_contact + ChangeType=update_user）——Parsed ChannelEvent：
+    /// EventType 复合 change_contact:update_user；ExternalUserId 双策略（自建 {CorpId}:{userid} / 三方 OpenUserID）；
+    /// OccurredAt=CreateTime→UTC；RawPayload=明文 XML。</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HandleEventAsync_ValidEvent_ParsesChannelEvent(bool isThirdParty)
+    {
+        using var _ = this;
+        var channel = await Setup(isThirdParty: isThirdParty);
+        var (msgEncrypt, timestamp, nonce, signature) = isThirdParty
+            ? BuildValidEvent(userId: TestUserId, openUserId: TestOpenUserId)                     // 三方——OpenUserID 优先
+            : BuildValidEvent(userId: TestUserId);                                                // 自建——{CorpId}:{userid} 复合
+
+        var outcome = await channel.HandleEventAsync(
+            WeComTestHost.CreateEventContext(
+                ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", msgEncrypt)),
+            CancellationToken.None);
+
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);
+        var evt = outcome.Event!;
+        Assert.Equal(TestChannelId, evt.ChannelId);
+        Assert.Equal("wecom_event", evt.ChannelType);
+        Assert.Equal(isThirdParty ? TestOpenUserId : $"{TestCorpId}:{TestUserId}", evt.ExternalUserId);
+        Assert.Equal("change_contact:update_user", evt.EventType);               // 复合保留子类型（§4.3 建议）
+        Assert.Equal("update_user", evt.Source);                                 // Source = ChangeType
+        Assert.Equal("change_contact", evt.Attributes["wecom.Event"]);
+        Assert.Equal("update_user", evt.Attributes["wecom.ChangeType"]);
+        Assert.Equal(TestUserId, evt.Attributes["wecom.UserID"]);
+        Assert.Equal(isThirdParty ? TestOpenUserId : null, evt.Attributes["wecom.OpenUserID"]);
+        var expected = DateTimeOffset.FromUnixTimeSeconds(1403610513).UtcDateTime;
+        Assert.Equal(expected, evt.OccurredAt);                                 // CreateTime → UTC
+        Assert.Contains("<Event><![CDATA[change_contact]]></Event>", evt.RawPayload!);
+    }
+
+    /// <summary>W-2：HandleEventAsync 篡改签名 → Rejected（一票否决）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_TamperedSignature_Rejected()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var (msgEncrypt, timestamp, nonce, signature) = BuildValidEvent(userId: TestUserId);
+        var tampered = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
+
+        var outcome = await channel.HandleEventAsync(
+            WeComTestHost.CreateEventContext(
+                ("msg_signature", tampered), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", msgEncrypt)),
+            CancellationToken.None);
+
+        Assert.Equal(ChannelEventOutcomeState.Rejected, outcome.State);
+    }
+
+    /// <summary>W-3：VerifyUrlAsync echostr 握手正向（WC-2 闭环）——验签 + AES 解密回显明文
+    /// （委托 VerifyAndDecryptEcho）；篡改签名 → null（负向同用例 Theory）。</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task VerifyUrlAsync_ValidEcho_EchoesPlain(bool tamperSignature)
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var timestamp = "1403610513";
+        var nonce = "test-nonce";
+        var echostr = WeComEventCrypto.EncryptMsg("echo-plain-123", TestAesKey, TestCorpId);
+        var signature = WeComEventCrypto.ComputeSignature(TestToken, timestamp, nonce, echostr);
+        if (tamperSignature)
+            signature = signature[..^1] + (signature[^1] == '0' ? '1' : '0');
+
+        var echoPlain = await channel.VerifyUrlAsync(
+            WeComTestHost.CreateEventContext(
+                ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("echostr", echostr)),
+            CancellationToken.None);
+
+        if (tamperSignature)
+            Assert.Null(echoPlain);
+        else
+            Assert.Equal("echo-plain-123", echoPlain);                            // 回显解密明文
+    }
+
+    /// <summary>W-4：VerifyUrlAsync 失败归一 null（缺参数/验签失败/解密失败——装配层 400 语义）。</summary>
+    [Fact]
+    public async Task VerifyUrlAsync_Failures_Null()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var timestamp = "1403610513";
+        var nonce = "test-nonce";
+
+        // ① 缺参（无 echostr）→ null
+        var missing = await channel.VerifyUrlAsync(
+            WeComTestHost.CreateEventContext(("timestamp", timestamp), ("nonce", nonce)), CancellationToken.None);
+        Assert.Null(missing);
+
+        // ② 验签失败（msg_signature 短签名）→ null
+        var badSig = await channel.VerifyUrlAsync(
+            WeComTestHost.CreateEventContext(
+                ("msg_signature", "short-sig"), ("timestamp", timestamp), ("nonce", nonce), ("echostr", "cipher-x")),
+            CancellationToken.None);
+        Assert.Null(badSig);
+
+        // ③ 解密失败（echostr 用错误 AESKey 加密——签名指向该密文通过 → DecryptAndVerify 抛 → catch 归一 null）
+        var echoWrongKey = WeComEventCrypto.EncryptMsg("echo-plain-123", WeComTestHost.GenerateEncodingAESKey(), TestCorpId);
+        var sigWrong = WeComEventCrypto.ComputeSignature(TestToken, timestamp, nonce, echoWrongKey);
+        var decryptFail = await channel.VerifyUrlAsync(
+            WeComTestHost.CreateEventContext(
+                ("msg_signature", sigWrong), ("timestamp", timestamp), ("nonce", nonce), ("echostr", echoWrongKey)),
+            CancellationToken.None);
+        Assert.Null(decryptFail);
+    }
+
+    /// <summary>W-5：HandleEventAsync subscribe 事件原文透传（P1-3 定案选项 b）——EventType="subscribe"
+    /// 不产 follow、不翻关注状态；身份 = FromUserName 兜底（关注事件无 UserID/OpenUserID，§4.3 三源链）。</summary>
+    [Fact]
+    public async Task HandleEventAsync_SubscribeEvent_Passthrough()
+    {
+        using var _ = this;
+        var channel = await Setup();
+        var xml = "<xml><ToUserName><![CDATA[ww_test_corp]]></ToUserName><FromUserName><![CDATA[om_member_openid]]></FromUserName>"
+            + "<CreateTime>1403610513</CreateTime><MsgType><![CDATA[event]]></MsgType><Event><![CDATA[subscribe]]></Event></xml>";
+        var (msgEncrypt, timestamp, nonce, signature) = BuildEvent(xml);
+
+        var outcome = await channel.HandleEventAsync(
+            WeComTestHost.CreateEventContext(
+                ("msg_signature", signature), ("timestamp", timestamp), ("nonce", nonce), ("msg_encrypt", msgEncrypt)),
+            CancellationToken.None);
+
+        Assert.Equal(ChannelEventOutcomeState.Parsed, outcome.State);
+        var evt = outcome.Event!;
+        Assert.Equal("subscribe", evt.EventType);                               // 原文透传——不产 follow（P1-3）
+        Assert.Equal("om_member_openid", evt.ExternalUserId);                   // FromUserName 兜底（三源链末位）
+        Assert.Equal("subscribe", evt.Attributes["wecom.Event"]);
+    }
+
+    /// <summary>W-6：WeComChannelSource.Capabilities 含 Event|OAuth（能力面锁定——I2-2 §3.5，不声明 Follow）。</summary>
+    [Fact]
+    public async Task ChannelSource_Capabilities_DeclaresEventOAuth()
+    {
+        using var _ = this;
+        await Setup();
+        var (provider, _) = BindTestScope();
+        var source = provider.GetRequiredService<IChannelSource>();
+        var caps = source.Capabilities;
+        Assert.True(caps.HasFlag(ChannelCapabilities.Event));
+        Assert.True(caps.HasFlag(ChannelCapabilities.OAuth));
+        Assert.False(caps.HasFlag(ChannelCapabilities.Follow));                 // 不声明 Follow（§3.5——企微无公众号关注订阅语义）
     }
 }

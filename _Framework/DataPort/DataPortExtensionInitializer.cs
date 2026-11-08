@@ -1,5 +1,8 @@
+using System;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Utility.DataPort;
@@ -11,9 +14,13 @@ namespace TKWF.Ext.DataPort
     /// DataPort 扩展初始化器——经 <c>[TKWFExtension]</c> 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
     /// <item><see cref="ConfigureServices"/>——注册 ImportService/ExportService + MiniExcel Provider（接线型普通 DI）+
-    ///       <see cref="IDataImportTaskService"/>（V4.10.53 AddConstructibleService 门面）+ <see cref="DataPortOptions"/> Options 绑定（TKWF:DataPort）</item>
+    ///       <see cref="IDataImportTaskService"/>（V4.10.53 AddConstructibleService 门面）+ <see cref="IStaleImportRecoveryService"/>
+    ///       （V0.1.5 DP-05 超时恢复门面）+ <see cref="DataPortOptions"/> Options 绑定（TKWF:DataPort）+
+    ///       <see cref="StandaloneDomainUserAccessor{TUserInfo}"/>（V0.1.5 启动扫描 SystemUser 供应，对齐 BackgroundJobs V0.4.1 先例）</item>
     /// <item>ConfigureFilters——不调用（V0.1.0 无过滤器）</item>
-    /// <item>InitializeAsync——不调用（V0.1.0 无种子数据）</item>
+    /// <item>InitializeAsync——启动扫描（DP-05 V0.1.5）：System 作用域经 SystemUser 执行一次
+    ///       <see cref="IStaleImportRecoveryService.RecoverStaleImportsAsync"/>（异常静默 + LogWarning，绝不阻断宿主启动；
+    ///       进程崩溃 → 下次启动即治愈超时 Processing；周期兜底由消费方调度文档示例负责）</item>
     /// </list>
     /// </summary>
     [TKWFExtension("DataPort")]
@@ -65,6 +72,37 @@ namespace TKWF.Ext.DataPort
             // 实现继承 DomainServiceBase（经基类 User 取上下文）+ [DiContractIgnore] 豁免 DI001（运行时手写注册）。
             // 数据访问红线（2026-09-07）：实现委托 SG1 DataService，禁裸 IFreeSql。
             services.AddConstructibleService<IDataImportTaskService, DataImportTaskService>();
+
+            // V0.1.5（DP-05）：超时恢复门面——AddConstructibleService 同形态（消费方经 User.Use<IStaleImportRecoveryService>() 解析）
+            services.AddConstructibleService<IStaleImportRecoveryService, StaleImportRecoveryService>();
+
+            // V0.1.5（DP-05）：StandaloneDomainUserAccessor——InitializeAsync 启动扫描的 SystemUser 供应者
+            // （三桥 System 帧/BeginSystemScopeAsync 内已设，对齐 BackgroundJobs V0.4.1 先例；TryAdd 防重复注册）
+            services.TryAddSingleton<IDomainUserAccessor<TUserInfo>, StandaloneDomainUserAccessor<TUserInfo>>();
+        }
+
+        /// <summary>
+        /// 系统就绪后启动扫描（V0.1.5 DP-05）——System 作用域内执行一次超时恢复：
+        /// 进程崩溃 → 记录冻结 Processing → 下次启动即治愈（重启正是卡死主场景，对齐"异常静默 + 后台 fire-and-forget"）。
+        /// <para>异常静默 + LogWarning——绝不阻断宿主启动（数据服务不可用时跳过）；周期兜底由消费方周期调度示例负责（文档）。</para>
+        /// </summary>
+        public override async Task InitializeAsync(System.IServiceProvider sp)
+        {
+            try
+            {
+                // SystemUser 经 StandaloneDomainUserAccessor（Startup 帧内由框架 SetCurrentUser + BindScope 双通道绑定）——NoAop 直建恢复服务
+                var accessor = sp.GetService<IDomainUserAccessor<TUserInfo>>();
+                var systemUser = accessor?.DomainUser;
+                if (systemUser is null) return;
+
+                var recovery = systemUser.Use<IStaleImportRecoveryService>();
+                await recovery.RecoverStaleImportsAsync();
+            }
+            catch (Exception ex)
+            {
+                sp.GetService<ILogger<DataPortExtensionInitializer<TUserInfo>>>()
+                    ?.LogWarning(ex, "DataPort 启动超时恢复扫描失败（异常静默，不阻断宿主启动）");
+            }
         }
     }
 }

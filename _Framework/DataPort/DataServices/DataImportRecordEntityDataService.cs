@@ -29,7 +29,8 @@ partial class DataImportRecordEntityDataService(IDomainUser user, IEntityDAC<Dat
     public async Task CreateAsync(DataImportRecordEntity record, CancellationToken ct = default)
         => await EntityCreateAsync(record, ct);
 
-    /// <summary>重置失败批次为 Processing（原 raw SQL ①——StartTime 保留 CanUpdate=false 不覆盖，其余字段重置）。</summary>
+    /// <summary>重置失败批次为 Processing（原 raw SQL ①——StartTime 保留 CanUpdate=false 不覆盖，其余字段重置）。
+    /// V0.1.5（DP-04）：<b>不清空 FailedBatchIndexes/BatchSize/MaxAttemptedBatchIndex 三新列</b>——重导判定依据（整实体读改写自然保留）。</summary>
     public async Task ResetToProcessingAsync(long id, DateTime updateTime, CancellationToken ct = default)
     {
         var record = await EntityGetAsync(r => r.Id == id, ct);
@@ -46,10 +47,12 @@ partial class DataImportRecordEntityDataService(IDomainUser user, IEntityDAC<Dat
         await EntityUpdateAsync(record, ct);
     }
 
-    /// <summary>更新批次状态（原 raw SQL ②——成功/部分成功路径）。</summary>
+    /// <summary>更新批次状态（原 raw SQL ②——成功/部分成功路径）。
+    /// <para>V0.1.5（DP-04）尾参 ×2：<paramref name="failedBatchIndexes"/>（JSON 数字数组字符串，PartiallySucceeded 写入；Succeeded/Failed 传 null 清除）+ <paramref name="maxAttemptedBatchIndex"/>（已尝试最大批次索引，≥0 写入；null 不覆盖）。</para></summary>
     public async Task UpdateStatusAsync(
         long id, string status, int successCount, int failedCount, int batchFailureCount,
-        DateTime endTime, string? errorSummary, DateTime updateTime, CancellationToken ct = default)
+        DateTime endTime, string? errorSummary, DateTime updateTime, CancellationToken ct = default,
+        string? failedBatchIndexes = null, int? maxAttemptedBatchIndex = null)
     {
         var record = await EntityGetAsync(r => r.Id == id, ct);
         if (record == null) return;
@@ -61,8 +64,31 @@ partial class DataImportRecordEntityDataService(IDomainUser user, IEntityDAC<Dat
         record.EndTime = endTime;
         record.ErrorSummary = errorSummary;
         record.UpdateTime = updateTime;
+        // V0.1.5（DP-04）：终态一并写入重放判定状态（尾参可选——既有调用不传则保留原值，非破坏）
+        record.FailedBatchIndexes = failedBatchIndexes;
+        record.MaxAttemptedBatchIndex = maxAttemptedBatchIndex;
         await EntityUpdateAsync(record, ct);
     }
+
+    /// <summary>查询超时 Processing 记录（DP-05 恢复扫描复用——WHERE Status='Processing' AND UpdateTime&lt;阈值，走 TKWFIX_Dir_Status_Updatetime 索引）。</summary>
+    public async Task<List<DataImportRecordEntity>> ListStaleProcessingAsync(
+        DateTime olderThanUtc, int limit, CancellationToken ct = default)
+        => await EntitySelectAsync(r => r.Status == "Processing" && r.UpdateTime < olderThanUtc, skip: 0, limit: limit, ct: ct);
+
+    /// <summary>心跳 touch（DP-05 P1-2）——CAS 条件更新：仅 Processing 态刷新 UpdateTime（防覆写终态）；返回影响行数（0 = 已终态化，调用方停止心跳）。</summary>
+    public Task<int> TouchProcessingAsync(long id, DateTime utcNow, CancellationToken ct = default)
+        => EntityUpdateWhereAsync<DataImportRecordEntity>(
+            r => r.Id == id && r.Status == "Processing",
+            e => new DataImportRecordEntity { UpdateTime = utcNow },
+            ct);
+
+    /// <summary>CAS 恢复（DP-05 P1-1）——条件更新重置超时 Processing → Failed（WHERE Id AND Status='Processing' AND UpdateTime&lt;阈值），返回影响行数（0 = 并发终态化/心跳刷新/他实例已恢复→跳过）。</summary>
+    public Task<int> MarkStaleFailedAsync(
+        long id, DateTime staleBeforeUtc, string errorSummary, DateTime utcNow, CancellationToken ct = default)
+        => EntityUpdateWhereAsync<DataImportRecordEntity>(
+            r => r.Id == id && r.Status == "Processing" && r.UpdateTime < staleBeforeUtc,
+            e => new DataImportRecordEntity { Status = "Failed", EndTime = utcNow, ErrorSummary = errorSummary, UpdateTime = utcNow },
+            ct);
 
     /// <summary>标记批次失败（原 raw SQL ③——异常路径，best-effort）。</summary>
     public async Task MarkFailedAsync(long id, DateTime endTime, string errorSummary, DateTime updateTime, CancellationToken ct = default)

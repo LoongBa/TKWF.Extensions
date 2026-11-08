@@ -15,12 +15,16 @@ namespace TKWF.Ext.AuthCenter;
 /// <param name="DeviceInfo">签发设备信息（可选，随 Refresh Token 落库）。</param>
 /// <param name="ChannelType">渠道类型（T5 三层边界 2026-10-09——外部 IdP 登录时填平台库 channelType 如
 /// <c>wechat_oauth</c>/<c>qq_oauth</c>，JWT 写 <c>channel_type</c> claim；非空时写，null 不写。末位可选参数默认 null——零破坏既有调用）。</param>
+/// <param name="IsLongLived">长时表态（AC-08 V0.13.1——壳端/低敏会话显式请求：access exp 按
+/// <c>AuthCenterOptions.LongLivedTokenExpirationDays</c>（天）签发 + payload 写 <c>long_lived</c> claim；
+/// refresh 生命周期不变（30d rotation 仍为收权点）。默认 false = 既有 2h 语义零变化。末位默认参零破坏既有调用）。</param>
 public sealed record TokenIssueRequest(
     string UserId,
     string AuthType,
     int AuthLevel,
     string? DeviceInfo = null,
-    string? ChannelType = null);
+    string? ChannelType = null,
+    bool IsLongLived = false);
 
 /// <summary>签发结果（方案 §5.4）。</summary>
 /// <param name="AccessToken">JWT access token（RS256）。</param>
@@ -78,11 +82,15 @@ public interface ITokenService : IDomainService
     /// <summary>撤销 access token——按 jti 落黑名单（ExpiresAt = 该 token 自然过期时间）。
     /// <para>AC-11（B 档）：可选 <paramref name="userId"/>——logout 链路带用户上下文传入（黑名单行落真实归属者，
     /// 审计留痕受益）；默认 null 保持既有调用零改动（黑名单行 UserId 空串）。</para>
+    /// <para>AC-08 评审 P1-3（V0.13.1）黑名单 TTL 适配：可选 <paramref name="tokenExpiresAt"/>——调用方持验签结果时传
+    /// token 的 <c>exp</c>（logout 链路 ambient 已带，<see cref="RevokeCurrentSessionAsync"/> 透传）→ 黑名单行
+    /// <c>ExpiresAt</c> 覆盖 token 全生命（含 7d 长时态）；缺省（纯 jti 撤销、无载荷）按签发语义保守回退
+    /// <c>LongLivedTokenExpirationDays</c>（多留不早删无副作用——黑名单行 jti 唯一只增）。</para>
     /// <c>ExposeRest=false</c>：撤销为内部能力（/logout 经 <see cref="RevokeCurrentSessionAsync"/> 生成端点按 ambient 撤销）。</summary>
     /// <remarks>匿名面声明：登出按 jti 自携带凭据自校验（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
     [ApiExpose(ExposeRest = false)]
-    Task RevokeTokenAsync(string jti, string reason, string? userId = null, CancellationToken ct = default);
+    Task RevokeTokenAsync(string jti, string reason, string? userId = null, DateTime? tokenExpiresAt = null, CancellationToken ct = default);
 
     /// <summary>
     /// 当前请求 Bearer 验签产物（Oracle5 2026-10-24 ambient 方案 A——/verify 内省数据源）。

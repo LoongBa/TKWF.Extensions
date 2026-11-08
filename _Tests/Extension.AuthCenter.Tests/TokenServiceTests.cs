@@ -337,6 +337,103 @@ public class TokenServiceTests
         Assert.Equal(3, result.AccessToken.Split('.').Length);
     }
 
+    // ── AC-08（V0.13.1）：Long-lived 契约实现 + 黑名单 TTL 适配 ────────
+
+    [Fact]
+    public async Task IssueToken_LongLived_ExpAndClaim()
+    {
+        // IsLongLived: true → exp = LongLivedTokenExpirationDays（≠2h）+ payload long_lived: true + ExpiresIn 长时态秒数
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
+        var account = CreateAccount();
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
+
+        var result = await service.IssueTokenAsync(
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, IsLongLived: true), ct: TestContext.Current.CancellationToken);
+
+        var payload = JsonDocument.Parse(Decode(result.AccessToken.Split('.')[1])).RootElement;
+        var expSeconds = payload.GetProperty("exp").GetInt64();
+        var issuedAt = DateTimeOffset.FromUnixTimeSeconds(payload.GetProperty("iat").GetInt64());
+        var expected = issuedAt.AddDays(7);   // LongLivedTokenExpirationDays 默认 7
+        Assert.InRange(DateTimeOffset.FromUnixTimeSeconds(expSeconds), expected.AddSeconds(-30), expected.AddSeconds(30));
+        Assert.True(payload.GetProperty("long_lived").GetBoolean());
+        Assert.Equal((int)TimeSpan.FromDays(7).TotalSeconds, result.ExpiresIn);
+    }
+
+    [Fact]
+    public async Task IssueToken_Default_Unchanged()
+    {
+        // 不传 IsLongLived → exp 恒 AccessTokenExpirationMinutes（2h 基线锁定）+ refresh 生命周期不变（30d）+ long_lived false
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
+        var account = CreateAccount();
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
+
+        var result = await service.IssueTokenAsync(
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
+
+        var payload = JsonDocument.Parse(Decode(result.AccessToken.Split('.')[1])).RootElement;
+        var expSeconds = payload.GetProperty("exp").GetInt64();
+        var issuedAt = DateTimeOffset.FromUnixTimeSeconds(payload.GetProperty("iat").GetInt64());
+        var expected = issuedAt.AddMinutes(120);   // AccessTokenExpirationMinutes 默认 120
+        Assert.InRange(DateTimeOffset.FromUnixTimeSeconds(expSeconds), expected.AddSeconds(-30), expected.AddSeconds(30));
+        Assert.False(payload.GetProperty("long_lived").GetBoolean());
+        Assert.Equal(120 * 60, result.ExpiresIn);
+
+        // refresh 生命周期不变（30d rotation 收权点）
+        var refreshRow = await stub.Use<AuthRefreshTokenEntityDataService>()
+            .GetByTokenHashAsync(TokenService.Sha256Hex(result.RefreshToken), ct: TestContext.Current.CancellationToken);
+        Assert.NotNull(refreshRow);
+        Assert.InRange(refreshRow!.ExpiresAt, DateTime.UtcNow.AddDays(29), DateTime.UtcNow.AddDays(31));
+    }
+
+    [Fact]
+    public async Task ValidateToken_LongLivedClaim_RoundTrip()
+    {
+        // 长时态 token 验签回读 long_lived claim（Claims 字典 "true"——容缺失键）
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
+        var account = CreateAccount();
+        await stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
+
+        var result = await service.IssueTokenAsync(
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, IsLongLived: true), ct: TestContext.Current.CancellationToken);
+        var validation = await service.ValidateTokenAsync(result.AccessToken, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("true", validation.Claims["long_lived"]);
+    }
+
+    [Fact]
+    public async Task RevokeToken_LongLived_BlacklistCoversFullLife()
+    {
+        // 长时态 token 签发后撤销 → 黑名单行 ExpiresAt 覆盖至签发生命周期（传 exp 精准覆盖）；
+        // 缺省回退 LongLivedTokenExpirationDays（保守覆盖任何签发形态）；对照 2h 常规 token 传 exp 行生命周期 = 2h
+        var (service, stub) = CreateService(AuthenticationTestHost.CreateOptions());
+        var account = CreateAccount();
+        var accountDs = stub.Use<AuthAccountEntityDataService>();
+        await accountDs.CreateAsync(account, ct: TestContext.Current.CancellationToken);
+
+        // 长时态：撤销传 token exp → 黑名单覆盖至 7d 生命末端
+        var longLived = await service.IssueTokenAsync(
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone, IsLongLived: true), ct: TestContext.Current.CancellationToken);
+        var longVal = await service.ValidateTokenAsync(longLived.AccessToken, ct: TestContext.Current.CancellationToken);
+        await service.RevokeTokenAsync(longVal.Jti, "revoke", longVal.UserId, longVal.ExpiresAtUtc, ct: TestContext.Current.CancellationToken);
+        var longRow = await stub.Use<AuthTokenBlacklistEntityDataService>().GetByJtiAsync(longVal.Jti, ct: TestContext.Current.CancellationToken);
+        // SQLite DateTime 本地化 +8h 存取（既有 SmsVerificationServiceTests L88 同款）——用 ±12h 容差
+        // （区分 7d 长时态 vs 2h 常规：长时态末端 ±12h 不包含 now+2h，若实现回归为 2h 本断言必红）
+        Assert.InRange(longRow!.ExpiresAt, longVal.ExpiresAtUtc.AddHours(-12), longVal.ExpiresAtUtc.AddHours(12));   // 精准覆盖（7d 而非 2h）
+
+        // 2h 常规：撤销传 token exp → 黑名单行 2h 生命周期不变
+        var normal = await service.IssueTokenAsync(
+            new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
+        var normalVal = await service.ValidateTokenAsync(normal.AccessToken, ct: TestContext.Current.CancellationToken);
+        await service.RevokeTokenAsync(normalVal.Jti, "revoke", normalVal.UserId, normalVal.ExpiresAtUtc, ct: TestContext.Current.CancellationToken);
+        var normalRow = await stub.Use<AuthTokenBlacklistEntityDataService>().GetByJtiAsync(normalVal.Jti, ct: TestContext.Current.CancellationToken);
+        Assert.InRange(normalRow!.ExpiresAt, normalVal.ExpiresAtUtc.AddHours(-12), normalVal.ExpiresAtUtc.AddHours(12));   // 2h 生命周期不变
+
+        // 缺省（纯 jti 撤销、无载荷）→ 保守回退 7d（覆盖任何签发形态——多留不早删）
+        await service.RevokeTokenAsync("jti-default-fallback", "revoke", null, ct: TestContext.Current.CancellationToken);
+        var fallbackRow = await stub.Use<AuthTokenBlacklistEntityDataService>().GetByJtiAsync("jti-default-fallback", ct: TestContext.Current.CancellationToken);
+        Assert.InRange(fallbackRow!.ExpiresAt, DateTime.UtcNow.AddDays(6.5), DateTime.UtcNow.AddDays(7.5));
+    }
+
     // ── helpers ───────────────────────────────────────────────────────
 
     private static string Decode(string base64Url)

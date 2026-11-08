@@ -17,11 +17,13 @@ namespace TKWF.Ext.AuthSurface;
 partial class UserAppsViewDataService(IDomainUser user, IEntityReadOnlyDAC<UserAppsView> dac)
         : DomainReadOnlyDataServiceBase<UserAppsView, UserAppsViewDto>(user, dac, hasSoftDelete: false)
 {
-    /// <summary>取用户当前有效授权（Status=Active 且 ValidUntil 未过，按授权时间倒序）——仅本人。</summary>
+    /// <summary>取用户当前有效授权（Status=Active 且 ValidUntil 未过，且应用未软禁用——IsEnabled=false 排除；
+/// NULL=目录未录入视同启用，按授权时间倒序）——仅本人。</summary>
     public async Task<List<UserAppsView>> GetActiveByUserIdAsync(string userId, CancellationToken ct = default)
         => await SelectAsync(v => v,
             predicate: v => v.UserId == userId && v.Status == 0
-                && (v.ValidUntil == null || v.ValidUntil > DateTime.UtcNow),
+                && (v.ValidUntil == null || v.ValidUntil > DateTime.UtcNow)
+                && (v.IsEnabled == null || v.IsEnabled == true),   // 显式 NULL 展开——== null 翻译 IS NULL（与 ValidUntil==null 同型，先例背书）
             orderBy: q => q.OrderByDescending(v => v.CreateTime),
             limit: 200, ct: ct);
 }

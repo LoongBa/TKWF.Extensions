@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
@@ -34,6 +35,7 @@ public sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginServ
     private readonly IReadOnlyList<IAuthenticationProvider> _providers;
     private readonly IOptions<AuthCenterOptions> _options;
     private readonly IRateLimitCheck _rateLimit;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly ILogger<PasswordLoginService> _logger;
 
     // DI004 铁律：领域服务间调用经 User.Use<T>() 懒加载（禁构造注入守卫工厂门面）
@@ -47,12 +49,14 @@ public sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginServ
         IEnumerable<IAuthenticationProvider> providers,
         IOptions<AuthCenterOptions> options,
         IRateLimitCheck rateLimit,
-        ILogger<PasswordLoginService> logger)
+        ILogger<PasswordLoginService> logger,
+        IHttpContextAccessor? httpContextAccessor = null)
         : base(user)
     {
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _rateLimit = rateLimit ?? throw new ArgumentNullException(nameof(rateLimit));
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -72,6 +76,16 @@ public sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginServ
             _logger.LogWarning("密码登录编排失败——Password Provider 未启用（EnabledAuthTypes 配置缺失 password）");
             throw new DomainException("PASSWORD_PROVIDER_NOT_ENABLED") { ErrorCode = "PASSWORD_PROVIDER_NOT_ENABLED" };
         }
+
+        // AC-02（V0.13.1）：IP 维度点检查（key 规范 login-ip:{ip}）——轮换 identifier 防单 IP 分布式爆破；
+        // 强度 PasswordPerHourPerIp 默认 20/h（既有声明——不新增收紧）；与 identifier 维度（pwd:login:{identifier}）双维并存。
+        // IP 经 IHttpContextAccessor.RemoteIpAddress（服务端获取不可伪造——防频控绕过）；空白/未注册 → unknown 桶
+        //（fail-closed 不空放——非 Web 调用路径与多实例单桶退化见 README；反代未配 ForwardedHeaders 时退化为代理单桶）。
+        var ipAddressPassword = _httpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+        var ipKeyPassword = string.IsNullOrWhiteSpace(ipAddressPassword) ? "unknown" : ipAddressPassword;
+        if (!_rateLimit.TryAcquire($"login-ip:{ipKeyPassword}",
+                _options.Value.LoginProtection.PasswordPerHourPerIp, TimeSpan.FromHours(1), out _))
+            throw new RateLimitedException(0, $"login-ip:{ipKeyPassword}") { ErrorCode = "PASSWORD_RATE_LIMITED" };
 
         // V0.9.0（ADR 决策 2/3——锁定=限流）：登录前置点检查（key 规范 pwd:login:{identifier}）——
         // TryAcquire 失败 = 锁定阻断（fail-closed）→ RateLimitedException 429（PASSWORD_RATE_LIMITED）

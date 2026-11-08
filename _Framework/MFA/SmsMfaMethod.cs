@@ -135,9 +135,9 @@ internal sealed class SmsMfaMethod : DomainServiceBase, IMfaMethod
         if (active is null)
             return null; // 未启用——服务层统一"已发起"防枚举（Oracle Q6）
 
-        // 发送手机 = context.Phone 覆盖 ?? 绑定 Phone（MfaChallengeContext.Phone 支持重发场景指定）
-        var phone = context?.Phone;
-        var targetPhone = string.IsNullOrWhiteSpace(phone) ? active.Phone : phone.Trim();
+        // 挑战手机恒用绑定 Phone（MF-03 闭环——context.Phone 故意忽略：手机所有权仅绑定验证一次，
+        // 挑战期可覆盖 = SMS 绑定语义绕过；换号走 Disable+Enroll——README 语义）
+        var targetPhone = active.Phone;
         if (string.IsNullOrWhiteSpace(targetPhone))
             return null; // 无可用手机（激活绑定应有 Phone，防御）
 

@@ -46,6 +46,10 @@ internal static class FederationEndpointHost
     public static FakeSsoLogin Login { get; } = new();
     public static FakeSsoChannelFactory Factory { get; } = new();
     public static FakeSsoChannel Channel { get; } = new("wechat-mp");
+    // I2-2（2026-11-09）：DingTalk/WeCom 门扩展分派用独立 Fake 通道实例（ChannelId 与 Registry 平台通道匹配——
+    // 选区分派经 factory.ChannelId 精确匹配；平台事件编排经 cfg.PlatformType 推导 channelType）
+    public static FakeSsoChannel DingTalkChannel { get; } = new("dingtalk-app");
+    public static FakeSsoChannel WeComChannel { get; } = new("wecom-app");
     public static FakeToken2Service Token2 { get; } = new();
     public static FakeSsoSubAppBridge Bridge { get; } = new();
     public static FakeChannelRegistry Registry { get; } = new();
@@ -67,6 +71,8 @@ internal static class FederationEndpointHost
         Channel.Reset();
         Channel.Result = new SsoChannelAuthResult(true, "ext-100", null, 2);
         Factory.Channel = Channel;
+        DingTalkChannel.Reset();
+        WeComChannel.Reset();
         Login.Factory = Factory;    // Fake 登录编排复用宿主工厂（共享实例——默认通道/选区走同一通道源）
         Token2.Reset();
         Bridge.Reset();
@@ -464,8 +470,13 @@ internal static class FederationEndpointHost
             Invoked++;
             LastInbound = context;
 
-            // ① 通道解析（FakeSsoChannel.HandleEventAsync——记录 LastEventContext + 返回可配置 Outcome）
-            var outcome = Channel.HandleEventAsync(context, ct).GetAwaiter().GetResult();
+            // ① 通道解析——镜像真实 EventOrchestrator（Federation/EventOrchestrator.cs L85）：经工厂
+            //    Factory.CreateAsync(channelId, channelType) 选区分派（生产路径——F-2 DingTalk 用例由测试配置的
+            //    DingTalkChannel.Outcome 被如实读取并编排，恒读静态默认 Channel 的接线缺陷修复）；
+            //    工厂选区失败（null）回退静态默认 Channel（既有 wechat 单通道用例语义保持）
+            var resolved = Factory.CreateAsync(channelId, channelType, ct).GetAwaiter().GetResult();
+            var channel = resolved ?? Channel;
+            var outcome = channel.HandleEventAsync(context, ct).GetAwaiter().GetResult();
             if (outcome.State == ChannelEventOutcomeState.Rejected)
                 return Task.FromResult<EventReplyResult?>(null);
             if (outcome.State == ChannelEventOutcomeState.NotApplicable || outcome.Event is null)

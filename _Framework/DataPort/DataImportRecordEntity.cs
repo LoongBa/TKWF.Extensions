@@ -16,6 +16,8 @@ namespace TKWF.Ext.DataPort
     [Table("TKWF_DataImportRecord")]
     [FreeSql.DataAnnotations.Index("TKWFIX_Dir_Filehash", nameof(FileHash), IsUnique = true)]
     [FreeSql.DataAnnotations.Index("TKWFIX_Dir_Batchno", nameof(BatchNo), IsUnique = true)]
+    // 超时恢复扫描索引（DP-05，V0.1.5）：WHERE Status='Processing' AND UpdateTime < 阈值（§六 风险表"启动扫描拖慢宿主启动"）
+    [FreeSql.DataAnnotations.Index("TKWFIX_Dir_Status_Updatetime", nameof(Status) + "," + nameof(UpdateTime))]
     [DomainGenerateCode(DefaultPageSize = 50)]
     public partial class DataImportRecordEntity
     {
@@ -85,5 +87,18 @@ namespace TKWF.Ext.DataPort
         /// <summary>更新时间（UTC）——由任务服务显式赋值（SQLite Provider 类型映射缺 DateTimeOffset，时间列统一用 DateTime）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 15)]
         public DateTime UpdateTime { get; set; }
+
+        /// <summary>失败批次索引集合（JSON 数字数组字符串，如 "[0,2]"；PartiallySucceeded 时落库，重导判定重放集合；null 表示兼容旧记录按全量重导）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 16, IsNullable = true)]
+        [MaxLength(512)]
+        public string? FailedBatchIndexes { get; set; }
+
+        /// <summary>首跑批次大小（重放时校验一致性，P0-2 ①——防重导传不同 BatchSize 致批次索引错位写错行）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 17, IsNullable = true)]
+        public int? BatchSize { get; set; }
+
+        /// <summary>首跑已尝试的最大批次索引（≥0；导入结束落库；重放判定"未尝试尾部"纳集，P0-2 ②——早停路径不丢数据）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 18, IsNullable = true)]
+        public int? MaxAttemptedBatchIndex { get; set; }
     }
 }

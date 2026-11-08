@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -394,5 +395,273 @@ public class MfaServiceTests
         Assert.Equal("totp", enroll.Method);
         Assert.Equal("", enroll.EnrollToken);
         Assert.Null(enroll.ProvisioningUri);
+    }
+
+    // ── V0.3.0 MF-01：TOTP 同窗重放防护（last-used-step 记账，RFC 6238 §5.2） ──
+
+    [Fact]
+    public async Task TotpReplay_SameStep_NewChallenge_Rejected()
+    {
+        // MF-01：激活 → 挑战 1 验证成功（记账）→ 同一步码再发挑战 2 → 验证 false（同窗重放拒绝）
+        // P1-2 码串一次性捕获：码串以局部变量一次计算、两次验证复用——不得重复现算（跨 30s 步界现算得新步码
+        // → CAS 放行 → 断言间歇失败）；跨步界语义：若执行跨步，第二次仍匹配旧步 → matchedStep=旧步
+        // <= LastUsedTotpStep=旧步 → false，结论恒成立（码串必须同一）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        var secret = await EnableTotpAsync(host, userId);
+
+        var code = TotpCode(secret);   // 一次性捕获
+
+        var challenge1 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge1.ChallengeId, code, ct: TestContext.Current.CancellationToken));
+
+        var challenge2 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.NotEqual(challenge1.ChallengeId, challenge2.ChallengeId);
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge2.ChallengeId, code, ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TotpReplay_SameStep_ConcurrentChallenges_ExactlyOneSucceeds()
+    {
+        // MF-01 并发：两独立实例并发验同步码（各自挑战票据）→ 恰一成功（⑥ CAS 记账 + ⑦ 单次消费双守卫；
+        // 文件模式 SQLite——:memory: 单连接池并发争用先例）
+        // 共享密钥文件（BuildIsolatedMfaService 直构独立 FileSymmetricKeyProvider——dev 随机密钥跨实例不可解，
+        // 须与宿主同密钥路径；对齐 MfaKeyStoreTests 跨实例可读先例）
+        var keyPath = Path.Combine(Path.GetTempPath(), "tkfw-mfa-key-" + Guid.NewGuid().ToString("N") + ".key");
+        try
+        {
+            using var host = MfaTestHost.CreateFile(out _, options: new MfaOptions { SecretEncryptionKeyPath = keyPath });
+            var userId = NewUserId();
+            var secret = await EnableTotpAsync(host, userId);
+
+            var code = TotpCode(secret);   // 同步码一次性捕获
+            var ch1 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+            var ch2 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+
+            var mfa1 = MfaTestHost.BuildIsolatedMfaService(host.Fsql, options: new MfaOptions { SecretEncryptionKeyPath = keyPath });
+            var mfa2 = MfaTestHost.BuildIsolatedMfaService(host.Fsql, options: new MfaOptions { SecretEncryptionKeyPath = keyPath });
+
+            var results = await Task.WhenAll(
+                mfa1.VerifyChallengeAsync(userId, "totp", ch1.ChallengeId, code, CancellationToken.None),
+                mfa2.VerifyChallengeAsync(userId, "totp", ch2.ChallengeId, code, CancellationToken.None));
+
+            Assert.Equal(1, results.Count(r => r));   // 恰一成功一失败（保守拒真 < 放重放）
+        }
+        finally
+        {
+            if (File.Exists(keyPath)) File.Delete(keyPath);
+        }
+    }
+
+    [Fact]
+    public async Task Totp_LegitmateNextStep_Accepted_AfterPreviousStep_Used()
+    {
+        // MF-01 递增语义：步 N 验证成功（记账 N）→ 步 N+1 码验证通过（拒绝条件仅拦 <=，不拦递增）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        var secret = await EnableTotpAsync(host, userId);
+
+        var step = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var codeN = TotpGenerator.ComputeCode(secret, step * 30, 30, 6);
+        var ch1 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch1.ChallengeId, codeN, ct: TestContext.Current.CancellationToken));
+
+        var codeN1 = TotpGenerator.ComputeCode(secret, (step + 1) * 30, 30, 6);
+        var ch2 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch2.ChallengeId, codeN1, ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Totp_LastUsedTotpStep_Null_FirstVerify_Accepted()
+    {
+        // MF-01 存量兼容：LastUsedTotpStep = null（从未使用）→ 首验放行（CAS null 分支——升级零迁移）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        var secret = await EnableTotpAsync(host, userId);
+
+        // 手工置 null（模拟存量行——激活后从未验证；ConfirmEnroll 不写记账，激活后本就 null，此处显式锚定语义）
+        var active = await host.Secrets.GetActiveSecretAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.NotNull(active);
+        active!.LastUsedTotpStep = null;
+        await host.Secrets.UpdateAsync(active, ct: TestContext.Current.CancellationToken);
+        Assert.Null((await host.Secrets.GetActiveSecretAsync(userId, "totp", ct: TestContext.Current.CancellationToken))!.LastUsedTotpStep);
+
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, TotpCode(secret), ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TotpReplay_StaleStep_BeyondLastUsed_Rejected()
+    {
+        // MF-01 精确语义：已记步 N+1 → 时窗内旧步 N 码拒绝（matchedStep=N <= LastUsed=N+1——拒绝的是"已成功使用的码"）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        var secret = await EnableTotpAsync(host, userId);
+
+        var step = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var codeN = TotpGenerator.ComputeCode(secret, step * 30, 30, 6);
+        var ch1 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch1.ChallengeId, codeN, ct: TestContext.Current.CancellationToken));
+
+        var codeN1 = TotpGenerator.ComputeCode(secret, (step + 1) * 30, 30, 6);
+        var ch2 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch2.ChallengeId, codeN1, ct: TestContext.Current.CancellationToken));
+
+        // 已记 N+1 → 旧步 N 码（当前步 N 或 N+1 均覆盖 N 于时窗 → matched=N）→ 拒绝
+        var ch3 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", ch3.ChallengeId, codeN, ct: TestContext.Current.CancellationToken));
+    }
+
+    // ── V0.3.0 MF-02：pending 替换语义（重绑自动清滞留——UX 唯一约束不再 500） ──
+
+    [Fact]
+    public async Task Enroll_PendingStale_Rebind_ReplacesPending_NoThrow()
+    {
+        // MF-02（P1-1①限定 TOTP——SMS 存在 TTL 发码拒绝语义见 SmsEnroll_* 用例）：
+        // Enroll（不 Confirm）→ 再 Enroll → 不抛（pending 物理删）→ 新 EnrollToken 可 Confirm 成功；pending 行数恒 ≤ 1
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+
+        var enroll1 = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(Issuer: "TestCo"), ct: TestContext.Current.CancellationToken);
+        Assert.False(string.IsNullOrEmpty(enroll1.EnrollToken));
+        Assert.Single(await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken));
+
+        // 再 Enroll——pending 被替换（无异常——修复前撞 TKWFIX_MfaSecret_User_Method 唯一约束 500）
+        var enroll2 = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(Issuer: "TestCo"), ct: TestContext.Current.CancellationToken);
+        Assert.False(string.IsNullOrEmpty(enroll2.EnrollToken));
+        Assert.NotEqual(enroll1.EnrollToken, enroll2.EnrollToken);
+        Assert.Single(await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken));
+
+        // 新 EnrollToken 有效——Confirm 成功（旧 token 已随旧 pending 行物理删除）
+        var secret = ExtractSecret(enroll2.ProvisioningUri!);
+        var recovery = await host.Mfa.ConfirmEnrollAsync(userId, "totp", enroll2.EnrollToken, TotpCode(secret), ct: TestContext.Current.CancellationToken);
+        Assert.Equal(8, recovery.Count);
+        Assert.True(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task SmsEnroll_ResendWithinTtl_Throws_VerificationCodeAlreadySent()
+    {
+        // MF-02 SMS 边界（P1-1②）：发码成功后 TTL 5min 内再 Enroll 被"短信验证码已发送"拦截——
+        // 刻意防发码滥用，预期行为非缺陷（pending 虽被替换删除，发码仍被 TTL 守卫拒绝）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        const string phone = "13900000101";
+
+        await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken);
+        Assert.Equal(1, host.SmsSender.SendCount);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("短信验证码已发送", ex.Message);
+        Assert.Equal(1, host.SmsSender.SendCount);   // 未重发
+    }
+
+    [Fact]
+    public async Task SmsEnroll_Rebind_AfterChallengeExpired_Succeeds()
+    {
+        // MF-02 SMS 边界（P1-1②）：TTL 过后（挑战活动守卫解除）替换语义生效——pending 清 + 新码发出（发往绑定手机）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        const string phone = "13900000102";
+
+        await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken);
+        Assert.Equal(1, host.SmsSender.SendCount);
+
+        // 模拟挑战过期——删除活动挑战行解除 TTL 守卫（ExpireAt 前移亦可，删除更直接）
+        var activeChallenges = await host.Challenges.GetActiveByUserMethodAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
+        Assert.NotEmpty(activeChallenges);
+        foreach (var c in activeChallenges)
+            await host.Challenges.DeleteAsync(c.Id, ct: TestContext.Current.CancellationToken);
+
+        // 再 Enroll——pending 替换 + TTL 解除 → 新码发出（发往绑定手机）
+        var enroll2 = await host.Mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: phone), ct: TestContext.Current.CancellationToken);
+        Assert.False(string.IsNullOrEmpty(enroll2.EnrollToken));
+        Assert.Equal(2, host.SmsSender.SendCount);
+        Assert.Equal(phone, host.SmsSender.Messages[^1].Phone);
+
+        // 新 EnrollToken 可 Confirm 成功
+        var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
+        var recovery = await host.Mfa.ConfirmEnrollAsync(userId, "sms", enroll2.EnrollToken, code, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(8, recovery.Count);
+    }
+
+    [Fact]
+    public async Task Enroll_Active_StillUnifiedResponse()
+    {
+        // MF-02 防枚举回归：已激活 → Enroll 仍返回统一形态（active 守卫前置，替换逻辑不触碰激活行）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        await EnableTotpAsync(host, userId);
+        Assert.Single(await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken));
+
+        var enroll = await host.Mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(), ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("", enroll.EnrollToken);
+        Assert.Null(enroll.ProvisioningUri);
+        Assert.Single(await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken));  // 激活行未被触碰
+        Assert.True(await host.Mfa.IsMfaEnabledAsync(userId, ct: TestContext.Current.CancellationToken));
+    }
+
+    // ── V0.3.0 MF-03：SMS 挑战手机恒为绑定手机（context.Phone 忽略——绑定语义闭合） ──
+
+    [Fact]
+    public async Task SmsChallenge_ContextPhoneOverride_Ignored_SendsToBoundPhone()
+    {
+        // MF-03：context.Phone 覆盖被忽略——激活绑定 A → 挑战传攻击者手机 → 仍发绑定 A（验证码落库发绑定号）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        const string phone = "13900000103";
+        await EnableSmsAsync(host, userId, phone);
+
+        var before = host.SmsSender.SendCount;
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", new MfaChallengeContext(Phone: "attacker-phone"), ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(before + 1, host.SmsSender.SendCount);
+        Assert.Equal(phone, host.SmsSender.Messages[^1].Phone);   // 不发攻击者手机
+
+        var code = ExtractSmsCode(host.SmsSender.Messages[^1].Content);
+        Assert.True(await host.Mfa.VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, code, ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task SmsChallenge_NoContext_SendsToBoundPhone()
+    {
+        // MF-03 回归：不传 context → 恒发绑定 Phone（既有行为）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        const string phone = "13900000105";
+        await EnableSmsAsync(host, userId, phone);
+
+        var before = host.SmsSender.SendCount;
+        var challenge = await host.Mfa.RequestChallengeAsync(userId, "sms", ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(before + 1, host.SmsSender.SendCount);
+        Assert.Equal(phone, host.SmsSender.Messages[^1].Phone);
+        Assert.False(string.IsNullOrEmpty(challenge.ChallengeId));
+    }
+
+    // ── V0.3.0 MF-01：DataService CAS 原子性 ──
+
+    [Fact]
+    public async Task TotpSecretDataServiceTryAdvance_Cas_SameStep_LoserZeroAffected()
+    {
+        // MF-01 DataService 原子性：同一步两次 TryAdvance → 恰一返回 1，另一 0（WHERE (null 或 <) 守卫）
+        using var host = MfaTestHost.Create();
+        var userId = NewUserId();
+        await EnableTotpAsync(host, userId);
+        var active = (await host.Secrets.GetByUserAsync(userId, ct: TestContext.Current.CancellationToken)).Single();
+
+        const long matchedStep = 12345;
+        var first = await host.Secrets.TryAdvanceLastUsedTotpStepAsync(active.Id, matchedStep, ct: TestContext.Current.CancellationToken);
+        var second = await host.Secrets.TryAdvanceLastUsedTotpStepAsync(active.Id, matchedStep, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, first);
+        Assert.Equal(0, second);
+
+        // 递增步可再推进（拒绝条件仅拦 <=）
+        var third = await host.Secrets.TryAdvanceLastUsedTotpStepAsync(active.Id, matchedStep + 1, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(1, third);
     }
 }

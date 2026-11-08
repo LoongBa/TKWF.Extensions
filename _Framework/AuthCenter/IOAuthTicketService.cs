@@ -13,13 +13,16 @@ namespace TKWF.Ext.AuthCenter;
 /// <param name="CodeVerifier">PKCE code_verifier 明文（仅存 SHA256 hash；服务端/trust 签发传 null）。</param>
 /// <param name="TicketType">票据类型（OAuthTicketTypes 常量：login/bind）。</param>
 /// <param name="UserId">签发即绑定用户（V0.8.0 B5——authorize 时用户已登录带 UId；末位默认参零破坏既有调用）。</param>
+/// <param name="AuthType">原始认证方式归因（AC-10 V0.13.1——口令兑换/redeem 等签发方显式传值；
+/// 缺省 null = 换发回退 <c>AuthTypes.Sms</c>；归因权威归签发方，客户端不可声明（防审计伪造））。</param>
 public sealed record OAuthTicketIssueRequest(
     string AppId,
     string RedirectUri,
     string? State = null,
     string? CodeVerifier = null,
     string TicketType = "login",
-    string? UserId = null);
+    string? UserId = null,
+    string? AuthType = null);
 
 /// <summary>票据换取请求（方案 §5.7）。</summary>
 /// <param name="Ticket">一次性票据（URL 回调承载）。</param>

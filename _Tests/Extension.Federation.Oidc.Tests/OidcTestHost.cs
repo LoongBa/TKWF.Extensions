@@ -132,6 +132,10 @@ public sealed class StubOidcHandler : HttpMessageHandler
         string? AlgOverride = null,
         string SubOverride = "oidc_stub_sub");
 
+    /// <summary>最近一次 token 换取请求携带的 redirect_uri（RFC 6749 §4.1.3 出站一致性断言——装配层注入 B3 修复后
+    /// 出站携带真实值；OAuth 授权时与回调时的 URL 比对语义由桩捕获供测试锁定）。</summary>
+    public string? LastTokenRequestRedirectUri { get; private set; }
+
     public StubOidcHandler(RSA privateKey, string kid, Func<OidcStubOptions> options)
     {
         _privateKey = privateKey;
@@ -139,16 +143,19 @@ public sealed class StubOidcHandler : HttpMessageHandler
         _options = options;
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var path = request.RequestUri?.AbsolutePath ?? "";
         var opt = _options();
 
         if (path.EndsWith("/token", StringComparison.Ordinal))
         {
+            // 捕获换取请求表单单的 redirect_uri（出站携带断言——B3 软读注入值出站）
+            var form = await (request.Content?.ReadAsStringAsync(ct) ?? Task.FromResult(""));
+            LastTokenRequestRedirectUri = GetFormParam(form, "redirect_uri");
             if (opt.FailCode)
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
-                { Content = new StringContent("{\"error\":\"invalid_grant\"}", Encoding.UTF8, "application/json") });
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                { Content = new StringContent("{\"error\":\"invalid_grant\"}", Encoding.UTF8, "application/json") };
 
             string json;
             if (opt.OmitIdToken)
@@ -162,19 +169,20 @@ public sealed class StubOidcHandler : HttpMessageHandler
                 // 记录访问 token 对（tests 断言用）——简化：返回固定 stub token
                 json = $"{{\"id_token\":\"{idToken}\",\"access_token\":\"stub-at\",\"expires_in\":3600}}";
             }
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent(json, Encoding.UTF8, "application/json") };
         }
+
         if (path.EndsWith("/jwks", StringComparison.Ordinal))
         {
             Interlocked.Increment(ref _jwkFetchCount);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            { Content = new StringContent(OidcTestHost.ExportJwks(_privateKey, _kid), Encoding.UTF8, "application/json") });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent(OidcTestHost.ExportJwks(_privateKey, _kid), Encoding.UTF8, "application/json") };
         }
         if (path.EndsWith("/.well-known/openid-configuration", StringComparison.Ordinal) || path.EndsWith("well-known/openid-configuration", StringComparison.Ordinal))
         {
             var baseAddr = $"{request.RequestUri!.Scheme}://{request.RequestUri.Authority}";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return new HttpResponseMessage(HttpStatusCode.OK)
             { Content = new StringContent(JsonSerializer.Serialize(new
             {
                 issuer = _options().Issuer,
@@ -182,18 +190,30 @@ public sealed class StubOidcHandler : HttpMessageHandler
                 token_endpoint = $"{baseAddr}/token",
                 jwks_uri = $"{baseAddr}/jwks",
                 userinfo_endpoint = $"{baseAddr}/userinfo",
-            }), Encoding.UTF8, "application/json") });
+            }), Encoding.UTF8, "application/json") };
         }
         if (path.EndsWith("/userinfo", StringComparison.Ordinal))
         {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            { Content = new StringContent("{\"sub\":\"stub-sub\",\"email\":\"u@example.com\",\"email_verified\":true,\"name\":\"Stub User\"}", Encoding.UTF8, "application/json") });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent("{\"sub\":\"stub-sub\",\"email\":\"u@example.com\",\"email_verified\":true,\"name\":\"Stub User\"}", Encoding.UTF8, "application/json") };
         }
 
-        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        return new HttpResponseMessage(HttpStatusCode.NotFound);
     }
 
     public int JwkFetchCount => Volatile.Read(ref _jwkFetchCount);
+
+    /// <summary>表单参数提取（FormUrlEncodedContent——%XX 编码 + 空格为 '+' 约定）——手拆避免 System.Web 依赖。</summary>
+    private static string GetFormParam(string form, string name)
+    {
+        foreach (var pair in form.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = pair.Split('=', 2);
+            if (kv.Length == 2 && kv[0] == name)
+                return Uri.UnescapeDataString(kv[1]).Replace('+', ' ');
+        }
+        return "";
+    }
 }
 
 /// <summary>测试宿主——真实 DI（AddLogging + AddOidcFederationChannel + 探针门面 + Stub HttpClientFactory）。</summary>

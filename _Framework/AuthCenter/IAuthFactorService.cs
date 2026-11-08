@@ -78,7 +78,8 @@ public interface IAuthFactorService : IDomainService
     /// <summary>验证因素通过（State→Active + VerifiedAt；写 Verify 事件）。</summary>
     Task<AuthFactorEntityDto> VerifyAsync(string uid, long factorId, CancellationToken ct = default);
 
-    /// <summary>重置因素密钥/凭据（SecretHash + SecretUpdatedAt；写 Reset 事件）。</summary>
+    /// <summary>重置因素密钥/凭据（SecretHash + SecretUpdatedAt；写 Reset 事件；AC-14 V0.13.1：
+    /// 补 <c>TokenVersion++</c> 同 UoW——重置后旧 Refresh 失效（REFRESH_STALE），与 SetPasswordAsync/UnbindAsync 语义对齐）。</summary>
     Task<AuthFactorEntityDto> ResetAsync(string uid, long factorId, string? newSecretHash, bool? mustChange = null, CancellationToken ct = default);
 
     /// <summary>按 uid 列出全部因素（FactorType 升序）。</summary>

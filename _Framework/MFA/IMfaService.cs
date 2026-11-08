@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -62,5 +63,7 @@ public sealed record MfaEnrollResult(string Method, string EnrollToken, string? 
 /// <summary>绑定上下文——TOTP：Issuer/DisplayName 进 provisioning URI；SMS：Phone 绑定。</summary>
 public sealed record MfaEnrollContext(string? Phone = null, string? Issuer = null, string? DisplayName = null);
 
-/// <summary>挑战上下文——SMS 可覆盖发送手机号。</summary>
-public sealed record MfaChallengeContext(string? Phone = null, string? DeviceInfo = null);
+/// <summary>挑战上下文（历史槽位——<c>Phone</c> 已废弃：挑战目标手机恒为绑定手机，勿再传入；换号走 Disable+Enroll）。</summary>
+public sealed record MfaChallengeContext(
+    [property: Obsolete("挑战目标手机恒为绑定手机——context.Phone 被忽略；换号走 Disable+Enroll")] string? Phone = null,
+    string? DeviceInfo = null);

@@ -318,6 +318,146 @@ public sealed class FederationWebExtensionTests
         Assert.Equal("wechat_event", FederationEndpointHost.Factory.LastChannelType);
     }
 
+    // ═══════════════════ I2-2 门扩展分派（2026-11-09——§3.6：POST 也试 VerifyUrlAsync + DingTalk 恒回加密信封） ═══════════════════
+
+    /// <summary>F-1：DingTalk check_url POST → 200 加密应答信封（P0-2 断言重写——非明文 success）；
+    /// 门扩展段 1 先试 VerifyUrlAsync（信封保存）→ 段 2 放行 AuthenticateAsync → 段 3 编排（check_url 无身份 →
+    /// HandleEventAsync NotApplicable → handler 不触达）→ 段 4 恒回信封（application/json）。</summary>
+    [Fact]
+    public async Task EventEndpoint_DingTalk_CheckUrl_ReturnsEncryptedEnvelope()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "dingtalk-app", PlatformType = "dingtalk", IsEnabled = true },
+        };
+        FederationEndpointHost.Factory.Channel = FederationEndpointHost.DingTalkChannel;
+        // 段 1 VerifyUrlAsync 返回加密应答信封（真实加密链在 D-4 锁定——端点只中转信封 JSON）
+        FederationEndpointHost.DingTalkChannel.UrlVerifyEcho =
+            """{"msg_signature":"sig-env-1","timeStamp":"1234567890","nonce":"nc-1","encrypt":"cipher-envelope-1"}""";
+        // check_url 无 FromUserId → HandleEventAsync NotApplicable（§3.0 守卫——编排跳过 handler）
+        FederationEndpointHost.DingTalkChannel.Outcome = ChannelEventOutcome.NotApplicable;
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/dingtalk/event/dingtalk-app",
+            new StringContent("""{"EventType":"check_url"}""", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("application/json", resp.Content.Headers.ContentType?.MediaType);
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.NotEqual("success", body);                                      // 非明文 success（P0-2）
+        using var doc = System.Text.Json.JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, root.ValueKind);
+        Assert.False(string.IsNullOrEmpty(root.GetProperty("encrypt").GetString()));      // 四字段对拍（加密链在通道层）
+        Assert.Equal("sig-env-1", root.GetProperty("msg_signature").GetString());
+        Assert.Equal("1234567890", root.GetProperty("timeStamp").GetString());
+        Assert.Equal("nc-1", root.GetProperty("nonce").GetString());
+        Assert.True(FederationEndpointHost.DingTalkChannel.UrlVerified);       // 段 1 VerifyUrlAsync 已执行
+        Assert.True(FederationEndpointHost.DingTalkChannel.Authenticated);     // 段 2 AuthenticateAsync 放行路径仍执行
+        Assert.Equal(1, FederationEndpointHost.Orchestrator.Invoked);          // 段 3 编排链仍达（不短路）
+        Assert.Equal(0, FederationEndpointHost.EventHandler1.Invoked);         // check_url 无身份 → handler 不触达
+        Assert.Equal("dingtalk_event", FederationEndpointHost.Factory.LastChannelType);
+    }
+
+    /// <summary>F-2：DingTalk 业务事件编排链集成——注册测试 IEventReplyHandler（ChannelType=dingtalk_event）→
+    /// handler 被迭代（first-non-null-wins 命中——双桶对钉钉可达 W3 语义）；对照 WeCom 同型用例。</summary>
+    [Fact]
+    public async Task Orchestrator_DingTalkEvent_ReachesHandler()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "dingtalk-app", PlatformType = "dingtalk", IsEnabled = true },
+        };
+        FederationEndpointHost.Factory.Channel = FederationEndpointHost.DingTalkChannel;
+        FederationEndpointHost.DingTalkChannel.UrlVerifyEcho =
+            """{"msg_signature":"sig-env-1","timeStamp":"1234567890","nonce":"nc-1","encrypt":"cipher-envelope-1"}""";
+        FederationEndpointHost.DingTalkChannel.Outcome = ChannelEventOutcome.Parsed(new ChannelEvent
+        {
+            ChannelId = "dingtalk-app",
+            ChannelType = "dingtalk_event",
+            ExternalUserId = "oa_scan_openid_1",
+            EventType = "scan",
+            Attributes = new Dictionary<string, string?> { ["dingtalk.EventType"] = "SCAN" },
+        });
+        FederationEndpointHost.EventHandler1.ChannelType = "dingtalk_event";
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("ding-handler-reply", "text/plain");
+        FederationEndpointHost.EventHandler2.ChannelType = "dingtalk_event";
+        FederationEndpointHost.EventHandler2.Result = new EventReplyResult("ding-handler-2", "text/plain");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/dingtalk/event/dingtalk-app",
+            new StringContent("""{"EventType":"SCAN","FromUserId":"oa_scan_openid_1"}""", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);          // first-non-null-wins 命中（handler-1）
+        Assert.NotNull(FederationEndpointHost.EventHandler1.LastDispatch);
+        Assert.Equal("dingtalk_event", FederationEndpointHost.EventHandler1.LastDispatch!.Event.ChannelType);
+        Assert.Equal("scan", FederationEndpointHost.EventHandler1.LastDispatch.Event.EventType);
+        Assert.Equal(0, FederationEndpointHost.EventHandler2.Invoked);         // 短路——handler-2 不触达
+    }
+
+    /// <summary>F-3：WeCom GET echostr URL 验证正向（门扩展回归锁）——现端点 + 新 channel 实现分派：
+    /// 200 text/plain 回显明文（`WECHAT_URL_VERIFY_FAILED` 400 根治——WC-2；真实加密握手在 W-3/W-4 锁定，端点只中转）。</summary>
+    [Fact]
+    public async Task EventEndpoint_WeCom_Echostr_Verify()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "wecom-app", PlatformType = "wecom", IsEnabled = true },
+        };
+        FederationEndpointHost.Factory.Channel = FederationEndpointHost.WeComChannel;
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/wecom/event/wecom-app?msg_signature=sig-1&timestamp=123&nonce=nc-1&echostr=echo-wecom-1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("echo-wecom-1", body);                                    // 明文 echostr 回显（不再 400）
+        Assert.True(FederationEndpointHost.WeComChannel.UrlVerified);          // VerifyUrlAsync 已执行
+        Assert.False(FederationEndpointHost.WeComChannel.Authenticated);       // echostr 握手不落事件验证路径
+    }
+
+    /// <summary>F-4：DingTalk 业务事件 POST → 200 恒回加密信封（P1-1 回归锁——handler 回复被忽略，钉钉不承载
+    /// 业务自由文本）；测试 handler 副作用已执行（编排链仍达——uid 映射/handler 双桶迭代未被门扩展短路）。</summary>
+    [Fact]
+    public async Task EventEndpoint_DingTalk_BusinessEvent_ReturnsEnvelopeIgnoringHandlerReply()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "dingtalk-app", PlatformType = "dingtalk", IsEnabled = true },
+        };
+        FederationEndpointHost.Factory.Channel = FederationEndpointHost.DingTalkChannel;
+        FederationEndpointHost.DingTalkChannel.UrlVerifyEcho =
+            """{"msg_signature":"sig-env-2","timeStamp":"1234567890","nonce":"nc-2","encrypt":"cipher-envelope-2"}""";
+        FederationEndpointHost.DingTalkChannel.Outcome = ChannelEventOutcome.Parsed(new ChannelEvent
+        {
+            ChannelId = "dingtalk-app",
+            ChannelType = "dingtalk_event",
+            ExternalUserId = "oa_scan_openid_1",
+            EventType = "scan",
+            Attributes = new Dictionary<string, string?> { ["dingtalk.EventType"] = "SCAN" },
+        });
+        FederationEndpointHost.EventHandler1.ChannelType = "dingtalk_event";
+        FederationEndpointHost.EventHandler1.Result = new EventReplyResult("must-be-ignored-reply", "text/plain");
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsync($"{DefaultPrefix}/dingtalk/event/dingtalk-app",
+            new StringContent("""{"EventType":"SCAN","FromUserId":"oa_scan_openid_1"}""", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("application/json", resp.Content.Headers.ContentType?.MediaType);
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("cipher-envelope-2", body);                            // 恒回加密信封
+        Assert.DoesNotContain("must-be-ignored-reply", body);                  // handler 回复被忽略（P1-1）
+        Assert.Equal(1, FederationEndpointHost.EventHandler1.Invoked);         // 副作用仍执行（编排链未短路）
+        Assert.Equal(1, FederationEndpointHost.Orchestrator.Invoked);
+    }
+
     // ═══════════════════ 事件链（外部身份联邦 E3——query 透传 + XML 回复 + handler + uid 只读） ═══════════════════
 
     /// <summary>event 端点 query 透传（现有缺陷修复——微信验签参数在 URL query）+ 微信 XML 回复：
@@ -445,7 +585,8 @@ public sealed class FederationWebExtensionTests
     // ═══════════════════ 子应用消费方委托端点冒烟（ISsoSubAppBridge——2026-10-11） ═══════════════════
 
     /// <summary>(1)：POST /feberation/authorize/start——匿名发起外部认证成功 → 200 {authorize_url, state}；
-    /// 断言 Fake 收到请求含 <c>CallbackBaseUrl</c> 服务端可信填充（<c>http://localhost</c>——请求体伪造值被覆盖，防子应用伪造回调域）。</summary>
+    /// 断言 Fake 收到请求含 <c>CallbackBaseUrl</c> 服务端可信填充（<b>回调端点全 URL</b>——完整落点
+    /// {mount}/{platformId}/oauth/{channelId}/callback，请求体伪造值被覆盖，防子应用伪造回调域；B4 收口）。</summary>
     [Fact]
     public async Task AuthorizeStart_Success_200_AndServerFillsCallbackBaseUrl()
     {
@@ -465,9 +606,12 @@ public sealed class FederationWebExtensionTests
         Assert.True(body.ContainsKey("state"));
         Assert.Equal("state-ticket", body["state"]);
 
-        // 服务端可信回调基址：请求体 CallbackBaseUrl 被覆盖为 Request.Scheme://Request.Host（TestServer = http://localhost）
+        // 服务端可信回调落点（B4——OAuth redirect_uri = 回调端点全 URL）：请求体 CallbackBaseUrl 被覆盖为
+        // {Scheme}://{Host}/{挂载前缀}/wechat/oauth/wechat-mp/callback（TestServer = http://localhost，
+        // 挂载前缀 = /api/feberation——从请求路径 Ordinal 推导，非 Options.RoutePrefix）
         Assert.NotNull(FederationEndpointHost.Bridge.LastStartRequest);
-        Assert.Equal("http://localhost", FederationEndpointHost.Bridge.LastStartRequest!.CallbackBaseUrl);
+        Assert.Equal($"http://localhost{DefaultPrefix}/wechat/oauth/wechat-mp/callback",
+            FederationEndpointHost.Bridge.LastStartRequest!.CallbackBaseUrl);
         Assert.Equal("app-1", FederationEndpointHost.Bridge.LastStartRequest.AppId);
         Assert.Equal("wechat-mp", FederationEndpointHost.Bridge.LastStartRequest.ChannelId);
         Assert.Equal("sub-state-1", FederationEndpointHost.Bridge.LastStartRequest.State);
@@ -511,11 +655,14 @@ public sealed class FederationWebExtensionTests
         Assert.Contains("code=ac-1", location);
         Assert.Contains("state=sub-state-1", location);
 
-        // query 参数透传（channelId 段 + code/state 参数包）
+        // query 参数透传（channelId 段 + code/state 参数包）+ 注入键无害断言（微信不要求 redirect_uri——
+        // 通道不读该键，注入仅多一键，既有断言不受影响——§5 用例 5 对照通）
         Assert.Equal("wechat-mp", FederationEndpointHost.Bridge.LastCallbackChannelId);
         Assert.NotNull(FederationEndpointHost.Bridge.LastCallbackParams);
         Assert.Equal("wechat-code-1", FederationEndpointHost.Bridge.LastCallbackParams!["code"]);
         Assert.Equal("ticket-1", FederationEndpointHost.Bridge.LastCallbackParams["state"]);
+        Assert.Equal($"http://localhost{DefaultPrefix}/{DefaultPlatformId}/oauth/wechat-mp/callback",
+            FederationEndpointHost.Bridge.LastCallbackParams["redirect_uri"]);   // 注入键存在（通道不读，无害增量）
     }
 
     /// <summary>(3b)：GET /feberation/{platformId}/oauth/callback（无通道段，单通道降级）——唯一活跃通道解析 →
@@ -556,6 +703,123 @@ public sealed class FederationWebExtensionTests
         Assert.NotNull(body);
         Assert.Equal("CHANNEL_REQUIRED", body!.Code);
         Assert.Null(FederationEndpointHost.Bridge.LastCallbackChannelId);      // 守卫拦截不触达门面
+    }
+
+    // ═══════════════════ OAuth 回调装配层注入（QQ-1/AL-1 P0 + Oidc 同源——oauth回调装配层修复-开发方案 §4） ═══════════════════
+
+    /// <summary>(用例 1) QQ 回调全链路注入：GET {prefix}/qq/oauth/qq-main/callback（query 含 code/state/伪造 redirect_uri）
+    /// → 装配层服务端可信注入 redirect_uri = 当前请求完整 URL（覆盖伪造 query 值——防伪造回调域，B1 闭环）；
+    /// QQ 302 回调仅 code+state 无 redirect_uri → 注入后 QQ_REDIRECT_URI_REQUIRED 必败根除。</summary>
+    [Fact]
+    public async Task OAuthCallback_QQ_InjectsRedirectUri_AndOverridesForged()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "qq-main", PlatformType = "qq", IsEnabled = true },
+        };
+        FederationEndpointHost.Bridge.CallbackResult =
+            new(true, "https://app.example.com/cb?code=ac-1&state=sub-state-1", "sub-state-1", null);
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        // 伪造 query redirect_uri（攻击者企图把换取导向任意域）——服务端必须权威覆盖
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/qq/oauth/qq-main/callback?code=qq-code-1&state=ticket-1&redirect_uri=https://evil.example.com/",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
+        Assert.Equal("qq-main", FederationEndpointHost.Bridge.LastCallbackChannelId);
+        Assert.NotNull(FederationEndpointHost.Bridge.LastCallbackParams);
+        Assert.Equal("qq-code-1", FederationEndpointHost.Bridge.LastCallbackParams!["code"]);
+        Assert.Equal("ticket-1", FederationEndpointHost.Bridge.LastCallbackParams["state"]);
+        // B1 核心断言：redirect_uri = 服务端注入的当前请求 URL（含 query 则被覆盖，本断言锁请求 URL 完整性）
+        var injected = FederationEndpointHost.Bridge.LastCallbackParams["redirect_uri"];
+        Assert.Equal($"http://localhost{DefaultPrefix}/qq/oauth/qq-main/callback", injected);
+        Assert.DoesNotContain("evil.example.com", injected, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>(用例 2) Alipay 回调全链路：GET {prefix}/alipay/oauth/callback（query 含 auth_code/state，无通道段单通道降级形态）
+    /// → 装配层 auth_code → code 归一（B2 闭环，支付宝回调键名）+ redirect_uri 注入（无通道段形态落点）。
+    /// 通道侧 code ?? auth_code 双键防御另在 Alipay.Tests 锁定（零装配直调亦可用）。</summary>
+    [Fact]
+    public async Task OAuthCallback_Alipay_AuthCodeNormalized_AndInjectsRedirectUri()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "alipay-main", PlatformType = "alipay", IsEnabled = true },
+        };
+        FederationEndpointHost.Bridge.CallbackResult =
+            new(true, "https://app.example.com/cb?code=ac-1&state=sub-state-1", "sub-state-1", null);
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/alipay/oauth/callback?auth_code=alipay-ac-1&state=ticket-1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
+        Assert.Equal("alipay-main", FederationEndpointHost.Bridge.LastCallbackChannelId);   // 单通道降级解析
+        Assert.NotNull(FederationEndpointHost.Bridge.LastCallbackParams);
+        var p = FederationEndpointHost.Bridge.LastCallbackParams!;
+        Assert.Equal("alipay-ac-1", p["code"]);                        // B2 归一：auth_code → code
+        Assert.Equal("alipay-ac-1", p["auth_code"]);                   // 原键保留（双键并存 code 优先）
+        Assert.Equal($"http://localhost{DefaultPrefix}/alipay/oauth/callback", p["redirect_uri"]);   // 注入——无通道段形态
+        Assert.DoesNotContain("?", p["redirect_uri"]!);                // 注入 URL 不含 query（风险 2 锁定）
+    }
+
+    /// <summary>(用例 3) OIDC 回调同源：GET {prefix}/oidc/oauth/oidc-main/callback（query 含 code/state）
+    /// → 装配层注入 redirect_uri（OidcChannelBase 软读 TryGetValue——软读语义保持，B3 行为修正由注入供给真实值）；
+    /// 通道零代码改动（出站换取携带断言在 Oidc.Tests 锁定）。</summary>
+    [Fact]
+    public async Task OAuthCallback_Oidc_InjectsRedirectUri_ZeroChannelChange()
+    {
+        FederationEndpointHost.Reset();
+        FederationEndpointHost.Registry.Channels = new List<ChannelConfig>
+        {
+            new() { ChannelId = "oidc-main", PlatformType = "oidc", IsEnabled = true },
+        };
+        FederationEndpointHost.Bridge.CallbackResult =
+            new(true, "https://app.example.com/cb?code=ac-1&state=sub-state-1", "sub-state-1", null);
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var resp = await client.GetAsync(
+            $"{DefaultPrefix}/oidc/oauth/oidc-main/callback?code=oidc-code-1&state=ticket-1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
+        Assert.Equal("oidc-main", FederationEndpointHost.Bridge.LastCallbackChannelId);
+        Assert.NotNull(FederationEndpointHost.Bridge.LastCallbackParams);
+        // 注入键存在（OidcChannelBase L86 软读该键——出站换取携带同一 URL，Oidc.Tests 断言）
+        Assert.Equal($"http://localhost{DefaultPrefix}/oidc/oauth/oidc-main/callback",
+            FederationEndpointHost.Bridge.LastCallbackParams!["redirect_uri"]);
+        Assert.Equal("oidc-code-1", FederationEndpointHost.Bridge.LastCallbackParams["code"]);
+    }
+
+    /// <summary>(用例 4) B4 委托链路闭环：authorize/start 发起侧落点（CallbackBaseUrl = 回调端点全 URL，经挂载前缀推导 +
+    /// channel registry 解析 platformId）→ 回调侧同 URL 注入 → 两段 redirect_uri 逐字节一致（start/callback 闭环）。</summary>
+    [Fact]
+    public async Task AuthorizeStart_B4_CallbackUrl_MatchesCallbackInjection()
+    {
+        FederationEndpointHost.Reset();
+        var client = FederationEndpointHost.Server.CreateClient();
+
+        var startResp = await client.PostAsJsonAsync($"{DefaultPrefix}/authorize/start",
+            new AuthorizeStartRequest(
+                AppId: "app-1", Mode: "federated", ChannelId: "wechat-mp", State: "sub-state-1",
+                Redirect: "https://app.example.com/cb", Scope: null, Parameters: null,
+                CallbackBaseUrl: ""), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, startResp.StatusCode);
+        Assert.NotNull(FederationEndpointHost.Bridge.LastStartRequest);
+        var startCallbackUrl = FederationEndpointHost.Bridge.LastStartRequest!.CallbackBaseUrl;
+        Assert.Equal($"http://localhost{DefaultPrefix}/wechat/oauth/wechat-mp/callback", startCallbackUrl);
+
+        // 回调端同 URL 注入——OAuthCallback 收到相同完整 URL（两段逐字节一致 → 授权时 IdP 校验通过）
+        FederationEndpointHost.Bridge.CallbackResult =
+            new(true, "https://app.example.com/cb?code=ac-1&state=sub-state-1", "sub-state-1", null);
+        var cbResp = await client.GetAsync(
+            $"{DefaultPrefix}/{DefaultPlatformId}/oauth/wechat-mp/callback?code=wechat-code-1&state=ticket-1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Redirect, cbResp.StatusCode);
+        Assert.NotNull(FederationEndpointHost.Bridge.LastCallbackParams);
+        Assert.Equal(startCallbackUrl, FederationEndpointHost.Bridge.LastCallbackParams!["redirect_uri"]);
     }
 
     /// <summary>(4a)：POST /feberation/trust/issue——已认证帧（测试哨兵中间件 X-Test-Auth-User 写入 Items["DomainUser"]）

@@ -17,7 +17,8 @@ namespace TKWF.Ext.AuthSurface;
 /// </summary>
 public interface IUserAppsQueryService : IDomainService
 {
-    /// <summary>取用户当前有效授权应用列表（Status=Active 且 ValidUntil 未过，按授权时间倒序）。</summary>
+    /// <summary>取用户当前有效授权应用列表（Status=Active 且 ValidUntil 未过，且目录未软禁用——IsEnabled=false 排除，
+    /// NULL=目录未录入视同启用，按授权时间倒序）。</summary>
     Task<IReadOnlyList<UserAppDto>> GetAppsAsync(string userId, CancellationToken ct = default);
 }
 

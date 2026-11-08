@@ -24,7 +24,7 @@ public interface IRedemptionCommandService : IDomainService
     /// 创建兑换码（单码——v0.1.0 无批次管理端；返回<b>明文 code 一次性</b>——不落库不日志，库中仅存 SHA256 哈希 + 脱敏值）。
     /// <para>v0.2.0 核验场景：<paramref name="payload"/> 为<b>核验业务信息明文</b>（如购买人信息/权益明细 JSON——运营侧传入），
     /// 门面经 keyed <see cref="ISymmetricKeyProvider"/> AES-GCM 加密落 <c>PayloadEncrypted</c>——<b>明文不落库</b>；
-    /// null = 无附加信息（兼容 v0.1.0 调用）。</para>
+    /// null = 无附加信息（兼容 v0.1.0 调用）。<b>payload 长度上限 2800 字符</b>（密文列 VARCHAR(4000) 容量保障），超限抛 <see cref="ArgumentException"/>。</para>
     /// <para>运营侧调用（装配层管理员上下文；v0.2.0 批次管理端/权限控制）。</para>
     /// </summary>
     Task<string> CreateCodeAsync(string productName, string targetAppId, TimeSpan? validity = null, CancellationToken ct = default, string? payload = null);
@@ -51,6 +51,9 @@ public interface IRedemptionCommandService : IDomainService
 [DiContractIgnore]
 internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionCommandService
 {
+    /// <summary>payload 最大长度（字符）——密文列 VARCHAR(4000) 容量保障（ASCII 2800 字符 + nonce/tag 全密文 base64 约 3740 ≤ 4000）。</summary>
+    private const int MaxPayloadChars = 2800;
+
     private readonly AuthSurfaceOptions _options;
     private readonly IRateLimitCheck _rateLimitCheck;
     private readonly ISymmetricKeyProvider _keys;
@@ -77,6 +80,10 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(productName);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetAppId);
+
+        // payload 上限 2800 字符——密文列 VARCHAR(4000) 容量保障（ASCII 2800 字符 → base64(nonce‖cipher‖tag) 约 3740 ≤ 4000）
+        if (payload is { Length: > MaxPayloadChars })
+            throw new ArgumentException($"兑换码附加信息 payload 超长——上限 {MaxPayloadChars} 字符", nameof(payload));
 
         var code = RedemptionCodeGenerator.Generate();
         var now = DateTime.UtcNow;

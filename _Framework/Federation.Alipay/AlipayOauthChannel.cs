@@ -33,19 +33,16 @@ namespace TKWF.Federation.Alipay;
 public sealed class AlipayOauthChannel : DomainServiceBase, ISsoChannel
 {
     private readonly AlipayApiClient _api;
-    private readonly AlipaySignService _signService;
     private readonly ChannelConfig? _channel;
 
     /// <summary>构造——channel 由 <see cref="ChannelConfig"/>（工厂预取传入）；null = 集合模板实例。</summary>
     public AlipayOauthChannel(
         IDomainUser user,
         AlipayApiClient api,
-        AlipaySignService signService,
         ChannelConfig? channel = null)
         : base(user)
     {
         _api = api ?? throw new ArgumentNullException(nameof(api));
-        _signService = signService ?? throw new ArgumentNullException(nameof(signService));
         _channel = channel;
     }
 

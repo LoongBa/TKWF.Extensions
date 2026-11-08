@@ -61,11 +61,12 @@ public sealed class AlipaySignService
             if (root.ValueKind != JsonValueKind.Object)
                 return false;
 
-            // 剥离顶层 "sign" 键；其余顶层字段值用 GetRawText 保留原始 JSON 子串（防回序列化差异）
+            // 剥离顶层 "sign"/"sign_type" 键（官方 rsaCheckV1/rsaCheckV2 同时剔除两者）；其余顶层字段值用 GetRawText 保留原始 JSON 子串（防回序列化差异）
             var entries = new List<KeyValuePair<string, string>>();
             foreach (var prop in root.EnumerateObject())
             {
-                if (string.Equals(prop.Name, "sign", StringComparison.Ordinal))
+                if (string.Equals(prop.Name, "sign", StringComparison.Ordinal)
+                    || string.Equals(prop.Name, "sign_type", StringComparison.Ordinal))
                     continue;
                 var value = prop.Value.ValueKind == JsonValueKind.String
                     ? prop.Value.GetString() ?? ""

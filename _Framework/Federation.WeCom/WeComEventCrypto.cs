@@ -121,12 +121,15 @@ internal static class WeComEventCrypto
         if (msgLen <= 0 || 20 + msgLen > plain.Length)
             throw new CryptographicException("企业微信回调解密结果 msg_len 非法");
 
-        // 提取明文尾部 receiveid 与期望（corpid/suiteid）恒定时间比对（P1-1——防跨企业回调混串）
+        // 提取明文尾部 receiveid 与期望（corpid/suiteid）恒定时间比对（P1-1——防跨企业回调混串）；
+        // 预检查：先取两侧 UTF-8 字节并比对字节长度——FixedTimeEquals(byte[], byte[]) 对异长数组抛
+        // ArgumentException，畸形 receiveid（超长多字节/空）须收敛为 fail-closed 的 CryptographicException（WC-6）
         var receiveIdLen = plain.Length - 20 - msgLen;
         var receiveId = Encoding.UTF8.GetString(plain, 20 + msgLen, receiveIdLen);
-        if (receiveId.Length != expectedReceiveId.Length
-            || !CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(receiveId), Encoding.UTF8.GetBytes(expectedReceiveId)))
+        var receiveIdBytes = Encoding.UTF8.GetBytes(receiveId);
+        var expectedReceiveIdBytes = Encoding.UTF8.GetBytes(expectedReceiveId);
+        if (receiveIdBytes.Length != expectedReceiveIdBytes.Length
+            || !CryptographicOperations.FixedTimeEquals(receiveIdBytes, expectedReceiveIdBytes))
             throw new CryptographicException("企业微信回调 receiveid 与 corpid/suiteid 不匹配（拒绝——防跨企业混串）");
 
         return Encoding.UTF8.GetString(plain, 20, msgLen);

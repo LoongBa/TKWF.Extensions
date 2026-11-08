@@ -15,7 +15,7 @@ namespace TKWF.Ext.Account
         /// <summary>重置码有效期分钟数（默认 30）。</summary>
         public int ResetCodeValidityMinutes { get; set; } = 30;
 
-        /// <summary>是否启用账户管理（默认 true）。</summary>
+        /// <summary>是否启用账户管理（⚠️ **预留未消费**——当前版本未实现关闭语义，配置不改变任何行为，勿依赖）。</summary>
         public bool IsEnabled { get; set; } = true;
     }
 }

@@ -25,8 +25,8 @@ public static class WeChatMessageRouteRuleMatcher
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(criteria);
 
-        // 规则按 SortOrder 升序尝试，取首个命中（输入顺序无关——排序语义由运行库持有）
-        return rules.OrderBy(r => r.SortOrder).FirstOrDefault(r => Matches(r, criteria));
+        // 规则按 SortOrder 升序尝试，取首个命中（平局按 Id 升序回退——排序语义完全由运行库持有，输入顺序无关）
+        return rules.OrderBy(r => r.SortOrder).ThenBy(r => r.Id).FirstOrDefault(r => Matches(r, criteria));
     }
 
     /// <summary>

@@ -305,4 +305,26 @@ public class RedemptionCommandServiceTests
         var row = fsql.Select<RedemptionCodeEntity>().Where(e => e.CodeHash == RedemptionCodeGenerator.Hash(code)).ToOne();
         Assert.Null(row.PayloadEncrypted);
     }
+
+    // payload 超长（> 2800 字符）——容量守卫抛异常（密文列 VARCHAR(4000) 保障）
+
+    [Fact]
+    public async Task CreateWithOversizedPayload_Throws()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        var user = BindUser(sp);
+        var cmd = user.Use<IRedemptionCommandService>();
+
+        var oversized = new string('a', 2801);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => cmd.CreateCodeAsync("精品课程 A", "edu-course", null, CancellationToken.None, oversized));
+        Assert.Contains("payload", ex.Message);
+
+        // 边界值 2800——不抛（恰好上限允许）
+        var payload2800 = new string('a', 2800);
+        var code = await cmd.CreateCodeAsync("精品课程 A", "edu-course", null, CancellationToken.None, payload2800);
+        Assert.False(string.IsNullOrEmpty(code));
+    }
 }

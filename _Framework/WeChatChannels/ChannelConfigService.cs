@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Exceptions;
@@ -34,6 +35,7 @@ namespace TKWF.Ext.WeChatChannels;
 public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigService
 {
     private readonly TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider _keys;
+    private readonly ILogger<ChannelConfigService>? _logger;
 
     private WeChatChannelConfigEntityDataService? _ds;
     private WeChatChannelConfigEntityDataService Ds => _ds ??= User.Use<WeChatChannelConfigEntityDataService>();
@@ -46,12 +48,24 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
 
     private static readonly Regex AliasPattern = new("^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$", RegexOptions.Compiled);
 
+    /// <summary>协议通道类型白名单（D03——wechat_oauth / wechat_event 双通道；平台库 ISsoChannel.ChannelType 选区）。
+    /// <para>与 <see cref="ChannelTypeRegistry"/>（通道形态 wechat 域）正交——协议类型不经注册表；未知值拒透传存储
+    /// （对齐相邻 ChannelForm/Verification 值校验 fail-fast——防下游 ISsoChannel 选区永不命中）。</para></summary>
+    private static readonly System.Collections.Generic.HashSet<string> LegalChannelTypes = new(
+        System.StringComparer.OrdinalIgnoreCase)
+    {
+        "wechat_oauth",
+        "wechat_event",
+    };
+
     public ChannelConfigService(
         IDomainUser user,
         [Microsoft.Extensions.DependencyInjection.FromKeyedServices(TKW.Framework.Domain.KeyManagement.SymmetricKeyProviderKeys.WeChatChannels)]
-        TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider keys) : base(user)
+        TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider keys,
+        ILogger<ChannelConfigService>? logger = null) : base(user)
     {
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -75,6 +89,8 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     /// <inheritdoc />
     public async Task<IReadOnlyList<WeChatChannelConfigDto>> ListChannelsAsync(CancellationToken ct = default)
     {
+        // 上限 1000 无分页（EntitySelectAsync count 参数硬编码）——通道数量级为个位数~几十（平台手工维护），
+        // 一次性全量投影语义保留；超出请评审增分页重载（对齐 ListChannelsAsync 契约——不静默截断）。
         var entities = await Ds.EntitySelectAsync(null, 0, 1000, q => q.OrderBy(e => e.ChannelId), ct);
         var list = new List<WeChatChannelConfigDto>(entities.Count);
         foreach (var e in entities) list.Add(ToDto(e));
@@ -96,6 +112,11 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         if (verification is not ("none" or "verified"))
             throw new ArgumentException($"认证状态非法：{request.Verification}（none/verified）", nameof(request));
 
+        // 协议通道类型白名单校验（fail-fast——未知类型拒透传存储，防下游 ISsoChannel 选区永不命中；对齐 ChannelForm/Verification 值校验）
+        var channelType = string.IsNullOrWhiteSpace(request.ChannelType) ? "wechat_event" : request.ChannelType.Trim().ToLowerInvariant();
+        if (!LegalChannelTypes.Contains(channelType))
+            throw new ArgumentException($"ChannelType 非法：{request.ChannelType}（合法值 wechat_oauth / wechat_event）", nameof(request));
+
         // 构造实体（wire DTO → 领域实体——凭证承载于 DTO 明文，服务端加密落库）
         var entity = new WeChatChannelConfigEntity
         {
@@ -105,7 +126,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             DisplayName = request.DisplayName ?? "",
             Remark = request.Remark,
             IsEnabled = request.IsEnabled,
-            ChannelType = request.ChannelType ?? "wechat_event",
+            ChannelType = channelType,        // 协议通道类型（whitelist 校验后归一存储——D03 白名单）
             ChannelForm = channelForm,          // D03 1.2 新列（形态——默认 mp_service 存量兼容）
             Verification = verification,        // D03 1.2 新列（认证状态——默认 none）
             Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : request.Alias.Trim().ToLowerInvariant(),   // D03 1.2 新列（对外别名——1.6 守卫另立）
@@ -143,7 +164,8 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
 
         // 更新——逐字段加密边界（变更字段才覆盖密文；其余保持）
         var db = await Ds.EntityGetAsync(e => e.Id == entity.Id, ct);
-        if (db is null) throw new InvalidOperationException($"公众号配置不存在：Id={entity.Id}");
+        // CH-12 目标不存在归因（ErrorCode 化——对齐 alias 守卫错误码形态；预查与 CAS 之间的并发删除由下方 0 行重查兜底）
+        if (db is null) throw new DomainException($"公众号配置不存在：Id={entity.Id}") { ErrorCode = "CHANNEL_NOT_FOUND" };
 
         // D03 1.6 alias 不可变 fail-fast（正常路径友好错误；并发窗口由下方 CAS WHERE 兜底——审核 P1-2）
         if (!string.IsNullOrWhiteSpace(db.Alias) && entity.Alias is not null && db.Alias != entity.Alias)
@@ -198,7 +220,14 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
                 }, ct);
         }
         if (affected == 0)
-            throw new DomainException("channel alias 并发冲突：alias 已被并发设置或修改，请刷新后重试") { ErrorCode = "CHANNEL_ALIAS_IMMUTABLE" };
+            {
+                // CH-12 归因区分：0 行 ≠ 恒 alias 冲突——预查与 CAS 之间目标行可能被并发删除（→ CHANNEL_NOT_FOUND）；
+                // 目标仍存在才归因 alias CAS 失败（→ CHANNEL_ALIAS_IMMUTABLE）
+                var stillExists = await Ds.EntityGetAsync(e => e.Id == entity.Id, ct);
+                if (stillExists is null)
+                    throw new DomainException($"公众号配置不存在：Id={entity.Id}") { ErrorCode = "CHANNEL_NOT_FOUND" };
+                throw new DomainException("channel alias 并发冲突：alias 已被并发设置或修改，请刷新后重试") { ErrorCode = "CHANNEL_ALIAS_IMMUTABLE" };
+            }
 
         await PublishChangedAsync(entity.ChannelId, now.Ticks);   // D03 三机制-事件失效（落库后发布）
         return entity.Id;
@@ -230,7 +259,11 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // 事件失效为旁路（TTL 兜底仍在）——发布失败不阻断写路径（降级矩阵惯例），Debug 留痕
+            // 事件失效为旁路（TTL 兜底仍在）——发布失败不阻断写路径（降级矩阵惯例）。
+            // 门面（AddConstructibleService 守卫工厂）禁止构造注入新依赖——logger 为可选注入
+            // （对齐 WeChatOperationsStatusService 先例）：守卫构造路径 logger=null 降级 Debug 留痕，
+            // 宿主 DI 解析路径经 ILogger 进宿主日志链路。
+            _logger?.LogWarning(ex, "[ChannelConfigService] ChannelConfigChanged 发布失败：{Message}", ex.Message);
             System.Diagnostics.Debug.WriteLine($"[ChannelConfigService] ChannelConfigChanged 发布失败：{ex.Message}");
         }
     }
@@ -249,6 +282,8 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
             IsEnabled: e.IsEnabled,
             ChannelType: e.ChannelType,
             Alias: e.Alias,
+            ChannelForm: e.ChannelForm,
+            Verification: e.Verification,
             HasCredentials: !string.IsNullOrWhiteSpace(e.AppSecretCipher) || !string.IsNullOrWhiteSpace(e.TokenCipher) || !string.IsNullOrWhiteSpace(e.EncodingAESKeyCipher),
             CreateTime: e.CreateTime,
             UpdateTime: e.UpdateTime);

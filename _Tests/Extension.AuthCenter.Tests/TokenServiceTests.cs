@@ -172,6 +172,31 @@ public class TokenServiceTests
         Assert.Equal("ALG_NOT_ALLOWED", ex.Message);
     }
 
+    // AC-03（B 档）：格式类异常归一——Base64 解码失败 / JSON 结构非法 → TOKEN_MALFORMED（原散乱 FormatException/JsonException 上抛）
+
+    [Fact]
+    public async Task ValidateToken_MalformedBase64Header_NormalizedToTokenMalformed()
+    {
+        var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        // '!' 非 base64url 字母表——header 段解码失败（此前散乱 FormatException 上抛）
+        var forged = "!!!.e30.QUJD";
+
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateTokenAsync(forged, ct: TestContext.Current.CancellationToken));
+        Assert.Equal("TOKEN_MALFORMED", ex.Message);
+    }
+
+    [Fact]
+    public async Task ValidateToken_MalformedJsonHeader_NormalizedToTokenMalformed()
+    {
+        var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
+        // header 段 Base64 合法但非 JSON——结构非法（此前散乱 JsonException 上抛）
+        var header = TokenService.Base64UrlEncode(Encoding.UTF8.GetBytes("not-json"));
+        var forged = $"{header}.e30.QUJD";
+
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateTokenAsync(forged, ct: TestContext.Current.CancellationToken));
+        Assert.Equal("TOKEN_MALFORMED", ex.Message);
+    }
+
     [Fact]
     public async Task ValidateToken_Expired_Rejected()
     {
@@ -209,9 +234,12 @@ public class TokenServiceTests
         var result = await service.IssueTokenAsync(new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
         var validation = await service.ValidateTokenAsync(result.AccessToken, ct: TestContext.Current.CancellationToken);
 
-        await service.RevokeTokenAsync(validation.Jti, "logout", ct: TestContext.Current.CancellationToken);
+        await service.RevokeTokenAsync(validation.Jti, "logout", validation.UserId, ct: TestContext.Current.CancellationToken);
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => service.ValidateTokenAsync(result.AccessToken, ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOKEN_REVOKED", ex.Message);
+        // AC-11（B 档）：logout 链路传 userId ——黑名单行落真实归属者（审计留痕；此前 UserId 空串）
+        var blackRow = await stub.Use<AuthTokenBlacklistEntityDataService>().GetByJtiAsync(validation.Jti, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(validation.UserId, blackRow!.UserId);
     }
 
     // ── D4 Refresh rotation + TokenVersion + 重用检测 ────────────────

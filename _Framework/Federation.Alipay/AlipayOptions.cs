@@ -34,7 +34,8 @@ public class AlipayChannelConfig
     /// <summary>支付宝公钥 PEM 文件路径（验签响应/通知——网关同步响应自实现验签，AlipaySignService）。</summary>
     public string AlipayPublicKeyPath { get; set; } = "";
 
-    /// <summary>手机号可选增强开关（默认 false——须企业资质 + 申请 mobile 字段审核，行业类目限制，非稳定能力，N4 §3.4）。</summary>
+    /// <summary>手机号可选增强开关（默认 false——须企业资质 + 申请 mobile 字段审核，行业类目限制，非稳定能力，N4 §3.4）。
+    /// ⚠️ 预留：当前零消费（GetUserInfoAsync 不请求 mobile、AlipayUserInfo 无 mobile 字段）——mobile 权限开通后实现裁剪时启用；保留开关为配置兼容。</summary>
     public bool EnableMobile { get; set; }
 }
 
@@ -46,6 +47,6 @@ public class AlipayChannelConfig
 [Options("TKWF:Federation:Alipay")]
 public class AlipayOptions
 {
-    /// <summary>channel 配置列表（每项一个 ChannelId/AppId/私钥公钥路径/EnableMobile）。</summary>
+    /// <summary>channel 配置列表（每项一个 ChannelId/AppId/私钥公钥路径/EnableMobile——预留开关，见 <see cref="AlipayChannelConfig.EnableMobile"/>）。</summary>
     public List<AlipayChannelConfig> Channels { get; set; } = [];
 }

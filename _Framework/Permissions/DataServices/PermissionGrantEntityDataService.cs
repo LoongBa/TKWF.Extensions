@@ -20,7 +20,8 @@ namespace TKWF.Ext.Permissions;
 // - 数据过滤干预 → 实现 IGlobalQueryFilter（初始化器基类 DomainHostInitializerBase 已实现，override Apply<T> 即可）
 // - 不要手动创建 Controller 类（V3.7 起由 SG 自动生成）
 //
-// 【V0.3.0 (权限管理 Service)】手写骨架（DMP-Lite 模式，`.cs` 入库；`.g.cs` 不入库、构建时自动生成）。
+// 【V0.3.0 (权限管理 Service)】手写骨架（DMP-Lite 模式，`.cs` 入库；`.g.cs` 为 xCodeGen 生成物，
+// 2026-09-14 入库政策起一并入库——实体变更后重跑 `pwsh .xCodeGen/run-xcodegen.ps1 -Ext Permissions` 并提交生成物）。
 // 消费方通过 DI 注入 PermissionGrantEntityDataService 即可操作权限授予数据。
 //
 // 【越权授权面修复（2026-10-15，变更记录条目⑥(a)，随下次 tag 发布）】

@@ -114,6 +114,8 @@ public sealed class DingTalkApiClient
             var url = $"{LegacyApiBase}/gettoken?appkey={Uri.EscapeDataString(secret.AppKey)}&appsecret={Uri.EscapeDataString(secret.AppSecret)}";
             using var resp = await _httpClient.GetAsync(url, ct);
             var json = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+                throw new InvalidOperationException($"钉钉旧版企业 token 获取失败（{(int)resp.StatusCode}）：{json}");
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)
@@ -188,6 +190,8 @@ public sealed class DingTalkApiClient
         var url = $"{LegacyApiBase}/topapi/user/getbyunionid?access_token={Uri.EscapeDataString(legacyToken)}";
         using var resp = await _httpClient.PostAsJsonAsync(url, new { unionid = unionId }, ct);
         var json = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"钉钉 getbyunionid 获取失败（{(int)resp.StatusCode}）：{json}");
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)

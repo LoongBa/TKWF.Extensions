@@ -35,7 +35,9 @@ public partial class UserRoleViewQueryService(IDomainUser user)
         return views.Select(UserRoleViewDto.FromEntity).ToList();
     }
 
-    /// <summary>解析当前用户 id（<see cref="IDomainUser.UserId"/> string → long）。</summary>
+    /// <summary>解析当前用户 id（<see cref="IDomainUser.UserId"/> string → long）。
+    /// <para>隐式约束：UserId 须为 long 数字串（Identity 用户表 Id 为 BIGINT——数值型 Id 的字符串形态）；
+    /// 非数字串视为无效上下文，抛 <see cref="UnauthorizedAccessException"/>（REST 面 401）。</para></summary>
     private long ResolveCurrentUserId()
         => long.TryParse(User.UserId, out var id) ? id : throw new UnauthorizedAccessException("当前用户上下文无效");
 }

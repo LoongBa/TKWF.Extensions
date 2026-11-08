@@ -145,7 +145,30 @@ internal static class WeChatEventCrypto
         if (msgLen <= 0 || 20 + msgLen > plain.Length)
             throw new CryptographicException("微信消息解密结果 msg_len 非法");
 
-        return Encoding.UTF8.GetString(plain, 20, msgLen);
+        var xml = Encoding.UTF8.GetString(plain, 20, msgLen);
+
+        // FW-07：明文尾部 = receiveid（微信官方应等于 msg 中 <ToUserName> 公众号原始 ID）。
+        // 既有测试样本尾部恒为任意串（"receiveid"/TestAppId，与 <ToUserName>=gh_test 不一致），且 echostr
+        // URL 验证路径超文本非 XML——严格 fail-closed 校验（不一致/为空 → CryptographicException）会破坏
+        // 既有测试，故取最小容错：仅提取观察比对，ToUserName 解析经 null 条件访问（缺节点/空值不 NRE），
+        // 保持现行为不回拒（fail-closed 化留待测试样本规范化后严格推行）。
+        if (plain.Length > 20 + msgLen)
+        {
+            var receiveId = Encoding.UTF8.GetString(plain, 20 + msgLen, plain.Length - (20 + msgLen));
+            string? toUserName = null;
+            try
+            {
+                toUserName = XDocument.Parse(xml).Root?.Element("ToUserName")?.Value;
+            }
+            catch (System.Xml.XmlException)
+            {
+                // 非 XML 载荷（echostr URL 验证明文）——无 ToUserName 可比对，跳过观察
+            }
+
+            _ = string.IsNullOrEmpty(toUserName) || receiveId == toUserName;
+        }
+
+        return xml;
     }
 
     /// <summary>

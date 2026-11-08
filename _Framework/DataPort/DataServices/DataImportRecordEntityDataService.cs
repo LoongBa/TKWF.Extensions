@@ -30,7 +30,7 @@ partial class DataImportRecordEntityDataService(IDomainUser user, IEntityDAC<Dat
         => await EntityCreateAsync(record, ct);
 
     /// <summary>重置失败批次为 Processing（原 raw SQL ①——StartTime 保留 CanUpdate=false 不覆盖，其余字段重置）。</summary>
-    public async Task ResetToProcessingAsync(long id, DateTime startTime, DateTime updateTime, CancellationToken ct = default)
+    public async Task ResetToProcessingAsync(long id, DateTime updateTime, CancellationToken ct = default)
     {
         var record = await EntityGetAsync(r => r.Id == id, ct);
         if (record == null) return;

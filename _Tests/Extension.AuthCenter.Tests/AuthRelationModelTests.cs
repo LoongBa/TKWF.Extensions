@@ -79,6 +79,26 @@ public class AuthRelationModelTests
         Assert.Single(active);
     }
 
+    // AC-15（B 档）：并发冻结幂等——无唯一约束下"查重→插入"非原子（并发双请求 → 双活跃行）。
+    // 插入后复核 CAS：最小 Id 为胜者，败者自删刚插行并幂等返回胜者行——终态恰好 1 活跃行、不抛错
+    [Fact]
+    public async Task Freeze_ConcurrentSameReason_IsIdempotentSingleRow()
+    {
+        var (user, _) = CreateHost();
+        await SeedAccountAsync(user, "u-frz-race");
+        var freezes = user.Use<IFreezeService>();
+
+        var results = await Task.WhenAll(
+            freezes.FreezeAsync("u-frz-race", "manual", null, null, ct: TestContext.Current.CancellationToken),
+            freezes.FreezeAsync("u-frz-race", "manual", null, null, ct: TestContext.Current.CancellationToken));
+
+        var active = await freezes.ListActiveFreezesAsync("u-frz-race", ct: TestContext.Current.CancellationToken);
+        Assert.Single(active);                                  // 终态单活跃行（重复冻结不叠加）
+        Assert.Equal(active[0].Id, results[0].Id);              // 两调用任一返回即最终保留行（最小 Id 胜者）
+        Assert.Equal(active[0].Id, results[1].Id);
+        Assert.Equal("manual", active[0].Reason);
+    }
+
     [Fact]
     public async Task Freeze_BlankReason_Rejected()
     {

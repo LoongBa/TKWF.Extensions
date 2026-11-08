@@ -16,7 +16,7 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>Federation.WeChat/v</MinVerTagPrefix>
     <PackageId>TKWF.Federation.WeChat</PackageId>
-    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：微信公众平台双向网关（OAuth 身份获取 + 事件推送接收验签）；WeChatApiClient 出站 API 客户端（access_token L1 缓存 + 并发锁 + code→openid + sns/userinfo）+ WeChatOptions 配置（TKWF:Federation:WeChat 节）</Description>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：微信公众平台连接器（大使馆/平台网关库）——双通道 OAuth 授权 + 事件验签解密（信任根 msg_signature+AES）/ 出站 ApiClient（access_token L1 缓存）/ 事件回复 Handler 三件套（二级分发 + 模板驱动 + 探针门控）/ 菜单出站 3 API / 凭证解析可插拔 / RawXml 透传逃逸口</Description>
   </PropertyGroup>
 
   <ItemGroup>

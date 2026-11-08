@@ -1,5 +1,7 @@
 using System;
+using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -105,5 +107,55 @@ public class WeComApiClientTests
         var client = CreateClient(failSensitive: true);
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => client.GetSensitiveInfoAsync("stale-ticket", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetAccessTokenAsync_Http500_Throws()
+    {
+        // WC-5：HTTP 非 2xx（500）→ 与 errcode 路径一致的 InvalidOperationException（错误状态按错误路径处理）
+        var client = new WeComApiClient(new HttpClient(new HttpErrorHandler("/cgi-bin/gettoken")), NullLogger<WeComApiClient>.Instance);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetAccessTokenAsync(TestCorpId, TestCorpSecret, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetIdentityAsync_Http500_Throws()
+    {
+        // gettoken 正常（200）→ getuserinfo 500 → GetIdentityAsync 自身状态检查失败
+        var client = new WeComApiClient(new HttpClient(new HttpErrorHandler("/cgi-bin/auth/getuserinfo")), NullLogger<WeComApiClient>.Instance);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetIdentityAsync(TestCorpId, TestCorpSecret, "code-1", isThirdParty: false, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetSensitiveInfoAsync_Http500_Throws()
+    {
+        var client = new WeComApiClient(new HttpClient(new HttpErrorHandler("/cgi-bin/auth/getuserdetail")), NullLogger<WeComApiClient>.Instance);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetSensitiveInfoAsync("stub-ticket", CancellationToken.None));
+    }
+
+    /// <summary>HTTP 错误状态码桩——errorPathSuffix 路径返回 500，gettoken 正常（200）供 getuserinfo/getuserdetail 链路前置。</summary>
+    private sealed class HttpErrorHandler : HttpMessageHandler
+    {
+        private readonly string _errorPathSuffix;
+
+        public HttpErrorHandler(string errorPathSuffix) => _errorPathSuffix = errorPathSuffix;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var path = request.RequestUri?.AbsolutePath ?? "";
+            if (path.EndsWith(_errorPathSuffix, StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                {
+                    Content = new StringContent("{\"errcode\":-1,\"errmsg\":\"server error\"}", Encoding.UTF8, "application/json"),
+                });
+            if (path.EndsWith("/cgi-bin/gettoken", StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"errcode\":0,\"access_token\":\"stub-token\",\"expires_in\":7200}", Encoding.UTF8, "application/json"),
+                });
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
     }
 }

@@ -26,8 +26,8 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <para>装配链镜像 <c>AuthCenterEndpointHost</c>（V0.6.0 T4/T5 冒烟先例）：ConfigWebAppDomain + ConsumerHostInitializer
 /// （白名单 WeChatOperations）+ RegisterServices 替换 8 门面为普通 Scoped Fake（守卫工厂替换——guest.Use 帧内解析，
 /// 聚焦端点挂载/路由映射/门面绑定，不测领域逻辑——领域逻辑由门面单测锁定）+ UseWebSession + WeChatOperationsWebExtension
-/// （DeclareEndpoints MapGenerated 挂载 25 端点）+ UseAspNetCoreRouting。</para>
-/// <para>⚠️ 认证语义：25 生成端点全挂 <c>RequireAuthorization()</c>（ASP.NET 授权层），测试宿主 <c>HttpAuth.ExcludedPathPrefixes</c>
+/// （DeclareEndpoints MapGenerated 挂载 22 端点）+ UseAspNetCoreRouting。</para>
+/// <para>⚠️ 认证语义：22 生成端点全挂 <c>RequireAuthorization()</c>（ASP.NET 授权层），测试宿主 <c>HttpAuth.ExcludedPathPrefixes</c>
 /// 排除 /api（对齐 AuthCenter 先例——401 语义不下沉门面，端点到门面绑定断言直达）——HttpAuthentication fail-closed
 /// 归框架中间件测试域（AuthCenter JwtAuth 顺序冒烟覆盖），本宿主聚焦<b>端点已挂载 + handler→门面绑定</b>（断链 → 404 即测试红）。</para>
 /// </summary>

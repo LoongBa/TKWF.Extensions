@@ -79,6 +79,23 @@ public class WeChatCircuitBreakerTests
     }
 
     [Fact]
+    public void RecordFailure_OpenState_SustainedFailure_DoesNotExtendWindow()
+    {
+        var breaker = Create(openWindow: TimeSpan.FromSeconds(60));
+        OpenWith(breaker, EpA, T0);
+
+        Assert.Equal(T0.AddSeconds(60), breaker.GetState(EpA).OpenUntilUtc); // 开闸止点基线 = 开闸时刻 + 开窗期
+
+        // 开窗期内持续失败 → 不延长窗口（止点仍为原开闸时刻 + 开窗期，窗口期满照常探测）
+        breaker.RecordFailure(EpA, T0.AddSeconds(10));
+        breaker.RecordFailure(EpA, T0.AddSeconds(30));
+        breaker.RecordFailure(EpA, T0.AddSeconds(59));
+
+        Assert.Equal(CircuitBreakerState.Open, breaker.GetState(EpA).State);
+        Assert.Equal(T0.AddSeconds(60), breaker.GetState(EpA).OpenUntilUtc);
+    }
+
+    [Fact]
     public void TryCall_WindowExpired_AllowsSingleProbe_HalfOpen()
     {
         var breaker = Create(openWindow: TimeSpan.FromSeconds(60));
@@ -153,6 +170,39 @@ public class WeChatCircuitBreakerTests
 
         Assert.Equal(CircuitBreakerState.Closed, breaker.GetState(EpA).State);
         Assert.True(breaker.TryCall(EpA, T0));
+    }
+
+    // ---------- 并发压力（锁粒度=端点，不变式不被并发破坏） ----------
+
+    [Fact]
+    public void Concurrent_RecordFailure_ThresholdExact_Opens_SingleWindowEnd()
+    {
+        var breaker = Create(threshold: 3, openWindow: TimeSpan.FromSeconds(60)); // 阈值 3 精确触发
+
+        // 并发失败 100 次（远超阈值）——不变式：① 阈值精确触发开闸 ② 窗口止点不被并发写坏（不延窗）
+        Parallel.For(0, 100, _ => breaker.RecordFailure(EpA, T0));
+
+        Assert.Equal(CircuitBreakerState.Open, breaker.GetState(EpA).State);
+        Assert.Equal(T0.AddSeconds(60), breaker.GetState(EpA).OpenUntilUtc);
+        Assert.False(breaker.TryCall(EpA, T0)); // 开闸期内拒绝
+    }
+
+    [Fact]
+    public void Concurrent_TryCall_WindowExpired_SingleProbe_OnlyOneAllowed()
+    {
+        var breaker = Create(openWindow: TimeSpan.FromSeconds(60));
+        OpenWith(breaker, EpA, T0);
+
+        var now = T0.AddSeconds(60); // 窗口期满（并发同刻放行竞争）
+        var allowed = 0;
+        Parallel.For(0, 32, _ =>
+        {
+            if (breaker.TryCall(EpA, now))
+                Interlocked.Increment(ref allowed);
+        });
+
+        Assert.Equal(1, allowed); // 半开单探测唯一——并发不多个放行
+        Assert.Equal(CircuitBreakerState.HalfOpen, breaker.GetState(EpA).State);
     }
 
     // ---------- 参数校验 ----------

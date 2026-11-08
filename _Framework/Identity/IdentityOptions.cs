@@ -9,7 +9,7 @@ namespace TKWF.Ext.Identity
         /// <summary>密码最小长度（默认 6）。</summary>
         public int PasswordMinLength { get; set; } = 6;
 
-        /// <summary>是否启用身份管理（默认 true）。</summary>
+        /// <summary>是否启用身份管理（⚠️ **预留未消费**——当前版本未实现关闭语义，配置不改变任何行为，勿依赖）。</summary>
         public bool IsEnabled { get; set; } = true;
     }
 }

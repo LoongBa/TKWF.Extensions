@@ -81,7 +81,14 @@ public sealed class WeChatApiClient
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)
+            {
+                // FW-06：40001（invalid credential）/42001（access_token expired）→ 缓存中 token 已失效（或凭证不匹配致新取失败），
+                // 先清失效缓存键（下次调用重新获取），再抛异常——最小语义：失效缓存不被陈旧 token 长期占据
+                var errCode = err.GetInt32();
+                if (errCode == 40001 || errCode == 42001)
+                    _tokenCache.TryRemove(appId, out _);
                 throw new InvalidOperationException($"微信 access_token 获取失败：{json}");
+            }
 
             var token = root.GetProperty("access_token").GetString()!;
             var expiresIn = root.GetProperty("expires_in").GetInt32();

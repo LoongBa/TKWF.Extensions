@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.AuthController;
 using TKW.Framework.Domain;
@@ -112,9 +113,23 @@ namespace TKWF.Ext.SecurityLog
                 // ⑤ 落库（Store 内部异常静默；此处再兜底——绝不阻断认证流程）
                 await store.SaveAsync(entry, CancellationToken.None);
             }
-            catch
+            catch (Exception ex)
             {
-                // 过滤器自身异常绝不阻断业务（审计旁路语义）
+                // SL-06 落地（2026-11-09）：审计旁路可观测性——失败不再完全静默。
+                // 经守卫帧 GetOptionalService 解析 ILogger（禁构造注入 DI004）——对齐本方法上方
+                // Options 解析同款通道（L99）；日志解析/记录自身失败亦静默（审计旁路语义保持：
+                // 过滤器自身异常绝不阻断业务——本 catch 即最后防线）。
+                try
+                {
+                    context.DomainUser.GetOptionalService<ILogger<SecurityLogFilterAttribute<TUserInfo>>>()
+                        ?.LogWarning(ex,
+                            "安全日志采集旁路失败（审计旁路——不阻断业务）：MethodName={MethodName} CorrelationId={CorrelationId}",
+                            context.Invocation.MethodName, context.CorrelationId);
+                }
+                catch
+                {
+                    // 日志通道不可用时静默（IActionFilter 域内不得二次抛出）
+                }
             }
         }
 

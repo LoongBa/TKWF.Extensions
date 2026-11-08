@@ -220,7 +220,7 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
                $"<FromUserName><![CDATA[{ctx.ToUserName}]]></FromUserName>" +
                $"<CreateTime>{createTime}</CreateTime>" +
                $"<MsgType><![CDATA[text]]></MsgType>" +
-               $"<Content><![CDATA[{content}]]></Content></xml>";
+               $"<Content><![CDATA[{EscapeCData(content)}]]></Content></xml>";
     }
 
     /// <summary>
@@ -242,15 +242,20 @@ public abstract class WechatEventReplyHandlerBase : DomainServiceBase, IEventRep
         foreach (var a in articles)
         {
             sb.Append("<item>");
-            sb.Append($"<Title><![CDATA[{a.Title}]]></Title>");
-            sb.Append($"<Description><![CDATA[{a.Description}]]></Description>");
-            sb.Append($"<PicUrl><![CDATA[{a.PicUrl ?? ""}]]></PicUrl>");
-            sb.Append($"<Url><![CDATA[{a.Url}]]></Url>");
+            sb.Append($"<Title><![CDATA[{EscapeCData(a.Title)}]]></Title>");
+            sb.Append($"<Description><![CDATA[{EscapeCData(a.Description)}]]></Description>");
+            sb.Append($"<PicUrl><![CDATA[{EscapeCData(a.PicUrl ?? "")}]]></PicUrl>");
+            sb.Append($"<Url><![CDATA[{EscapeCData(a.Url)}]]></Url>");
             sb.Append("</item>");
         }
         sb.Append("</Articles></xml>");
         return sb.ToString();
     }
+
+    /// <summary>CDATA 内容转义——内容含字面 <c>]]&gt;</c> 会提前闭合 CDATA 段破坏 XML 结构，
+    /// 按 XML 规范拆分技法替换为 <c>]]]]&gt;&lt;![CDATA[&gt;</c>（双段拼合，内容保真）。</summary>
+    private static string EscapeCData(string value)
+        => value.Replace("]]>", "]]]]><![CDATA[>", StringComparison.Ordinal);
 
     /// <summary>
     /// 业务载荷 → <see cref="EventReplyResult"/>（微信 XML 信封——<b>RawXml 优先（原始 XML 透传——

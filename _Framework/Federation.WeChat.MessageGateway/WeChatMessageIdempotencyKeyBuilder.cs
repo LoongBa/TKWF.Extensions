@@ -1,3 +1,5 @@
+using System;
+
 namespace TKWF.Federation.WeChat.MessageGateway;
 
 /// <summary>
@@ -20,6 +22,9 @@ public static class WeChatMessageIdempotencyKeyBuilder
     /// <returns>规范化幂等键。</returns>
     public static string BuildKey(string channelId, string? msgId, string fromUserName, long createTime)
     {
+        ArgumentNullException.ThrowIfNull(channelId);
+        ArgumentNullException.ThrowIfNull(fromUserName);
+
         // 前缀类型隔离：msg:（消息形态）与 evt:（事件形态）永不互相碰撞；
         // ChannelId 入键：跨通道同 MsgId/同 FromUserName 各自独立去重。
         return string.IsNullOrEmpty(msgId)

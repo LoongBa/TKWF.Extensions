@@ -81,7 +81,7 @@ public class AuthenticationProductionPathTests
         Assert.Equal(account.UId, validation.UserId);
         Assert.Equal(AuthTypes.Sms, validation.AuthType);
 
-        await tokenService.RevokeTokenAsync(validation.Jti, "logout", CancellationToken.None);
+        await tokenService.RevokeTokenAsync(validation.Jti, "logout", ct: CancellationToken.None);
         var ex = await Assert.ThrowsAsync<AuthenticationException>(() => tokenService.ValidateTokenAsync(issued.AccessToken, CancellationToken.None));
         Assert.Equal("TOKEN_REVOKED", ex.Message);
 

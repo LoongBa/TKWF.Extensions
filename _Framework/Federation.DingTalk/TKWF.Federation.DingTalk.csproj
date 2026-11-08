@@ -16,14 +16,14 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>Federation.DingTalk/v</MinVerTagPrefix>
     <PackageId>TKWF.Federation.DingTalk</PackageId>
-    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：钉钉开放平台双向网关（新 OAuth2 身份获取 + 事件订阅回调验签）；DingTalkApiClient 出站 API 客户端（userAccessToken 一次性 + 新旧双企业 token L1 缓存 + getbyunionid + /contact/users 裁剪）+ DingTalkOptions 配置（TKWF:Federation:DingTalk 节）</Description>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：钉钉开放平台连接器（大使馆/平台网关库）——双通道 DingTalkOauthChannel（dingtalk_oauth）/DingTalkEventChannel（dingtalk_event）+ 事件回调三道闸门验签（signature + AES 解密 + receiveid=corpId 校验）+ 出站 DingTalkApiClient（userAccessToken 一次性 + 新旧双企业 token L1 缓存 + getbyunionid + /contact/users 裁剪）+ DingTalkChannelSource 多通道投影 + AddDingTalkFederationChannels() 注册；DingTalkOptions 配置（TKWF:Federation:DingTalk 节）</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
          扩展不引库。DingTalkOauthChannel/DingTalkEventChannel 实现 ISsoChannel 在此库内） -->
     <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
-    <!-- 2026-10-09 三层边界（TrustCenter 剥离）：ISsoChannel 契约迁 TrustCenter.Abstractions——平台库直引收口 L2（实现 ISsoChannel 的契约来源） -->
+    <!-- 2026-10-09 三层边界（TrustCenter 剥离）+ I2-1：ISsoChannel 契约迁 Federation.Abstractions——平台库直引收口 L2（实现 ISsoChannel 的契约来源） -->
   </ItemGroup>
 
   <ItemGroup>

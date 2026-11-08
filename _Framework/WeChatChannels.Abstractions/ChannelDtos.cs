@@ -31,6 +31,3 @@ public sealed record SaveChannelRequest(
     string? ChannelForm = null,
     string? Verification = null,
     string? Alias = null);
-
-/// <summary>保存结果响应（Id——新建返回自增主键）。</summary>
-public sealed record SaveChannelResponse(long Id);

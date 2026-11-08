@@ -20,7 +20,8 @@ public class WeChatMessageGatewayOptions
     public bool GatewayEnabled { get; set; } = false;
 
     /// <summary>幂等保留天数（默认 7——覆盖微信全部重试窗口 + 对账余量；<c>0/负数</c> = 不清理；
-    /// 仅清理 Forwarded/Skipped 终态记录，Pending 由 <see cref="PendingTimeoutMinutes"/> 独立超时兜底——方案 P1-5）。</summary>
+    /// 仅清理 Forwarded/Skipped 终态记录，Pending 由 <see cref="PendingTimeoutMinutes"/> 独立超时兜底——方案 P1-5）。
+    /// <para>⚠️ 规划中未接线：当前零消费（幂等记录清理任务未落地，此键暂无读取方）。</para></summary>
     public int IdempotencyRetentionDays { get; set; } = 7;
 
     /// <summary>幂等 Pending 超时分钟（默认 5——极端场景下 Pending 超时后允许新请求复用键重建 Pending+转发，
@@ -28,10 +29,12 @@ public class WeChatMessageGatewayOptions
     public int PendingTimeoutMinutes { get; set; } = 5;
 
     /// <summary>异步抄送投递重试次数（默认 3——BackgroundJob 队列 MaxRetryCount；下游必须幂等——
-    /// <c>IdempotencyKey</c> 透传供其自行去重，方案 §十·三 ③ at-least-once 语义）。</summary>
+    /// <c>IdempotencyKey</c> 透传供其自行去重，方案 §十·三 ③ at-least-once 语义）。
+    /// <para>⚠️ 规划中未接线：当前零消费（BackgroundJob 入队未读取本节，重试语义归队列默认）。</para></summary>
     public int AsyncForwardRetryCount { get; set; } = 3;
 
-    /// <summary>异步抄送失败退避秒数（默认 2——指数退避 <c>2^RetryCount</c> 秒基础值）。</summary>
+    /// <summary>异步抄送失败退避秒数（默认 2——指数退避 <c>2^RetryCount</c> 秒基础值）。
+    /// <para>⚠️ 规划中未接线：当前零消费（BackgroundJob 退避未读取本节，退避归队列默认）。</para></summary>
     public int BackoffSeconds { get; set; } = 2;
 
     /// <summary>同步透传默认超时秒数（默认 2——微信 5 秒时限留 1 秒本地兜底余量；<b>上限强制 ≤3</b>，

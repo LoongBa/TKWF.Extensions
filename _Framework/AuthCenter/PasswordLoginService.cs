@@ -75,8 +75,9 @@ public sealed class PasswordLoginService : DomainServiceBase, IPasswordLoginServ
 
         // V0.9.0（ADR 决策 2/3——锁定=限流）：登录前置点检查（key 规范 pwd:login:{identifier}）——
         // TryAcquire 失败 = 锁定阻断（fail-closed）→ RateLimitedException 429（PASSWORD_RATE_LIMITED）
-        var protection = _options.Value.LoginProtection;
-        if (!_rateLimit.TryAcquire($"pwd:login:{identifier}", protection.PasswordPerMinutePerSubject, TimeSpan.FromMinutes(1), out _))
+        // AC-05（B 档）：窗口对齐文档声明 5 次/10min（镜像 PasswordResetService 同款 5 次/10min 约定；
+        // PasswordPerMinutePerSubject 保留作 AuthLoginAttempt 60s 滑窗审计从域额度，不再作 pwd:login 点检查额窗）
+        if (!_rateLimit.TryAcquire($"pwd:login:{identifier}", 5, TimeSpan.FromMinutes(10), out _))
             throw new RateLimitedException(0, $"pwd:login:{identifier}") { ErrorCode = "PASSWORD_RATE_LIMITED" };
 
         var result = await provider.AuthenticateAsync(

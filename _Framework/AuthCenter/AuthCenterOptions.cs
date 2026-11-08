@@ -51,7 +51,8 @@ public class LoginProtectionOptions
     /// <summary>口令兑换每小时尝试上限（默认 5）。</summary>
     public int RedeemPerHour { get; set; } = 5;
 
-    /// <summary>密码登录每分钟每 UId/Phone 尝试上限（默认 10——V0.9.0 B.9，AuthLoginAttempt 计数）。</summary>
+    /// <summary>密码登录 60s 滑窗每 UId/Phone 尝试上限（默认 10——AuthLoginAttempt 审计从域滑窗阈值，防单账号爆破；
+    /// AC-05（B 档）起 <c>pwd:login:{identifier}</c> IRateLimitCheck 点检查固定 5 次/10min 对齐文档，不再读本键）。</summary>
     public int PasswordPerMinutePerSubject { get; set; } = 10;
 
     /// <summary>密码登录每小时每 IP 尝试上限（默认 20——V0.9.0 B.9，AuthLoginAttempt 计数）。</summary>

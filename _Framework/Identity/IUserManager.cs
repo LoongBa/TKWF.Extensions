@@ -7,7 +7,7 @@ namespace TKWF.Ext.Identity
 {
     /// <summary>
     /// 用户管理门面——用户 CRUD、凭据验证（供消费方 UserHelper 登录钩子调用）、角色分配、角色 CRUD。
-    /// <para>由扩展默认实现（<see cref="UserManager"/>），消费方可自定义（TryAdd 语义）。</para>
+    /// <para>由扩展默认实现（<see cref="UserManager"/>），消费方可自定义（V0.5.0 起 AddConstructibleService 注册——经 <c>AddScoped&lt;IUserManager, MyCustomManager&gt;()</c> 覆盖）。</para>
     /// </summary>
     public interface IUserManager : IDomainService
     {

@@ -9,7 +9,7 @@ using TKWF.Ext.RateLimiting.DTOs;
 namespace TKWF.Ext.RateLimiting;
 
 /// <summary>
-/// 限流计数表数据服务——partial 分部（.g.cs 由 xCodeGen 生成承载 CRUD/构造器，不入库；本分部仅编写业务方法）。
+/// 限流计数表数据服务——partial 分部（.g.cs 由 xCodeGen 生成承载 CRUD/构造器，生成物入库——实体变更后须重跑 run-xcodegen.ps1 并同步提交；本分部仅编写业务方法）。
 /// <para>数据访问红线：Service 层只依赖 DataService（ADR61 自动注册），零 IFreeSql/IEntityDAC 直注入。</para>
 /// <para>CAS 原子语义（ADR89 <c>UpdateWhereAsync</c>——单语句条件 UPDATE 天然原子，行锁 + WHERE 重求值；
 /// 方案 v0.3.0 §五 R2：防 read-modify-write TOCTOU）：<c>SET Count=Count+1 WHERE Key=@key AND

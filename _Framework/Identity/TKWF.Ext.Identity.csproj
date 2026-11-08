@@ -58,7 +58,7 @@
     <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\identity.xCodeGen.json</_XCG_ConfigPath>
   </PropertyGroup>
 
-  <!-- 测试项目访问 internal（FreeSqlUserStore、FreeSqlRoleStore、UserManager） -->
+  <!-- 测试项目访问 internal（UserStore、RoleStore、UserManager） -->
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.Identity.Tests" />
   </ItemGroup>

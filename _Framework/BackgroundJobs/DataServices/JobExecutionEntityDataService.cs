@@ -15,7 +15,7 @@ namespace TKWF.Ext.BackgroundJobs;
 /// <summary>
 /// 数据服务：作业执行历史实体（V0.1.0，Oracle P1-3 业务方法 partial）——分页过滤 + SQL 级聚合统计 + GetDetailAsync，供 <see cref="T:TKWF.Ext.BackgroundJobs.IJobExecutionQueryService"/> 委托。
 /// </summary>
-// 提示：标准 CRUD 逻辑和构造函数已由 JobExecutionEntityDataService.g.cs 承载。
+// 提示：标准 CRUD 逻辑和构造函数已由 JobExecutionEntityDataService.g.cs 承载——生成物入库（本仓库源码库自包含），实体/模板变更后重跑 pwsh .xCodeGen/run-xcodegen.ps1 -Ext BackgroundJobs 重生成，禁止直改 .g.cs。
 partial class JobExecutionEntityDataService(IDomainUser user, IEntityDAC<JobExecutionEntity> dac)
         : DomainDataServiceBase<JobExecutionEntity, JobExecutionEntityDto>(user, dac, hasSoftDelete: false)
 {
@@ -78,7 +78,7 @@ partial class JobExecutionEntityDataService(IDomainUser user, IEntityDAC<JobExec
     }
 
     /// <summary>
-    /// 删除早于 cutoffUtc 的过期执行历史（V0.2.0 历史清理）——锚点 <see cref="JobExecutionEntity.StartedAtUtc"/>（IX_JobExecution_StartedAt 索引）。
+    /// 删除早于 cutoffUtc 的过期执行历史（V0.2.0 历史清理）——锚点 <see cref="JobExecutionEntity.StartedAtUtc"/>（TKWFIX_JobExecution_StartedAt 索引）。
     /// <para>先查过期 Id 列表（Take batchSize），再 <see cref="EntityDeleteBatchAsync"/> 物理批量删
     /// （hasSoftDelete:false，绝不用 EntitySoftDeleteAsync——会抛 InvalidOperationException）；返回实际删除条数。</para>
     /// </summary>

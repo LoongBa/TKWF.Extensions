@@ -16,6 +16,9 @@ namespace TKWF.Ext.WeChatChannels;
 /// <param name="HasCredentials">是否已配置凭证（AppSecret/Token/EncodingAESKey 任一密文非空）。</param>
 /// <param name="CreateTime">创建时间（UTC）。</param>
 /// <param name="UpdateTime">更新时间（UTC）。</param>
+/// <param name="ChannelForm">通道形态（D03 §4.1——mp_subscription / mp_service / mini_program / work_wechat；
+/// 外部消费方展示/判断用，实体透传）。</param>
+/// <param name="Verification">认证状态（D03 §4.1——none / verified；外部消费方展示/判断用，实体透传）。</param>
 public sealed record WeChatChannelConfigDto(
     long Id,
     string ChannelId,
@@ -27,4 +30,6 @@ public sealed record WeChatChannelConfigDto(
     string? Alias,
     bool HasCredentials,
     DateTime CreateTime,
-    DateTime UpdateTime);
+    DateTime UpdateTime,
+    string ChannelForm = "mp_service",
+    string Verification = "none");

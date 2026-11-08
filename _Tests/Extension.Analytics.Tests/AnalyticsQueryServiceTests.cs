@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
 using TKWF.Ext.Analytics;
 
 namespace TKWF.Ext.Analytics.Tests;
@@ -129,15 +130,22 @@ public class AnalyticsQueryServiceTests
     [Fact]
     public void Di_RegistersFacade()
     {
+        // 对齐 Metrics 先例（MetricsExtensionInitializerTests）：直调扩展 Initializer.ConfigureServices——
+        // 生产路径真实注册（TryAddSingleton 语义），替代手写 AddSingleton（复制即漂移）
         var services = new ServiceCollection();
         services.AddOptions<AnalyticsOptions>();
         services.Configure<AnalyticsOptions>(o => o.SpecRoot = ResolveSpecRoot());
-        services.AddSingleton(sp => new AnalyticsSpecLoader(sp.GetRequiredService<IOptions<AnalyticsOptions>>().Value));
-        services.AddSingleton<IAnalyticsQueryService, AnalyticsQueryService>();
+        new AnalyticsExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         using var provider = services.BuildServiceProvider();
+        _ = provider.GetRequiredService<AnalyticsSpecLoader>(); // 工厂 lambda 桥接 Options→Loader 可解析
         var facade = provider.GetRequiredService<IAnalyticsQueryService>();
 
         Assert.IsType<AnalyticsQueryService>(facade);
+    }
+
+    /// <summary>测试用用户类型（对齐 Metrics 测试 <c>SimpleUserInfo</c> 派生形态——Initializer 泛型约束）。</summary>
+    private sealed class TestUserInfo : SimpleUserInfo
+    {
     }
 }

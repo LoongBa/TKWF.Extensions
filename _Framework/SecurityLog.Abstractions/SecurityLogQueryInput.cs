@@ -15,7 +15,7 @@ namespace TKWF.Ext.SecurityLog
         /// <summary>客户端 IP（LIKE '%value%' 模糊匹配——兼容 IPv4/IPv6/端口变体）。null = 不限。</summary>
         public string? IpAddress { get; init; }
 
-        /// <summary>事件类型（精确匹配：Login/Logout/PasswordChange/PasswordReset/Lockout/Register/Challenge）。null = 不限。</summary>
+        /// <summary>事件类型（精确匹配，共 11 种，常量见 <see cref="SecurityLogEventTypes"/>：Login/Logout/PasswordChange/PasswordReset/Lockout/Register/Challenge + Freeze/Unfreeze/Bind/Unbind——后四者扩展直写）。null = 不限。</summary>
         public string? EventType { get; init; }
 
         /// <summary>结果（精确匹配：Success/Failed）。null = 不限。</summary>

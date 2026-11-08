@@ -16,14 +16,14 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>Federation.WeCom/v</MinVerTagPrefix>
     <PackageId>TKWF.Federation.WeCom</PackageId>
-    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：企业微信（WeCom）双向网关（双授权流 Webview+扫码统一 getuserinfo + 通讯录/事件回调验签）；WeComApiClient 出站 API 客户端（gettoken 双用途缓存 + getuserinfo 三路径身份 + getuserdetail 敏感信息即用即弃）+ WeComOptions 配置（TKWF:Federation:WeCom 节）</Description>
+    <Description>TKWF 平台网关库（纯库——无 Initializer 无 [TKWFExtension] 无持久化）：企业微信平台网关库——双授权流 WeComOauthChannel（wecom_oauth——Webview+扫码统一 getuserinfo）+ 通讯录/事件回调三道闸门验签（msg_signature 验签 + AES 解密 + ReceiveId=corpid/suiteid 校验 + echostr URL 验证）+ external_uid 双策略（三方 open_userid / 自建 {CorpId}:{userid} / 非成员 openid）+ 出站 WeComApiClient（gettoken 双用途缓存键 + getuserinfo 三路径身份 + getuserdetail 敏感信息即用即弃）+ WeComChannelSource 多通道投影 + AddWeComFederationChannels() 注册；WeComOptions 配置（TKWF:Federation:WeCom 节）</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Oracle P1-1（AuthCenter 归层开发方案 §5.4/§5.5）：库引 Federation 扩展（实现 ISsoChannel——单向依赖无循环；
          扩展不引库。WeComOauthChannel/WeComEventChannel 实现 ISsoChannel 在此库内） -->
     <ProjectReference Include="..\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
-    <!-- 2026-10-09 三层边界（TrustCenter 剥离）：ISsoChannel 契约迁 TrustCenter.Abstractions——平台库直引收口 L2（实现 ISsoChannel 的契约来源） -->
+    <!-- 2026-10-09 三层边界（TrustCenter 剥离）+ I2-1：ISsoChannel 契约迁 Federation.Abstractions——平台库直引收口 L2（实现 ISsoChannel 的契约来源） -->
   </ItemGroup>
 
   <ItemGroup>

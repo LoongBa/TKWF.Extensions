@@ -115,6 +115,18 @@ public class WeComEventCryptoTests
     }
 
     [Fact]
+    public void DecryptAndVerify_MalformedReceiveId_OverlongOrEmpty_ThrowsCryptographicException()
+    {
+        // WC-6：畸形 receiveid 预检查——超长（同字符数异字节数：多字节 UTF-8 下字符串 Length 相等但字节长度不等，
+        // 预检查使 FixedTimeEquals 不触碰异长 byte[]，收敛为 fail-closed 的 CryptographicException 而非 ArgumentException）
+        var (overlong, _, _, _) = BuildEncryptedEvent("user-abc", receiveId: "企企企企企企企企企企企");  // 11 字符 = 33 字节 ≠ corpId 11 字节
+        Assert.Throws<CryptographicException>(() => WeComEventCrypto.DecryptAndVerify(TestEncodingAESKey, overlong, TestCorpId));
+        // 空 receiveid（明文尾部零长度）→ 预检查拒（同 fail-closed 语义）
+        var (empty, _, _, _) = BuildEncryptedEvent("user-abc", receiveId: "");
+        Assert.Throws<CryptographicException>(() => WeComEventCrypto.DecryptAndVerify(TestEncodingAESKey, empty, TestCorpId));
+    }
+
+    [Fact]
     public void VerifyAndDecryptEcho_Valid_ReturnsPlainText()
     {
         // URL 验证握手（Oracle 评审 P1-6）——echostr 验签 + 解密回显明文（1s 硬约束）

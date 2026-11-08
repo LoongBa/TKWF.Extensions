@@ -65,7 +65,4 @@ public sealed class OidcPlatformConfig
 
     /// <summary>private_key_jwt 认证（企业场景证书认证；null = 用 ClientSecret post 认证）。</summary>
     public string? ClientAssertionSigningKeyPath { get; set; }
-
-    /// <summary>userinfo 是否默认拉取（true=AuthenticateAsync 内拉取并入 DTO；false=懒加载由调用方决定）。</summary>
-    public bool FetchUserInfo { get; set; }
 }

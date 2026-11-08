@@ -6,6 +6,7 @@
     <SccAuxPath>SAK</SccAuxPath>
     <SccLocalPath>SAK</SccLocalPath>
     <Platforms>AnyCPU;x64</Platforms>
+    <!-- NoWarn 豁免（WO-11 核查实证，2026-11-08）：移除后单项目构建实测 CSC error TKWF_SG1b_TKWF0022 ×2——直引 TKWF.Ext.FeatureManagement 主包（V0.4.0 ③ 消息业务总开关 DB 化定案设计，IFeatureManager 消费；FeatureManagement 无 Abstractions 契约包），故豁免必需；TKWF0030 一并豁免（平台库 Federation.WeChat 传递引用历史场景——DisableTransitiveProjectReferences 收口后全解上下文仍可能经依赖图曝光） -->
     <NoWarn>$(NoWarn);TKWF_SG1b_TKWF0022;TKWF_SG1b_TKWF0030</NoWarn>
     <!-- CTRB001 抑制已移除（2026-11-06，v4.10.111 判据退役——SG1a 归属检查误报消费方修正；随 lockstep 4.10.112 清理） -->
   </PropertyGroup>
@@ -19,7 +20,7 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>WeChatOperations/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.WeChatOperations</PackageId>
-    <Description>TKWF 扩展：微信公众号运营（公众号渠道配置/素材/回复规则/菜单/订阅统计/交互日志——数据底座，通讯走平台库 Federation.WeChat）</Description>
+    <Description>TKWF 扩展：微信公众号运营（素材/回复规则/菜单/订阅统计/交互日志/消息转发网关/运营配置面——数据底座，通讯走平台库 Federation.WeChat）</Description>
     <!-- 骨架阶段（实体型，尚无 Initializer——门面任务补）：Federation.WeChat 平台库自身 ProjectReference 了 TKWF.Ext.Federation
          （扩展实现程序集），若允许其传递引用流入本编译将触发 L1 普通项目门控（TKWF0030——非领域非扩展项目直引扩展）。
          本阶段实体零 Federation 类型消费，切断传递引用只让平台库程序集流入编译；门面任务接入 Federation 契约类型时

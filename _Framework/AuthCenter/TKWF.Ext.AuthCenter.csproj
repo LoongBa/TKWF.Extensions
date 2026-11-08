@@ -16,7 +16,7 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>AuthCenter/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.AuthCenter</PackageId>
-    <Description>TKWF 扩展：认证中心——令牌体系（手写 RS256 JWT + kid 轮换 + 黑名单落库 + Refresh rotation）/ 认证矩阵 Provider（短信 + 微信）/ 登录保护 / 票据换令牌（PKCE）/ 身份适配层（JwtDomainUserParser/ITokenVerifier/IAuthorizationMapper/UserHelperBase/中间件）/ 跨系统映射 / 平台凭证</Description>
+    <Description>TKWF 扩展：认证中心（RS256 JWT 令牌体系 + kid 轮换 + 黑名单落库 + Refresh rotation + TokenVersion 闭环；密码能力 SecurePassword 协议 + 策略 + 重置三通道；账号冻结（IFreezeService 多原因）；票据换令牌 PKCE；登录保护；外部 IdP 桥接；身份适配层；内建标准对内端点）</Description>
   </PropertyGroup>
 
   <ItemGroup>

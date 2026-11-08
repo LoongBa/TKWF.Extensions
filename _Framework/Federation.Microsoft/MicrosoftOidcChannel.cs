@@ -66,7 +66,6 @@ public sealed class MicrosoftOidcChannel : OidcChannelBase
             // ⚠️ common/consumers/organizations 授权后 iss 含实际租户 GUID——通配/正则匹配（M2-P1-1）
             TokenIssuers = [$"https://login.microsoftonline.com/{t}/v2.0",
                             $"^https://login\\.microsoftonline\\.com/[^/]+/v2\\.0$"],
-            FetchUserInfo = false,
         };
     }
 }

@@ -76,11 +76,13 @@ public interface ITokenService : IDomainService
     Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default);
 
     /// <summary>撤销 access token——按 jti 落黑名单（ExpiresAt = 该 token 自然过期时间）。
+    /// <para>AC-11（B 档）：可选 <paramref name="userId"/>——logout 链路带用户上下文传入（黑名单行落真实归属者，
+    /// 审计留痕受益）；默认 null 保持既有调用零改动（黑名单行 UserId 空串）。</para>
     /// <c>ExposeRest=false</c>：撤销为内部能力（/logout 经 <see cref="RevokeCurrentSessionAsync"/> 生成端点按 ambient 撤销）。</summary>
     /// <remarks>匿名面声明：登出按 jti 自携带凭据自校验（EduPlatform 转达 E1）。</remarks>
     [AllowAnonymousFlag]
     [ApiExpose(ExposeRest = false)]
-    Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default);
+    Task RevokeTokenAsync(string jti, string reason, string? userId = null, CancellationToken ct = default);
 
     /// <summary>
     /// 当前请求 Bearer 验签产物（Oracle5 2026-10-24 ambient 方案 A——/verify 内省数据源）。

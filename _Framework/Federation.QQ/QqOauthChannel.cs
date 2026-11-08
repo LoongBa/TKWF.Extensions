@@ -91,12 +91,12 @@ public sealed class QqOauthChannel : DomainServiceBase, ISsoChannel
 
         // QQ 网页授权（state 必填——Platform 签名票据；scope 默认 get_user_info；display 可经 Parameters 扩展）
         string scope = context.Scope ?? "get_user_info";
-        string display = context.Parameters.TryGetValue("display", out var d) && !string.IsNullOrEmpty(d)
+        string display = context.Parameters != null && context.Parameters.TryGetValue("display", out var d) && !string.IsNullOrEmpty(d)
             ? $"&display={Uri.EscapeDataString(d)}" : string.Empty;
         string url = "https://graph.qq.com/oauth2.0/authorize"
             + $"?client_id={Uri.EscapeDataString(_channel.AppId!)}"
             + $"&redirect_uri={Uri.EscapeDataString(context.RedirectUri)}"
-            + $"&state={Uri.EscapeDataString(context.State ?? string.Empty)}"
+            + (string.IsNullOrWhiteSpace(context.State) ? "" : $"&state={Uri.EscapeDataString(context.State)}")
             + $"&scope={Uri.EscapeDataString(scope)}"
             + display;
         return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));

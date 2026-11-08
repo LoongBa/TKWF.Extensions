@@ -170,6 +170,18 @@ public class MicrosoftOidcChannelTests : MicrosoftChannelTestHost
     }
 
     [Fact]
+    public async Task AuthenticateAsync_WrongAudience_Rejected()
+    {
+        // Stub IdP 签发 aud=other-app（非 client_id）→ 引擎 aud 校验拒（对齐 OidcConfiguredChannelTests 同型用例）
+        var (_, channel) = await Setup(s => s with { AudOverride = "other-app" });
+
+        var result = await channel.AuthenticateAsync(MicrosoftTestHost.CreateContext(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("aud", result.FailReason);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_MissingVerifier_PkceEnabled_Rejected()
     {
         var (_, channel) = await Setup();

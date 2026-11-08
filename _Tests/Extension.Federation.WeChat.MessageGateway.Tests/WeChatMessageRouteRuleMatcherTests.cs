@@ -12,6 +12,7 @@ public class WeChatMessageRouteRuleMatcherTests
     private const long Ep1 = 101;
 
     private static MessageRouteRuleDescriptor Rule(
+        long id = 1,
         string channelId = "ch-main",
         string? msgType = null,
         string? @event = null,
@@ -21,7 +22,7 @@ public class WeChatMessageRouteRuleMatcherTests
         long? endpointId = Ep1,
         int sortOrder = 0,
         bool isEnabled = true)
-        => new(Id: 1, channelId, msgType, @event, matchMode, triggerKey, forwardMode, endpointId, sortOrder, isEnabled);
+        => new(id, channelId, msgType, @event, matchMode, triggerKey, forwardMode, endpointId, sortOrder, isEnabled);
 
     private static RouteRuleCriteria Criteria(string channelId = "ch-main", string? msgType = null, string? @event = null, string? content = null)
         => new(channelId, msgType, @event, content);
@@ -167,6 +168,16 @@ public class WeChatMessageRouteRuleMatcherTests
     }
 
     [Fact]
+    public void Match_MsgTypePureDelimiter_NoMatch()
+    {
+        // 规则 MsgType 为纯逗号（Split 后 types.Length==0）→ fail-safe 不命中（防空数组误判全类型通配）
+        var rule = Rule(msgType: ",");
+        var criteria = Criteria(msgType: WeChatMessageTypes.Text, content: "x");
+
+        Assert.False(WeChatMessageRouteRuleMatcher.Matches(rule, criteria));
+    }
+
+    [Fact]
     public void Match_MsgTypeMultiValue_EventRule_MatchesEvent()
     {
         // 多值含 event → 事件规则正常参与（Event 匹配语义不受多值影响）
@@ -255,6 +266,21 @@ public class WeChatMessageRouteRuleMatcherTests
         var hit = WeChatMessageRouteRuleMatcher.Match([high, low], criteria);
 
         Assert.NotNull(hit);
+        Assert.Equal(WeChatMessageForwardModes.LocalOnly, hit.ForwardMode);
+    }
+
+    [Fact]
+    public void Match_MultipleRules_SameSortOrder_TieBreakByIdAscending()
+    {
+        // 同 SortOrder 平局 → 按 Id 升序回退取首个（排序语义完全由运行库持有——输入逆序传入结果不变）
+        var idLow = Rule(id: 2, sortOrder: 5, forwardMode: WeChatMessageForwardModes.LocalOnly, endpointId: null);
+        var idHigh = Rule(id: 9, sortOrder: 5, forwardMode: WeChatMessageForwardModes.AsyncCopy);
+        var criteria = Criteria();
+
+        var hit = WeChatMessageRouteRuleMatcher.Match([idHigh, idLow], criteria);
+
+        Assert.NotNull(hit);
+        Assert.Equal(2, hit.Id);
         Assert.Equal(WeChatMessageForwardModes.LocalOnly, hit.ForwardMode);
     }
 

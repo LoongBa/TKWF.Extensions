@@ -42,6 +42,5 @@ public sealed class GoogleOidcChannel : OidcChannelBase
         Scopes = ["openid", "email", "profile"],
         UsePkce = true,
         TokenIssuers = ["https://accounts.google.com"],
-        FetchUserInfo = false,
     };
 }

@@ -63,7 +63,7 @@ public sealed class WeChatCircuitBreaker
     /// 半开探测失败 → 重置开窗（回开态，新开窗期）；开窗期内持续失败不改变状态。
     /// </summary>
     /// <param name="endpointId">下游端点 id（每个端点独立状态）。</param>
-    /// <param name="utcNow">当前 UTC 时间（可注入控制——测试用；缺省系统时钟）。</param>
+    /// <param name="utcNow">当前 UTC 时间（可空——null 用系统时钟 <c>DateTime.UtcNow</c>；测试注入固定时钟控制开闸时刻）。</param>
     public void RecordFailure(string endpointId, DateTime? utcNow = null)
     {
         ArgumentNullException.ThrowIfNull(endpointId);
@@ -91,7 +91,8 @@ public sealed class WeChatCircuitBreaker
         }
     }
 
-    /// <summary>记录一次成功：回关 + 连续失败计数清零（任意状态下成功即回关）。</summary>
+    /// <summary>记录一次成功：回关 + 连续失败计数清零（任意状态下成功即回关；
+    /// 无时钟参数——成功时刻不参与状态机，立即回关不依赖时间）。</summary>
     /// <param name="endpointId">下游端点 id。</param>
     public void RecordSuccess(string endpointId)
     {
@@ -115,7 +116,7 @@ public sealed class WeChatCircuitBreaker
     /// </list>
     /// </summary>
     /// <param name="endpointId">下游端点 id。</param>
-    /// <param name="utcNow">当前 UTC 时间（注入时钟——测试控制开窗期）。</param>
+    /// <param name="utcNow">当前 UTC 时间（强制注入——无缺省；生产调用链恒传 <c>DateTime.UtcNow</c>，测试注入固定时钟控制开窗期）。</param>
     /// <returns>是否放行本次调用。</returns>
     public bool TryCall(string endpointId, DateTime utcNow)
     {

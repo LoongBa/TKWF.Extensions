@@ -16,7 +16,7 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>Federation/v</MinVerTagPrefix>
     <PackageId>TKWF.Ext.Federation</PackageId>
-    <Description>TKWF 扩展：认证中心联邦层（Federation，外交部）——应用注册 / 授权码 accesscode / token2（ES256 独立密钥域 + JWKS）/ profile API / ISsoChannel IdP 适配器契约；组合式消费认证中心（经 Authentication.Abstractions 契约包，零主包传递）；不引主包、零 Store</Description>
+    <Description>TKWF 扩展：认证体系三层架构的对外连接层壳（Federation，外交部）——平台 IdP 连接 + 编排 + /feberation/* 端点：ISsoChannel 集合编排 / 多通道设施（DB 动态权威 + ChannelAlias 双键）/ 外部 IdP 借道桥接（AuthCenter.Abstractions 契约）/ profile API（scope 强制 + 审计）/ 事件回复链（双桶迭代 + handler 集合 + 免登入口）；信任内核（token2/accesscode）经 TrustCenter.Abstractions 契约调用</Description>
   </PropertyGroup>
 
   <ItemGroup>

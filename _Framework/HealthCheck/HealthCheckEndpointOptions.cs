@@ -18,7 +18,7 @@ namespace TKWF.Ext.HealthCheck
         /// <summary>是否启用健康检查端点（默认 true；false 时不映射端点）。</summary>
         public bool Enabled { get; set; } = true;
 
-        /// <summary>是否返回详细诊断（默认 false——生产避免泄露组件细节；true 时走自定义 ResponseWriter 输出组件级状态 JSON）。</summary>
+        /// <summary>（已删功能残留——v0.3.0 起无组件级输出）是否返回详细诊断。框架不读此键：Detailed 组件级输出已随方案 A（f8425d4）移除，MapHealthCheckCore 恒用摘要 writer，设置不再生效。</summary>
         public bool Detailed { get; set; } = false;
 
         /// <summary>端点是否匿名可访问（默认 true——健康探测无需认证；与 D04 /health /healthz 豁免一致；false 时遵循应用认证管线）。</summary>

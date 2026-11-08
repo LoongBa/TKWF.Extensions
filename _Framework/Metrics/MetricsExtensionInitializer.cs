@@ -31,7 +31,8 @@ namespace TKWF.Ext.Metrics
         /// 注册指标引擎服务。
         /// <para>C3+M4：<see cref="IMetricsEngine"/> 用工厂 lambda 注册——桥接 <see cref="MetricsOptions"/>（派生，[Options] 绑定）
         /// 到 <see cref="MetricsEngineOptions"/>（基类，Utility 纯 POCO），因 <c>IOptions&lt;T&gt;</c> 不变性不能直接注入基类；
-        /// 注册为 Singleton：引擎无状态 + 定义校验/访问器缓存跨请求复用（对齐 D21 §5.7 "validate once per specKey"）。
+        /// 注册为 Singleton：引擎无状态，字段访问委托（TypeAccessor）静态缓存跨请求复用——**定义不缓存**
+        /// （规格文件经 <see cref="MetricsSpecFileProvider.Load"/> 每次调用直接读盘，改动下次调用即生效）。
         /// <see cref="IMetricCalculatorFactory"/> 亦为 Singleton（静态注册表，计算器无状态）。</para>
         /// <para>TryAdd 语义：消费方可自定义 <see cref="IMetricsEngine"/> / <see cref="IMetricCalculatorFactory"/> 实现，
         /// 扩展默认实现不覆盖消费方。</para>

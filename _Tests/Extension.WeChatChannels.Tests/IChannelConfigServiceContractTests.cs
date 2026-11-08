@@ -85,7 +85,6 @@ public class IChannelConfigServiceContractTests
     public void WireDtos_CoLocated_With_Contract()
     {
         Assert.Equal(Contract.Assembly, typeof(SaveChannelRequest).Assembly);
-        Assert.Equal(Contract.Assembly, typeof(SaveChannelResponse).Assembly);
         Assert.Equal(Contract.Assembly, typeof(WeChatChannelConfigDto).Assembly);
         Assert.NotNull(typeof(SaveChannelRequest).GetProperty(nameof(SaveChannelRequest.AppSecret)));
         Assert.NotNull(typeof(SaveChannelRequest).GetProperty(nameof(SaveChannelRequest.Token)));

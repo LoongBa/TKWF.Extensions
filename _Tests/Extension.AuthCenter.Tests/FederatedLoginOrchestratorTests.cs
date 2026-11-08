@@ -335,7 +335,7 @@ public class FederatedLoginOrchestratorTests
         }
         public Task<TokenValidationResult> ValidateTokenAsync(string accessToken, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<TokenResponse> RefreshTokenAsync(RefreshRequest request, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task RevokeTokenAsync(string jti, string reason, string? userId = null, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<VerifyResponse> GetCurrentTokenInfoAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task RevokeCurrentSessionAsync(CancellationToken ct = default) => throw new NotSupportedException();
     }

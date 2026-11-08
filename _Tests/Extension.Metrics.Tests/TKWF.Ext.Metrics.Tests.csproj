@@ -51,8 +51,7 @@
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
   <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
 
-    <!-- T0（v0.2.0）：SG1 分析器（build/refs 预编译 DLL，测试宿主首次定义 [DomainGenerateCode] 实体——
-         若生成器不识别测试项目，按方案 §四 T0 替代路径改手写 DataService 分部子类，详见 TestMetricResultEntity 注释） -->
+    <!-- T0（v0.2.0）：SG1 分析器（NuGet 纯 Analyzer 包，本仓库恒用——AGENTS §6；测试宿主首次定义 [DomainGenerateCode] 实体由 SG1 自动接线） -->
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
 
     <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->

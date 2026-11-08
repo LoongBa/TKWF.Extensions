@@ -102,6 +102,8 @@ public abstract class OidcChannelBase : DomainServiceBase, ISsoChannel
                                        or System.Text.Json.JsonException)
         {
             // 验签失败/协议错误/网络错误——统一失败，FailReason 携带机器可读消息（信任根负路径：不静默放行）
+            // ⚠️ catch 白名单依赖 OAuthProtocolException : InvalidOperationException 继承链（引擎异常均从此派生——
+            //    若引擎未来改基类需同步扩展 catch）；待类型化守卫后显式收口
             return new SsoChannelAuthResult(false, null, ex.Message, 0);
         }
     }
@@ -128,7 +130,6 @@ public abstract class OidcChannelBase : DomainServiceBase, ISsoChannel
             TokenIssuers = overrideCfg.TokenIssuers.Count > 0 ? overrideCfg.TokenIssuers : defaults.TokenIssuers,
             ClientAssertionSigningKeyPath = !string.IsNullOrWhiteSpace(overrideCfg.ClientAssertionSigningKeyPath)
                 ? overrideCfg.ClientAssertionSigningKeyPath : defaults.ClientAssertionSigningKeyPath,
-            FetchUserInfo = overrideCfg.FetchUserInfo,
         };
     }
 
@@ -144,7 +145,6 @@ public abstract class OidcChannelBase : DomainServiceBase, ISsoChannel
     {
         var extra = channel.Extra;
         string Get(string key) => extra.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v! : "";
-        bool GetBool(string key) => extra.TryGetValue(key, out var v) && bool.TryParse(v, out var b) && b;
         bool? GetBoolOrNull(string key)
             => extra.TryGetValue(key, out var v) && bool.TryParse(v, out var b) ? b : null;
 
@@ -163,7 +163,6 @@ public abstract class OidcChannelBase : DomainServiceBase, ISsoChannel
             UsePkce = GetBoolOrNull(OidcChannelConfigKeys.UsePkce) ?? true,
             TokenIssuers = DeserializeList(Get(OidcChannelConfigKeys.TokenIssuers)),
             ClientAssertionSigningKeyPath = Get(OidcChannelConfigKeys.ClientAssertionSigningKeyPath),
-            FetchUserInfo = GetBool(OidcChannelConfigKeys.FetchUserInfo),
         };
     }
 
@@ -228,9 +227,6 @@ public static class OidcChannelConfigKeys
 
     /// <summary>private_key_jwt 签名密钥路径（企业证书认证，可空）。</summary>
     public const string ClientAssertionSigningKeyPath = "ClientAssertionSigningKeyPath";
-
-    /// <summary>userinfo 是否默认拉取（"true"/"false"；缺省 false）。</summary>
-    public const string FetchUserInfo = "FetchUserInfo";
 
     /// <summary>tenant 受众（Microsoft 专属——common/consumers/organizations/{id} 端点模板；其他派生平台不写）。</summary>
     public const string Tenant = "Tenant";

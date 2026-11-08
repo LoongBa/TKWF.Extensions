@@ -68,8 +68,7 @@ namespace TKWF.Ext.DataPort
                 }
                 // 已失败的批次 → 允许重新导入（重置记录为 Processing 后重跑）
                 // StartTime 保留首次导入时间（CanUpdate=false 语义优于原 raw SQL 覆盖）
-                await DataService.ResetToProcessingAsync(
-                    existing.Id, DateTime.UtcNow, DateTime.UtcNow, ct);
+                await DataService.ResetToProcessingAsync(existing.Id, DateTime.UtcNow, ct);
 
                 return await ExecuteImportAsync(existing, filePath, adapter, batchOptions, ct);
             }

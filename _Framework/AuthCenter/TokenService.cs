@@ -139,9 +139,13 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         var keys = _keys.Value;
         var (header, payload, signature, signingInput) = ParseToken(accessToken);
 
-        // C1-a：alg 强制 RS256（防 alg=none / HS256 伪造）——header 为 Base64Url，先解码
-        using var headerDoc = JsonDocument.Parse(Base64UrlDecode(header));
-        var alg = headerDoc.RootElement.GetProperty("alg").GetString();
+        // C1-a：alg 强制 RS256（防 alg=none / HS256 伪造）——header 为 Base64Url，先解码。
+        // AC-03（B 档）：格式类异常（Base64 解码失败/JSON 结构非法/缺 alg 键）统一归一 TOKEN_MALFORMED
+        //（原散乱 FormatException/JsonException/KeyNotFoundException 上抛），含 alg 语义分派保持安全分类。
+        using var headerDoc = DecodeSegment(header);
+        var alg = headerDoc.RootElement.TryGetProperty("alg", out var algEl) ? algEl.GetString() : null;
+        if (alg is null)
+            throw new AuthenticationException("TOKEN_MALFORMED");
         if (!string.Equals(alg, AlgHeader, StringComparison.Ordinal))
             throw new AuthenticationException("ALG_NOT_ALLOWED");
 
@@ -152,14 +156,14 @@ public sealed class TokenService : DomainServiceBase, ITokenService
 
         // C1-b：签名验证经 RSA.VerifyData（.NET BCL——RS256 验签标准路径；FixedTimeEquals 语义适用于对称 MAC 比对，非 RSA 验签）
         // C1-g：签名范围 base64url(header).base64url(payload)
-        var signatureBytes = Base64UrlDecode(signature);
+        var signatureBytes = DecodeBase64UrlOrThrow(signature);
         var expectedSignature = verifyKey.VerifyData(
             Encoding.UTF8.GetBytes(signingInput), signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         if (!expectedSignature)
             throw new AuthenticationException("INVALID_SIGNATURE");
 
         // C1-d：exp/iat 校验（iat 不得未来；exp 不得过去）——payload 为 Base64Url，先解码
-        using var payloadDoc = JsonDocument.Parse(Base64UrlDecode(payload));
+        using var payloadDoc = DecodeSegment(payload);
         var root = payloadDoc.RootElement;
         var now = DateTime.UtcNow;
         var nowUnix = new DateTimeOffset(now).ToUnixTimeSeconds();
@@ -263,7 +267,7 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         }
     }
 
-    public async Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default)
+    public async Task RevokeTokenAsync(string jti, string reason, string? userId = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(jti)) return;
 
@@ -276,7 +280,9 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         await BlacklistDataService.CreateAsync(new AuthTokenBlacklistEntity
         {
             Jti = jti,
-            UserId = "",
+            // AC-11（B 档）：可选 userId 参数（logout 链路带上下文传入）——黑名单行落真实归属者，
+            // 替代原空串（审计留痕受益：UserId 可追溯撤销来源账号）；默认 null 保持既有调用零改动
+            UserId = userId ?? "",
             ExpiresAt = now.AddMinutes(_options.Value.AccessTokenExpirationMinutes),
             RevokedAt = now,
             Reason = reason
@@ -312,7 +318,7 @@ public sealed class TokenService : DomainServiceBase, ITokenService
         if (ambient is null)
             throw new AuthenticationException("AUTH_REQUIRED"); // 非 Bearer 认证请求——无当前令牌可撤销（应被 401 前置拦截）
 
-        await RevokeTokenAsync(ambient.Jti, "logout", ct);
+        await RevokeTokenAsync(ambient.Jti, "logout", ambient.UserId, ct);
     }
 
     /// <summary>启动预检（Initializer.InitializeAsync 经系统作用域解析实例后调用）——触发密钥懒加载，生产 fail-fast（缺 Issuer/密钥 → InvalidOperationException）。</summary>
@@ -410,6 +416,9 @@ public sealed class TokenService : DomainServiceBase, ITokenService
                 var rsa = CreateRsaFromPem(cfg.PrivateKeyPath) ?? CreateRsaFromPem(cfg.PublicKeyPath);
                 if (rsa == null) continue;
                 EnsureKeyLength(rsa);
+                // AC-18（B 档）：dev 模式配置撞 kid → Warning 告警（重复定义后覆盖先——语义与生产 LoadKeysCore 分支一致）
+                if (verifyKeys.ContainsKey(cfg.Kid))
+                    logger.LogWarning("认证中心 dev 密钥集配置撞 kid：kid={Kid} 重复定义——后配置覆盖先配置（检查 AuthCenterOptions.SigningKeys）", cfg.Kid);
                 verifyKeys[cfg.Kid] = rsa;
             }
             if (!verifyKeys.ContainsKey(currentKid)) verifyKeys[currentKid] = signingKey;
@@ -497,5 +506,31 @@ public sealed class TokenService : DomainServiceBase, ITokenService
             case 1: throw new FormatException("Invalid Base64Url string");
         }
         return Convert.FromBase64String(s);
+    }
+
+    /// <summary>Base64Url 解码 + 格式类异常归一（AC-03：非法 Base64 → TOKEN_MALFORMED，不上抛散乱 FormatException）。</summary>
+    private static byte[] DecodeBase64UrlOrThrow(string segment)
+    {
+        try
+        {
+            return Base64UrlDecode(segment);
+        }
+        catch (FormatException)
+        {
+            throw new AuthenticationException("TOKEN_MALFORMED");
+        }
+    }
+
+    /// <summary>解码 JWT 段并解析 JSON（AC-03：Base64 非法 / JSON 结构非法 → TOKEN_MALFORMED——JWT 结构段格式类异常统一归一）。</summary>
+    private static JsonDocument DecodeSegment(string segment)
+    {
+        try
+        {
+            return JsonDocument.Parse(DecodeBase64UrlOrThrow(segment));
+        }
+        catch (JsonException)
+        {
+            throw new AuthenticationException("TOKEN_MALFORMED");
+        }
     }
 }

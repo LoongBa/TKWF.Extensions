@@ -26,7 +26,6 @@ public class AlipayOauthChannelBuildAuthorizeUrlTests
         => new(new StubDomainUser(),
             new AlipayApiClient(new System.Net.Http.HttpClient(),
                 Options.Create(new AlipayOptions()), new AlipaySignService(), NullLogger<AlipayApiClient>.Instance),
-            new AlipaySignService(),
             channel);
 
     [Fact]

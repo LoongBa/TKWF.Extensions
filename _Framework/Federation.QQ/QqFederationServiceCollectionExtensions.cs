@@ -5,8 +5,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
+using TKWF.Federation.QQ;
 
-namespace TKWF.Federation.QQ;
+namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// QQ 互联平台网关库 DI 装配扩展（库无 Initializer——库提供扩展方法，消费方/装配层调用；

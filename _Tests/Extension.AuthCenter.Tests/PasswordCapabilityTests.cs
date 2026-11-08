@@ -253,6 +253,38 @@ public class PasswordCapabilityTests
         Assert.Equal("PASSWORD_REUSE_REJECTED", ex.Message);
     }
 
+    // AC-16（B 档）：TrimHistory 偏移删除——超 HistoryRetentionCount 代后旧代按偏移裁剪（原 100 代硬编码上限截断缺陷）
+
+    [Fact]
+    public async Task SetPassword_TrimHistory_KeepsRecentGenerations()
+    {
+        var stub = CreateStub(out _);
+        await SeedAccountAsync(stub, "u-pol-trim", "13800000602");
+        var options = AuthenticationTestHost.CreateOptions();
+        options.PasswordPolicy.HistoryRetentionCount = 2;   // 只保留最近 2 代
+        var write = new AuthAccountService(stub,
+            Options.Create(new DomainOptions()), Options.Create(options), CreateProtector());
+
+        // 连续 4 次设密 → 历史 4 代 → Trim 保留最近 2 代，删除旧 2 代（偏移删除）
+        var salts = Enumerable.Range(0, 4).Select(_ => NewSalt()).ToArray();
+        for (var i = 0; i < 4; i++)
+        {
+            await write.SetPasswordAsync("u-pol-trim",
+                ClientHash($"Gen{i}Pass{i}!", Convert.FromHexString(salts[i])), salts[i],
+                ct: TestContext.Current.CancellationToken);
+        }
+
+        // 组装格式 {iterations}.{b64salt}.{b64hash}——按 hash 段（末段）判定代归属
+        static string HashSegment(string password, string salt)
+            => Convert.ToBase64String(Convert.FromHexString(ClientHash(password, Convert.FromHexString(salt))));
+        var history = await stub.Use<PasswordHistoryEntityDataService>().GetRecentAsync("u-pol-trim", 10, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(2, history.Count);   // 只增表 + 门面裁剪：恰保留最近 2 代
+        Assert.DoesNotContain(history, h => h.ClientHash.EndsWith("." + HashSegment("Gen0Pass0!", salts[0]), StringComparison.Ordinal));
+        Assert.DoesNotContain(history, h => h.ClientHash.EndsWith("." + HashSegment("Gen1Pass1!", salts[1]), StringComparison.Ordinal));
+        Assert.Contains(history, h => h.ClientHash.EndsWith("." + HashSegment("Gen2Pass2!", salts[2]), StringComparison.Ordinal));
+        Assert.Contains(history, h => h.ClientHash.EndsWith("." + HashSegment("Gen3Pass3!", salts[3]), StringComparison.Ordinal));
+    }
+
     // ── 账号冻结（④ 决策 3/6/7） ──────────────────────────────────────
 
     [Fact]
@@ -306,7 +338,6 @@ public class PasswordCapabilityTests
     {
         var stub = CreateStub(out _);
         var options = AuthenticationTestHost.CreateOptions();
-        options.LoginProtection.PasswordPerMinutePerSubject = 1;   // 阈值 1：首次失败后立即锁定
         var service = new PasswordLoginService(
             stub,
             [new PasswordAuthenticationProvider(stub, CreateProtector(), NullLogger<PasswordAuthenticationProvider>.Instance)],
@@ -314,12 +345,16 @@ public class PasswordCapabilityTests
             CreateRateLimit(),
             NullLogger<PasswordLoginService>.Instance);
 
-        // 首次（错密码——Provider 失败，但 TryAcquire 成功消耗额度；B3b：非频控失败 → DomainException）
+        // AC-05（B 档）：pwd:login 点检查固定 5 次/10min 对齐文档（镜像 PasswordResetService；Options 阈值不再生效）——
+        // 前 5 次错密码消耗额度（Provider 失败 → DomainException，非频控失败），第 6 次 → TryAcquire 失败 → RateLimitedException
         var salt = NewSalt();
-        await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
-            service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt), ct: TestContext.Current.CancellationToken));
+        for (var i = 0; i < 5; i++)
+        {
+            await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.DomainException>(() =>
+                service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt), ct: TestContext.Current.CancellationToken));
+        }
 
-        // 第二次 → TryAcquire 失败 → RateLimitedException（PASSWORD_RATE_LIMITED 锁定=限流，ADR 决策 2/3）
+        // 第 6 次 → PASSWORD_RATE_LIMITED（锁定=限流，ADR 决策 2/3）
         var ex = await Assert.ThrowsAsync<TKW.Framework.Domain.Exceptions.RateLimitedException>(() =>
             service.LoginAsync(new PasswordLoginRequest("u-fl-1", ClientHash("wrong", Convert.FromHexString(salt)), salt), ct: TestContext.Current.CancellationToken));
         Assert.Equal("PASSWORD_RATE_LIMITED", ex.ErrorCode);

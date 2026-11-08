@@ -38,7 +38,7 @@ public partial class MfaSecretEntity
     [MaxLength(20)]
     public string Method { get; set; } = "";
 
-    /// <summary>TOTP secret AES-GCM 密文（"base64(iv).base64(tag).base64(cipher)"——明文不落库；
+    /// <summary>TOTP secret AES-GCM 密文（单段 "base64(nonce[12]‖cipher‖tag[16])"——明文不落库；
     /// 仅 TOTP 场景；写入后不可变 CanUpdate=false——重新绑定走 Disable+Enroll）。
     /// 敏感字段：Dto 忽略 + Json 忽略（tkwf-entity 规则 4——对齐 PlatformCredentialEntity.AppSecretEncrypted 先例）。</summary>
     [FreeSql.DataAnnotations.Column(Position = 4, IsNullable = true, CanUpdate = false)]

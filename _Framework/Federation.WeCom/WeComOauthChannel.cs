@@ -136,7 +136,7 @@ public sealed class WeComOauthChannel : DomainServiceBase, ISsoChannel
 
             string url = flow == "scan"
                 ? WeComAuthorizeUrlBuilder.BuildScanUrl(corpId, agentId, context.RedirectUri, state,
-                    loginType: string.Equals(GetExtra(_channel, "IsThirdParty"), "true", StringComparison.OrdinalIgnoreCase) ? "ServiceApp" : "CorpApp")
+                    loginType: IsTrue(_channel, "IsThirdParty") ? "ServiceApp" : "CorpApp")
                 : WeComAuthorizeUrlBuilder.BuildWebviewUrl(corpId, context.RedirectUri, scope, state, agentId);
             return Task.FromResult<SsoChannelAuthorizeResult?>(new SsoChannelAuthorizeResult(url, context.State, null, null));
         }

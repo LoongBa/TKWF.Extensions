@@ -41,7 +41,8 @@ public sealed class IdentityRoleProvider<TUserInfo> : IRoleProvider<TUserInfo>
 
     public async Task<IReadOnlyList<string>> GetRolesAsync(TUserInfo userInfo)
     {
-        // UserIdString → long（Identity 用户表 long 约定）；转换失败返回空
+        // UserIdString → long（隐式约束：Identity 用户表 Id 为 BIGINT——UserIdString 须为 long 数字串）；
+        // 转换失败返回空（角色查库跳过——Permissions 角色级判定 fail-closed 兜底）
         if (userInfo?.UserIdString is not { } userIdStr || !long.TryParse(userIdStr, out var userId)) return [];
 
         // Scoped 缓存：同一请求内二次调用命中内存（PermissionChecker 双调用/批量放大消除，Oracle P1-2）

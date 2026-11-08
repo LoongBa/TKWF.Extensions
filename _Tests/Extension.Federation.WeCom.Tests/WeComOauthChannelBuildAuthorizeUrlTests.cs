@@ -29,7 +29,7 @@ public class WeComOauthChannelBuildAuthorizeUrlTests
             new WeComApiClient(new System.Net.Http.HttpClient(), NullLogger<WeComApiClient>.Instance),
             channel);
 
-    private static ChannelConfig RealConfig(string? defaultScope = null)
+    private static ChannelConfig RealConfig(string? defaultScope = null, bool isThirdParty = false)
         => new()
         {
             ChannelId = "wecom-main",
@@ -39,7 +39,7 @@ public class WeComOauthChannelBuildAuthorizeUrlTests
             {
                 ["CorpId"] = TestCorpId,
                 ["AgentId"] = TestAgentId,
-                ["IsThirdParty"] = "false",
+                ["IsThirdParty"] = isThirdParty ? "true" : "false",
                 ["DefaultScope"] = defaultScope,       // 可空——兜底 snsapi_base
             },
         };
@@ -98,6 +98,24 @@ public class WeComOauthChannelBuildAuthorizeUrlTests
         Assert.Contains($"agentid={TestAgentId}", result.Url);
         Assert.Contains($"redirect_uri={System.Uri.EscapeDataString(TestRedirectUri)}", result.Url);
         Assert.Contains($"state={TestState}", result.Url);
+        Assert.Equal(TestState, result.State);
+    }
+
+    /// <summary>扫码流三方应用（IsThirdParty=true）：login_type=ServiceApp（WC-8——IsTrue 统一判定路径）。</summary>
+    [Fact]
+    public async Task BuildAuthorizeUrl_RealConfig_ScanFlow_ThirdParty_LoginTypeServiceApp()
+    {
+        var channel = CreateChannel(RealConfig(isThirdParty: true));
+
+        var result = await channel.BuildAuthorizeUrlAsync(
+            new SsoChannelAuthorizeContext(TestRedirectUri, TestState, null,
+                new Dictionary<string, string?> { ["flow"] = "scan" }),
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.StartsWith("https://login.work.weixin.qq.com/wwlogin/sso/login?", result!.Url);
+        Assert.Contains("login_type=ServiceApp", result.Url);            // 三方应用（IsThirdParty=true）
+        Assert.DoesNotContain("login_type=CorpApp", result.Url);
         Assert.Equal(TestState, result.State);
     }
 

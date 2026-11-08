@@ -67,7 +67,8 @@ public sealed class QqApiClient
         if (TryGetError(root, out var errMsg))
             throw new InvalidOperationException($"QQ access_token 获取失败：{errMsg}");
 
-        return root.GetProperty("access_token").GetString()!;
+        return GetStringOrNull(root, "access_token")
+            ?? throw new InvalidOperationException("QQ 响应缺少 access_token（畸形响应——防被编排层错标 CHANNEL_REGISTRY_UNAVAILABLE）");
     }
 
     /// <summary>
@@ -98,7 +99,8 @@ public sealed class QqApiClient
         if (TryGetError(root, out var errMsg))
             throw new InvalidOperationException($"QQ openid 获取失败：{errMsg}");
 
-        var openId = root.GetProperty("openid").GetString()!;
+        var openId = GetStringOrNull(root, "openid")
+            ?? throw new InvalidOperationException("QQ 响应缺少 openid（畸形响应——防被编排层错标 CHANNEL_REGISTRY_UNAVAILABLE）");
         var unionId = root.TryGetProperty("unionid", out var u) && u.ValueKind == JsonValueKind.String
             ? u.GetString()
             : null;

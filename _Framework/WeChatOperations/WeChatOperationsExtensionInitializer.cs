@@ -53,10 +53,9 @@ namespace TKWF.Ext.WeChatOperations;
 [TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Federation.IChannelSource), MinVersion = "0.2.0")]
 // 2026-11-05 拆分（V0.9.0）：通道门面契约依赖 WeChatChannels.Abstractions（IChannelConfigService——
 //   运营门面经 User.Use<IChannelConfigService> 消费通道；依赖方须先白名单 WeChatChannels）。
-// ⚠️ MinVersion 0.0.0-preview.0：契约包首发 v0.1.0 tag 前为 preview 版本（DEP002 按引用程序集实际版本
-//   SemVer 比较——0.0.0-preview.x < 0.0.0 故不能用正式版下限），发布后提升为 0.1.0
-//   （对齐 Federation.Abstractions 首发先例：tag 后设正式版编译门）
-[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.WeChatChannels.IChannelConfigService), MinVersion = "0.0.0-preview.0")]
+// 2026-11-08（WO-10）：MinVersion 0.0.0-preview.0 → 0.1.0——WeChatChannels.Abstractions/v0.1.0/v0.1.1 已发布，
+//   DEP002 门控按引用程序集版本 SemVer 比较（0.1.x ≥ 0.1.0 编译门通过；对齐 Federation.Abstractions 首发后升正式版先例）
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.WeChatChannels.IChannelConfigService), MinVersion = "0.1.0")]
 public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {

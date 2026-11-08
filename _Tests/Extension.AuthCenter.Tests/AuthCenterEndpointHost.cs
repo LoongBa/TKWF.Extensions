@@ -259,7 +259,7 @@ internal static class AuthCenterEndpointHost
             return Task.FromResult(new TokenResponse("at-2", "rt-2", "Bearer", 7200));
         }
 
-        public Task RevokeTokenAsync(string jti, string reason, CancellationToken ct = default)
+        public Task RevokeTokenAsync(string jti, string reason, string? userId = null, CancellationToken ct = default)
         {
             RevokedJti = jti;
             return Task.CompletedTask;

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Utility.Caching;
@@ -84,6 +86,62 @@ public class DevRsaKeyCacheTests
         var second = cache.GetOrCreate(Factory);
         Assert.Same(first, second);
         Assert.Equal(1, factoryCalls);
+    }
+
+    // AC-18（B 档）：dev 模式 SigningKeys 配置撞 kid（同 kid 重复定义）→ Warning 告警（后配置覆盖先，语义与生产 LoadKeysCore 分支一致）
+
+    [Fact]
+    public async Task DevMode_DuplicateKidInSigningKeys_LogsWarning()
+    {
+        // 两个同 kid 配置需各自可加载 PEM——测试临时生成真实 RSA 私钥 PEM 文件
+        var dir = Path.Combine(Path.GetTempPath(), "authc-devkid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var pem1 = Path.Combine(dir, "k1.pem");
+            var pem2 = Path.Combine(dir, "k2.pem");
+            using (var key1 = RSA.Create(2048)) File.WriteAllText(pem1, key1.ExportRSAPrivateKeyPem());
+            using (var key2 = RSA.Create(2048)) File.WriteAllText(pem2, key2.ExportRSAPrivateKeyPem());
+
+            var options = new AuthCenterOptions
+            {
+                IsProduction = false,
+                Issuer = "auth-test",
+                SigningKeys =
+                [
+                    new SigningKeyConfig { Kid = "dup-key", PrivateKeyPath = pem1 },
+                    new SigningKeyConfig { Kid = "dup-key", PrivateKeyPath = pem2 }
+                ]
+            };
+            var logger = new CollectingLogger<TokenService>();
+            var fsql = AuthenticationTestHost.CreateInMemoryFreeSql();
+            var stub = AuthenticationTestHost.CreateStub(fsql);
+            var service = new TokenService(stub, _devKeys, Options.Create(options), new MemoryCache(new MemoryCacheOptions()), logger);
+
+            var account = CreateAccount();
+            await stub.Use<AuthAccountEntityDataService>().CreateAsync(account, ct: TestContext.Current.CancellationToken);
+            await service.IssueTokenAsync(
+                new TokenIssueRequest(account.UId, AuthTypes.Sms, (int)AuthLevel.Phone), ct: TestContext.Current.CancellationToken);
+
+            Assert.Contains(logger.Warnings, w =>
+                w.Contains("dup-key", StringComparison.Ordinal) && w.Contains("撞 kid", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>仅收集 Warning 级日志——断言语告警触发（Information 密钥加载日志不收集）。</summary>
+    private sealed class CollectingLogger<T> : ILogger<T>
+    {
+        public List<string> Warnings { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => logLevel == LogLevel.Warning;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception));
+        }
     }
 
     // ── helpers（对齐 TokenServiceTests.CreateService 形态——独立实例直构 + 显式传入 DevKeyCache）──

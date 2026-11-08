@@ -134,7 +134,6 @@ public class DataPortExtensionInitializerTests
 
         Assert.Equal(500, options.DefaultBatchSize);
         Assert.False(options.StopOnBatchFailure);
-        Assert.Equal("miniexcel", options.DefaultProvider);
     }
 
     [Fact]
@@ -147,8 +146,7 @@ public class DataPortExtensionInitializerTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [$"{TkfwDataPortSection}:{nameof(DataPortOptions.DefaultBatchSize)}"] = "10",
-                [$"{TkfwDataPortSection}:{nameof(DataPortOptions.StopOnBatchFailure)}"] = "true",
-                [$"{TkfwDataPortSection}:{nameof(DataPortOptions.DefaultProvider)}"] = "csv"
+                [$"{TkfwDataPortSection}:{nameof(DataPortOptions.StopOnBatchFailure)}"] = "true"
             })
             .Build();
         services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(config);
@@ -160,6 +158,5 @@ public class DataPortExtensionInitializerTests
 
         Assert.Equal(10, options.DefaultBatchSize);
         Assert.True(options.StopOnBatchFailure);
-        Assert.Equal("csv", options.DefaultProvider);
     }
 }

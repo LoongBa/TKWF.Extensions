@@ -148,8 +148,9 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
         var m = GetMethod(method);
 
         // 未启用 → 统一"已发起"（防用户存在性/绑定状态探测；随机假 challengeId 验证必败，Oracle Q6）
+        // 假 challengeId 用随机 long（对齐真实句柄形态——真实 = 挑战表 long 主键字符串）——防形态区分可枚举出"伪"
         if (await Secrets.GetActiveSecretAsync(userId, m.Method, ct) is null)
-            return new MfaChallengeResult(Guid.NewGuid().ToString("N"), m.Method);
+            return new MfaChallengeResult(NextFakeChallengeId().ToString(), m.Method);
 
         var request = await m.RequestChallengeAsync(new MfaUser(userId), context, ct);
         if (request?.ChallengeId is null)
@@ -267,6 +268,14 @@ internal sealed class MfaService : DomainServiceBase, IMfaService
         for (var i = 0; i < RecoveryCodeLength; i++)
             chars[i] = RecoveryCodeCharset[RandomNumberGenerator.GetInt32(RecoveryCodeCharset.Length)];
         return new string(chars);
+    }
+
+    /// <summary>生成随机正 long 假挑战句柄（加密安全随机 8 字节 → 清符号位恒正——形态对齐真实 challengeId：挑战表 long 主键字符串）。</summary>
+    private static long NextFakeChallengeId()
+    {
+        Span<byte> buf = stackalloc byte[sizeof(long)];
+        RandomNumberGenerator.Fill(buf);
+        return BitConverter.ToInt64(buf) & long.MaxValue;
     }
 
     /// <summary>SHA256 hex（小写）——恢复码/令牌落库单向散列。</summary>

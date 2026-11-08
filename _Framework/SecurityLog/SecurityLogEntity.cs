@@ -25,8 +25,10 @@ namespace TKWF.Ext.SecurityLog
         public long Id { get; set; }
 
         /// <summary>
-        /// 事件类型。合法值（使用指南注明，无编译期约束）：
-        /// Login / Logout / PasswordChange / PasswordReset / Lockout / Register / Challenge。
+        /// 事件类型。合法值（使用指南注明，无编译期约束，常量收敛于 <see cref="SecurityLogEventTypes"/>，共 11 种）：
+        /// Login / Logout / PasswordChange / PasswordReset / Lockout / Register / Challenge
+        /// + Freeze / Unfreeze（AuthCenter 冻结/解冻直写）+ Bind / Unbind（AuthCenter V0.11.0 认证因素绑定/解绑直写
+        /// ——后四者经扩展直写、非过滤器采集，事件表直写语义见使用指南 §5）。
         /// </summary>
         [FreeSql.DataAnnotations.Column(Position = 2)]
         [MaxLength(32)]

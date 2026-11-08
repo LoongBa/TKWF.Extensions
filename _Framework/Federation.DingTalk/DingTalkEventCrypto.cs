@@ -120,12 +120,15 @@ internal static class DingTalkEventCrypto
         if (msgLen <= 0 || 20 + msgLen > plain.Length)
             throw new CryptographicException("钉钉事件解密结果 msg_len 非法");
 
-        // 提取明文尾部 receiveid 与 expectedReceiveId 恒定时间比对（P1-1 第二道闸门——不符拒）
+        // 提取明文尾部 receiveid 与 expectedReceiveId 恒定时间比对（P1-1 第二道闸门——不符拒）；
+        // 预检查：先取两侧 UTF-8 字节并比对字节长度——FixedTimeEquals(byte[], byte[]) 对异长数组抛
+        // ArgumentException，畸形 receiveid（超长多字节/空）须收敛为 fail-closed 的 CryptographicException（DT-5）
         var receiveIdLen = plain.Length - 20 - msgLen;
         var receiveId = Encoding.UTF8.GetString(plain, 20 + msgLen, receiveIdLen);
-        if (receiveId.Length != expectedReceiveId.Length
-            || !CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(receiveId), Encoding.UTF8.GetBytes(expectedReceiveId)))
+        var receiveIdBytes = Encoding.UTF8.GetBytes(receiveId);
+        var expectedReceiveIdBytes = Encoding.UTF8.GetBytes(expectedReceiveId);
+        if (receiveIdBytes.Length != expectedReceiveIdBytes.Length
+            || !CryptographicOperations.FixedTimeEquals(receiveIdBytes, expectedReceiveIdBytes))
             throw new CryptographicException("钉钉事件 receiveid 与 CorpId 不匹配（拒绝——防 forged org-change event）");
 
         return Encoding.UTF8.GetString(plain, 20, msgLen);

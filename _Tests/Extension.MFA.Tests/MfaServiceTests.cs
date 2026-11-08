@@ -365,6 +365,13 @@ public class MfaServiceTests
         Assert.False(string.IsNullOrEmpty(challenge.ChallengeId));
         Assert.Equal("totp", challenge.Method);
 
+        // 假 challengeId 为随机 long（对齐真实句柄形态——防形态区分可枚举出"伪"）
+        Assert.True(long.TryParse(challenge.ChallengeId, out var fakeId) && fakeId > 0);
+
+        // 两次 Request 的假 challengeId 随机不重复
+        var challenge2 = await host.Mfa.RequestChallengeAsync(userId, "totp", ct: TestContext.Current.CancellationToken);
+        Assert.NotEqual(challenge.ChallengeId, challenge2.ChallengeId);
+
         // 假 challengeId 验证必败（统一 false 不区分原因）
         Assert.False(await host.Mfa.VerifyChallengeAsync(userId, "totp", challenge.ChallengeId, "000000", ct: TestContext.Current.CancellationToken));
 

@@ -33,8 +33,10 @@ public sealed record OidcIdTokenValidationResult(string Sub, string Issuer, stri
 /// <c>ClientAuthenticationScheme</c> 无 <c>PrivateKeyJwt</c>，OIDC 归并方案 P1-8）。</para>
 /// <para><b>删内联重复</b>：M1 <c>JwksManager</c>/<c>OidcIdTokenValidator</c> 已上移引擎
 /// （<see cref="JwksManager"/>/<see cref="IdTokenDecoder"/>——kid 精确匹配 + 墓园 Dispose + 512KB 钳制 + RSA≥2048 过滤 +
-/// iss 白名单 + azp + leeway + nbf + exp 强校验）。验签密钥 L1 缓存：本流自持 <see cref="JwksManager"/> 按 jwksUri 键缓存
-/// （对齐 M1 单实例设计——JWKS 缓存 TTL 1h 保留）。</para>
+/// iss 白名单 + azp + leeway + nbf + exp 强校验）。验签密钥缓存：本流自持 <see cref="JwksManager"/> 按 jwksUri 键缓存——
+/// flow 为 Transient typed client（AddHttpClient 默认）——<c>_jwksCache</c> 仅单 scope 内有效，跨请求缓存失效
+/// （每次联邦登录拉取一次 JWKS，~50KB）；安全无影响（新拉取更鲜 + 引擎 kid miss 重取容错）；若需跨请求缓存
+/// 将 JwksManager 上移独立单例服务（待办）。</para>
 /// <para>端点覆盖规则：显式配置优先 → Discovery 解析覆盖。HttpClient 经 typed client 注入。</para>
 /// </summary>
 public sealed class OidcChannelFlow : IDisposable
@@ -306,7 +308,7 @@ public sealed class OidcChannelFlow : IDisposable
             ClockSkew: TimeSpan.FromSeconds(30));   // M1 leeway 30s
     }
 
-    /// <summary>验签密钥源——JwksManager 按 jwksUri 键缓存（L1 缓存 TTL 1h 保留，对齐 M1 设计）。</summary>
+    /// <summary>验签密钥源——JwksManager 按 jwksUri 键缓存（TTL 1h；仅单 scope 内有效，跨请求实例重建——见类注释）。</summary>
     private JwksManager GetJwks(string jwksUri)
         => _jwksCache.GetOrAdd(jwksUri, _ => new JwksManager(_httpClient));
 

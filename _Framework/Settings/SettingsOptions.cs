@@ -12,7 +12,7 @@ namespace TKWF.Ext.Settings
     [Options("TKWF:Settings")]
     public class SettingsOptions
     {
-        /// <summary>默认设置值提供者名称（默认 "Global"）。</summary>
+        /// <summary>默认设置值提供者名称（⚠️ **预留未消费**——全仓零消费，配置不改变任何行为，勿依赖；分层读写 Provider 名由管理器内部逻辑决定）。</summary>
         public string DefaultSettingValueProvider { get; set; } = "Global";
 
         /// <summary>缓存过期时间（秒），默认 300 秒（5 分钟）。</summary>

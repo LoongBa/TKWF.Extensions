@@ -50,7 +50,7 @@ internal static class MicrosoftTestHost
         string tenant = "organizations",
         string tenantGuid = "common",
         bool tampered = false, string? algOverride = null, long? expOverrideSecs = null,
-        string? issuerOverride = null)
+        string? issuerOverride = null, string? audOverride = null)
     {
         var header = JsonSerializer.Serialize(new { alg = algOverride ?? "RS256", typ = "JWT", kid });
         var now = DateTimeOffset.UtcNow;
@@ -62,7 +62,7 @@ internal static class MicrosoftTestHost
         var claims = new Dictionary<string, object>
         {
             ["iss"] = actualIssuer,
-            ["aud"] = clientId,
+            ["aud"] = audOverride ?? clientId,
             ["sub"] = tampered ? "tampered-sub" : sub,
             ["iat"] = now.ToUnixTimeSeconds(),
             ["exp"] = expOverrideSecs ?? now.AddMinutes(5).ToUnixTimeSeconds(),
@@ -126,6 +126,7 @@ public sealed class StubMicrosoftHandler : HttpMessageHandler
         string Tenant = "organizations",
         string TenantGuid = "guid-11111111-2222-3333-4444-555555555555",
         string? IssuerOverride = null,   // evil iss 模拟（白名单拒）
+        string? AudOverride = null,      // 错误 aud 模拟（aud 校验拒）
         bool Tampered = false,
         string? AlgOverride = null,
         long? ExpOverrideSecs = null);
@@ -146,7 +147,7 @@ public sealed class StubMicrosoftHandler : HttpMessageHandler
         {
             var idToken = MicrosoftTestHost.SignIdToken(_privateKey, _kid, opt.Sub,
                 opt.ClientId, opt.Tenant, opt.TenantGuid, opt.Tampered, opt.AlgOverride, opt.ExpOverrideSecs,
-                opt.IssuerOverride);
+                opt.IssuerOverride, opt.AudOverride);
             var json = $"{{\"id_token\":\"{idToken}\",\"access_token\":\"stub-at\",\"expires_in\":3600}}";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             { Content = new StringContent(json, Encoding.UTF8, "application/json") });

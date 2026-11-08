@@ -428,8 +428,10 @@ public sealed class WeChatEventChannel : DomainServiceBase, ISsoChannel, IFollow
                 },
             };
 
+            // FW-09：Content 可能含用户 PII——日志脱敏（前 32 字符 + 截断标记）
+            var logContent = msgContent is null ? "" : (msgContent.Length <= 32 ? msgContent : msgContent[..32] + "…(已截断)");
             _logger.LogInformation("微信事件入站：ChannelId={ChannelId} MsgType={MsgType} Event={Event} OpenId={OpenId} Content={Content}",
-                _channel.ChannelId, msgType ?? "", eventValue ?? "", openId, msgContent ?? "");
+                _channel.ChannelId, msgType ?? "", eventValue ?? "", openId, logContent);
 
             return Task.FromResult(ChannelEventOutcome.Parsed(evt));
         }

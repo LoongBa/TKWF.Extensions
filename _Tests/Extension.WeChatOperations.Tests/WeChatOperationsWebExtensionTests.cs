@@ -12,9 +12,9 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 
 /// <summary>
 /// T22 gate（2026-10-27 补，转达 DMP v0.9.21——SG2 门面聚合缺口）：<see cref="WeChatOperationsWebExtension"/>
-/// 端点级黑盒冒烟——25 端点逐一断言<b>已挂载（200）+ handler→门面绑定（Fake Invoked）</b>——断链（未挂载 → 404）即测试红。
+/// 端点级黑盒冒烟——22 端点逐一断言<b>已挂载（200）+ handler→门面绑定（Fake Invoked）</b>——断链（未挂载 → 404）即测试红。
 /// <para>背景：V0.4.0 曾删 WebExtension 依赖消费方 SG1b 聚合；B4（v4.10.82/83/84 referencesAspNetCore 门控）后扩展
-/// 落入 ExtensionEndpointRegistrations 发射分支 → 消费方 SG2 结构性让路 → 25 端点两头落空（运行时 404）——V0.6.0
+/// 落入 ExtensionEndpointRegistrations 发射分支 → 消费方 SG2 结构性让路 → 22 端点两头落空（运行时 404）——V0.6.0
 /// e770087 重建 WebExtension（DeclareEndpoints + MapGenerated + ExtensionModule 前缀）修复。此测试锁定该修复：
 /// 端点挂载断链必须炸测试（此前 143 例门面单测全绿不覆盖 HTTP 端点 → 断链静默）。</para>
 /// <para>认证语义：生成端点全 <c>RequireAuthorization()</c>；宿主 <c>HttpAuth.ExcludedPathPrefixes</c> 排除 /api

@@ -11,7 +11,8 @@ namespace TKWF.Ext.RateLimiting
     ///       （AddOptions&lt;RateLimitingOptions&gt;().BindConfiguration("TKWF:RateLimiting")，与
     ///       <c>RateLimitingWebExtension.ConfigureServices</c> 幂等）</item>
     /// <item>ConfigureFilters——不调用（限流在 Web 层中间件接线，Domain 层 [RateLimit] 属主框架既有能力）</item>
-    /// <item>InitializeAsync——不调用（无种子/无持久化；本扩展纯 Web 层接线，无 SG1 实体）</item>
+    /// <item>InitializeAsync——不调用（无种子/无持久化；v0.3.0 起含 SG1 计数实体 <c>RateLimitCounterEntity</c>（点检查 DB Provider），
+    ///       数据访问经 <c>RateLimitCounterEntityDataService</c> 随用随取，无需启动加载）</item>
     /// </list>
     /// <para><b>注意</b>：启用本扩展仅完成 Options 绑定；<b>限流中间件接线须消费方显式
     /// <c>UseWebExtensions(e =&gt; e.Add&lt;RateLimitingWebExtension&gt;(...))</c></b>（v4.10.45 收敛迁移——

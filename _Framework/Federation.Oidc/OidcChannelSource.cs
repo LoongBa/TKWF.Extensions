@@ -14,7 +14,7 @@ namespace TKWF.Federation.Oidc;
 /// <para>投影映射（方案 §3.1 公共列 + Extra）：<c>ChannelId→ChannelId</c> / <c>ClientId→AppId</c> /
 /// <c>ClientSecret→AppSecret</c>（公共列——OIDC 系 client_id/client_secret 按 M7 映射约束归一）；
 /// 平台特有字段（Platform/AuthorizeUri/TokenUri/UserInfoUri/JwksUri/DiscoveryUri/Scopes/UsePkce/
-/// TokenIssuers/FetchUserInfo/ClientAssertionSigningKeyPath）进 Extra（键见 <see cref="OidcChannelConfigKeys"/>；
+/// TokenIssuers/ClientAssertionSigningKeyPath）进 Extra（键见 <see cref="OidcChannelConfigKeys"/>；
 /// 列表字段 JSON 数组序列化——TokenIssuer 正则可含任意字符，分隔符方案有歧义风险）。
 /// <see cref="PlatformType"/> = "oidc"。</para>
 /// <para>注册：<c>AddOidcFederationChannel()</c> 内 <c>TryAddEnumerable&lt;IChannelSource&gt;</c>
@@ -55,7 +55,6 @@ public sealed class OidcChannelSource : IChannelSource
                     [OidcChannelConfigKeys.UsePkce] = c.UsePkce.ToString().ToLowerInvariant(),
                     [OidcChannelConfigKeys.TokenIssuers] = JsonSerializer.Serialize(c.TokenIssuers),
                     [OidcChannelConfigKeys.ClientAssertionSigningKeyPath] = c.ClientAssertionSigningKeyPath,
-                    [OidcChannelConfigKeys.FetchUserInfo] = c.FetchUserInfo.ToString().ToLowerInvariant(),
                 },
             })
             .ToList();

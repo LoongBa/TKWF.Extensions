@@ -24,6 +24,7 @@ public class WeChatOperationsOptions
     /// ——<see cref="WeChatOperationsReplyHandler"/> 网关 RouteAsync 先行执行仍转发生效）。</summary>
     public bool MessageBusinessEnabled { get; set; } = true;
 
-    /// <summary>交互日志保留天数（0/负数 = 不清理；阶段一查询面够用，清理任务归后续迭代）。</summary>
+    /// <summary>交互日志保留天数（0/负数 = 不清理；阶段一查询面够用，清理任务归后续迭代）。
+    /// <para>⚠️ 规划中未接线：当前零消费（交互日志清理任务未落地，此键暂无读取方）。</para></summary>
     public int InteractionLogRetentionDays { get; set; }
 }

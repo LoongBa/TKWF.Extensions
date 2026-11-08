@@ -66,6 +66,8 @@ public sealed class WeComApiClient
             var url = $"{ApiBase}/cgi-bin/gettoken?corpid={Uri.EscapeDataString(corpId)}&corpsecret={Uri.EscapeDataString(corpSecret)}";
             using var resp = await _httpClient.GetAsync(url, ct);
             var json = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+                throw new InvalidOperationException($"企业微信 access_token 获取失败（{(int)resp.StatusCode}）：{json}");
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)
@@ -102,6 +104,8 @@ public sealed class WeComApiClient
         var url = $"{ApiBase}{endpoint}?access_token={Uri.EscapeDataString(accessToken)}&code={Uri.EscapeDataString(code)}";
         using var resp = await _httpClient.GetAsync(url, ct);
         var json = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"企业微信授权 code 换取身份失败（{(int)resp.StatusCode}）：{json}");
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)
@@ -127,6 +131,8 @@ public sealed class WeComApiClient
         var url = $"{ApiBase}/cgi-bin/auth/getuserdetail?user_ticket={Uri.EscapeDataString(userTicket)}";
         using var resp = await _httpClient.PostAsync(url, null, ct);
         var json = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"企业微信敏感信息获取失败（{(int)resp.StatusCode}）：{json}");
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         if (root.TryGetProperty("errcode", out var err) && err.GetInt32() != 0)

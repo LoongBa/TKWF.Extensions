@@ -58,7 +58,7 @@ public sealed class NotificationDefinition
     /// <summary>默认严重级别。</summary>
     public NotificationSeverity Severity { get; }
 
-    /// <summary>发布方必需权限（null=不校验）。C1 修订：仅校验发布方（当前用户），非逐收件人。</summary>
+    /// <summary>发布方必需权限（null=不校验）。C1 修订：校验发布方（当前用户）+ V0.3.0 起逐收件人权限门控（委托 Permissions <see cref="T:TKWF.Ext.Permissions.Abstractions.IPermissionBatchChecker"/>，仅向有权限收件人投递）。</summary>
     public string? PermissionName { get; private set; }
 
     /// <summary>设置发布方必需权限（Fluent API）。</summary>

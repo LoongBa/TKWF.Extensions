@@ -129,7 +129,7 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         var protectedBlob = _credentialProtector.Protect(System.Text.Encoding.UTF8.GetBytes(assembled));
 
         // ⑥ 密码策略单入口强制校验（fail-closed——复杂度/历史防重用；轮换判定查历史表）
-        EnforcePasswordPolicy(account, assembled, ct);
+        await EnforcePasswordPolicyAsync(account, assembled, ct);
 
         // 因素落库（V0.11.0 T5：密码归属 AuthFactor(Password)——标识恒为 UId；写后 TokenVersion++ 使旧 refresh 失效）
         var existing = await FindPasswordFactorAsync(uid, ct);
@@ -179,8 +179,9 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         return Convert.FromBase64String(parts[2]);
     }
 
-    /// <summary>⑥ 密码策略强制校验（fail-closed 单入口——复杂度/历史防重用/强制轮换；EnforcePolicy=false 时跳过校验仍记历史）。</summary>
-    private void EnforcePasswordPolicy(AuthAccountEntity account, string assembledClientHash, CancellationToken ct)
+    /// <summary>⑥ 密码策略强制校验（fail-closed 单入口——复杂度/历史防重用/强制轮换；EnforcePolicy=false 时跳过校验仍记历史）。
+    /// AC-16（B 档）：sync-over-async（原 .GetAwaiter().GetResult()）改真 async 链路。</summary>
+    private async Task EnforcePasswordPolicyAsync(AuthAccountEntity account, string assembledClientHash, CancellationToken ct)
     {
         var policy = _authOptions.Value.PasswordPolicy;
         if (!policy.EnforcePolicy) return;
@@ -191,7 +192,7 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
 
         // 历史防重用：新 clientHash 不得与最近 N 代相同（比对组装格式 hash 段）
         // 强制轮换：最近改密时间超过 RotationDays → 拒绝设密（由验证侧判定；设密侧仅当 RotationDays>0 且历史超期时提示）
-        var recent = HistoryDataService.GetRecentAsync(account.UId, Math.Max(policy.HistoryRetentionCount, 1), ct).GetAwaiter().GetResult();
+        var recent = await HistoryDataService.GetRecentAsync(account.UId, Math.Max(policy.HistoryRetentionCount, 1), ct);
         var newHash = ParseClientHash(assembledClientHash);
         foreach (var hist in recent)
         {
@@ -201,12 +202,29 @@ internal sealed class AuthAccountService : DomainServiceBase, IAuthAccountServic
         }
     }
 
-    /// <summary>历史裁剪——保留最近 N 代（超出删除；只增表语义下由门面清理旧代）。</summary>
+    /// <summary>历史裁剪——保留最近 N 代（超出删除；只增表语义下由门面清理旧代）。
+    /// AC-16（B 档）偏移删除语义修正：原 <c>GetRecentAsync(uid, 100) + Skip(keep)</c> 在历史 &gt;100 代时
+    /// 第 100 代以前的行永久残留（硬编码上限截断）；改为「按 Id 降序取 keep+1 代 → 以第 keep+1 代（应删最旧代）
+    /// Id 为界偏移批删更早全部旧代」，无截断缺陷。
+    /// ⚠️ 排序/边界一律用 Id（自增主键，与创建序单调一致）而不用 CreateTime——SQLite DateTime 同刻写入
+    /// 无次级排序/精度截断（同 tick 行乱序 + 时间戳相等），时间边界会误删保留代（实测归零）。
+    /// 追加的当次历史行在本方法执行前已入库（Id 最大，恒保留）。</summary>
     private async Task TrimHistoryAsync(string uid, CancellationToken ct)
     {
         var keep = Math.Max(_authOptions.Value.PasswordPolicy.HistoryRetentionCount, 1);
-        var all = await HistoryDataService.GetRecentAsync(uid, 100, ct);
-        foreach (var hist in all.Skip(keep))
-            await HistoryDataService.AdminDeleteAsync(hist.Id, ct);
+        var recent = await HistoryDataService.EntitySelectAsync(
+            h => h.UId == uid, 0, keep + 1, q => q.OrderByDescending(h => h.Id), ct);
+        if (recent.Count <= keep) return;   // 恰 keep 代（或更少）——无需裁剪
+
+        var cutoffId = recent[keep].Id;   // Id 降序稳定：第 keep+1 条 = 应删的最新一代
+        while (true)
+        {
+            var stale = await HistoryDataService.EntitySelectAsync(
+                h => h.UId == uid && h.Id <= cutoffId,
+                0, 100,
+                q => q.OrderByDescending(h => h.Id), ct);
+            if (stale.Count == 0) break;
+            await HistoryDataService.EntityDeleteBatchAsync(stale.Select(h => h.Id), ct);
+        }
     }
 }

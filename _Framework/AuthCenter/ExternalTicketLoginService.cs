@@ -126,6 +126,7 @@ public sealed class ExternalTicketLoginService : DomainServiceBase, IExternalTic
     }
 
     /// <summary>领域架构守卫异常判定——<c>User.Use&lt;T&gt;()</c> 帧外/未装配守卫工厂抛 <c>InvalidOperationException</c> + "领域架构守卫" 前缀。</summary>
+    // 待框架提供类型化守卫异常基类（转达登记 2026-11-08）——框架文案变更可能致映射 503→500 退化。
     private static bool IsDomainGuardException(InvalidOperationException ex)
         => ex.Message.Contains("领域架构守卫", StringComparison.Ordinal);
 

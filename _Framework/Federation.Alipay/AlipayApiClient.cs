@@ -253,7 +253,7 @@ public sealed class AlipayApiClient
             ["format"] = "JSON",
             ["charset"] = "utf-8",
             ["sign_type"] = "RSA2",
-            ["timestamp"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), // 支付宝按北京时间校验；对齐官方 SDK 本地时间
+            ["timestamp"] = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss"), // 支付宝按北京时间校验——显式东八区，海外部署/Docker UTC 环境安全
             ["version"] = "1.0",
         };
         foreach (var (key, value) in topLevelParams)
@@ -297,7 +297,7 @@ public sealed class AlipayApiClient
             RefreshToken: GetStringOrNull(biz, "refresh_token"));
     }
 
-    /// <summary>商户私钥 PEM 读取（L1 缓存按路径——生产缺文件抛 FileNotFoundException，fail-fast F7；启动/首用即失败）。</summary>
+    /// <summary>商户私钥 PEM 读取（请求内缓存——typed client Transient 生命周期跨请求即失效，注释如实；如需跨请求缓存改 static ConcurrentDictionary 待办）。生产缺文件抛 FileNotFoundException（fail-fast F7；启动/首用即失败）。</summary>
     private string LoadPrivateKeyPem(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -305,7 +305,7 @@ public sealed class AlipayApiClient
         return _pemCache.GetOrAdd(path, static p => File.ReadAllText(p));
     }
 
-    /// <summary>支付宝公钥 PEM 读取（同上——验签响应必需）。</summary>
+    /// <summary>支付宝公钥 PEM 读取（同商户私钥——请求内缓存；验签响应必需）。</summary>
     private string LoadAlipayPublicKeyPem(string path)
     {
         if (string.IsNullOrWhiteSpace(path))

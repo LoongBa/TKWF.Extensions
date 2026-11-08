@@ -52,7 +52,12 @@ public sealed class WeChatChannelRegistrySource : IChannelSource, IUserBoundChan
     public string PlatformType => "wechat";
 
     /// <inheritdoc />
-    /// <remarks>per-channel 能力经 <see cref="ChannelConfig.Capabilities"/> 派生；此处为源级兜底声明。</remarks>
+    /// <remarks>⚠️ <b>真实能力必读 per-channel</b>：逐行 <see cref="ChannelConfig.Capabilities"/> 经
+    /// <see cref="WeChatChannelCapabilityResolver"/> 派生（(ChannelForm, Verification) 矩阵——订阅号仅
+    /// Event|Follow，企微仅 OAuth|Menu，etc.）；本声明为<b>源级能力并集兜底</b>（最大能力集），只读源级
+    /// 调用方不得据此断言单通道能力——高估弱通道将致能力误判（如对订阅号通道按 OAuth 选区）。
+    /// 静态投影填充与既有 DIM 语义对齐（契约 <c>IChannelSource.Capabilities</c> 注释）；逐通道以
+    /// <c>ChannelConfig.Capabilities</c> 为准（fail-closed None 缺省不变）。</remarks>
     public ChannelCapabilities Capabilities => ChannelCapabilities.Event | ChannelCapabilities.Follow | ChannelCapabilities.OAuth
         | ChannelCapabilities.SilentAuthorize | ChannelCapabilities.FollowQuery | ChannelCapabilities.Menu;
 

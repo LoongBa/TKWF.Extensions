@@ -45,7 +45,7 @@ public enum ForwardDegradeStage
 /// </summary>
 /// <param name="Action">决策动作（LocalOnly/AsyncCopy/SyncProxy/PreprocessSync/LocalFallback）。</param>
 /// <param name="DegradeStage">降级链阶段（<see cref="ForwardAction.LocalFallback"/> 时指示回退到哪一级；否则 None）。</param>
-/// <param name="EndpointId">参与转发的下游端点引用（LocalOnly 恒空；转发类策略取规则端点）。</param>
+/// <param name="EndpointId">取规则端点值（LocalOnly 语义上不消费——恒携带但不使用；转发类策略据此决策）。</param>
 public sealed record ForwardDecision(ForwardAction Action, ForwardDegradeStage DegradeStage, long? EndpointId)
 {
     /// <summary>是否降级（Action == LocalFallback——同步透传失败或未知转发模式）。</summary>

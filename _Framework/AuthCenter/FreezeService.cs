@@ -55,7 +55,7 @@ internal sealed class FreezeService : DomainServiceBase, IFreezeService
 
         var now = DateTime.UtcNow;
 
-        // 幂等：同 (UId, Reason, Scope) 的活跃行不重复建（方案 §4.6）
+        // 幂等：同 (UId, Reason, Scope) 的活跃行不重复建（方案 §4.6）——快路径查重
         var existing = await DataService.EntityGetAsync(
             f => f.UId == uid && f.Reason == reason && f.Scope == AccountScope
               && f.ReleasedAt == null && (f.FreezeEnd == null || f.FreezeEnd > now), ct);
@@ -73,6 +73,21 @@ internal sealed class FreezeService : DomainServiceBase, IFreezeService
             CreatedBy = CurrentOperatorName(),
             Note = note,
         }, ct);
+
+        // AC-15（B 档）并发冻结幂等：无唯一约束下"查重→插入"非原子（并发双请求 → 双活跃行）。
+        // 插入后复核 CAS——以最小 Id（最先插入）为胜者：败者删掉自己刚插的行并幂等返回胜者行。
+        // Id 序判定无竞态（双方复核交错时胜者行恒存——胜者不删自己，败者只删自己；终态恒单活跃行、不抛错）。
+        // ⚠️ 复核条件必须含自己刚插行（f.Id == created.Id 兜底）——FreezeEnd 已过期的行不满足活跃判据，
+        //    否则查不到自己导致 First() 崩溃（Freeze_WithFreezeEnd_AutoExpires 实证）。
+        var active = await DataService.EntitySelectAsync(
+            f => f.UId == uid && f.Reason == reason && f.Scope == AccountScope
+              && f.ReleasedAt == null && (f.FreezeEnd == null || f.FreezeEnd > now || f.Id == created.Id), ct: ct);
+        var winner = active.OrderBy(f => f.Id).First();
+        if (winner.Id != created.Id)
+        {
+            await DataService.EntityDeleteBatchAsync([created.Id], ct);
+            return winner;   // 幂等返回并发胜者行（不写 SecurityLog——冻结本次逻辑未生效，仅补偿删除）
+        }
 
         InvalidateSnapshot(uid);   // 写路径负责失效读取面快照（方案 §4.6 帧内缓存）
         await WriteSecurityLogAsync(

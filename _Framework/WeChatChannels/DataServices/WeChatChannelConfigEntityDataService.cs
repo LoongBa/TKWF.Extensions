@@ -16,6 +16,10 @@ namespace TKWF.Ext.WeChatChannels;
 // - 自定义业务逻辑 → 在 `Services/` 下创建 Service 类，标注 `[GenerateController]`
 // - 数据过滤干预 → 实现 IGlobalQueryFilter（初始化器基类 DomainHostInitializerBase 已实现，override Apply<T> 即可）
 // - 不要手动创建 Controller 类（V3.7 起由 SG 自动生成）
+//
+// ⚠️ 凭证密文字段在 EntityDto 中（AppSecretCipher/TokenCipher/EncodingAESKeyCipher）——本 DataService
+//    不可标 [GenerateController(FromDataService=true)]，否则凭证密文经 CRUD API 泄漏；
+//    管理面经 IChannelConfigService 投影 DTO（不含凭证）
  partial class WeChatChannelConfigEntityDataService(IDomainUser user, IEntityDAC<WeChatChannelConfigEntity> dac)
         : DomainDataServiceBase<WeChatChannelConfigEntity, WeChatChannelConfigEntityDto>(user, dac, hasSoftDelete:false) 
 {

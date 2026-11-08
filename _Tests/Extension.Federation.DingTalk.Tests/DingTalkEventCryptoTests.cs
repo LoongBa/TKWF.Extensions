@@ -115,6 +115,18 @@ public class DingTalkEventCryptoTests
     }
 
     [Fact]
+    public void DecryptMsg_MalformedReceiveId_OverlongOrEmpty_ThrowsCryptographicException()
+    {
+        // DT-5：畸形 receiveid 预检查——超长（同字符数异字节数：多字节 UTF-8 下字符串 Length 相等但字节长度不等，
+        // 预检查使 FixedTimeEquals 不触碰异长 byte[]，收敛为 fail-closed 的 CryptographicException 而非 ArgumentException）
+        var (overlong, _, _, _) = BuildEncryptedEvent("openid-abc", receiveId: "企企企企企企企企企企企企企");  // 13 字符 = 39 字节 ≠ corpId 13 字节
+        Assert.Throws<CryptographicException>(() => DingTalkEventCrypto.DecryptMsg(TestEncodingAESKey, overlong, TestCorpId));
+        // 空 receiveid（明文尾部零长度）→ 预检查拒（同 fail-closed 语义）
+        var (empty, _, _, _) = BuildEncryptedEvent("openid-abc", receiveId: "");
+        Assert.Throws<CryptographicException>(() => DingTalkEventCrypto.DecryptMsg(TestEncodingAESKey, empty, TestCorpId));
+    }
+
+    [Fact]
     public void ExtractFromUserId_FromDecryptedJson()
     {
         var (msgEncrypt, _, _, _) = BuildEncryptedEvent("openid-mp1");

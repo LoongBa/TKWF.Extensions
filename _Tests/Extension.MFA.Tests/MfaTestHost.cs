@@ -64,9 +64,10 @@ internal static class MfaTestSupport
 /// （设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 → ActivatorUtilities 直建，
 /// CurrentAopUser = 真实 DomainUser）；DataService 经基类 <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 直建
 /// （IEntityDAC 从 DI 解析——与 Settings/Account 生产路径宿主同模式）。</para>
-/// <para><b>IMfaMethod 实现（Totp/Sms）</b>本批整改范围外（已裁定方案仅列 MfaService）——仍构造注入 IDomainUser；
-/// 测试宿主为其注册可配置 <see cref="StubDomainUser"/>（IDomainUser 单例——门面本身经守卫工厂走真实 DomainUser，
-/// 桩仅供未整改方法经 DI 解析）；其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价
+/// <para><b>IMfaMethod 实现（Totp/Sms）</b>经 <c>TryAddEnumerableConstructible</c> 注册（V4.10.55 ADR92）——
+/// 集合版守卫工厂经 CurrentAopUser 供给 ctor <see cref="IDomainUser"/>；测试宿主仍注册可配置
+/// <see cref="StubDomainUser"/>（IDomainUser 单例）供 <see cref="BuildIsolatedMfaService"/> 直构路径
+/// 与帧外解析兜底使用；其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价
 /// （<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，IEntityDAC 从 DI 解析）。</para>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库（用例隔离）。
 /// <c>configure</c> 回调在初始化器之后执行。</para>
@@ -171,8 +172,9 @@ internal sealed class MfaTestHost : IDisposable
         // 初始化器经 AddOptions/Option 绑定注册的默认配置对已存在 IOptions 实例不生效，测试以显式 options 为准）
         services.AddSingleton<IOptions<MfaOptions>>(Options.Create(options ?? new MfaOptions()));
 
-        // ⚠️ IMfaMethod 实现（Totp/Sms）本批整改范围外——仍 ctor 注入 IDomainUser；宿主为其注册可配置 stub
-        //（门面 MfaService 经守卫工厂走真实 DomainUser，此桩仅供未整改方法经 DI 解析——过渡期记录在整改日志）
+        // IMfaMethod 实现（Totp/Sms）经 TryAddEnumerableConstructible 守卫工厂注册（V4.10.55 ADR92——
+        // 帧内枚举时经 CurrentAopUser 供给 ctor IDomainUser）；stub 供 BuildIsolatedMfaService 直构路径
+        // 与帧外解析兜底使用（门面 MfaService 经守卫工厂走真实 DomainUser，不触此桩）
         var stubUser = new StubDomainUser();
         services.AddSingleton<IDomainUser>(sp => { stubUser.ServiceProvider = sp; return stubUser; });
 
@@ -310,8 +312,10 @@ internal sealed class NoopTransactionScope : ITransactionScope
 /// <para>V4.10.53（领域自治根治）：<c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价实现——具体类经
 /// <c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c> 直建（IDomainUser 参数显式传 this，
 /// IEntityDAC 等其余从 DI 解析——对齐 Settings/Tagging 测试桩）。</para>
-/// <para>⚠️ 本桩供未整改的 <see cref="IMfaMethod"/> 实现（Totp/Sms 仍 ctor 注入 IDomainUser）经 DI 解析；
-/// 门面 <see cref="IMfaService"/> 经真实 <see cref="DomainUser{TUserInfo}"/> + 守卫工厂 AOP 路径解析（不触此桩）。</para>
+/// <para>用途：供 <see cref="MfaTestHost.BuildIsolatedMfaService"/> 直构 <see cref="IMfaMethod"/> 实例
+/// （TOTP/SMS ctor 均须 <see cref="IDomainUser"/>——V4.10.55 ADR92 后生产路径经守卫工厂帧内供给，
+/// 隔离直构路径无法走守卫工厂，以本桩显式传入）；门面 <see cref="IMfaService"/> 经真实
+/// <see cref="DomainUser{TUserInfo}"/> + 守卫工厂 AOP 路径解析（不触此桩）。</para>
 /// </summary>
 internal sealed class StubDomainUser : IDomainUser
 {

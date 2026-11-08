@@ -1,6 +1,6 @@
 # TKWF.Ext.BlobStoring 二进制存储扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.3 (本地文件系统 + FreeSql 记录持久化 + 下载 FileStream 流式) + **V0.3.0（V4.10.53 ADR90 领域自治根治——标准门面；V0.2.4 已为既有 tag，整改发布版升 V0.3.0）** | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.3 (本地文件系统 + FreeSql 记录持久化 + 下载 FileStream 流式) + **V0.3.0（V4.10.53 ADR90 领域自治根治——标准门面；V0.2.4 已为既有 tag，整改发布版升 V0.3.0）** + **V0.3.1（安全修复：路径白名单 + 规范化双保险——BL-P0 rooted/UNC 漏洞闭环；⚠️ 行为变更：白名单收紧 + 存量数据影响，见 §六）** | **框架**: .NET 10
 
 **核心约束**: 本地文件系统 Blob 存储、FreeSql 元数据持久化、异常静默处理、SG1 声明式实体、不引入外部存储 SDK
 
@@ -204,3 +204,10 @@ TryAdd 语义确保消费方实现优先。
 - 分片上传 / 断点续传
 - 存储配额与目录结构策略
 - 管理 UI（文件浏览/删除/审计）
+
+### V0.3.1（已实施，2026-11-09 安全修复——BL-P0 rooted/UNC 漏洞闭环）
+- **路径白名单 + 规范化双保险**：`EnsureSafeRelativePath` 升级为段级白名单整路径锚定正则（`SafeRelativePathPattern`——段首尾必须字母数字、中缀 `[A-Za-z0-9._-]`、`\z` 严格末尾）+ `Path.GetFullPath` 规范化后 RootPath 前缀 OrdinalIgnoreCase 双保险（`IsUnderRoot`，分隔符边界防兄弟目录误判）；`EnsureSafeFileName` 同步改实例方法
+- **结构性拒绝形态**：绝对路径（`/etc/passwd`、`\Windows\System32\x`）/ UNC（`//server/share/x`）/ 盘符与 NTFS ADS（`C:\evil`、`good.txt::$DATA`）/ `..` 穿越段 / 前导分隔符与空段（`/a/b`、`a//b`）/ 尾分隔符（`a/b/`）/ 尾点（`evil.txt.`）/ 尾随换行（`evil.txt\n`）/ 尾空格 / 短名 `~` / Unicode——校验失败抛 `ArgumentException`（fail-closed，延续 C2 语义，try 块外不落异常静默 catch）
+- **⚠️ 行为变更（显著标注）**：白名单收紧——中文/空格/括号/尾点/尾分隔符/尾随换行等文件名**自 V0.3.1 起被拒**；合法 ASCII 文件名（含大小写，如 `photo.JPG`）与内部 `{guid}/{name}` 路径零回归（FileManagement `photo.JPG` 用例实证）
+- **⚠️ 存量数据影响**：V0.3.1 前经旧黑名单校验已存储的**非白名单 `StoredPath`**（如 `{guid}/中文名.png`）在 Download/Delete/Exists 读路径**同样被白名单拦截——不可读不可删**；升级前按使用指南「安全说明」节迁移指引处理（消费方扫描 `BlobRecord` 表 `StoredPath` 重命名/迁移），升级后新写入自动合规
+- 契约（`BlobStoring.Abstractions`）**零变更**；无新 Options/配置节；无新依赖

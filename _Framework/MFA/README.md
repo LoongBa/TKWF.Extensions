@@ -79,6 +79,10 @@ IRateLimitCheck（框架 Utility v4.10.67）      # 频控契约（DI 注入 + I
 - **防枚举（Oracle Q6）**：验证失败统一 `false`；未启用挑战返回统一"已发起"；已启用重复绑定返回统一形态。
 - **恒定时间比较**：SMS 码/恢复码/TOTP 比对经 `CryptographicOperations.FixedTimeEquals`。
 - **secret 加密（ADR-MFA-TOTP自研与密钥存储）**：TOTP 自研 RFC 6238（HMAC-SHA1 + 30s + 6 位 + Base32 + ±1 窗口，附录 B 向量锚定）；secret AES-GCM 密文落库（`SecretEncryptionKeyPath` 派生密钥，生产缺密钥 fail-fast）；解密异常语义：**格式非法（单段 blob 结构损坏）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`**。
+- **激活流与验证流记账分离（V0.3.0——安全已知边界披露）**：`ConfirmEnrollAsync` 激活码（确认码）校验**不写 last-used-step**（激活流与验证流语义分离）——激活码为一次性消费挑战码且 TTL 短窗，实时截获激活码仅可作一次首验（窄窗：须在确认流同时截获；激活码一经确认即消费失效）；正常验证路径仍受挑战单次消费 + last-used-step 双守卫，风险极窄。
+- **TOTP 同窗重放防护（V0.3.0——RFC 6238 §5.2 last-used-step）**：验证成功按**匹配步**落库记账（`last_used_totp_step`，CAS 条件更新 `WHERE LastUsedTotpStep IS NULL OR LastUsedTotpStep < matchedStep`）——**同一步码只接受一次**（拒绝 `matchedStep <= LastUsedTotpStep`）；NULL = 存量/首验放行；与挑战票据单次消费**双守卫**（同票据重放仍由 `IsConsumed` 守，同步新票据重放由 last-used-step 守），DB 列权威**跨实例生效**。
+- **重绑替换语义（V0.3.0——pending 自动清理）**：再次 `EnrollAsync` 发现同 (userId, method) 滞留 **pending**（未确认）绑定行 → 物理删除后替换发起（不再撞 `TKWFIX_MfaSecret_User_Method` 唯一约束 500）——"再次发起绑定 = 重新开始"。**SMS 方法附注**：发码成功后 TTL 5min 内重绑仍被"短信验证码已发送"拦截（刻意防发码滥用，属预期语义）；TTL 过后或发送未成功时替换语义照常生效（pending 清除 + 重新发码）。
+- **挑战手机恒绑定号（V0.3.0——context.Phone 忽略）**：SMS 挑战手机恒为绑定 `phone`（`active.Phone`——手机所有权仅绑定验证一次，挑战期可覆盖 = SMS 绑定语义绕过）；`MfaChallengeContext.Phone` 已废弃（`[property: Obsolete]` 编译警示 CS0618），传入被忽略；**换号走 Disable+Enroll**。
 - **频控单实例（Oracle Q3/C8）**：v0.1.0 内存滑动窗口仅本实例生效——TOTP/SMS 验证暴力多实例可忽略（6 位码 + 单次消费）；**SMS 发码多实例 = 短信计费滥用 → 外部限流器/单实例前置**；DB 化跨实例频控 v0.2.0 候选。⚠️ **TTL 内重发拒绝在单实例极端并发下存在理论 TOCTOU 窗口**（两并发请求可同时过活动挑战检查 → 同时创建挑战双发 SMS）——`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
 - **频控 Provider 切换注记（V4.10.67 R3，Oracle7 RC2）**：频控经 DI 注入 `IRateLimitCheck`（Initializer fallback `MemoryRateLimitCheck` 滑动窗口）——消费方显式注册 `SqlCountRateLimitCheck` 时窗口边界行为由 sliding 变为 fixed，窗口边界突发差异（fixed 窗口边界重计可能瞬时放行）MFA 验证低频可接受；R4 文档统一成文。
 - **恢复码**：SHA256 落库（明文不落库）、单次消费、验证纳入频控、再生成全量替换；丢失恢复码 + 设备丢失 = 锁死（防锁死是恢复码的意义）。
@@ -117,7 +121,8 @@ public class LoginService : DomainServiceBase
 ```sql
 TKWF_MfaSecret(id BIGINT PK, user_id VARCHAR(128), method VARCHAR(20), secret_encrypted VARCHAR(512) NULL,
           phone VARCHAR(32) NULL, is_confirmed BOOLEAN, enroll_token_hash VARCHAR(64) NULL,
-          enroll_expire_at TIMESTAMP NULL, create_time TIMESTAMP, update_time TIMESTAMP)
+          enroll_expire_at TIMESTAMP NULL, create_time TIMESTAMP, update_time TIMESTAMP,
+          last_used_totp_step BIGINT NULL)
 TKWF_MfaChallenge(id BIGINT PK, user_id VARCHAR(128), method VARCHAR(20), code_hash VARCHAR(64) NULL,
              expire_at TIMESTAMP, is_consumed BOOLEAN, create_time TIMESTAMP)
 TKWF_MfaRecoveryCode(id BIGINT PK, user_id VARCHAR(128), code_hash VARCHAR(64), is_consumed BOOLEAN, create_time TIMESTAMP)
@@ -129,6 +134,7 @@ TKWF_MfaRecoveryCode(id BIGINT PK, user_id VARCHAR(128), code_hash VARCHAR(64), 
 - 删除语义：**物理删除**（不声明 `IsDeleted`，`hasSoftDelete:false`）——Disable 解绑删绑定 + 未消费挑战 + 恢复码（级联）。
 - `secret_encrypted` 为 AES-GCM 密文（单段 `base64(nonce[12]‖cipher‖tag[16])`——明文不落库，`DtoFieldIgnore` 不入 DTO）；`code_hash`/`enroll_token_hash`/`recovery code_hash` 为 SHA256 十六进制小写（明文不落库）。
 - 绑定激活后 `secret_encrypted`/`phone` 不可变（`CanUpdate=false`）——解绑重绑走 Disable+Enroll。
+- `last_used_totp_step`（V0.3.0——TOTP 同窗重放防护）：最近一次**验证成功**所匹配的 RFC 6238 时间步（`unixSeconds / TotpTimeStepSeconds`；时窗容差匹配时记录**匹配步**而非当前步）；TOTP 激活绑定首次验证前为 NULL（**NULL = 从未使用 → 存量行/首验无条件放行**，零迁移），SMS 方法恒 NULL；验证成功按匹配步 CAS 条件更新（`WHERE LastUsedTotpStep IS NULL OR LastUsedTotpStep < matchedStep`），拒绝 `matchedStep <= LastUsedTotpStep`——同一步码只接受一次。
 - 生产建表：框架 `SyncTables` 统一托管（ADR49），**无手工 DDL 前置**。
 
 ## 后续演进（v0.2.0+ 候选）

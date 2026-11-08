@@ -108,6 +108,7 @@ var enroll = await mfa.EnrollAsync(userId, "sms", new MfaEnrollContext(Phone: ph
 var codes = await mfa.ConfirmEnrollAsync(userId, "sms", enroll.EnrollToken, smsCode);
 
 // 挑战：RequestChallengeAsync(userId, "sms") —— 自动发码（经消费方 IMfaSmsSender）
+//       ⚠️ 挑战手机恒为绑定手机——context.Phone 已废弃（传入被忽略）；换号走 Disable+Enroll（V0.3.0）
 // 验证：VerifyChallengeAsync(userId, "sms", challenge.ChallengeId, smsCode)
 ```
 
@@ -137,7 +138,7 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 | `EnrollAsync(userId, method, context)` | 发起绑定——TOTP 返回 ProvisioningUri；SMS 存绑手机 + 发码；已启用返回统一形态（防枚举） |
 | `ConfirmEnrollAsync(userId, method, enrollToken, code)` | 确认绑定（校验 EnrollToken 单次消费 + 一次码）→ 激活 + **首次生成恢复码返回** |
 | `DisableAsync(userId, method)` | 解绑（级联删挑战 + 恢复码） |
-| `RequestChallengeAsync(userId, method, context?)` | 发起挑战——TOTP 票据句柄 / SMS 发码落库；未启用返回统一"已发起"（防枚举） |
+| `RequestChallengeAsync(userId, method, context?)` | 发起挑战——TOTP 票据句柄 / SMS 发码落库；未启用返回统一"已发起"（防枚举）；**SMS 挑战手机恒为绑定手机（context.Phone 已废弃忽略——换号走 Disable+Enroll）** |
 | `VerifyChallengeAsync(userId, method, challengeId, code)` | 验证挑战——TOTP 时窗 / SMS 落库比对；失败统一 false |
 | `GenerateRecoveryCodesAsync(userId)` | 再生成恢复码（全量替换） |
 | `VerifyRecoveryCodeAsync(userId, code)` | 验证恢复码（SHA256 + 单次消费 + 频控） |
@@ -154,6 +155,7 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 
 - **多实例部署 ⚠️（Oracle C8）**：v0.1.0 频控为**内存单实例**（验证尝试 + 短信发码）——SMS MFA 多实例 = 5×N 条/小时/用户（短信计费滥用），**须外部限流器（Redis 等）或单实例部署**；TOTP MFA 无此限制（不发码）。
 - **TTL 内重发拒绝（理论 TOCTOU）⚠️**：活动挑战检查与建行非原子——单实例**极端并发**下两请求可同时通过检查、同时创建挑战双发 SMS（理论窗口）；`SmsMaxPerHour` 频控器提供二级防护（至多 5 条/小时/用户）；v0.2.0 拟加 DB 唯一约束无条件消除。
+- **换号路径（V0.3.0）⚠️**：SMS 绑定激活后 `phone` 不可变（`CanUpdate=false`）——挑战手机恒为绑定手机（`context.Phone` 已废弃并忽略，传入不生效）；换绑新手机走 **Disable + Enroll 重绑**（Disable 级联清绑定 + 未消费挑战 + 恢复码，重绑激活后恢复码重新生成）。
 - **密钥 fail-fast**：`SecretEncryptionKeyPath` 生产缺失 → 拒启动（对齐 Authentication 密钥策略）；密钥文件前 32 字节为 AES-GCM 密钥，**不进代码库**。
 - **加密边界（实施注记）**：TOTP secret 的 AES-GCM 加解密在**方法实现层**（`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider`——框架 TKW.Framework.Domain.KeyManagement v4.10.61，`SymmetricKeyProviderKeys.Mfa`，E4 V0.2.0）；密文落库、DB 无明文、生产缺密钥 fail-fast（`FileSymmetricKeyProvider` 自 `TKWF:Mfa:SecretEncryptionKeyPath` 派生密钥），与方案"DataService 边界"（Oracle C6 意图）安全语义等价。**解密异常语义**：格式非法（单段 blob 结构损坏）/认证失败（tag 不匹配）抛 `CryptographicException`（`AuthenticationTagMismatchException` 为其派生）；非法 base64 抛 `FormatException`。
 - **防枚举**：`VerifyChallengeAsync` 失败统一 `false`（不区分原因）；`RequestChallengeAsync` 对未启用用户返回统一"已发起"——日志层自行区分。
@@ -176,12 +178,16 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 | TOTP secret 密钥缺失（生产） | fail-fast 拒启动 |
 | 恢复码 | 8 位字母数字 × 8 枚，SHA256 落库，单次消费，验证纳入频控，再生成全量替换 |
 | 解绑 | 级联删绑定 + 未消费挑战 + 恢复码 |
+| TOTP 同一步码重放（同窗新挑战） | 拒绝——`last_used_totp_step` 记账（RFC 6238 §5.2）：同一步码只接受一次（V0.3.0） |
+| pending 滞留重绑 | 替换语义——自动物理删 pending 再发起（不再 500）；**SMS：发码成功后 5min 内重绑被"验证码已发送"拦截（TTL 过后或发送未成功时替换生效）**（V0.3.0） |
+| SMS 挑战手机指定（context.Phone） | 忽略——恒发绑定手机（`Phone` 已废弃 CS0618）；换号走 Disable+Enroll（V0.3.0） |
 | 多实例 SMS 频控 | ⚠️ 内存单实例——外部限流器或单实例部署 |
 
 ## 8. 变更记录
 
 | 日期 | 版本 | 变更内容 |
 |------|------|---------|
+| 2026-11-09 | V0.3.0 | **安全加固（三 P0 闭环——方案 `docs/MFA/v0.3.0-MFA安全加固-开发方案.md`）**：①**TOTP 同窗重放防护**——`MfaSecretEntity` 增 `last_used_totp_step`（RFC 6238 §5.2 last-used-step 记账，CAS 条件更新）——**同一时间步码只接受一次**（存量 NULL 零迁移首验放行）；②**pending 滞留重绑替换语义**——再 Enroll 自动物理删未确认 pending 行（不再撞 UX 唯一约束 500）；⚠️ SMS 发码成功后 5min TTL 内重绑仍被"验证码已发送"拦截（TTL 过后或发送未成功时替换生效）；③**SMS 挑战手机恒为绑定手机**——`MfaChallengeContext.Phone` 废弃（`[Obsolete]` 传入忽略），换号走 Disable+Enroll |
 | 2026-11-08 | V0.2.2 | **表名前缀对齐（v4.10.66 框架批次）**：实体表名 `MfaSecret`/`MfaChallenge`/`MfaRecoveryCode` → `TKWF_MfaSecret`/`TKWF_MfaChallenge`/`TKWF_MfaRecoveryCode`，索引 `UX_*`/`IX_*` → `TKWFIX_*`——消费方零配置变更（框架 `SyncTables` 统一建表） |
 | 2026-11-08 | V0.2.1 | **频控 Contract 迁移（v4.10.67 IRateLimitCheck）**：验证尝试/发码频控改经 DI 注入 `IRateLimitCheck`（Initializer fallback `MemoryRateLimitCheck` 滑动窗口），消费方显式注册 `SqlCountRateLimitCheck` 时窗口边界行为由 sliding 变为 fixed（差异见指南 §6/README 注记） |
 | 2026-10-06 | V0.2.0 | **E4 密钥管理抽象（框架 v4.10.61 配套）**：删 `MfaSecretKeyStore` 静态密钥类——`TotpMfaMethod` ctor 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`，消费点即注入点）；`MfaService` 构造不再有 Initialize 密钥副作用；测试去反射（`ResetMfaSecretKeyStore` 改注入式 internal Reset）；修正 `MfaSecretEntityDataService` 陈旧注释；AES-GCM 单段规范格式（AeadEncryptionUtil）。消费方零配置变更。65 用例全绿 |

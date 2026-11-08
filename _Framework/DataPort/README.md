@@ -1,6 +1,6 @@
 # TKWF.Ext.DataPort 数据导入导出扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.4（V4.10.53 领域自治根治，ADR90——正确路线） | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.1.5（DP-04 幂等重设计 + DP-05 锁死治理） | **框架**: .NET 10
 
 **核心约束**: 三层架构（核心运行库 + MiniExcel Provider + 扩展模块带持久化）、批次切分算法在核心、FileHash 幂等检查（R3）、消费方自管业务数据持久化（R2）、SG1 声明式实体、领域服务门面继承 DomainServiceBase（IDomainUser 永不注册 DI）
 
@@ -29,7 +29,9 @@
 - **批次切分语义（核心）**：Provider 流式返回行 → Service 累积每 `BatchSize` 行触发一次 `onBatch`（含 batchIndex + startRowIndex）；末批余数显式 flush（空文件 → 0 批 0 回调）；批次回调异常 → `BatchFailure` 收集 + `StopOnBatchFailure` 终止/继续；`ImportResult.SuccessCount` = 验证通过数（独立于批次持久化，Oracle C3）。
 - **模板方法模式（R2'）**：`ImportAdapterBase<T>` 基类——不同导入各一派生类（如 `PaymentImportAdapter : ImportAdapterBase<PaymentLog>`），便于管理与维护；改善 ExcelTools 静态工具类 + 接口混职责问题。
 - **幂等检查（R3）**：`FileHash`（SHA256）唯一索引——同文件二次导入 → Processing/Succeeded 返回已有批次（拒绝）；Failed 批次 → 重置为 Processing 允许重导。`BatchNo` 为消费方回滚钩子入口。
+- **幂等语义（V0.1.5 DP-04 批次级重放）**：PartiallySucceeded 重导 = **仅重放"失败 ∪ 未尝试尾部"批次**（definition 模式 onBatch 过滤——跳过已成功批次回调，消费方零重复写、零数据丢失）；Failed 保持全量重导。重放判据 = `FailedBatchIndexes`（JSON 数组）+ `MaxAttemptedBatchIndex`（统一覆盖 continue/早停/Terminate：尾部纳入重放防丢失、前缀跳过零重复写）；`BatchSize` 首跑落库 + 重放一致性校验（不一致拒绝，防索引错位）；三列均 null 的旧记录按全量重导（升级零破坏）。框架 `BuildImportDefinition` 仍 internal → 本地反射提取接入 definition 模式（P0-1 方案 B 降级，脆弱性已披露，见代码注释；框架公开后移除反射改直调）。
 - **状态跟踪**：Processing → Succeeded / Failed / PartiallySucceeded（`BatchFailures.Count > 0`），错误摘要取前 5 个批次失败消息拼接。
+- **Processing 超时治理（V0.1.5 DP-05）**：进程崩溃 → 记录冻结 Processing → 同文件永远无法再导入（无解锁路径）。新增 `IStaleImportRecoveryService` 门面（CAS 重置超时 Processing → Failed + "stale recovery" 标记）+ **导入心跳**（onBatch 内周期条件 touch `UpdateTime`，仅 Processing 态）+ Initializer **启动扫描**兜底（进程崩溃 → 下次启动即治愈）+ 文档周期调度接线示例（对齐 BackgroundJobs `IJobHistoryCleanupService` 先例）；选项 `ProcessingTimeoutMinutes`（默认 60，0 禁用）/`HeartbeatIntervalMinutes`（默认 1）。
 - **异常语义**：核心导入失败统一抛 **`DataImportException`**（核心运行库导出的导入异常类型——含批量失败明细）；消费方可捕获该异常并据 `BatchNo` 回滚（§三.5）。
 
 ### 3. 与主框架的关系
@@ -103,6 +105,8 @@ public class PaymentImporter : DomainServiceBase
 
 `IImportService.ImportAsync(filePath, definition, onBatch)`——不需要派生适配器即可用；`onBatch` 为批次写库回调 (batchIndex, startRowIndex, batch, ct)。
 
+> **V0.1.5（DP-04 重放过滤）**：`DataImportTaskService` 内部统一走 definition 模式 onBatch 回调（经反射提取消费方 adapter 的 `BuildImportDefinition`——含既有 SheetName/OnValidate/OnConvert，`OnBatchWrite` 为 public virtual 由 onBatch 闭包按重放判据调度）；重放时仅调用失败/未尝试批次的 `OnBatchWrite`（已成功批次跳过 = 消费方零重复写）；`OnValidate`/`OnConvert` 对所有行全量执行。
+
 ### 4. 导出
 
 ```csharp
@@ -126,6 +130,8 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 // 消费方按 BatchNo 删自己数据表数据 → 更新/删除批次记录
 ```
 
+> ⚠️ **恢复后全量重导双写警示（V0.1.5 DP-05，P1-4）**：Processing 超时被恢复扫描标记为 Failed 的记录（`ErrorSummary` 含 **"stale recovery"** 标记 = 崩溃前有部分批次已写入）→ 消费方再导入同文件 = **全量重导**（Failed 语义）→ 会对崩溃前已写入的批次**重复写**——**非幂等 `OnBatchWrite` 消费方须先按 `BatchNo` 回滚（删除已落数据）再重导**；幂等消费方（OnBatchWrite 天然去重）可直接重导。`BatchNo` 回滚钩子是此场景的前置手段。
+
 ### 6. 配置选项
 
 通过 `appsettings.json` 配置（`TKWF:DataPort` 节）：
@@ -146,6 +152,8 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 |------|------|------|
 | **`DefaultBatchSize`** | 500 | 默认批次大小（每批处理行数，≥1） |
 | **`StopOnBatchFailure`** | false | 批次回调异常时是否终止（false = 继续下一批） |
+| **`ProcessingTimeoutMinutes`** | 60 | Processing 超时（分钟）——启动/周期扫描时，超过该时长仍为 Processing 的记录重置为 Failed（0 = 禁用恢复扫描） |
+| **`HeartbeatIntervalMinutes`** | 1 | 导入心跳间隔（分钟）——导入执行中每批检查，距上次心跳达到该值即更新 UpdateTime（仅 Processing 态条件更新）；0 = 禁用心跳 |
 
 > **`ImportBatchOptions`（核心运行库，导入时按次覆盖）**：构造参数 `(BatchSize, StopOnBatchFailure, SkipValidationErrors)`——第三个参数 `SkipValidationErrors`（bool，默认 `true`：Skip 行收集 failure 继续；`false` 时**首个 Skip 行即终止导入**）。**`DataPortOptions` 无此配置项**——消费方经 `ImportBatchOptions` 显式传（如 `new ImportBatchOptions(BatchSize: 500, StopOnBatchFailure: false, SkipValidationErrors: true)`）。
 
@@ -157,8 +165,9 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | **`IExportService`** | 导出门面（列表 → 流） | `ExportService`（核心运行库） |
 | **`IImportProvider`** | 读取引擎抽象（流式行，非泛型；只读场景可仅注册） | `MiniExcelImportProvider`（MiniExcel Provider） |
 | **`IExportProvider`** | 写入引擎抽象（IEnumerable 懒求值） | `MiniExcelExportProvider`（MiniExcel Provider） |
-| **`IDataImportTaskService`** | 批次任务：导入执行 + 批次记录落库 + FileHash 幂等 + 状态跟踪 | `DataImportTaskService`（本扩展——V0.1.4 继承 `DomainServiceBase` + `[DiContractIgnore]`，`AddConstructibleService` 注册，消费方 `User.Use<IDataImportTaskService>()`） |
-| **`DataImportRecordEntity`** | 导入批次记录实体（批次号/FileHash 唯一/状态/统计/错误摘要/CreatedBy） | SG1 声明式实体 → `TKWF_DataImportRecord` 表 |
+| **`IDataImportTaskService`** | 批次任务：导入执行 + 批次记录落库 + FileHash 幂等 + 状态跟踪 + PartiallySucceeded 失败批次重放（V0.1.5） | `DataImportTaskService`（本扩展——V0.1.4 继承 `DomainServiceBase` + `[DiContractIgnore]`，`AddConstructibleService` 注册，消费方 `User.Use<IDataImportTaskService>()`） |
+| **`IStaleImportRecoveryService`** | Processing 超时恢复门面（V0.1.5 DP-05）——CAS 重置超时 Processing → Failed + "stale recovery" 标记 | `StaleImportRecoveryService`（本扩展——`AddConstructibleService` 注册，消费方 `User.Use<IStaleImportRecoveryService>()`） |
+| **`DataImportRecordEntity`** | 导入批次记录实体（批次号/FileHash 唯一/状态/统计/错误摘要/CreatedBy + V0.1.5 重放三新列） | SG1 声明式实体 → `TKWF_DataImportRecord` 表 |
 | **`DataPortOptions`** | 配置（`TKWF:DataPort` 节） | 内置 |
 | **`DataPortExtensionInitializer<TUserInfo>`** | 扩展初始化器（`[TKWFExtension]` SG1 发现 + 三钩子 DI 接线） | 本扩展 |
 
@@ -183,10 +192,19 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 | CreatedBy | NVARCHAR(128)? | 创建人（审计字段，v0.1.0 预留） |
 | CreateTime | DATETIME | 创建时间 |
 | UpdateTime | DATETIME | 更新时间 |
+| FailedBatchIndexes | NVARCHAR(512)? | **V0.1.5** 失败批次索引集合（JSON 数字数组字符串，如 `"[0,2]"`；PartiallySucceeded 时落库，重导判定重放集合；null = 旧记录按全量重导） |
+| BatchSize | INT? | **V0.1.5** 首跑批次大小（重放时校验一致性——传不同 BatchSize 拒绝，防索引错位） |
+| MaxAttemptedBatchIndex | INT? | **V0.1.5** 首跑已尝试的最大批次索引（重放判定"未尝试尾部"纳集——早停路径不丢数据） |
 
-**索引**：`TKWFIX_Dir_Filehash`（FileHash 唯一）+ `TKWFIX_Dir_Batchno`（BatchNo 唯一）。
+**索引**：`TKWFIX_Dir_Filehash`（FileHash 唯一）+ `TKWFIX_Dir_Batchno`（BatchNo 唯一）+ `TKWFIX_Dir_Status_Updatetime`（**V0.1.5** Status+UpdateTime，超时恢复扫描）。
 
 ## 六、架构演进路线 (Architecture Roadmap)
+
+### V0.1.5（DP-04 幂等重设计 + DP-05 超时治理，2026-11-09 迭代）
+- **DP-04 批次级幂等**：PartiallySucceeded 重导语义改为**失败批次重放**——新增 `FailedBatchIndexes`/`BatchSize`/`MaxAttemptedBatchIndex` 三结构化列 + definition 模式 onBatch 重放过滤（`ReplayFilter` 统一判据：失败 ∪ 未尝试尾部纳集；continue 模式零重复写、早停模式零丢失）；Failed 全量重导不变、Succeeded/Processing 拒绝不变；重放 BatchSize 一致性校验（拒绝防索引错位）；FailedBatchIndexes 解析失败降级全量（LogWarning）；旧记录（三列 null）全量重导（升级零破坏）。框架 `BuildImportDefinition` internal → 本地反射提取接入（P0-1 方案 B 降级，脆弱性披露于代码注释；框架公开后移除反射）
+- **DP-05 超时治理**：新门面 `IStaleImportRecoveryService` + `StaleImportRecoveryService`（CAS 恢复：条件更新 WHERE Status='Processing' AND UpdateTime<阈值，影响行数判竞态）+ 导入心跳（onBatch 内周期 `TouchProcessingAsync` 仅 Processing 刷新 UpdateTime）+ Initializer `InitializeAsync` 启动扫描（SystemUser，异常静默不阻断启动）+ 文档周期调度接线示例（对齐 `IJobHistoryCleanupService` 先例）；恢复为 Failed（保留元数据/BatchNo 回滚钩子）+ **恢复后全量重导双写警示**
+- 测试 33 用例全绿（既有 6 适配三新列 + T1-T11：重放批次/零重复写/多失败/兼容边界/早停/BatchSize 拒绝/脏数据降级 + 超时恢复/未超时/启动扫描/恢复重导闭环/CAS/心跳）
+- 文档同步：README + 使用指南（幂等/状态/超时治理小节 + 恢复与重导警示 P1-4）+ 变更记录
 
 ### V0.1.4（V4.10.53 领域自治根治，ADR90——正确路线）
 - `IDataImportTaskService`（`: IDomainService`）门面化：实现继承 `DomainServiceBase`（经基类 `User` 取上下文——IDomainUser 永不注册 DI）+ `[DiContractIgnore]` 豁免 DI001；注册由 `TryAddScoped` 改 **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory）；消费方经 `User.Use<IDataImportTaskService>()` 解析
@@ -210,4 +228,4 @@ var record = await taskService.GetRecordByBatchNoAsync(batchNo);   // 回滚入�
 - `.xls`/`.xlsb` 旧格式读取（体现 ExcelTools 桥接评估）
 - Excel 模板渲染/样式/公式（与 `TKWF.Ext.Reporting` 边界对齐）
 
-**文档信息**: V0.1.0 | 2026-09-06 | 关联：ADR-DataPort-读写引擎选型与分层架构.md（主框架私有）、v0.1.0-DataPort-数据导入导出-开发方案.md（主框架私有）；**V0.1.4 整改注记**（2026-10-04）：领域自治根治（ADR90——正确路线）——门面 AddConstructibleService + 接线型保留框架服务，详见 §三 自动注册表与 §六 V0.1.4
+**文档信息**: V0.1.0 | 2026-09-06 | 关联：ADR-DataPort-读写引擎选型与分层架构.md（主框架私有）、v0.1.0-DataPort-数据导入导出-开发方案.md（主框架私有）；**V0.1.4 整改注记**（2026-10-04）：领域自治根治（ADR90——正确路线）——门面 AddConstructibleService + 接线型保留框架服务，详见 §三 自动注册表与 §六 V0.1.4；**V0.1.5 迭代注记**（2026-11-09）：DP-04 幂等重设计（失败批次重放） + DP-05 超时治理（恢复门面 + 心跳 + 启动扫描），详见 §二.2/§三.5/§五/§六 V0.1.5 与 `docs/DataPort/幂等与锁死治理-开发方案.md`

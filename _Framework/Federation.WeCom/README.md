@@ -90,17 +90,17 @@ Federation 扩展按 channel 类型路由：`wecom_oauth` → 302 企业微信 a
 | `WeComOptions` + `WeComChannelConfig` | `TKWF:Federation:WeCom` 节——`DefaultScope` 兜底 + `Channels` 列表（ChannelId/CorpId/CorpSecret/AgentId/IsThirdParty/EnableSensitiveInfo/Token/EncodingAESKey）；凭证自持 | 配置 | ✅ 已实现（T1） |
 | `WeComUserInfo` + `WeComSensitiveInfo` | 响应裁剪 record（UserId/OpenId/OpenUserid/ExternalUserid/UserTicket——三标识双策略来源）；敏感信息独立 record（**敏感字段标注防日志泄露 P2-3，DeviceId 不透出**） | DTO | ✅ 已实现（T2） |
 | `WeComOauthChannel` | `ISsoChannel`（`ChannelType="wecom_oauth"`）——回调 code→身份（**双授权流统一 getuserinfo**）；**external_uid 双策略（P0-1）**；**AgentId fail-fast（P1-5）** | 对外（上游 IdP 适配） | ✅ 已实现（T3） |
-| `WeComEventChannel` + `WeComEventCrypto` | `ISsoChannel`（`ChannelType="wecom_event"`）——通讯录/事件回调三道闸门（msg_signature 验签 + AES 解密 + **ReceiveId=corpid/suiteid 校验 P1-1**）+ XML 身份提取；**URL 验证 echostr 原语（P1-6）** | 对外（上游 IdP 适配） | ✅ 已实现（T4/T5） |
+| `WeComEventChannel` + `WeComEventCrypto` | `ISsoChannel`（`ChannelType="wecom_event"`）——通讯录/事件回调三道闸门（msg_signature 验签 + AES 解密 + **ReceiveId=corpid/suiteid 校验 P1-1**）+ XML 身份提取；**URL 验证 echostr 原语（P1-6）**；**I2-2（V0.4.2）`HandleEventAsync`**（产 `ChannelEvent`——Event 归一（change_contact 复合）/**subscribe 原文透传不翻状态 P1-3** + `wecom.` 前缀 Attributes + OccurredAt UTC + RawPayload 明文 XML）+ **`VerifyUrlAsync`**（echostr 委托 `VerifyAndDecryptEcho` 回显明文） | 对外（上游 IdP 适配） | ✅ 已实现（T4/T5 / I2-2） |
 | `WeComAuthorizeUrlBuilder` | authorize URL 构造辅助（静态纯字符串——**双授权流 URL 模板 P1-3/P2-4**：Webview `#wechat_redirect` vs 扫码 `login_type`；agentid 条件拼接） | 装配辅助 | ✅ 已实现（T3） |
 | `AddWeComFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel>`——channel 业务参数经 Options 注入，不占 ctor `IDomainUser` 槽，ADR92 兼容） | 装配 | ✅ 已实现（T6） |
-| `WeComChannelSource` | `IChannelSource` 通道投影（多通道联邦 v0.3.0 Phase 1）——`WeComOptions.Channels` → 统一 `ChannelConfig`（`ChannelId`→`ChannelId` 公共列；**平台特有字段全进 `Extra`**：`CorpId`/`CorpSecret`/`AgentId`/`IsThirdParty`/`EnableSensitiveInfo`/`Token`/`EncodingAESKey` + Options 级 `DefaultScope` 兜底投影到每通道），`PlatformType="wecom"`，Priority 默认 | 装配 | ✅ 已实现（v0.3.0） |
+| `WeComChannelSource` | `IChannelSource` 通道投影（多通道联邦 v0.3.0 Phase 1）——`WeComOptions.Channels` → 统一 `ChannelConfig`（`ChannelId`→`ChannelId` 公共列；**平台特有字段全进 `Extra`**：`CorpId`/`CorpSecret`/`AgentId`/`IsThirdParty`/`EnableSensitiveInfo`/`Token`/`EncodingAESKey` + Options 级 `DefaultScope` 兜底投影到每通道），`PlatformType="wecom"`，Priority 默认；**`Capabilities` = `Event\|OAuth`（I2-2——不声明 Follow，企微关注应用事件非公众号关注订阅语义）** | 装配 | ✅ 已实现（v0.3.0 / I2-2） |
 
 ## 四、双通道契约（T3/T5 已实现）
 
 | 通道 | 场景 | 流程 |
 |------|------|------|
 | `wecom_oauth` | 双授权流（内置客户端 Webview 跳转 / 桌面端扫码）统一身份获取 | 装配层构造 authorize URL（`WeComAuthorizeUrlBuilder`——Webview `open.weixin.qq.com/connect/oauth2/authorize` + `#wechat_redirect` 尾缀 / 扫码 `login.work.weixin.qq.com/wwlogin/sso/login` + `login_type=CorpApp\|ServiceApp`）→ 授权 → 回调 code → `GetIdentityAsync`（gettoken 企业 token + getuserinfo/getuserinfo3rd **code 直接换身份**）→ **external_uid 双策略（P0-1）** → `SsoChannelAuthResult` → 编排层 `(channel_id, external_uid) → uid` → Federation 签 token2 |
-| `wecom_event` | 通讯录变更/事件推送入站 | 企业微信推送 → 接收端点（**三道闸门：msg_signature 验签 + AES 解密 + ReceiveId=corpid/suiteid 校验**；XML 提取 UserID/OpenUserID → external_uid 双策略）→ 落库即返（回调不阻塞业务——官方"无法保证 100% 回调成功"不强依赖；URL 验证 echostr 握手归装配层）→ 编排层映射/解绑 |
+| `wecom_event` | 通讯录变更/事件推送入站 | 企业微信推送 → 接收端点（**三道闸门：msg_signature 验签 + AES 解密 + ReceiveId=corpid/suiteid 校验**；XML 提取 UserID/OpenUserID → external_uid 双策略）→ **I2-2（V0.4.2）**：`HandleEventAsync` 产出 `ChannelEvent`（EventType 归一——change_contact 复合保留子类型 / **subscribe·unsubscribe 原文透传不翻关注状态（P1-3）**；`wecom.` 前缀 Attributes + OccurredAt UTC + RawPayload 明文 XML——编排链 uid 只读映射/handler 双桶迭代可达，WC-1 闭环）+ **URL 验证 echostr 握手经 `channel.VerifyUrlAsync`**（WC-2——**委托 `VerifyAndDecryptEcho`**，验签 + AES 解密回显明文；装配层调 channel 非直调原语，README 声称修正）→ 落库即返（回调不阻塞业务——官方"无法保证 100% 回调成功"不强依赖）→ 编排层映射/解绑 |
 
 - **external_uid 双策略（Oracle 评审 P0-1 定案）**——按应用类型 + 成员状态选取：
 
@@ -125,7 +125,7 @@ external_uid 选取策略：
 - **闸门 ① 验签失败即拒，无降级无旁路**（一票否决）；
 - **闸门 ② AES 解密**：明文布局 = `random(16) + msg_len(4 网络序) + msg(XML) + receiveid`；
 - **闸门 ③ ReceiveId 校验（Oracle 评审 P1-1——增量）**：WeChat 先例 DecryptMsg 只取 msg 丢弃 receiveid——本库 **`DecryptAndVerify` 一体化提取 `plain[20+msgLen..]` 与期望（自建 corpid / 三方 suiteid）恒定时间比对**（`CryptographicOperations.FixedTimeEquals`），不符抛 `CryptographicException`——**防跨企业回调混串**（fail-closed：期望未配置亦抛）；
-- **URL 验证握手（Oracle 评审 P1-6）**：回调 URL 验证（GET 带 echostr AES 密文）验签 + 解密回显明文（**1s 硬约束**）——`VerifyAndDecryptEcho(token, timestamp, nonce, echostr, msgSignature, encodingAESKey, expectedReceiveId)` 原语归装配层端点握手（非 EventChannel 业务路径）；验签失败返回 null（装配层回显失败语义）；
+- **URL 验证握手（Oracle 评审 P1-6）**：回调 URL 验证（GET 带 echostr AES 密文）验签 + 解密回显明文（**1s 硬约束**）——`VerifyAndDecryptEcho(token, timestamp, nonce, echostr, msgSignature, encodingAESKey, expectedReceiveId)` 原语经通道 `WeComEventChannel.VerifyUrlAsync` **委托**（I2-2 WC-2 闭环——装配层调 `channel.VerifyUrlAsync` 经通道内旋转发原语，不直调 Crypto；验签失败返回 null → 装配层 400 语义）；
 - 正向：合法 `msg_signature` + AES 密文 + receiveid 匹配通过；负向：篡改签名拒 / 篡改密文拒 / **receiveid 篡改拒（跨企业混串防御）**（信任根自动化测试正负路径——T7 验收 F3）；
 - **回调可靠性**：官方"无法保证 100% 回调成功"——业务**不强依赖回调**（认证主路径走 OAuth 出站；回调只做增量/解绑通知）；URL 验证 1s / 业务 5s 响应——回调响应策略统一（验签+解密+落库归阻塞路径、业务异步、按平台最严超时，P2-2 回填 N1 模板）。
 
@@ -168,5 +168,6 @@ external_uid 选取策略：
 | V0.3.0（2026-10-11） | 多通道联邦：`WeComChannelSource` 投影（WeComOptions.Channels → ChannelConfig——CorpId/CorpSecret/AgentId/**IsThirdParty**/**EnableSensitiveInfo**/Token/EncodingAESKey/**DefaultScope** 进 Extra 平台字段）+ ChannelConfig 选区 + FromChannel 重建 |
 | V0.4.0（2026-10-18） | 契约收口：csproj 改引 `Federation.Abstractions`（7 平台库联动改引契约包，依赖拓扑切 Abstractions） |
 | V0.4.1（2026-10-21） | I2 契约迁移联动（Federation I2 复查修复发布） |
+| V0.4.2（2026-11-09，功能线） | **I2-2 契约跟进（C 档——WC-1/WC-2 同批，方案 `docs/Federation/DingTalkWeCom-I2-2契约跟进-开发方案.md` Oracle PASS WITH CONDITIONS 闭环）**：`WeComEventChannel` 补 `HandleEventAsync`（验签→解密→Event/ChangeType 归一（change_contact 复合保留子类型）→`wecom.` 前缀 Attributes + OccurredAt UTC + RawPayload 明文 XML；**subscribe/unsubscribe 原文透传不翻关注状态（P1-3）**——编排链 uid 映射/handler 双桶可达）+ `VerifyUrlAsync`（echostr 握手**委托 `VerifyAndDecryptEcho`**——验签 + AES 解密回显明文，失败归一 null，装配层 400 语义）；`WeComChannelSource.Capabilities` = `Event\|OAuth`（不声明 Follow）；测试 58 用例全绿 |
 
 <!-- EOF -->

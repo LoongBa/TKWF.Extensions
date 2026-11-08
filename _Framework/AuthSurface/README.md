@@ -49,7 +49,7 @@ RedemptionErrorCodes                                  # 兑换业务错误码（
 
 | API | 说明 |
 |-----|------|
-| `IUserAppsQueryService.GetAppsAsync(userId)` | 我的应用——`TKWFV_UserApps` 视图（JOIN `TKWF_AuthGrant` + `TKWF_AuthAccount` + `TKWF_AuthApp` LEFT JOIN 取 AppName）；**有效过滤在 DataService**（Status=Active 且 ValidUntil 未过——C# 侧 UtcNow 无方言风险）；返回 `UserAppDto`（`UsageSummary` 恒 null——儿童数据红线） |
+| `IUserAppsQueryService.GetAppsAsync(userId)` | 我的应用——`TKWFV_UserApps` 视图（JOIN `TKWF_AuthGrant` + `TKWF_AuthAccount` + `TKWF_AuthApp` LEFT JOIN 取 AppName）；**有效过滤在 DataService**（Status=Active 且 ValidUntil 未过，且**目录未软禁用**——IsEnabled=false 排除、NULL=目录未录入视同启用，v0.2.1 兑现）——C# 侧 UtcNow 无方言风险）；返回 `UserAppDto`（`UsageSummary` 恒 null——儿童数据红线） |
 | `IRedemptionQueryService.GetRedemptionsAsync(userId)` | 兑换历史——`TKWFV_UserRedemptionHistory` 视图（JOIN `TKWF_RedemptionCode` + `TKWF_AuthAccount`——INNER JOIN 天然排除未兑换行）；返回 `RedemptionRecordDto`（code 已脱敏透传） |
 
 > ⚠️ **v0.1.0 业务语义（Oracle4 P1-3 明示）**：兑换成功后应用**不会**出现在"我的应用"列表——v0.1.0 兑换不写 `AuthGrant`（`Source=redeem` 预留 v0.2.0）；兑换历史可见。消费方页面应区分"兑换记录"与"应用授权"两栏。
@@ -120,6 +120,7 @@ TKWF_AuthApp(id BIGINT PK, app_id VARCHAR(100) UNIQUE, app_name VARCHAR(100), ic
 -- 视图（跨扩展——生产 DBA 手动建，依赖 AuthCenter 表）
 TKWFV_UserRedemptionHistory  = TKWF_RedemptionCode INNER JOIN TKWF_AuthAccount (RedeemedByUId = UId)
 TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserId = UId) LEFT JOIN TKWF_AuthApp (AppId)
+                              -- v0.2.1：SELECT 末尾投影 a."IsEnabled"（LEFT JOIN 未命中 = NULL，软禁用排除在 DataService——NULL 视同启用）
 ```
 
 - 索引：`TKWFIX_RedemptionCode_CodeHash`（唯一——一码一兑）/ `TKWFIX_AuthApp_AppId`（唯一）。
@@ -140,7 +141,7 @@ TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserI
 
 ## 测试基线
 
-`Extension.AuthSurface.Tests`——**23 用例全绿**（兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成（ProjectReference + 双白名单，Oracle4 P1-2 契约兑现）**）。
+`Extension.AuthSurface.Tests`——**28 用例全绿**（兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言/**软禁用聚合语义（V0.2.1 AS-04：排除/恢复/NULL 视同启用/非物理删除）**；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成（ProjectReference + 双白名单，Oracle4 P1-2 契约兑现）**）。
 
 > ⚠️ **v0.2.0 包（2026-10-10）ViewSql 含 `ac."AuthLevel"` 投影**——与 AuthCenter V0.11.0+ 组合部署建视图存在列失配风险，请升级至含修复的后续版本。
 

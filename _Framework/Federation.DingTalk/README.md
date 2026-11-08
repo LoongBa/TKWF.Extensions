@@ -92,16 +92,16 @@ Federation 扩展按 channel 类型路由：`dingtalk_oauth` → 302 钉钉 auth
 | `DingTalkOptions` + `DingTalkChannelConfig` | `TKWF:Federation:DingTalk` 节——`Channels` 列表按应用区分（ChannelId/CorpId/AppKey/AppSecret/Token/EncodingAESKey）；凭证自持 | 配置 | ✅ 已实现（T1） |
 | `DingTalkUserInfo` | 响应裁剪 record（OpenId/UnionId/Userid/Nick/Avatar/Mobile——B 端员工组织字段）；**两步填充（P1-4/P2-5）：/contact/users → nick/avatar/mobile + getbyunionid → userid** | DTO | ✅ 已实现（T2） |
 | `DingTalkOauthChannel` | `ISsoChannel`（`ChannelType="dingtalk_oauth"`）——回调 code→openId/unionId（AuthenticateAsync 内 userAccessToken 换）；**external_uid 恒 = openId（P1-4 两步流）** | 对外（上游 IdP 适配） | ✅ 已实现（T3） |
-| `DingTalkEventChannel` + `DingTalkEventCrypto` | `ISsoChannel`（`ChannelType="dingtalk_event"`）——事件推送三道闸门（signature 验签 + AES 解密 + **receiveid=corpId 校验 P1-1**）+ FromUserId→openId；CPU-only <50ms | 对外（上游 IdP 适配） | ✅ 已实现（T4/T5） |
+| `DingTalkEventChannel` + `DingTalkEventCrypto` | `ISsoChannel`（`ChannelType="dingtalk_event"`）——事件推送三道闸门（signature 验签 + AES 解密 + **receiveid=corpId 校验 P1-1**）+ FromUserId→openId；CPU-only <50ms；**I2-2（V0.4.2）`HandleEventAsync`**（产 `ChannelEvent`——EventType 归一 + `dingtalk.` 前缀 Attributes + OccurredAt UTC + RawPayload 明文 JSON；check_url/组织事件无 FromUserId → NotApplicable）+ **`VerifyUrlAsync`**（任意合法入站恒回**加密 JSON 应答信封**——`EncryptMsg("success")` + `ComputeSignature` 四字段，P0-2） | 对外（上游 IdP 适配） | ✅ 已实现（T4/T5 / I2-2） |
 | `AddDingTalkFederationChannels()` | DI 注册扩展方法（`TryAddEnumerableConstructible<ISsoChannel>`——channel 业务参数经 Options 注入，不占 ctor `IDomainUser` 槽，ADR92 兼容） | 装配 | ✅ 已实现（T6） |
-| `DingTalkChannelSource` | `IChannelSource` 通道投影（多通道联邦 v0.3.0 Phase 1）——`DingTalkOptions.Channels` → 统一 `ChannelConfig`（`ChannelId`→`ChannelId`/`AppSecret`→`AppSecret` 公共列；`CorpId`/`AppKey`/`Token`/`EncodingAESKey` 进 `Extra` 平台字段），`PlatformType="dingtalk"`，Priority 默认 | 装配 | ✅ 已实现（v0.3.0） |
+| `DingTalkChannelSource` | `IChannelSource` 通道投影（多通道联邦 v0.3.0 Phase 1）——`DingTalkOptions.Channels` → 统一 `ChannelConfig`（`ChannelId`→`ChannelId`/`AppSecret`→`AppSecret` 公共列；`CorpId`/`AppKey`/`Token`/`EncodingAESKey` 进 `Extra` 平台字段），`PlatformType="dingtalk"`，Priority 默认；**`Capabilities` = `Event\|OAuth`（I2-2——不声明 Follow，钉钉无"关注"概念）** | 装配 | ✅ 已实现（v0.3.0 / I2-2） |
 
 ## 四、双通道契约（T3/T5 已实现）
 
 | 通道 | 场景 | 流程 |
 |------|------|------|
 | `dingtalk_oauth` | 新 OAuth2 网页授权（扫码内嵌 DTFrameLogin/302 跳转） | 装配层构造 authorize URL（`login.dingtalk.com/oauth2/auth`？client_id+redirect_uri+scope=openid+**prompt=consent 必填**+state——iframe 内嵌须与 redirect_uri 同源）→ 回调 code → `GetUserAccessTokenAsync`（**token 端点不接受 redirect_uri——P1-3，一致性校验归装配层**；accessToken 7200s 一次性不缓存）→ openId/unionId/corpId → `SsoChannelAuthResult(ExternalUserId=openId)` → 编排层 `(channel_id, openId) → uid` → Federation 签 token2 |
-| `dingtalk_event` | 事件订阅推送入站（扫码成功/组织变更） | 钉钉推送事件 → 接收端点（**三道闸门：signature 验签 + AES 解密 + receiveid=corpId 校验**；`FromUserId`=openId）→ 落库即返 success（**1200ms 硬约束——装配层 persist-then-ack**，异步业务不阻塞回调响应）→ 编排层映射 |
+| `dingtalk_event` | 事件订阅推送入站（扫码成功/组织变更） | 钉钉推送事件 → 接收端点（**三道闸门：signature 验签 + AES 解密 + receiveid=corpId 校验**——密文参数名 **`encrypt` 主/`msg_encrypt` 别名双键双位（P0-1）**；`FromUserId`=openId）→ **I2-2（V0.4.2）**：装配层门扩展段 1 先试通道 `VerifyUrlAsync`——任意合法入站（check_url 或业务事件）**恒回加密 JSON 应答信封**（P0-2，非明文 success——复用 `EncryptMsg` + `ComputeSignature` 四字段）→ 段 2 `AuthenticateAsync`（无 FromUserId 事件（check_url/组织变更）**放行 success(null)**——P1-2，不再 400）→ 段 3 `HandleEventAsync` 产出 `ChannelEvent`（EventType 归一 + `dingtalk.` 前缀 Attributes + OccurredAt UTC + RawPayload 明文 JSON——编排链 uid 只读映射/handler 双桶迭代可达，DT-1 闭环）→ **段 4 恒回加密信封（handler 回复被忽略——钉钉协议不承载业务自由文本，P1-1）**；落库即返 success（**1200ms 硬约束——装配层 persist-then-ack**，异步业务不阻塞回调响应）→ 编排层映射 |
 
 - **联盟锚点配合**：unionId 写联盟锚点辅助（开启 `EnableUnionId` 时经 `ISsoAccountLinkService.SetFederationAnchorAsync` 写 `FederationAnchorOpenId`——N2 选项 B：anchor 列存 TKWF 自生成平台无关锚点值，unionid 是辅助写入——兼容）；钉钉 unionId 封闭于开发者账号（不可跨开发者）——锚点须 TKWF 侧自建映射。
 - **userid（企业维度员工 id）**：B 端需要组织身份时装配层按需调 `DingTalkApiClient.GetUserIdAsync(unionId, corpId)` 经 `DingTalkUserInfo` 承载——**非 external_uid**（依赖企业内成员关系，随组织变动不稳定，不参与联邦映射键；P1-4 两步流）。
@@ -153,5 +153,6 @@ Federation 扩展按 channel 类型路由：`dingtalk_oauth` → 302 钉钉 auth
 | V0.3.0（2026-10-11） | 多通道联邦：`DingTalkChannelSource` 投影（DingTalkOptions.Channels → ChannelConfig）+ ChannelConfig 选区 + FromChannel 重建 |
 | V0.4.0（2026-10-18） | 契约收口：csproj 改引 `Federation.Abstractions`（7 平台库联动改引契约包，依赖拓扑切 Abstractions） |
 | V0.4.1（2026-10-21） | I2 契约迁移联动（Federation I2 复查修复发布） |
+| V0.4.2（2026-11-09，功能线） | **I2-2 契约跟进（C 档——DT-1/WC-1 同批，方案 `docs/Federation/DingTalkWeCom-I2-2契约跟进-开发方案.md` Oracle PASS WITH CONDITIONS 闭环）**：`DingTalkEventChannel` 补 `HandleEventAsync`（验签→解密→事件归一→`dingtalk.` 前缀 Attributes + OccurredAt UTC + RawPayload 明文 JSON——编排链 uid 映射/handler 双桶可达）+ `VerifyUrlAsync`（**加密 JSON 应答信封**——复用 `EncryptMsg` + `ComputeSignature` 四字段，非明文 success，P0-2）；`AuthenticateAsync` 密文参数 <c>encrypt</c> 主/<c>msg_encrypt</c> 别名双键双位（P0-1）+ 无 FromUserId（check_url/组织事件）**放行 success(null）**（P1-2）；`DingTalkChannelSource.Capabilities` = `Event\|OAuth`（不声明 Follow）；测试 42 用例全绿 |
 
 <!-- EOF -->

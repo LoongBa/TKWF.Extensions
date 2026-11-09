@@ -33,8 +33,9 @@ public class WeChatOperationsExtensionInitializerTests
         Assert.Equal("WeChatOperations", attr.Name);
     }
 
-    /// <summary>运营 8 门面接口全部注册为构造工厂（非实现映射）+ Scoped 生命周期（AddConstructibleService 形态；
-    /// V0.9.0 拆分后不含 IChannelConfigService——下沉 WeChatChannels）。</summary>
+    /// <summary>运营门面接口全部注册为构造工厂（非实现映射）+ Scoped 生命周期（AddConstructibleService 形态；
+    /// V0.9.0 拆分后不含 IChannelConfigService——下沉 WeChatChannels；V0.10.0 增 IWeChatMessageRouter——
+    /// 进程内路由编排接口与 IMessageGatewayService 单实现双注册，同形态同断言）。</summary>
     [Theory]
     [InlineData(typeof(IMenuService))]
     [InlineData(typeof(IReplyRuleService))]
@@ -42,6 +43,7 @@ public class WeChatOperationsExtensionInitializerTests
     [InlineData(typeof(ISubscriptionStatService))]
     [InlineData(typeof(ILogQueryService))]
     [InlineData(typeof(IMessageGatewayService))]
+    [InlineData(typeof(IWeChatMessageRouter))]
     [InlineData(typeof(IMessageForwardDispatcher))]
     [InlineData(typeof(IWeChatOperationsStatusService))]
     public void ConfigureServices_Registers_Facade_FactoryDescriptor(Type facadeType)

@@ -12,7 +12,7 @@ public static class WeChatOperationsFeatureNames
     /// <summary>
     /// 消息业务总开关（Boolean——默认 <c>true</c>，对齐 V0.2.1 Options <see cref="WeChatOperationsOptions.MessageBusinessEnabled"/>
     /// 默认语义：关闭后本地回复停发统一维护提示 <see cref="WeChatOperationsOptions.DefaultReplyText"/>；<b>转发网关不受控</b>
-    /// （<see cref="IMessageGatewayService.RouteAsync"/> 先行仍转发生效）。
+    /// （<see cref="IWeChatMessageRouter.RouteAsync"/> 先行仍转发生效）。
     /// <para>运行时切换：<c>manager.SetValueAsync(WeChatOperationsFeatureNames.MessageBusiness, "true"/"false", FeatureProviders.Global, null, ct)</c>
     /// ——DB 权威（<c>FeatureValue</c> 表）+ 版本号缓存失效 + 分布式事件（多实例即时生效）；重启不丢。</para>
     /// </summary>

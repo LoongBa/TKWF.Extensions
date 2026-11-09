@@ -54,8 +54,8 @@ public class WeChatOperationsReplyHandler : WechatTemplateEventReplyHandler
     private MaterialEntityDataService MatDs => _matDs ??= User.Use<MaterialEntityDataService>();
     private InteractionLogEntityDataService? _logDs;
     private InteractionLogEntityDataService LogDs => _logDs ??= User.Use<InteractionLogEntityDataService>();
-    private IMessageGatewayService? _gateway;
-    private IMessageGatewayService Gateway => _gateway ??= User.Use<IMessageGatewayService>();
+    private IWeChatMessageRouter? _gateway;
+    private IWeChatMessageRouter Gateway => _gateway ??= User.Use<IWeChatMessageRouter>();
 
     /// <summary>消息业务总开关读源（V0.4.0 DB 化——FeatureManagement 消费：<c>WeChatOperations.MessageBusiness</c>
     /// feature 布尔判定，fail-closed（未定义/解析失败 → false）；Options <see cref="WeChatOperationsOptions.MessageBusinessEnabled"/>

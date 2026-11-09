@@ -275,7 +275,9 @@ public sealed class WeChatOperationsWebExtensionTests
     [Fact]
     public async Task RouteAsync_NotExposed_RouteThroughGateway404OrKnownRoutesOnly()
     {
-        // RouteAsync 为事件内部入口（ExposeRest=false）——无 /gateway/route 端点；断言未知子路径 404
+        // RouteAsync 为进程内编排入口（V0.10.0 撤出契约面：IWeChatMessageRouter 非 wire 契约 +
+        //   类方法 [GenerateIgnore] 阻断 B4 默认暴露）——无 /gateway/route 端点；断言该子路径 404（弱门——
+        //   端点总表面 32 条中无 gateway/route 由生成物 grep 守卫，见迭代验证清单）
         var client = WeChatOperationsEndpointHost.Server.CreateClient();
         var resp = await client.PostAsync(WeChatOperationsEndpointHost.Url("/gateway/route"), new StringContent("{}", System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 

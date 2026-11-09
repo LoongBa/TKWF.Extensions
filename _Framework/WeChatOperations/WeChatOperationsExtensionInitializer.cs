@@ -113,9 +113,13 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         services.AddConstructibleService<ISubscriptionStatService, SubscriptionStatService>();
         services.AddConstructibleService<ILogQueryService, LogQueryService>();
 
-        // V0.2.0 网关门面（转发编排核心 RouteAsync + 路由规则/下游端点 CRUD + 网关状态）——
+        // V0.2.0 网关门面（路由规则/下游端点 CRUD + 网关状态 + 运行时开关）——
         //   异步抄送门面（BackgroundJob 队列，守卫工厂帧内调用）
+        // V0.10.0 WARN009 契约形状纠正：IWeChatMessageRouter（进程内编排入口）双注册同实现——
+        //   ⚠️ 注册语句顺序无关（两个 AddConstructibleService 独立守卫工厂）；契约锚定发生在
+        //   MessageGatewayService.cs 类声明基类列表（IMessageGatewayService 居首，IWeChatMessageRouter 居次），禁止调换
         services.AddConstructibleService<IMessageGatewayService, MessageGatewayService>();
+        services.AddConstructibleService<IWeChatMessageRouter, MessageGatewayService>();
         services.AddConstructibleService<IMessageForwardDispatcher, MessageForwardDispatcher>();
 
         // V0.3.0 系统状态聚合门面（DMP-Lite 5.8 "系统状态"页四卡——公众号连接状态/今日消息量/

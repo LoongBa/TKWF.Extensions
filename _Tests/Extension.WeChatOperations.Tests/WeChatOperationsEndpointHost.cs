@@ -266,7 +266,8 @@ internal static class WeChatOperationsEndpointHost
         }
     }
 
-    /// <summary>网关门面 Fake——Invoked 捕获 + 空列表/固定状态（RouteAsync 内部入口不测——throw 保真）。</summary>
+    /// <summary>网关门面 Fake——Invoked 捕获 + 空列表/固定状态（管理面 9 方法；RouteAsync 编排入口
+    /// 已撤出契约面（V0.10.0 IWeChatMessageRouter，端点冒烟不涉——类方法 [GenerateIgnore] 无默认暴露）。</summary>
     internal sealed class FakeMessageGatewayService : IMessageGatewayService
     {
         public bool ListRulesInvoked { get; private set; }
@@ -332,9 +333,6 @@ internal static class WeChatOperationsEndpointHost
             ForwardLogsInvoked = true;
             return Task.FromResult<IReadOnlyList<MessageForwardLogEntity>>(Array.Empty<MessageForwardLogEntity>());
         }
-
-        public Task<GatewayRouteResult> RouteAsync(WechatEventContext ctx, CancellationToken ct = default)
-            => throw new NotSupportedException("RouteAsync 为事件内部入口，不生成 REST 端点（端点冒烟不涉）。");
     }
 
     /// <summary>状态卡门面 Fake——Invoked 捕获 + 固定未连接状态（零凭证零数据依赖）。</summary>

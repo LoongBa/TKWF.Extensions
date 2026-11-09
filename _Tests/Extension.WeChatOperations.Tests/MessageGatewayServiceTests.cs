@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FreeSql;
 using TKW.Framework.Domain;
 using TKWF.Ext.WeChatOperations.DTOs;
+using TKWF.Federation.WeChat;
 using TKWF.Federation.WeChat.MessageGateway;
 
 namespace TKWF.Ext.WeChatOperations.Tests;
@@ -303,4 +304,49 @@ public class MessageGatewayServiceTests : WeChatOperationsTestHost
             ResetGatewayEnabledOverride();
         }
     }
+
+    /// <summary>V0.10.0 契约形状纠正：双注册同实现 + 静态共享承诺（code-reviewer #11）——管理面与路由面
+    /// 解析到同一实现类；管理面 <see cref="IMessageGatewayService.SetGatewayEnabledAsync"/> 翻转
+    /// <c>_gatewayEnabledOverride</c> 静态覆盖后，路由面 <see cref="IWeChatMessageRouter.RouteAsync"/> 首行
+    /// 短路判定立即生效（默认 false 时返回 NotHandled；翻转 true 后进入路由核心 → 空库 NoRule 日志落库）。
+    /// 证明"单实现双接口、零状态迁移"非仅注释承诺。</summary>
+    [Fact]
+    public async Task ManagementAndRouter_ResolveSameImpl_SharedStaticOverride()
+    {
+        ConfigureGatewayOptions = o => o.GatewayEnabled = false;
+        using var _ = this;
+        var (_, user) = BindScope();
+        ResetGatewayEnabledOverride();
+        var mgmt = user.Use<IMessageGatewayService>();
+        var router = user.Use<IWeChatMessageRouter>();
+
+        // ① 同实现类（双注册共享单实现）
+        Assert.Same(mgmt.GetType(), router.GetType());
+
+        // ② 默认关 + 未覆盖 → 路由首行短路 NotHandled（无副作用）
+        var before = await router.RouteAsync(WxCtx("text", content: "共享验证", msgId: "m-shared-1"), TestContext.Current.CancellationToken);
+        Assert.Equal(GatewayRouteResult.NotHandled, before);
+
+        try
+        {
+            // ③ 管理面翻转 true → 路由面立即生效（静态 _gatewayEnabledOverride 共享）——空库 NoRule 路径
+            await mgmt.SetGatewayEnabledAsync(new SetGatewayEnabledRequest(true), TestContext.Current.CancellationToken);
+            var after = await router.RouteAsync(WxCtx("text", content: "共享验证", msgId: "m-shared-2"), TestContext.Current.CancellationToken);
+            Assert.False(after.Handled);       // 无规则 → handler 继续本地链
+            Assert.False(after.SkippedDuplicate); // NoRule（非幂等跳过）
+        }
+        finally
+        {
+            ResetGatewayEnabledOverride();
+        }
+    }
+
+    private static WechatEventContext WxCtx(string? msgType, string? content, string? msgId)
+        => new(
+            MsgType: msgType, Event: null, FromUserName: "openid-gw-shared", ToUserName: null, EventKey: null,
+            Latitude: null, Longitude: null, Precision: null, Scale: null, Label: null,
+            Content: content, MediaId: null, PicUrl: null, Format: null, ThumbMediaId: null,
+            Title: null, Description: null, Url: null, Status: null, TotalCount: null, FilterCount: null,
+            SentCount: null, ErrorCount: null, OpenId: "openid-gw-shared", UId: null, ChannelId: "ch-gw-shared",
+            MsgId: msgId, CreateTime: DateTimeOffset.UtcNow.ToUnixTimeSeconds(), RawXml: null);
 }

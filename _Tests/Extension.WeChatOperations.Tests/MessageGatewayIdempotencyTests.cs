@@ -11,9 +11,9 @@ using TKWF.Federation.WeChat.MessageGateway;
 namespace TKWF.Ext.WeChatOperations.Tests;
 
 /// <summary>
-/// <see cref="IMessageGatewayService.RouteAsync"/> 幂等测试（V0.2.0 增网关模块——批次 3）——生产路径
+/// <see cref="IWeChatMessageRouter.RouteAsync"/> 幂等测试（V0.2.0 增网关模块——批次 3）——生产路径
 /// <see cref="WeChatOperationsTestHost"/> + <c>ConfigureGatewayOptions</c> 开网关（fail-closed 默认关）+
-/// <c>user.Use&lt;IMessageGatewayService&gt;()</c> AOP。
+/// <c>user.Use&lt;IWeChatMessageRouter&gt;()</c> AOP。
 /// <para>覆盖：幂等键构建（消息形态 msg: / 事件形态 evt:）/ 同键重复回调跳过（转发日志 SkippedDuplicate 留痕）/
 /// 并发败者重查（唯一索引兜底）/ Pending 超时复用键（P1-5）/ 首次处理状态迁移 Forwarded（P1-2 语义=已处理待投递）。</para>
 /// <para>运行库键构建纯逻辑（<see cref="WeChatMessageIdempotencyKeyBuilder"/>）直测 + 门面集成双覆盖；
@@ -63,7 +63,7 @@ public class MessageGatewayIdempotencyTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
         ResetGatewayEnabledOverride();
         var ruleId = await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
         var ctx = WxCtx("text", content: "重复回调", msgId: "msg-100");
 
         var first = await svc.RouteAsync(ctx, TestContext.Current.CancellationToken);
@@ -99,7 +99,7 @@ public class MessageGatewayIdempotencyTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
         ResetGatewayEnabledOverride();
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "event", @event: "subscribe", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
         var ctx = WxCtx("event", @event: "subscribe", msgId: null, createTime: 1730000000);
 
         var result = await svc.RouteAsync(ctx, TestContext.Current.CancellationToken);
@@ -127,7 +127,7 @@ public class MessageGatewayIdempotencyTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
         ResetGatewayEnabledOverride();
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
         var ctx = WxCtx("text", content: "并发", msgId: "msg-concurrent");
 
         var results = await Task.WhenAll(
@@ -178,7 +178,7 @@ public class MessageGatewayIdempotencyTests : WeChatOperationsTestHost
             UpdateTime = DateTime.UtcNow,
         }, TestContext.Current.CancellationToken);
 
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
         var result = await svc.RouteAsync(WxCtx("text", content: "超时复用", msgId: "msg-p1"), TestContext.Current.CancellationToken);
 
         // 超时 Pending 复用——继续处理（命中 LocalOnly → 不跳过）

@@ -15,8 +15,8 @@ using TKWF.Federation.WeChat.MessageGateway;
 namespace TKWF.Ext.WeChatOperations.Tests;
 
 /// <summary>
-/// <see cref="IMessageGatewayService.RouteAsync"/> 转发决策测试（V0.2.0 增网关模块——批次 3；V0.3.0 SyncProxy 真透传）——
-/// 生产路径 <see cref="WeChatOperationsTestHost"/> + <c>ConfigureGatewayOptions</c> 开网关 + <c>User.Use&lt;IMessageGatewayService&gt;()</c>。
+/// <see cref="IWeChatMessageRouter.RouteAsync"/> 转发决策测试（V0.2.0 增网关模块——批次 3；V0.3.0 SyncProxy 真透传）——
+/// 生产路径 <see cref="WeChatOperationsTestHost"/> + <c>ConfigureGatewayOptions</c> 开网关 + <c>User.Use&lt;IWeChatMessageRouter&gt;()</c>。
 /// <para>覆盖：LocalOnly（Handled=false 本地渲染继续 + 零转发日志 + 幂等 Forwarded）/ AsyncCopy（Handled=false +
 /// 转发日志 Queued 落库 + 幂等 Forwarded——BackgroundJob 基础设施未入宿主，断言 Queued 落库为生产路径等价）/
 /// NoRule（NoRule 日志 + 幂等 Skipped + Handled=false）/ MatchMode 三态（None/Exact/Contains）/ MsgType 通配与相等 /
@@ -44,7 +44,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         var (provider, user) = BindScope();
         ResetGatewayEnabledOverride();
         var ruleId = await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "本地回复", msgId: "m-local"), TestContext.Current.CancellationToken);
 
@@ -77,7 +77,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "copy-ep", "https://down.example.com");
         var ruleId = await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.AsyncCopy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "异步抄送", msgId: "m-copy", rawXml: "<xml><MsgType><![CDATA[text]]></MsgType></xml>"),
             TestContext.Current.CancellationToken);
@@ -111,7 +111,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         using var _ = this;
         var (provider, user) = BindScope();
         ResetGatewayEnabledOverride();
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "无规则", msgId: "m-norule"), TestContext.Current.CancellationToken);
 
@@ -139,7 +139,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "text",
             matchMode: WeChatMessageMatchModes.Exact, triggerKey: "优惠券");
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var hit = await svc.RouteAsync(WxCtx("text", content: "优惠券", msgId: "m-exact-1"), TestContext.Current.CancellationToken);
         Assert.False(hit.Handled);
@@ -162,7 +162,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "text",
             matchMode: WeChatMessageMatchModes.Contains, triggerKey: "促销");
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var hit = await svc.RouteAsync(WxCtx("text", content: "本周促销活动开启", msgId: "m-contains"), TestContext.Current.CancellationToken);
         Assert.False(hit.Handled);
@@ -179,7 +179,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         ResetGatewayEnabledOverride();
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "任意内容", msgId: "m-none"), TestContext.Current.CancellationToken);
         Assert.False(result.Handled);
@@ -200,7 +200,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         // 通配规则（sortOrder=10，后位）+ image 精确规则（sortOrder=1，前位）——image 消息命中精确；text 消息命中通配
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: null, matchMode: WeChatMessageMatchModes.None, sortOrder: 10);
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "image", matchMode: WeChatMessageMatchModes.None, sortOrder: 1);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var image = await svc.RouteAsync(WxCtx("image", content: null, msgId: "m-img"), TestContext.Current.CancellationToken);
         Assert.False(image.Handled);
@@ -224,7 +224,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         var (_, user) = BindScope();
         ResetGatewayEnabledOverride();
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.LocalOnly, msgType: "event", @event: "subscribe", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var evt = await svc.RouteAsync(WxCtx("event", @event: "subscribe", msgId: null, createTime: 1730000000), TestContext.Current.CancellationToken);
         Assert.False(evt.Handled);
@@ -295,7 +295,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-ep", "https://down.example.com");
         var ruleId = await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
         var incomingXml = WeChatOperationsTestSupport.WxXml(("MsgType", "text"), ("Content", "同步透传"));
 
         var result = await svc.RouteAsync(WxCtx("text", content: "同步透传", msgId: "m-sync-ok", rawXml: incomingXml),
@@ -343,7 +343,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "pre-ep", "https://down.example.com");
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.PreprocessSync, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "前置透传", msgId: "m-pre", rawXml: WeChatOperationsTestSupport.WxXml(("MsgType", "text"))),
             TestContext.Current.CancellationToken);
@@ -369,7 +369,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-bad-ep", "https://down.example.com");
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "非XML", msgId: "m-bad-xml", rawXml: WeChatOperationsTestSupport.WxXml(("MsgType", "text"))),
             TestContext.Current.CancellationToken);
@@ -403,7 +403,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-500-ep", "https://down.example.com");
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "下游500", msgId: "m-500", rawXml: WeChatOperationsTestSupport.WxXml(("MsgType", "text"))),
             TestContext.Current.CancellationToken);
@@ -438,7 +438,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-slow-ep", "https://down.example.com", timeoutSeconds: 1);
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         var result = await svc.RouteAsync(WxCtx("text", content: "超时", msgId: "m-timeout", rawXml: WeChatOperationsTestSupport.WxXml(("MsgType", "text"))),
             TestContext.Current.CancellationToken);
@@ -466,7 +466,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-br-ep", "https://down.example.com");
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         // 两次失败 → 熔断开闸（关态连续失败 ≥ 2）
         for (var i = 1; i <= 2; i++)
@@ -514,7 +514,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-br2-ep", "https://down.example.com");
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
 
         // 两次失败 → 开闸
         for (var i = 1; i <= 2; i++)
@@ -555,7 +555,7 @@ public class MessageGatewayRoutingTests : WeChatOperationsTestHost
         ResetGatewayEnabledOverride();
         var epId = await SeedEndpointAsync(user, ChA, "sync-idem-ep", "https://down.example.com");
         await SeedRuleAsync(user, ChA, WeChatMessageForwardModes.SyncProxy, endpointId: epId, msgType: "text", matchMode: WeChatMessageMatchModes.None);
-        var svc = user.Use<IMessageGatewayService>();
+        var svc = user.Use<IWeChatMessageRouter>();
         var ctx = WxCtx("text", content: "幂等", msgId: "m-idem", rawXml: WeChatOperationsTestSupport.WxXml(("MsgType", "text")));
 
         var first = await svc.RouteAsync(ctx, TestContext.Current.CancellationToken);

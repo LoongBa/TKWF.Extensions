@@ -49,7 +49,7 @@ public interface IMenuService : IDomainService
     /// <summary>本地基准快照（MenuSnapshot——最近一次发布/拉取确认的完整 JSON；无 → null）。
     /// <para><c>ExposeRest=false</c>：快照原子读取为内部能力（click key 收集数据源），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task<string?> GetSnapshotAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>版本历史（MenuVersion——按 VersionNo 升序；回滚数据源列表）。
@@ -67,7 +67,7 @@ public interface IMenuService : IDomainService
     /// <summary>删除当前自定义菜单（menu/delete + PublishLog Delete 审计——本地快照/版本保留可追溯）。
     /// <para><c>ExposeRest=false</c>：删除为高操作权限能力，对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task DeleteAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>菜单树 click 类型按钮标识列表（递归收集 click 按钮 Key——DMP-Lite 5.4 自动生成映射行；
@@ -75,7 +75,7 @@ public interface IMenuService : IDomainService
     /// 快照空/解析失败 → 空列表）。
     /// <para><c>ExposeRest=false</c>：click key 为菜单映射管理内部能力（映射页数据源），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task<IReadOnlyList<string>> GetClickKeysAsync(string channelId, CancellationToken ct = default);
 }
 

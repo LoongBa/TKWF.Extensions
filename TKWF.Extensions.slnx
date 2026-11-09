@@ -260,6 +260,11 @@
   <Folder Name="/_Tests/Extension.WeChatOperations.Tests/">
     <Project Path="_Tests/Extension.WeChatOperations.Tests/TKWF.Ext.WeChatOperations.Tests.csproj" />
   </Folder>
+  <!-- V0.10.0（WARN009 契约形状纠正）P11 载体——DLL 模式模拟消费方（raw Reference 缺 MessageGateway.dll，
+       对齐 DMP-Lite 引用形态；catalog 契约形状断言 + WARN009 构建输出 grep 验证） -->
+  <Folder Name="/_Tests/Extension.WeChatOperations.Consumer/">
+    <Project Path="_Tests/Extension.WeChatOperations.Consumer/TKWF.Ext.WeChatOperations.Consumer.Tests.csproj" />
+  </Folder>
   <!-- Federation.WeChat.MessageGateway 运行库（2026-10-18 十·〇 ① 三部分分层裁定——纯逻辑零实体零持久化，对齐 DataPort/Tagging 运行库提炼先例） -->
   <Folder Name="/_Framework/Federation.WeChat.MessageGateway/">
     <Project Path="_Framework/Federation.WeChat.MessageGateway/TKWF.Federation.WeChat.MessageGateway.csproj" />

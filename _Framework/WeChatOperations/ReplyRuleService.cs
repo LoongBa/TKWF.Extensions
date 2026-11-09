@@ -34,19 +34,19 @@ public interface IReplyRuleService : IDomainService
 
     /// <summary>删除规则（物理删）。<para><c>ExposeRest=false</c>：对齐既有 15 端点映射（现无删除端点）不新增暴露面。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task<bool> DeleteReplyRuleAsync(long ruleId, CancellationToken ct = default);
 
     /// <summary>关注欢迎语规则（SceneType=Subscribe——单条；风格最受欢迎的 SortOrder 最小）。
     /// <para><c>ExposeRest=false</c>：欢迎语/默认兜底规则为规则列表内部语义（消费方经 ListReplyRulesAsync 过滤获取），不生成 REST 端点。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task<ReplyRuleEntity?> GetWelcomeAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>默认兜底规则（SceneType=Default——未命中关键词/场景时用）。
     /// <para><c>ExposeRest=false</c>：同 <see cref="GetWelcomeAsync"/> 内部语义，不生成 REST 端点。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task<ReplyRuleEntity?> GetDefaultAsync(string channelId, CancellationToken ct = default);
 }
 

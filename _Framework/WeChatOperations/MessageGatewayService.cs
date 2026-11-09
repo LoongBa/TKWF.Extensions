@@ -20,16 +20,16 @@ namespace TKWF.Ext.WeChatOperations;
 
 /// <summary>
 /// 微信公众号消息网关门面（V0.2.0 增网关模块——方案 §十·五 ① 独立网关组件）。
-/// <para>职责：路由规则/下游端点 CRUD + 网关状态 + <b>转发编排核心 <see cref="RouteAsync"/></b>
-/// （幂等检查最前 → 路由规则匹配（运行库 matcher）→ 转发决策（运行库 decider）→ 异步抄送/降级链）——
-/// <see cref="WeChatOperationsReplyHandler"/> 各可回复分支首行统一调用。</para>
-/// <para>铁律（tkwf-extension）：接口 <c>: IDomainService</c> + 实现 <c>internal sealed : DomainServiceBase</c>
+/// <para>职责：路由规则/下游端点 CRUD + 网关状态 + 运行时开关——<b>wire 管理面</b>
+/// （V0.10.0 起编排核心归 <see cref="IWeChatMessageRouter.RouteAsync"/> 进程内接口，本契约仅管理面）——
+/// <see cref="WeChatOperationsReplyHandler"/> 各可回复分支首行统一调用网关编排（经路由接口）。</para>
+/// <para>铁律（tkwf-extension）：接口 <c>: IDomainService</c> + 实现 <c>public sealed : DomainServiceBase</c>
 /// + <c>[DiContractIgnore]</c> + <c>AddConstructibleService</c> 注册（守卫工厂帧内供给 ctor IDomainUser）；
 /// DataService 经基类 <c>User.Use&lt;具体 DataService&gt;()</c> 懒加载（DI004 零豁免）；运行库类型纯逻辑
 /// 零持久化——静态方法直用（<c>WeChatMessageRouteRuleMatcher.Match</c>/<c>WeChatMessageForwardDecider.DecideAsync</c>/
 /// <c>WeChatMessageIdempotencyKeyBuilder.BuildKey</c>）。</para>
 /// <para>⚠️ 默认开关关零回归：<see cref="WeChatMessageGatewayOptions.GatewayEnabled"/> 默认 false——
-/// <see cref="RouteAsync"/> 首行判定直接返回未接管（不查库不转发），既有 67 用例全绿保持。</para>
+/// <see cref="IWeChatMessageRouter.RouteAsync"/> 首行判定直接返回未接管（不查库不转发），既有 67 用例全绿保持。</para>
 /// <para>✅ SyncProxy/PreprocessSync（同步透传）V0.3.0 落地（方案 §十·二 P0-1 选 A——平台库 RawXml 就绪后补）：
 /// 命中经 <see cref="DownstreamForwardClient.SendRawXmlAsync"/> 出站透传（<c>__decrypted_xml</c> 明文 XML 原样 POST 下游）
 /// → 下游完整响应 XML 包装 <c>WechatReplyPayload.RawXml</c> <b>原样返回微信</b>（RawXml 逃逸口防双重信封）；超时/失败/非 XML
@@ -97,7 +97,24 @@ public interface IMessageGatewayService : IDomainService
     [RequirePermission("WeChatOperations.Query")]
     [ApiExpose(RestRoute = "/gateway/forward-logs", RestMethod = "GET")]
     Task<IReadOnlyList<MessageForwardLogEntity>> ListForwardLogsAsync(string channelId, DateTime? from = null, DateTime? to = null, CancellationToken ct = default);
+}
 
+/// <summary>
+/// 微信消息网关**进程内路由编排接口**（V0.10.0 自 <see cref="IMessageGatewayService"/> 拆分——WARN009 契约形状纠正：
+/// <b>内部编排入口不驻 wire 契约面</b>——本接口<b>非</b> <c>[GenerateController]</c> catalog 契约（不实现 IAopContract），
+/// 不参与 SG2a DTO 图收集、不生成任何 REST/GraphQL/客户端产物；仅供网关事件链路帧内
+/// <c>User.Use&lt;IWeChatMessageRouter&gt;()</c> 调用（生产唯一调用方 = 同包 <c>WeChatOperationsReplyHandler</c>）。
+/// </summary>
+/// <remarks>
+/// <para><b>接口声明顺序 = 契约锚定（禁止调换实现类基类列表顺序）</b>：SG1b <c>FindFacadeInterface</c> 取<b>首个</b>非框架直接接口
+/// （ControllerGenerator 语义）——实现类 <see cref="MessageGatewayService"/> 基类列表中 <see cref="IMessageGatewayService"/>
+/// 必须居首（其 9 管理方法进 catalog + SG2a），<b>本接口居次</b>（逃逸枚举、不进任何生成面）。
+/// 顺序倒转 = 管理方法整体逃逸 catalog（端点/DTO 消失）+ <c>RouteAsync</c> 重入 SG2a（WARN009 复燃）。</para>
+/// <para>破坏性（V0.10.0 minor）：<see cref="IMessageGatewayService"/> 移除 <c>RouteAsync</c>——DMP-Lite 从不直调（handler 在扩展内运行），
+/// 外部 C# 直调消费方须改为本接口。</para>
+/// </remarks>
+public interface IWeChatMessageRouter : IDomainService
+{
     /// <summary>
     /// <b>转发编排核心</b>（handler 挂载调用点——方案 §十·五 ①）：幂等检查（最前短路）→ 路由规则匹配
     /// （运行库 matcher——实体投影 descriptor + <see cref="RouteRuleCriteria"/>）→ 转发决策（运行库 decider——
@@ -110,15 +127,15 @@ public interface IMessageGatewayService : IDomainService
     /// <returns>网关决策结果（<see cref="GatewayRouteResult"/>——Handled=true 由网关接管本次回复（幂等跳过 /
     /// SyncProxy 透传结果 RawXml 原样返回）；Handled=false handler 继续本地渲染链（LocalOnly/AsyncCopy 本地回复 /
     /// NoRule 默认兜底 / SyncProxy 透传失败降级）。</returns>
-    /// <para><c>ExposeRest=false</c>：微信回调事件路径内部入口（帧内调用），不生成 REST 端点。</para>
-    [ApiExpose(ExposeRest = false)]
+    /// <para><b>不生成任何端点</b>：微信回调事件路径内部入口（帧内调用）——非 wire 契约（oracle-pro3 C1 裁定：
+    /// [GenerateIgnore] 阻断 B4 默认暴露；[GenerateController] Service 目标按类提取 public 方法，无标注将默认发射端点）。</para>
     Task<GatewayRouteResult> RouteAsync(WechatEventContext ctx, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
 [DiContractIgnore]
 [GenerateController]
-public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewayService
+public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewayService, IWeChatMessageRouter
 {
     /// <summary>进程内网关开关运行时覆盖（null = 未覆盖，用 <see cref="WeChatMessageGatewayOptions.GatewayEnabled"/> 配置值；
     /// 进程重启即清零——对齐 <c>WeChatApiClient</c> 纯内存缓存先例）。</summary>
@@ -365,7 +382,11 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
             ct);
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc cref="IWeChatMessageRouter.RouteAsync" />
+    /// <remarks>⚠️ [GenerateIgnore] 必标（oracle-pro3 C1[P0]）：[GenerateController] Service 目标按类提取 public 方法（仅排除
+    /// [GenerateIgnore]）→ 无标注将默认发射 REST 端点（且生成 handler 委托 Use&lt;IMessageGatewayService&gt;().RouteAsync → CS1061 断编）。
+    /// 标在 <see cref="IWeChatMessageRouter"/> 成员上对 B4 无效（发射回查仅读 facade 接口）——必须标在本类方法上。</remarks>
+    [GenerateIgnore]
     public async Task<GatewayRouteResult> RouteAsync(WechatEventContext ctx, CancellationToken ct = default)
     {
         // ① 默认开关关零回归：未启用 → 未接管（不查库不转发——既有 handler 行为零回归，方案 §十·五 ⑤）
@@ -712,7 +733,7 @@ public sealed class MessageGatewayService : DomainServiceBase, IMessageGatewaySe
 }
 
 /// <summary>
-/// 网关路由决策结果（<see cref="IMessageGatewayService.RouteAsync"/> 返回——handler 挂载调用点消费；
+/// 网关路由决策结果（<see cref="IWeChatMessageRouter.RouteAsync"/> 返回——handler 挂载调用点消费；
 /// 方案 §十·五 ①）。<see cref="Handled"/> = true 时本次回复已由网关接管（幂等跳过——Result=null 静默跳过）；
 /// false 时 handler 继续本地渲染链。
 /// </summary>

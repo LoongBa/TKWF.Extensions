@@ -16,7 +16,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <summary>
 /// <see cref="WeChatOperationsReplyHandler"/> 网关挂载测试（V0.2.0 增网关模块——批次 3）——生产路径
 /// <see cref="WeChatOperationsTestHost"/> + <c>user.Use&lt;WeChatOperationsReplyHandler&gt;()</c> NoAop 直建
-/// （handler 内部经 <c>User.Use&lt;IMessageGatewayService&gt;()</c> AOP 帧内调用 RouteAsync）。
+/// （handler 内部经 <c>User.Use&lt;IWeChatMessageRouter&gt;()</c> AOP 帧内调用 RouteAsync）。
 /// <para>覆盖：<b>默认关零回归</b>（GatewayEnabled=false——RouteAsync 首行短路不参与，既有 handler 行为零变化）/
 /// 网关开 + 幂等跳过（同事件两次——第二次不触发交互日志）/ <b>LOCATION 事件挂载</b>（P2-2——
 /// OnLocationEventAsync 挂载后 LOCATION 事件可转发）。</para>

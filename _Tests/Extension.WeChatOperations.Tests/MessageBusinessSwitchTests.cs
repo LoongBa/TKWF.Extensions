@@ -17,7 +17,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// 消息业务总开关测试（DMP-Lite 5.8——<see cref="WeChatOperationsOptions.MessageBusinessEnabled"/>）：
 /// 默认 true 既有行为零回归（关键词回复照常）/ 关闭（false）本地回复停发——text 返回维护提示
 /// （<see cref="WeChatOperationsOptions.DefaultReplyText"/> 兜底文案）、subscribe 不再出欢迎语 /
-/// <b>转发网关不受控</b>——总开关关闭但网关 <see cref="IMessageGatewayService.RouteAsync"/> 先行仍转发生效
+/// <b>转发网关不受控</b>——总开关关闭但网关 <see cref="IWeChatMessageRouter.RouteAsync"/> 先行仍转发生效
 /// （AsyncCopy 命中 → 转发日志 Queued 落库——网关先行于总开关判定，handler 首行挂载序）。
 /// <para>生产路径：<c>user.Use&lt;WeChatOperationsReplyHandler&gt;()</c> NoAop 直建（守卫工厂 ctor 帧内供给
 /// IDomainUser + IOptions 从 DI 解析——<see cref="WeChatOperationsTestHost.ConfigureOperationsOptions"/> 编程覆盖）；
@@ -85,7 +85,7 @@ public class MessageBusinessSwitchTests : WeChatOperationsTestHost
 
     // ═══════════════════ 转发网关不受控 ═══════════════════
 
-    /// <summary>总开关关闭但网关先行：handler 首行 <see cref="IMessageGatewayService.RouteAsync"/> 仍执行——
+    /// <summary>总开关关闭但网关先行：handler 首行 <see cref="IWeChatMessageRouter.RouteAsync"/> 仍执行——
     /// AsyncCopy 规则命中 → 转发日志 Queued 落库（网关先行于总开关判定，不受控）；随后总开关判定 →
     /// 本地回复停发返回维护提示（双断言：转发仍生效 + 本地停发）。</summary>
     [Fact]

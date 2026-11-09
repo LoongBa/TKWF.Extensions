@@ -8,10 +8,9 @@
     <IsTestProject>true</IsTestProject>
     <RootNamespace>TKWF.Ext.WeChatOperations.Consumer.Tests</RootNamespace>
     <LangVersion>latest</LangVersion>
-    <!-- V0.10.0（WARN009 契约形状纠正）P11 载体：默认 DLL 模式（消费方 DLL 引用形态复现——
-         扩展经 raw Reference（非传递）引用，编译引用集【不含】TKWF.Federation.WeChat.MessageGateway.dll
-         （复现 DMP WebApi 漏列形态）；NuGet 模式（CI/UseLocalFw=false）走 ProjectReference 保证可编译——
-         code-reviewer P0 #1 闭环：双模式必可构建 -->
+    <!-- V0.10.0（WARN009 契约形状纠正）P11 载体：默认 DLL 模式（UseLocalFw=true 主框架 refs）；扩展
+         引用 = 无条件 ProjectReference（对齐 Permissions.Consumer 先例；部署脚本 -Cleanup 先清 refs 再构建
+         的链路要求——raw Reference 依赖 refs 扩展 DLL 存在性会断链，2026-11-10 部署实证后改为本项目形态） -->
     <UseLocalFw Condition="'$(UseLocalFw)' == ''">true</UseLocalFw>
   </PropertyGroup>
 
@@ -33,33 +32,24 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 被测扩展——DLL 引用（raw Reference 非传递，对齐 DMP WebApi.csproj L92-101 形态）：
-         WeChatChannels 双包（通道底座依赖）+ WeChatOperations 主包 + Federation.Abstractions（关注域契约）
-         + Federation.WeChat（平台库——接口签名暴露其类型时需显式）+ 【故意的】缺 MessageGateway.dll -->
-    <Reference Include="TKWF.Ext.WeChatChannels.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.Ext.WeChatChannels.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Ext.WeChatChannels.Abstractions.dll')" />
-    <Reference Include="TKWF.Ext.WeChatChannels" HintPath="$(_LocalFwRefsDir)TKWF.Ext.WeChatChannels.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Ext.WeChatChannels.dll')" />
-    <Reference Include="TKWF.Ext.Permissions.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.Ext.Permissions.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Ext.Permissions.Abstractions.dll')" />
-    <Reference Include="TKWF.Ext.WeChatOperations" HintPath="$(_LocalFwRefsDir)TKWF.Ext.WeChatOperations.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Ext.WeChatOperations.dll')" />
-    <Reference Include="TKWF.Federation.WeChat" HintPath="$(_LocalFwRefsDir)TKWF.Federation.WeChat.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Federation.WeChat.dll')" />
-    <Reference Include="TKWF.Federation.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.Federation.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Federation.Abstractions.dll')" />
-    <!-- DLL 模式 raw Reference 不传递：FeatureManagement（WeChatOperations 依赖扩展——消息业务总开关 DB 化，白名单所需）显式补 -->
-    <Reference Include="TKWF.Ext.FeatureManagement" HintPath="$(_LocalFwRefsDir)TKWF.Ext.FeatureManagement.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Ext.FeatureManagement.dll')" />
-    <!-- ⚠️ 无 TKWF.Federation.WeChat.MessageGateway.dll——DMP 漏列形态复现（P11 载体核心） -->
-    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
-    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
-    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
-    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
-  </ItemGroup>
-
-  <!-- NuGet 模式（UseLocalFw=false，CI 全量 slnx 构建）——扩展走 ProjectReference 保证可编译
-       （code-reviewer P0 #1 闭环；Permissions.Consumer 同型先例；DLL 模式仍走上方 raw Reference 复现形态） -->
-  <ItemGroup Condition="'$(UseLocalFw)' != 'true'">
+    <!-- 被测扩展——无条件 ProjectReference（对齐 Permissions.Consumer 先例；code-reviewer P0 #1 + 部署
+         脚本 -Cleanup 先清 refs 再构建的链路要求——raw Reference 依赖 refs 扩展 DLL 存在性会断链）：
+         WeChatChannels 双包（通道底座）+ Permissions.Abstractions（[RequirePermission] 特性）+ WeChatOperations
+         主包 + Federation.WeChat（平台库）+ Federation.Abstractions（关注域契约）+ FeatureManagement（总开关 DB 化）。
+         注：早期 raw Reference「编译引用集缺 MessageGateway.dll」的 DMP 漏列形态证据已存于 code-reviewer 审核报告
+         （warn009-v0.10.0-code-review.md §3.1——实测编译引用集无 MessageGateway.dll）；本项目现为编译引用集含
+         MessageGateway（ProjectReference 传递）的形态，DMP WebApi 复验仍为 WARN009 现象级最终观察点。 -->
     <ProjectReference Include="..\..\_Framework\WeChatChannels.Abstractions\TKWF.Ext.WeChatChannels.Abstractions.csproj" />
     <ProjectReference Include="..\..\_Framework\WeChatChannels\TKWF.Ext.WeChatChannels.csproj" />
     <ProjectReference Include="..\..\_Framework\Permissions.Abstractions\TKWF.Ext.Permissions.Abstractions.csproj" />
     <ProjectReference Include="..\..\_Framework\WeChatOperations\TKWF.Ext.WeChatOperations.csproj" />
     <ProjectReference Include="..\..\_Framework\Federation.WeChat\TKWF.Federation.WeChat.csproj" />
     <ProjectReference Include="..\..\_Framework\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\_Framework\FeatureManagement\TKWF.Ext.FeatureManagement.csproj" />
+    <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
   </ItemGroup>
 
   <!-- V0.10.0：激活 SG1 分析器（纯 Analyzer 包）——SG1b 在消费方生成

@@ -32,16 +32,19 @@ public interface IMaterialService : IDomainService
     Task<long> SaveMaterialAsync(MaterialEntity material, CancellationToken ct = default);
 
     /// <summary>删除素材（被规则引用时抛 <see cref="InvalidOperationException"/>——先查引用）。
-    /// <para><c>ExposeRest=false</c>：删除为高操作权限能力（引用保护——防误删），对齐既有 15 端点映射不新增暴露面。</para></summary>
+    /// <para>REST：<c>DELETE /api/wechat-ops/materials/{materialId}</c>（V0.10.1 反向治理——CRUD 面补齐
+    /// （C/R/U 已有 D 补）；引用保护异常经框架 B4 执行层映射（同 DeleteEndpointAsync 先例，P14 验证）；
+    /// ExposeGraphQL 显式关闭——最小暴露面）。</para></summary>
     [RequirePermission("WeChatOperations.Manage")]
-    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
+    [ApiExpose(RestRoute = "/materials/{materialId}", RestMethod = "DELETE", ExposeGraphQL = false)]
     Task<bool> DeleteMaterialAsync(long materialId, CancellationToken ct = default);
 
     /// <summary>素材引用清单（跨回复规则聚合——欢迎语/关键词/Click 映射/全消息类型/Default；返回引用位置 DTO
     /// 含 SceneType 语义 + 规则 Id——DMP-Lite 5.2 引用反查"引用 N 处"+清单）。
-    /// <para><c>ExposeRest=false</c>：引用反查为素材管理内部能力，不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
+    /// <para>REST：<c>GET /api/wechat-ops/materials/{materialId}/references</c>（V0.10.1 反向治理——
+    /// DMP AdminUI 素材库"引用 N 处"真实业务消费；ExposeGraphQL 显式关闭）。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
+    [ApiExpose(RestRoute = "/materials/{materialId}/references", RestMethod = "GET", ExposeGraphQL = false)]
     Task<IReadOnlyList<MaterialReferenceDto>> GetReferencesAsync(long materialId, CancellationToken ct = default);
 }
 

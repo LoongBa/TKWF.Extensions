@@ -73,9 +73,11 @@ public interface IMenuService : IDomainService
     /// <summary>菜单树 click 类型按钮标识列表（递归收集 click 按钮 Key——DMP-Lite 5.4 自动生成映射行；
     /// 数据源 = 本地基准快照 JSON（<see cref="MenuSnapshotEntity.MenuJson"/>——发布/拉取确认的结构化 poco 序列化）；
     /// 快照空/解析失败 → 空列表）。
-    /// <para><c>ExposeRest=false</c>：click key 为菜单映射管理内部能力（映射页数据源），不生成 REST 端点——对齐既有 15 端点映射。</para></summary>
+    /// <para>REST：<c>GET /api/wechat-ops/channels/{channelId}/menu/click-keys</c>（V0.10.1 反向治理——
+    /// DMP AdminUI click 映射页数据源真实业务消费，oracle-pro6 裁决补 REST；ExposeGraphQL 显式关闭，
+    /// 最小暴露面——SG3/REST 客户端走 REST 通道）。</para></summary>
     [RequirePermission("WeChatOperations.Query")]
-    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
+    [ApiExpose(RestRoute = "/channels/{channelId}/menu/click-keys", RestMethod = "GET", ExposeGraphQL = false)]
     Task<IReadOnlyList<string>> GetClickKeysAsync(string channelId, CancellationToken ct = default);
 }
 

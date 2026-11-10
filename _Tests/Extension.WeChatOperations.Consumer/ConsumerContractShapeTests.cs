@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reflection;
 using TKW.Framework.CodeGeneration;
 using TKWF.Ext.WeChatOperations;
@@ -71,5 +72,31 @@ public class ConsumerContractShapeTests
             "TKWF.Ext.WeChatOperations.GatewayRouteResult",
             route!.ReturnType.IsGenericType ? route.ReturnType.GetGenericArguments()[0].FullName : route.ReturnType.FullName);
         Assert.Equal("TKWF.Federation.WeChat.WechatEventContext", route.GetParameters()[0].ParameterType.FullName);
+    }
+
+    /// <summary>V0.10.1 反向治理（oracle-pro6 裁决）：3 争议方法（DMP AdminUI 真实业务消费）REST 面恢复——
+    /// [ApiExpose] RestRoute 非空（SG3/REST 客户端可生成）+ ExposeGraphQL 显式保持 false（最小暴露面——
+    /// 只开 REST 通道，GraphQL 无消费需求不开）。契约级防回归：未来若再关闭/误改，断言即红。</summary>
+    [Fact]
+    public void Contract_DisputedMethods_HaveRestRoutes_GraphQLClosed()
+    {
+        var cases = new (System.Reflection.MethodInfo Method, string Route, string Verb)[]
+        {
+            (typeof(IMenuService).GetMethod("GetClickKeysAsync")!, "/channels/{channelId}/menu/click-keys", "GET"),
+            (typeof(IMaterialService).GetMethod("GetReferencesAsync")!, "/materials/{materialId}/references", "GET"),
+            (typeof(IMaterialService).GetMethod("DeleteMaterialAsync")!, "/materials/{materialId}", "DELETE"),
+        };
+
+        foreach (var (method, route, verb) in cases)
+        {
+            var expose = method.GetCustomAttributes()
+                .OfType<TKW.Framework.CodeGeneration.ApiExposeAttribute>()
+                .SingleOrDefault();
+
+            Assert.NotNull(expose);
+            Assert.True(expose!.RestRoute == route, $"{method.Name} RestRoute 应为 {route}");
+            Assert.Equal(verb, expose.RestMethod);
+            Assert.False(expose.ExposeGraphQL, $"{method.Name} ExposeGraphQL 应保持 false（最小暴露面）");
+        }
     }
 }

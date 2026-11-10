@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.FileManagement;
 
 namespace TKWF.Ext.FileManagement.Tests;
@@ -64,7 +65,7 @@ public class FileManagementInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<FileManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<FileManager>());
     }
 
     [Fact]
@@ -76,7 +77,7 @@ public class FileManagementInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IFileManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IFileManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IFileManager", ex.Message);
     }

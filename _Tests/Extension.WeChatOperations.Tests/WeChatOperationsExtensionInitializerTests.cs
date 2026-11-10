@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Federation;
 
@@ -81,7 +82,7 @@ public class WeChatOperationsExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(implType));
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService(implType));
     }
 
     /// <summary>接口构造工厂的 CurrentAopUser 守卫——非 User.Use&lt;T&gt;() 调用链内解析即抛（DI004 运行期兜底）。</summary>
@@ -94,7 +95,7 @@ public class WeChatOperationsExtensionInitializerTests
         services.AddOptions<WeChatOperationsOptions>();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IMenuService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IMenuService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IMenuService", ex.Message);
     }

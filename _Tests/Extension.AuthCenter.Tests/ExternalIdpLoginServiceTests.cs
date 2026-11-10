@@ -125,6 +125,8 @@ public class ExternalIdpLoginServiceTests
         });
         var service = new ExternalIdpLoginService(stub, NullLogger<ExternalIdpLoginService>.Instance);
 
+        // 桩层不模拟守卫工厂——未注册接口抛标准 DI 解析异常（真实生产守卫工厂预检抛 DomainGuardException，
+        // 见 AuthenticationProductionPathTests 真实未装配路径）；断言传播不静默降级（fail-hard）
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(ChannelType, Params(), ct: TestContext.Current.CancellationToken));
         Assert.Contains("IExternalIdpAuthenticator", ex.Message);   // GetRequiredService 缺实现守卫
     }

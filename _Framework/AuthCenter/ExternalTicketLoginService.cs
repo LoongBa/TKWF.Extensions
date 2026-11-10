@@ -118,17 +118,13 @@ public sealed class ExternalTicketLoginService : DomainServiceBase, IExternalTic
                 throw;
             }
         }
-        catch (InvalidOperationException ex) when (IsDomainGuardException(ex))
+        catch (DomainGuardException ex)
         {
-            // fail-hard：ISealedTicketService（主框架契约，TrustCenter DB 后端注册）/ orchestrator 未装配 → 守卫异常 → 503
+            // fail-hard：ISealedTicketService（主框架契约，TrustCenter DB 后端注册）/ orchestrator 未装配 →
+            // 守卫异常 → 503（v4.10.118 类型化守卫基类——转达 F1 闭环，类型判定替代字符串匹配）
             throw new ServiceNotConfiguredException("ticket-service", ex.Message, ex) { ErrorCode = "TICKET_SERVICE_NOT_CONFIGURED" };
         }
     }
-
-    /// <summary>领域架构守卫异常判定——<c>User.Use&lt;T&gt;()</c> 帧外/未装配守卫工厂抛 <c>InvalidOperationException</c> + "领域架构守卫" 前缀。</summary>
-    // 待框架提供类型化守卫异常基类（转达登记 2026-11-08）——框架文案变更可能致映射 503→500 退化。
-    private static bool IsDomainGuardException(InvalidOperationException ex)
-        => ex.Message.Contains("领域架构守卫", StringComparison.Ordinal);
 
     /// <summary>票标识前缀（补偿日志用——不落全票：ticket 高熵机密，仅前 8 字符协助运维反查）。</summary>
     private static string TicketPrefix(string ticket)

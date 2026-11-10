@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interception.Filters;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.FeatureManagement;
@@ -68,7 +69,7 @@ public class FeatureManagementInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<FeatureManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<FeatureManager>());
     }
 
     [Fact]
@@ -79,7 +80,7 @@ public class FeatureManagementInitializerTests
         new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IFeatureManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IFeatureManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IFeatureManager", ex.Message);
     }
@@ -111,7 +112,7 @@ public class FeatureManagementInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<FeatureValueStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<FeatureValueStore>());
     }
 
     [Fact]
@@ -121,7 +122,7 @@ public class FeatureManagementInitializerTests
         new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IFeatureValueStore>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IFeatureValueStore>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IFeatureValueStore", ex.Message);
     }
@@ -179,7 +180,7 @@ public class FeatureManagementInitializerTests
             Assert.NotNull(descriptor!.ImplementationFactory);
 
             using var provider = services.BuildServiceProvider();
-            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(implType));
+            Assert.Throws<DomainGuardException>(() => provider.GetRequiredService(implType));
         }
     }
 

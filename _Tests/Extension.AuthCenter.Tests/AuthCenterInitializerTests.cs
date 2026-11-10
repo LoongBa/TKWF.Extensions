@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -56,6 +57,8 @@ public class AuthCenterInitializerTests
         // V0.10.0 外部 IdP 票据 SPA 兑现（P2-2 共享编排 + 票据门面）
         (typeof(IFederatedLoginOrchestrator), typeof(FederatedLoginOrchestrator)),
         (typeof(IExternalTicketLoginService), typeof(ExternalTicketLoginService)),
+        // V0.14.0 业务兑票（纯兑票端点——不建会话不发 token）
+        (typeof(IExternalTicketRedeemService), typeof(ExternalTicketRedeemService)),
         // V0.11.0（Iteration 1）：因素/冻结门面 + 外部身份统一契约（T4 合并落点，实现类复用 PlatformAccountMapService）
         (typeof(IAuthFactorService), typeof(AuthFactorService)),
         (typeof(IFreezeService), typeof(FreezeService)),
@@ -109,7 +112,7 @@ public class AuthCenterInitializerTests
         var provider = services.BuildServiceProvider();
         foreach (var (_, implType) in Facades)
         {
-            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(implType));
+            Assert.Throws<DomainGuardException>(() => provider.GetRequiredService(implType));
         }
     }
 
@@ -122,7 +125,7 @@ public class AuthCenterInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITokenService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ITokenService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ITokenService", ex.Message);
     }
@@ -156,7 +159,7 @@ public class AuthCenterInitializerTests
             var descriptor = services.FirstOrDefault(d => d.ServiceType == implType);
             Assert.NotNull(descriptor);
             Assert.NotNull(descriptor!.ImplementationFactory);
-            Assert.Throws<InvalidOperationException>(() =>
+            Assert.Throws<DomainGuardException>(() =>
             {
                 var sp = services.BuildServiceProvider();
                 _ = sp.GetRequiredService(implType);

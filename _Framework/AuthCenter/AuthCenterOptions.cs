@@ -61,6 +61,12 @@ public class LoginProtectionOptions
     /// <summary>票据 SPA 兑换每分钟每 IP 尝试上限（默认 10——V0.10.0 P2-4 强制频控，<c>ext:ticket:{ip}</c> key——
     /// <c>IRateLimitCheck</c> 点检查；票 32B 高熵不可枚举，IP 维度纵深防御）。</summary>
     public int TicketRedeemPerMinutePerIp { get; set; } = 10;
+
+    /// <summary>业务兑票端点每分钟每 IP 尝试上限（默认 60——V0.14.0 独立桶 <c>ext:ticket-redeem:{ip}</c>；
+    /// 消费方为服务间调用（DMP Merchant 后端出口 IP 集中）——配额语义是「每后端实例」非「每用户」，
+    /// 默认取登录桶 6 倍（防重试风暴 + DoS 纵深，非业务限流）；运维可独立调优，不联动登录桶）。
+    /// ⚠️ 容量假设：单出口 IP 兑票峰值 &lt; 60/min，超出按本键调优。</summary>
+    public int TicketRedeemServicePerMinutePerIp { get; set; } = 60;
 }
 
 /// <summary>联邦建号策略（V0.11.0 方案 §6.5 T6 / §6.6——领域决策，Web 层不存在对应开关）。</summary>

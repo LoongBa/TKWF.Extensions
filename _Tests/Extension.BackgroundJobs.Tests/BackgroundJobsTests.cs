@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.BackgroundJobs;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
@@ -597,7 +598,7 @@ public class BackgroundJobsTests
             var descriptor = services.FirstOrDefault(d => d.ServiceType == impl);
             Assert.NotNull(descriptor);
             Assert.NotNull(descriptor!.ImplementationFactory);
-            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(impl));
+            Assert.Throws<DomainGuardException>(() => provider.GetRequiredService(impl));
         }
         provider.Dispose();
     }
@@ -614,7 +615,7 @@ public class BackgroundJobsTests
         Type[] ifaces = [typeof(IJobResultRecorder), typeof(IJobExecutionQueryService), typeof(IJobResultQueryService), typeof(IJobHistoryCleanupService)];
         foreach (var iface in ifaces)
         {
-            var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(iface));
+            var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService(iface));
             Assert.Contains("领域架构守卫", ex.Message);
             Assert.Contains(iface.Name, ex.Message);
         }

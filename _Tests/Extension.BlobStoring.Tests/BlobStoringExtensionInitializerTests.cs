@@ -4,6 +4,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.BlobStoring.Tests;
@@ -87,7 +88,7 @@ public class BlobStoringExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<BlobRecordStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<BlobRecordStore>());
     }
 
     [Fact]
@@ -99,7 +100,7 @@ public class BlobStoringExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IBlobRecordStore>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IBlobRecordStore>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IBlobRecordStore", ex.Message);
     }

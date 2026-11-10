@@ -96,6 +96,8 @@ public sealed class AuthCenterWebExtension<TUserInfo> : IWebExtension
             registry.MapGenerated<IExternalIdpLoginService>();   // POST /login/external/{channelType}
         if (endpointOptions.TicketLoginEndpointEnabled)
             registry.MapGenerated<IExternalTicketLoginService>();   // POST /login/ticket（V0.10.0 独立路由）
+        if (endpointOptions.TicketRedeemEndpointEnabled)
+            registry.MapGenerated<IExternalTicketRedeemService>();   // POST /login/ticket/redeem（V0.14.0 业务兑票——纯兑票返回 payload，不建会话不发 token）
         if (endpointOptions.RefreshEndpointEnabled || endpointOptions.LogoutEndpointEnabled || endpointOptions.TokenVerifyEndpointEnabled)
             registry.MapGenerated<ITokenService>();   // 三开关合并——ITokenService 暴露 refresh+logout+verify 全部 [ApiExpose] 方法
         if (endpointOptions.GrantsEndpointEnabled)

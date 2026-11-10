@@ -65,7 +65,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <!-- ════════════════════════════════════════════════════════
          主框架 TKWF.* 包（2026-09-15 迁移：ProjectReference → PackageReference）
-         ✅ 当前 lockstep = **4.10.116**（2026-11-09——框架 v4.10.116 已在线发布（nuget.org tkwf.domain/codegeneration 均含 4.10.116），CPM lockstep 4.10.113 → 4.10.116 + CodeGeneration 双锁切在线正式号（-local 退出，AGENTS §6 规则）；中间 4.10.106~4.10.115 在线不存在（框架攒批经 4.10.116 发布）——NuGet 模式 restore 须 4.10.116）（2026-11-06——框架 v4.10.111/v4.10.112/v4.10.113 三版合并批次已本地部署并打 tag；local-feed 产出 `4.10.116` 双包（0:22 刷新）；⚠️ nuget.org 在线最新仍为 4.10.105——4.10.106+ 未在线发布（非对外期攒批），NuGet 模式/CI restore 待框架在线发布后验证，本地 DLL 模式零 restore 不受影响）：扩展侧适配 = **CPM lockstep 即完成（零代码）**——11 正式号 4.10.112 -> 4.10.113 + **CodeGeneration/CodeGeneration.Abstractions 双锁 `4.10.116`**（AGENTS §6 本地 feed 机制）。**v4.10.111 = CTRB001/PAGE001 判据修正退役**（消费方必误报修复——本仓 WeChatOperations CTRB001 NoWarn 已随 4.10.112 lockstep 移除，零告警实证）；**v4.10.112 = ADR128 VEntity 字段消歧三码**（WARN012/013/ERR005——本仓 8 VEntity 零冲突，VEntity 字段名永不变勿 NoWarn 压制）；**v4.10.113 = ADR129 SG1b fallback 过滤链单源修复**（ExcludeMethods/IncludeMethods/[GenerateControllerMethod] 在非泛型扩展 DataService 上生效——本仓 2026-11-06 转达的 fallback 缺陷（只认 [GenerateIgnore]）已根治；Permissions `GetGrantedNamesByProviderKeyAsync` 已回退为**纯 ExcludeMethods**（移除 [GenerateIgnore] 双保险），ExtI 6 方法/控制器 0 命中实证；⚠️ 重建后查 TKWCTRL007（剥 Async 后同名方法）与 Service 目标 [GenerateIgnore] 误标；已知边界：fallback 不补基类 CRUD、Service 目标 ExcludeMethods 仍 no-op）；P3 客户端注解级告警属预期（框架侧可空性注解细化，客户端生成代码注解级告警不阻塞）。
+         ✅ 当前 lockstep = **4.10.118**（2026-11-11——**v4.10.118 = F1 类型化守卫异常基类**：`DomainGuardException : InvalidOperationException`（框架 `_Framework/Domain/Exceptions/DomainGuardException.cs`——本仓 2026-11-08 转达 F1 闭环，注释明写「转达 F1 闭环」）；AuthCenter V0.14.0 业务兑票端点（`ExternalTicketRedeemService`/`ExternalTicketLoginService` 双门面 catch 改类型判定）依赖；⚠️ nuget.org 在线最新仍 **4.10.116**——4.10.118 未在线发布（非对外期攒批），**NuGet 模式/CI restore 待框架在线发布后验证**（同 4.10.113→116 期间模式），本地 DLL 模式零 restore 不受影响；CodeGeneration 双包锁 **`4.10.118-local`**（AGENTS §6 本地机制——local-feed 双包已刷新，在线正式号发布后仍保持本地引用直至显式切号））（2026-11-09——框架 v4.10.116 已在线发布（nuget.org tkwf.domain/codegeneration 均含 4.10.116），CPM lockstep 4.10.113 → 4.10.116 + CodeGeneration 双锁切在线正式号（-local 退出，AGENTS §6 规则）；中间 4.10.106~4.10.115 在线不存在（框架攒批经 4.10.116 发布）——NuGet 模式 restore 须 4.10.116）（2026-11-06——框架 v4.10.111/v4.10.112/v4.10.113 三版合并批次已本地部署并打 tag；local-feed 产出 `4.10.116` 双包（0:22 刷新）；⚠️ nuget.org 在线最新仍为 4.10.105——4.10.106+ 未在线发布（非对外期攒批），NuGet 模式/CI restore 待框架在线发布后验证，本地 DLL 模式零 restore 不受影响）：扩展侧适配 = **CPM lockstep 即完成（零代码）**——11 正式号 4.10.112 -> 4.10.113 + **CodeGeneration/CodeGeneration.Abstractions 双锁 `4.10.116`**（AGENTS §6 本地 feed 机制）。**v4.10.111 = CTRB001/PAGE001 判据修正退役**（消费方必误报修复——本仓 WeChatOperations CTRB001 NoWarn 已随 4.10.112 lockstep 移除，零告警实证）；**v4.10.112 = ADR128 VEntity 字段消歧三码**（WARN012/013/ERR005——本仓 8 VEntity 零冲突，VEntity 字段名永不变勿 NoWarn 压制）；**v4.10.113 = ADR129 SG1b fallback 过滤链单源修复**（ExcludeMethods/IncludeMethods/[GenerateControllerMethod] 在非泛型扩展 DataService 上生效——本仓 2026-11-06 转达的 fallback 缺陷（只认 [GenerateIgnore]）已根治；Permissions `GetGrantedNamesByProviderKeyAsync` 已回退为**纯 ExcludeMethods**（移除 [GenerateIgnore] 双保险），ExtI 6 方法/控制器 0 命中实证；⚠️ 重建后查 TKWCTRL007（剥 Async 后同名方法）与 Service 目标 [GenerateIgnore] 误标；已知边界：fallback 不补基类 CRUD、Service 目标 ExcludeMethods 仍 no-op）；P3 客户端注解级告警属预期（框架侧可空性注解细化，客户端生成代码注解级告警不阻塞）。
          ⚠️ 历史批次注记（历史 lockstep = **4.10.105**——nuget.org 32 包 4.10.105 已推送（dispatch run
           41968215380 publish job 实证 `=== OK: v4.10.105 ===`；flatcontainer 索引传播延迟不阻塞，publish
           job success 即闭环）；v4.10.105 为**遗留清理批次**：① SG2 新增 `TKWF_SG2a_WARN009` 显式诊断
@@ -204,18 +204,18 @@
          TKWF.CodeGeneration 为纯 Analyzer 包（analyzers/dotnet/cs/，无 lib/），
          消费侧声明后 Roslyn 自动加载，无需 <Analyzer> 元素。
          ════════════════════════════════════════════════════════ -->
-    <PackageVersion Include="TKWF.Domain" Version="4.10.116" />
-    <PackageVersion Include="TKWF.Utility" Version="4.10.116" />
-    <PackageVersion Include="TKWF.Core" Version="4.10.116" />
-    <PackageVersion Include="TKWF.Abstractions" Version="4.10.116" />
-    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.116" />
-    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.116" />
-    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.116" />
-    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.116" />
-    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.116" />
+    <PackageVersion Include="TKWF.Domain" Version="4.10.118" />
+    <PackageVersion Include="TKWF.Utility" Version="4.10.118" />
+    <PackageVersion Include="TKWF.Core" Version="4.10.118" />
+    <PackageVersion Include="TKWF.Abstractions" Version="4.10.118" />
+    <PackageVersion Include="TKWF.BackgroundJobs" Version="4.10.118" />
+    <PackageVersion Include="TKWF.BackgroundJobs.Quartz" Version="4.10.118" />
+    <PackageVersion Include="TKWF.Utility.DataPort" Version="4.10.118" />
+    <PackageVersion Include="TKWF.Utility.DataPort.Providers.MiniExcel" Version="4.10.118" />
+    <PackageVersion Include="TKWF.Domain.FreeSql" Version="4.10.118" />
     <!-- ✅ Web 装配钩子（v4.10.45，ADR87）：Web 类扩展以 IWebExtension 三阶段自描述 Web 装配需求——
          4 个 Web 接线先例（Authentication/RateLimiting/HealthCheck/Notifications.SignalR）收敛迁移的前置引用 -->
-    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.116" />
+    <PackageVersion Include="TKWF.Domain.Web" Version="4.10.118" />
 <!-- ✅ 全量 lockstep 4.10.100（2026-10-30——**TABLE002 裸 [Table] 实体误报修复**（DMP-Lite 转达
      ——`ExtractEntityTableNames` 兜底 ClassName：裸 [Table]（无 Name）→ 类名（实体默认表名约定，
      对齐 cshtml `vw_{ClassName}` 先例；实体=类名 / VEntity=vw_ 前缀形态不同，`GetTableName` 层不分层
@@ -320,12 +320,12 @@
          DataProtection 误命中致非 Web 扩展 CS0234，CI NuGet 模式实证）；AGENTS §6 本地 feed 机制临时锁 4.10.85-local 已解除 -->
     <!-- ✅ 本地 feed 双包（AGENTS §6 本地测试机制，2026-11-07）：CodeGeneration + Abstractions 均锁 4.10.116
          （本地部署版本，非在线正式号；nuget.org 最新 4.10.105，4.10.111-113 未上架）——框架在线发布后切正式号并删本地源 -->
-    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.116" />
-    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.116" />
+    <PackageVersion Include="TKWF.CodeGeneration" Version="4.10.118-local" />
+    <PackageVersion Include="TKWF.CodeGeneration.Abstractions" Version="4.10.118-local" />
     <!-- ✅ 测试辅助（ADR91 议题 1 兑现，A 精简版）：TKWF.Domain.Testing.xUnit 提供 BindTestScope（域作用域
          IDisposable 封装）+ AssertConstructible（注册形态断言三要素）——C 基座 TestHostBase/TestHostAssert 语义
          对齐后迁移 = 换 using + 包引用；消费方测试项目按需引用本条目（CPM 版本声明，不自动引入） -->
-    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.116" />
+    <PackageVersion Include="TKWF.Domain.Testing.xUnit" Version="4.10.118" />
   </ItemGroup>
 </Project>
 

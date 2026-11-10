@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Calendar;
 
 namespace TKWF.Ext.Calendar.Tests;
@@ -64,7 +65,7 @@ public class CalendarInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<CalendarManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<CalendarManager>());
     }
 
     [Fact]
@@ -76,7 +77,7 @@ public class CalendarInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ICalendarManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ICalendarManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ICalendarManager", ex.Message);
     }

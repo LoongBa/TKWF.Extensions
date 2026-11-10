@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Core.Hosting;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Account;
@@ -133,7 +134,7 @@ public class IdentityProductionPathTests
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IUserManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<IUserManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IUserManager", ex.Message);
     }
@@ -145,9 +146,9 @@ public class IdentityProductionPathTests
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
 
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<UserStore>());
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<RoleStore>());
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<UserManager>());
+        Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<UserStore>());
+        Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<RoleStore>());
+        Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<UserManager>());
     }
 
     /// <summary>

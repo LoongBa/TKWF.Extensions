@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Settings.Tests;
@@ -57,7 +58,7 @@ public class SettingsExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SettingManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<SettingManager>());
     }
 
     [Fact]
@@ -69,7 +70,7 @@ public class SettingsExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISettingManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ISettingManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ISettingManager", ex.Message);
     }

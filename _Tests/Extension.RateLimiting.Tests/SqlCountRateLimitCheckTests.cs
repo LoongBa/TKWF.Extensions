@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Exceptions;
 
 namespace TKWF.Ext.RateLimiting.Tests;
 
@@ -160,7 +161,7 @@ public class SqlCountRateLimitCheckTests
         using var host = RateLimitTestHost.Create();
 
         // 未 Use 帧——SqlCount ctor 内 GetRequiredService<IRateLimitCounterDataService>（守卫工厂）→ CurrentAopUser 空 → 抛
-        Assert.Throws<InvalidOperationException>(() => host.RateLimitCheck);
+        Assert.Throws<DomainGuardException>(() => host.RateLimitCheck);
     }
 
     /// <summary>帧外守卫：无 User.Use 帧 → GetRequiredService&lt;IRateLimitCounterDataService&gt;()（守卫工厂）抛。</summary>
@@ -170,7 +171,7 @@ public class SqlCountRateLimitCheckTests
         using var host = RateLimitTestHost.Create();
 
         // 未 BindScope/未 Use 帧——CurrentAopUser 为空 → 守卫工厂抛 InvalidOperationException
-        Assert.Throws<InvalidOperationException>(() => host.GetRequiredService<IRateLimitCounterDataService>());
+        Assert.Throws<DomainGuardException>(() => host.GetRequiredService<IRateLimitCounterDataService>());
     }
 
     private static bool AttemptAcquire(RateLimitTestHost host, string key, int maxAttempts)

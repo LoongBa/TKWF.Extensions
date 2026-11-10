@@ -1,4 +1,5 @@
 using System.Security.Authentication;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthSurface.Tests;
@@ -237,7 +238,7 @@ public class RedemptionCommandServiceTests
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IRedemptionCommandService>());
+        var ex = Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<IRedemptionCommandService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains(nameof(IRedemptionCommandService), ex.Message);
     }

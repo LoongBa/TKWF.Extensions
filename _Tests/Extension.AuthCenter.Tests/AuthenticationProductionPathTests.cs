@@ -6,6 +6,7 @@ using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.AuthController;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Testing.Shared;
@@ -125,7 +126,7 @@ public class AuthenticationProductionPathTests
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<ITokenService>());
+        var ex = Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<ITokenService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ITokenService", ex.Message);
     }
@@ -137,9 +138,9 @@ public class AuthenticationProductionPathTests
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
 
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<TokenService>());
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<OAuthTicketService>());
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<AuthAccountQueryService>());
+        Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<TokenService>());
+        Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<OAuthTicketService>());
+        Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<AuthAccountQueryService>());
     }
 
     // ═══════════════════════════════════════════════════════
@@ -207,9 +208,33 @@ public class AuthenticationProductionPathTests
         using var fsql = CreateInMemoryFreeSql();
         using var sp = CreateProvider(fsql);
 
-        var ex = Assert.Throws<InvalidOperationException>(
+        var ex = Assert.Throws<DomainGuardException>(
             () => sp.GetServices<IAuthenticationProvider>().ToList());
         Assert.Contains("集合元素", ex.Message);
+    }
+
+    /// <summary>真实未装配 503 闭环（E3 补充——不经 Fake）：TrustCenter 未装配（<c>ISealedTicketService</c> 未注册）
+    /// → <c>User.Use&lt;IExternalTicketRedeemService&gt;()</c> AOP 帧内 → 门面内 <c>Use&lt;ISealedTicketService&lt;…&gt;&gt;()</c>
+    /// 守卫工厂未注册预检抛 <see cref="DomainGuardException"/>（v4.10.118 类型化）→ catch → 503（TICKET_SERVICE_NOT_CONFIGURED）。</summary>
+    [Fact]
+    public async Task Use_IExternalTicketRedeemService_TicketServiceNotAssembled_Throws503()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql, services =>
+        {
+            // 门面 ctor 经守卫工厂解析 IHttpContextAccessor（无 Web 宿主——Fake IP 维度；非本用例关注面）
+            services.AddSingleton<Microsoft.AspNetCore.Http.IHttpContextAccessor>(
+                new ExternalTicketLoginServiceTests.FakeHttpContextAccessor("10.0.0.1"));
+        });
+        DomainUser<TestUserInfo>.BindScope(sp);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-42", "测试用户") };
+
+        var redeem = user.Use<IExternalTicketRedeemService>();
+
+        var ex = await Assert.ThrowsAsync<ServiceNotConfiguredException>(() =>
+            redeem.RedeemAsync(new ExternalTicketRedeemRequest("ticket-32B-base64url-abcdefghijklmnop"), CancellationToken.None));
+
+        Assert.Equal("TICKET_SERVICE_NOT_CONFIGURED", ex.ErrorCode);
     }
 }
 

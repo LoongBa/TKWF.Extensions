@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Auditing;
 
@@ -139,7 +140,7 @@ public class AuditLoggingExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<AuditLogQueryService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<AuditLogQueryService>());
     }
 
     [Fact]
@@ -151,7 +152,7 @@ public class AuditLoggingExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IAuditLogQueryService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IAuditLogQueryService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IAuditLogQueryService", ex.Message);
     }
@@ -185,7 +186,7 @@ public class AuditLoggingExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<AuditLogAnalyticsService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<AuditLogAnalyticsService>());
     }
 
     [Fact]
@@ -196,7 +197,7 @@ public class AuditLoggingExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IAuditLogAnalyticsService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IAuditLogAnalyticsService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IAuditLogAnalyticsService", ex.Message);
     }

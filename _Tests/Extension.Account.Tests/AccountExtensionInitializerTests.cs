@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Core.AuthController;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Account.Tests;
@@ -105,8 +106,8 @@ public class AccountExtensionInitializerTests
         Assert.NotNull(resetImpl!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<AccountLockoutStore>());
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<PasswordResetStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<AccountLockoutStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<PasswordResetStore>());
     }
 
     [Fact]
@@ -118,11 +119,11 @@ public class AccountExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex1 = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IAccountLockoutStore>());
+        var ex1 = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IAccountLockoutStore>());
         Assert.Contains("领域架构守卫", ex1.Message);
         Assert.Contains("IAccountLockoutStore", ex1.Message);
 
-        var ex2 = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IPasswordResetStore>());
+        var ex2 = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IPasswordResetStore>());
         Assert.Contains("领域架构守卫", ex2.Message);
         Assert.Contains("IPasswordResetStore", ex2.Message);
     }
@@ -168,7 +169,7 @@ public class AccountExtensionInitializerTests
         Assert.NotNull(implDescriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ILoginHistoryService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ILoginHistoryService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ILoginHistoryService", ex.Message);
     }

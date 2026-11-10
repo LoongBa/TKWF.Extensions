@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
 
@@ -80,8 +81,8 @@ namespace TKWF.Ext.Federation;
         //   旧装配保留兼容（类与注册保留，既有显式消费方零破坏）+ 文档标注废弃（彻底删除留后续清理迭代）——
         //   显式 Use<DbChannelRegistry>() 仍可解析（NoAop 直建 + throw-factory 守卫照旧）。
         services.AddScoped<StaticChannelRegistry>();
-        services.Add(ServiceDescriptor.Scoped(typeof(DbChannelRegistry), _ => throw new InvalidOperationException(
-            "[领域架构守卫] DbChannelRegistry 必须经 User.Use<DbChannelRegistry>() 解析（旧装配兼容——弃用，见 CompositeChannelRegistry 注释）")));
+        services.Add(ServiceDescriptor.Scoped(typeof(DbChannelRegistry), _ => throw new DomainGuardException(
+            "[领域架构守卫] DbChannelRegistry 必须经 User.Use<DbChannelRegistry>() 解析（旧装配兼容——弃用，见 CompositeChannelRegistry 注释；v4.10.118 类型化守卫基类）")));
         // 通道注册表写入门面（Register/Update/Unregister + AES-GCM 加解密——管理端点不建，服务层方法保留）
         services.AddConstructibleService<ISsoChannelRegistryService, SsoChannelRegistryService>();
 

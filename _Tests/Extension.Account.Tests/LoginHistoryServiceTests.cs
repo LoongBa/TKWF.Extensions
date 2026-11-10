@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.FreeSql;
 using TKWF.Ext.SecurityLog;
 using TKWF.Ext.Testing.Shared;
@@ -202,9 +203,9 @@ public class LoginHistoryServiceTests
         var user = BindUser(sp);
         var service = user.Use<ILoginHistoryService>();
 
-        // C1 模式：SecurityLog 契约未注册 → 门面内 User.Use<ISecurityLogQueryService>() 经 AOP 路径 GetRequiredService
-        // 抛 InvalidOperationException（未注册异常，消息含 SecurityLog 类型名）——保持原有"明确异常"语义
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        // C1 模式：SecurityLog 契约未注册 → 门面内 User.Use<ISecurityLogQueryService>() 经 AOP 路径
+        // 守卫工厂预检抛 DomainGuardException（v4.10.118 类型化；消息含 SecurityLog 类型名）——保持"明确异常"语义
+        var ex = await Assert.ThrowsAsync<DomainGuardException>(
             () => service.GetLoginHistoryAsync(new LoginHistoryQueryInput(), ct: TestContext.Current.CancellationToken));
         Assert.Contains("SecurityLog", ex.Message);                        // 提示须启用 SecurityLog 扩展
     }
@@ -217,10 +218,10 @@ public class LoginHistoryServiceTests
         var user = BindUser(sp);
         var service = user.Use<ILoginHistoryService>();
 
-        var exUser = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedUsersAsync(ct: TestContext.Current.CancellationToken));
+        var exUser = await Assert.ThrowsAsync<DomainGuardException>(() => service.GetTopFailedUsersAsync(ct: TestContext.Current.CancellationToken));
         Assert.Contains("SecurityLog", exUser.Message);
 
-        var exIp = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetTopFailedIpsAsync(ct: TestContext.Current.CancellationToken));
+        var exIp = await Assert.ThrowsAsync<DomainGuardException>(() => service.GetTopFailedIpsAsync(ct: TestContext.Current.CancellationToken));
         Assert.Contains("SecurityLog", exIp.Message);
     }
 

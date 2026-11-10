@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.OrganizationUnit;
 
 namespace TKWF.Ext.OrganizationUnit.Tests;
@@ -63,7 +64,7 @@ public class OrganizationUnitInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<OrganizationUnitManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<OrganizationUnitManager>());
     }
 
     [Fact]
@@ -75,7 +76,7 @@ public class OrganizationUnitInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOrganizationUnitManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IOrganizationUnitManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IOrganizationUnitManager", ex.Message);
     }

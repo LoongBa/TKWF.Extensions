@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
 
@@ -67,7 +68,7 @@ public class PermissionExtensionInitializerTests
         new PermissionExtensionInitializer<SimpleUserInfo>().ConfigureServices(services);
         var sp = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IPermissionChecker>());
+        var ex = Assert.Throws<DomainGuardException>(() => sp.GetRequiredService<IPermissionChecker>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IPermissionChecker", ex.Message);
     }

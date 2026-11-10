@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Testing.Shared;
 
@@ -59,7 +60,7 @@ public class SecurityLogExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SecurityLogStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<SecurityLogStore>());
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public class SecurityLogExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecurityLogStore>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ISecurityLogStore>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ISecurityLogStore", ex.Message);
     }
@@ -103,7 +104,7 @@ public class SecurityLogExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SecurityLogQueryService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<SecurityLogQueryService>());
     }
 
     [Fact]
@@ -114,7 +115,7 @@ public class SecurityLogExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecurityLogQueryService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ISecurityLogQueryService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ISecurityLogQueryService", ex.Message);
     }
@@ -146,7 +147,7 @@ public class SecurityLogExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<SecurityLogAnalyticsService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<SecurityLogAnalyticsService>());
     }
 
     [Fact]
@@ -157,7 +158,7 @@ public class SecurityLogExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecurityLogAnalyticsService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ISecurityLogAnalyticsService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("ISecurityLogAnalyticsService", ex.Message);
     }

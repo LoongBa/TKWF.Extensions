@@ -4,6 +4,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing.Tests;
@@ -54,7 +55,7 @@ public class EmailingExtensionInitializerTests
         Assert.NotNull(descriptor);
         Assert.NotNull(descriptor!.ImplementationFactory);
         using var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<EmailRecordStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<EmailRecordStore>());
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public class EmailingExtensionInitializerTests
         new EmailingExtensionInitializer<EmailingUserInfo>().ConfigureServices(services);
         using var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IEmailRecordStore>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IEmailRecordStore>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IEmailRecordStore", ex.Message);
     }

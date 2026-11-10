@@ -84,16 +84,11 @@ public sealed class ExternalIdpLoginService : DomainServiceBase, IExternalIdpLog
                 AuthLevel: auth.AuthLevel);
             return await Orchestrator.LoginAsync(identity, ct);
         }
-        catch (InvalidOperationException ex) when (IsDomainGuardException(ex))
+        catch (DomainGuardException ex)
         {
             // fail-hard（P7→B3b）：Federation 未装配 → Use<IExternalIdpAuthenticator>() 抛守卫 → 503 显式告知
+            // （v4.10.118 类型化守卫基类——转达 F1 闭环，类型判定替代字符串匹配）
             throw new ServiceNotConfiguredException("external-idp", ex.Message, ex) { ErrorCode = "EXTERNAL_IDP_NOT_CONFIGURED" };
         }
     }
-
-    /// <summary>领域架构守卫异常判定——<c>User.Use&lt;T&gt;()</c> 帧外/未装配守卫工厂
-    /// （AddConstructibleService 实现类 throw-factory / 接口守卫工厂）抛 <c>InvalidOperationException</c> + "领域架构守卫" 前缀。</summary>
-    // 待框架提供类型化守卫异常基类（转达登记 2026-11-08）——框架文案变更可能致映射 503→500 退化。
-    private static bool IsDomainGuardException(InvalidOperationException ex)
-        => ex.Message.Contains("领域架构守卫", StringComparison.Ordinal);
 }

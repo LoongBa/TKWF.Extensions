@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Approval;
 using TKWF.Ext.Testing.Shared;
 
@@ -86,7 +87,7 @@ public class ApprovalExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ApprovalManager>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ApprovalManager>());
         Assert.Contains("领域架构守卫", ex.Message);
     }
 
@@ -101,7 +102,7 @@ public class ApprovalExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ApprovalQueryService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ApprovalQueryService>());
         Assert.Contains("领域架构守卫", ex.Message);
     }
 
@@ -116,7 +117,7 @@ public class ApprovalExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ApprovalTimeoutService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ApprovalTimeoutService>());
         Assert.Contains("领域架构守卫", ex.Message);
     }
 
@@ -129,7 +130,7 @@ public class ApprovalExtensionInitializerTests
         new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IApprovalService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IApprovalService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IApprovalService", ex.Message);
     }
@@ -141,7 +142,7 @@ public class ApprovalExtensionInitializerTests
         new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IApprovalQueryService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IApprovalQueryService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IApprovalQueryService", ex.Message);
     }
@@ -153,7 +154,7 @@ public class ApprovalExtensionInitializerTests
         new ApprovalExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IApprovalTimeoutService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IApprovalTimeoutService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IApprovalTimeoutService", ex.Message);
     }

@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Account;
@@ -106,9 +107,9 @@ public class IdentityExtensionInitializerTests
         Assert.NotNull(userManagerImpl!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<UserStore>());
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<RoleStore>());
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<UserManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<UserStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<RoleStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<UserManager>());
     }
 
     [Fact]
@@ -120,15 +121,15 @@ public class IdentityExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex1 = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IUserStore>());
+        var ex1 = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IUserStore>());
         Assert.Contains("领域架构守卫", ex1.Message);
         Assert.Contains("IUserStore", ex1.Message);
 
-        var ex2 = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IRoleStore>());
+        var ex2 = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IRoleStore>());
         Assert.Contains("领域架构守卫", ex2.Message);
         Assert.Contains("IRoleStore", ex2.Message);
 
-        var ex3 = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IUserManager>());
+        var ex3 = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IUserManager>());
         Assert.Contains("领域架构守卫", ex3.Message);
         Assert.Contains("IUserManager", ex3.Message);
     }

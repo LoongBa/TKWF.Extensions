@@ -73,6 +73,11 @@ public sealed record ExternalTicketLoginRequest(string Ticket, string? ChannelId
         => !string.IsNullOrWhiteSpace(ChannelId) ? ChannelId : ChannelIdSnakeCase;
 }
 
+/// <summary>业务兑票请求（V0.14.0——POST {prefix}/login/ticket/redeem；DMP ADR05 方案 B 冻结契约 body =
+/// <c>{"ticket": "..."}</c>；单键无 snake_case 变体）。</summary>
+/// <param name="Ticket">32B base64url 密封票据（空白 → 400 TICKET_INVALID，生产显式校验与测试 Fake 同码）。</param>
+public sealed record ExternalTicketRedeemRequest(string Ticket);
+
 /// <summary>票据换令牌请求（PKCE code_verifier 可选——IssueAsync 时若生成则 Exchange 必传；V0.10.1 双收：
 /// 文档契约 body = <c>{ticket, code_verifier, app_id, state}</c>；camelCase <c>codeVerifier</c>/<c>appId</c> 亦接受，
 /// 同传时 camelCase 优先——别名键保证文档契约可用）。</summary>

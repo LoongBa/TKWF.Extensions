@@ -57,4 +57,9 @@ public class AuthCenterEndpointOptions
     /// <summary>外部 IdP 票据 SPA 兑现端点开关（POST {prefix}/login/ticket——V0.10.0 独立路由，不挂 external 前缀；
     /// 事件取 OpenId 链路"票 → token1"匿名兑换面；验票失败 → 400 TICKET_INVALID / 频控 → 429 TICKET_RATE_LIMITED）。</summary>
     public bool TicketLoginEndpointEnabled { get; set; } = true;
+
+    /// <summary>业务兑票端点开关（POST {prefix}/login/ticket/redeem——V0.14.0；纯兑票返回 FederatedTicketPayload
+    /// 明文 11 字段 + extensions，不建会话不发 token；消费方为 DMP Merchant 后端服务间调用；
+    /// 验票失败 → 400 TICKET_INVALID / 冻结禁用 → 400 ACCOUNT_FROZEN|ACCOUNT_DISABLED / 频控 → 429 / 未装配 → 503）。</summary>
+    public bool TicketRedeemEndpointEnabled { get; set; } = true;
 }

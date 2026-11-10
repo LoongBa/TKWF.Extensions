@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using TKW.Framework.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
@@ -63,7 +65,7 @@ public class WeChatChannelsExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(typeof(ChannelConfigService)));
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService(typeof(ChannelConfigService)));
     }
 
     /// <summary>接口构造工厂的 CurrentAopUser 守卫——非 User.Use&lt;T&gt;() 调用链内解析即抛（DI004 运行期兜底）。</summary>
@@ -76,7 +78,7 @@ public class WeChatChannelsExtensionInitializerTests
         services.AddOptions<WeChatChannelsOptions>();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IChannelConfigService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IChannelConfigService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IChannelConfigService", ex.Message);
     }

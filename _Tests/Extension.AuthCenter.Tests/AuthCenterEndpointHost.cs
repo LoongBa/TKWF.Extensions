@@ -15,6 +15,7 @@ using TKW.Framework.Domain.Hosting;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Web.Extensions;
 using TKW.Framework.Domain.Web.Hosting;
+using TKWF.Ext.Federation;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.AuthCenter.Tests;
@@ -45,6 +46,7 @@ internal static class AuthCenterEndpointHost
     public static FakeAuthGrantQueryService Grants { get; } = new();        // V0.8.0 /grants 查询门面
     public static FakeAuthGrantCommandService GrantCommand { get; } = new(); // V0.8.0 /grants 写入门面（未暴露端点，注册保真）
     public static FakeExternalTicketLoginService TicketLogin { get; } = new();  // V0.10.0 /login/ticket 票据 SPA 兑现门面
+    public static FakeExternalTicketRedeemService TicketRedeem { get; } = new();  // V0.14.0 /login/ticket/redeem 业务兑票门面
 
     private static TestServer CreateServer()
     {
@@ -72,6 +74,7 @@ internal static class AuthCenterEndpointHost
             svc.Replace(ServiceDescriptor.Scoped<IAuthGrantQueryService>(_ => Grants));       // V0.8.0 /grants 查询
             svc.Replace(ServiceDescriptor.Scoped<IAuthGrantCommandService>(_ => GrantCommand)); // V0.8.0 写入门面（未暴露端点，注册保真）
             svc.Replace(ServiceDescriptor.Scoped<IExternalTicketLoginService>(_ => TicketLogin)); // V0.10.0 /login/ticket 票据兑现
+            svc.Replace(ServiceDescriptor.Scoped<IExternalTicketRedeemService>(_ => TicketRedeem)); // V0.14.0 /login/ticket/redeem 业务兑票
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -235,6 +238,53 @@ internal static class AuthCenterEndpointHost
             // 缺 ticket 校验模拟（保留原 handler 400 INVALID_ARGUMENT 黑盒语义）
             if (string.IsNullOrWhiteSpace(request.Ticket))
                 throw new DomainException("INVALID_ARGUMENT") { ErrorCode = "INVALID_ARGUMENT" };
+            return Task.FromResult(Result);
+        }
+    }
+
+    /// <summary>
+    /// 业务兑票门面 Fake（V0.14.0——POST /login/ticket/redeem）：Invoked/LastTicket 捕获 +
+    /// 可配置 Result（成功 <see cref="FederatedTicketPayload"/>）/ GuardExceptionMessage（守卫异常——503
+    /// TICKET_SERVICE_NOT_CONFIGURED）/ RateLimitedMessage（频控异常——429 TICKET_RATE_LIMITED）/
+    /// Throw（业务失败——400 含 ACCOUNT_FROZEN/ACCOUNT_DISABLED/TICKET_INVALID）。
+    /// </summary>
+    internal sealed class FakeExternalTicketRedeemService : IExternalTicketRedeemService
+    {
+        public bool Invoked { get; private set; }
+        public string? LastTicket { get; private set; }
+
+        public FederatedTicketPayload Result { get; set; } = new(
+            Provider: "wechat",
+            ChannelType: "mp_subscription",
+            ChannelId: "wechat-event-1",
+            ChannelAlias: null,
+            ExternalUserId: "openid-event-1",
+            UnionId: null,
+            PlatformUid: "u-redeem-1",
+            Assurance: "event",
+            Iat: 1234567890,
+            Exp: 1234567950,
+            Jti: "jti-test");
+
+        public string? GuardExceptionMessage { get; set; }
+        public string? RateLimitedMessage { get; set; }
+
+        /// <summary>业务失败模拟（B3b——DomainException 400，ErrorCode 按场景：ACCOUNT_FROZEN/ACCOUNT_DISABLED/TICKET_INVALID）。</summary>
+        public DomainException? Throw { get; set; }
+
+        public Task<FederatedTicketPayload> RedeemAsync(ExternalTicketRedeemRequest request, CancellationToken ct = default)
+        {
+            Invoked = true;
+            LastTicket = request.Ticket;
+            if (Throw is not null) throw Throw;
+            if (GuardExceptionMessage is not null)
+                throw new ServiceNotConfiguredException("ticket-service", GuardExceptionMessage) { ErrorCode = "TICKET_SERVICE_NOT_CONFIGURED" };
+            if (RateLimitedMessage is not null)
+                throw new RateLimitedException(0, "ext:ticket-redeem:test") { ErrorCode = RateLimitedMessage };
+            // 缺 ticket 校验模拟（V0.14.0 生产显式校验语义——与生产同码 TICKET_INVALID，不复制既有
+            // FakeExternalTicketLoginService 的 INVALID_ARGUMENT 分裂）
+            if (string.IsNullOrWhiteSpace(request.Ticket))
+                throw new DomainException("TICKET_INVALID") { ErrorCode = "TICKET_INVALID" };
             return Task.FromResult(Result);
         }
     }

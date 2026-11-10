@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.DataDictionary.Tests;
@@ -70,7 +71,7 @@ public class DataDictionaryExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<DictionaryStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<DictionaryStore>());
     }
 
     [Fact]
@@ -84,7 +85,7 @@ public class DataDictionaryExtensionInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<DictionaryManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<DictionaryManager>());
     }
 
     [Fact]
@@ -96,11 +97,11 @@ public class DataDictionaryExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var storeEx = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IDictionaryStore>());
+        var storeEx = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IDictionaryStore>());
         Assert.Contains("领域架构守卫", storeEx.Message);
         Assert.Contains("IDictionaryStore", storeEx.Message);
 
-        var managerEx = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IDictionaryManager>());
+        var managerEx = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IDictionaryManager>());
         Assert.Contains("领域架构守卫", managerEx.Message);
         Assert.Contains("IDictionaryManager", managerEx.Message);
     }

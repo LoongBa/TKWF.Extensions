@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Utility.RateLimitChecks;
 using TKWF.Ext.MFA;
 
@@ -58,7 +59,7 @@ public class MfaInitializerTests
         Assert.NotNull(descriptor!.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<MfaService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<MfaService>());
     }
 
     [Fact]
@@ -70,7 +71,7 @@ public class MfaInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IMfaService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IMfaService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IMfaService", ex.Message);
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.PrintTemplates.Tests;
@@ -50,7 +51,7 @@ public class PrintTemplatesExtensionInitializerTests
         Assert.NotNull(descriptor.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<TemplateStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<TemplateStore>());
     }
 
     [Fact]
@@ -63,7 +64,7 @@ public class PrintTemplatesExtensionInitializerTests
         Assert.NotNull(descriptor.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<TemplateManager>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<TemplateManager>());
     }
 
     [Fact]
@@ -75,11 +76,11 @@ public class PrintTemplatesExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var storeEx = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITemplateStore>());
+        var storeEx = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ITemplateStore>());
         Assert.Contains("领域架构守卫", storeEx.Message);
         Assert.Contains("ITemplateStore", storeEx.Message);
 
-        var managerEx = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITemplateManager>());
+        var managerEx = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<ITemplateManager>());
         Assert.Contains("领域架构守卫", managerEx.Message);
         Assert.Contains("ITemplateManager", managerEx.Message);
     }

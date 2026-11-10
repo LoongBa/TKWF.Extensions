@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TKWF.Ext.Notifications;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Testing.Shared;
 
 namespace TKWF.Ext.Notifications.Tests;
@@ -84,7 +85,7 @@ public class NotificationsExtensionInitializerTests
         Assert.NotNull(descriptor.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<NotificationStore>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<NotificationStore>());
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public class NotificationsExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<INotificationPublisher>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<INotificationPublisher>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("INotificationPublisher", ex.Message);
     }

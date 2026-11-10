@@ -148,6 +148,11 @@ namespace TKWF.Ext.AuthCenter;
         // 频控强制（P2-4——ctor IRateLimitCheck，Initializer 已 fallback MemoryRateLimitCheck 兜底"始终在"）
         services.AddConstructibleService<IExternalTicketLoginService, ExternalTicketLoginService>();
 
+        // V0.14.0：外部 IdP 业务兑票门面——RedeemAsync 验票（P1-3 统一 TICKET_INVALID）→ L2 账号状态检查
+        // → 返回 payload 明文（不建会话不发 token）；频控独立桶 ext:ticket-redeem:{ip}（服务间调用 IP 集中，
+        // 阈值 TicketRedeemServicePerMinutePerIp 默认 60——防重试风暴 + DoS 纵深，不联动登录桶）
+        services.AddConstructibleService<IExternalTicketRedeemService, ExternalTicketRedeemService>();
+
         // V0.9.0（B.9）：密码登录编排门面——镜像 SmsLoginService（Identifier+Password → Password Provider → 签发）
         services.AddConstructibleService<IPasswordLoginService, PasswordLoginService>();
 

@@ -185,7 +185,8 @@ private static (OAuthTicketService Service, StubDomainUser Stub) CreateServiceWi
     [Fact]
     public async Task Bind_NoAuthenticatedFrame_Rejected()
     {
-        // 无认证帧（匿名 stub——UserId null）→ 拒绝（抛守卫 InvalidOperationException——防票据劫持绑任意 userId）
+// 无认证帧（匿名 stub——UserId null）→ 拒绝（业务守卫 InvalidOperationException——防票据劫持绑任意 userId；
+        // 非框架守卫抛点，不属 DomainGuardException 类型化面（v4.10.118 F1））
         var (service, _) = CreateService(AuthenticationTestHost.CreateOptions());
         var ticket = await service.IssueAsync(new OAuthTicketIssueRequest("app-1", RedirectUri), ct: TestContext.Current.CancellationToken);
 

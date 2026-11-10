@@ -514,6 +514,108 @@ public sealed class AuthCenterWebExtensionTests
         }
     }
 
+    // ═══════════════════ V0.14.0 业务兑票（POST /login/ticket/redeem——DMP ADR05 方案 B 冻结契约） ═══════════════════
+
+    [Fact]
+    public async Task TicketRedeem_Success_ReturnsPayload()
+    {
+        // 匿名游客帧 + 独立路由：body = {ticket} → 门面成功 → FederatedTicketPayload 明文
+        // 11 契约键逐字吻合（camelCase）+ extensions 第 12 键容忍（P1-3——Federation 契约原样透传）
+        AuthCenterEndpointHost.TicketRedeem.GuardExceptionMessage = null;
+        AuthCenterEndpointHost.TicketRedeem.RateLimitedMessage = null;
+        AuthCenterEndpointHost.TicketRedeem.Throw = null;
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket/redeem",
+            new ExternalTicketRedeemRequest("ticket-32B-base64url-abcdefghijklmnop"), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.True(AuthCenterEndpointHost.TicketRedeem.Invoked);
+        Assert.Equal("ticket-32B-base64url-abcdefghijklmnop", AuthCenterEndpointHost.TicketRedeem.LastTicket);
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cancellationToken: TestContext.Current.CancellationToken));
+        var root = doc.RootElement;
+        foreach (var key in new[] { "provider", "channelType", "channelId", "channelAlias", "externalUserId", "unionId", "platformUid", "assurance", "iat", "exp", "jti" })
+            Assert.True(root.TryGetProperty(key, out _), $"契约键 {key} 缺失");
+        Assert.True(root.TryGetProperty("extensions", out _));   // 第 12 键容忍（RFC：未知键不拒收）
+    }
+
+    [Fact]
+    public async Task TicketRedeem_MissingTicket_400_TicketInvalid()
+    {
+        // V0.14.0 生产显式校验语义——缺 ticket → 400 TICKET_INVALID（与生产同码，不复制既有
+        // /login/ticket Fake 的 INVALID_ARGUMENT 分裂——P1-4）
+        AuthCenterEndpointHost.TicketRedeem.Throw = null;
+        AuthCenterEndpointHost.TicketRedeem.GuardExceptionMessage = null;
+        AuthCenterEndpointHost.TicketRedeem.RateLimitedMessage = null;
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket/redeem",
+            new ExternalTicketRedeemRequest(""), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Equal("TICKET_INVALID", await ReadErrorCodeAsync(resp.Content));
+    }
+
+    [Fact]
+    public async Task TicketRedeem_AccountFrozen_400()
+    {
+        // L2 守卫（R1 折中）：冻结账号 → 400 + errorCode=ACCOUNT_FROZEN（契约 403 偏差点，P0-1 回执确认项）
+        AuthCenterEndpointHost.TicketRedeem.Throw = new DomainException("ACCOUNT_FROZEN") { ErrorCode = "ACCOUNT_FROZEN" };
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket/redeem",
+                new ExternalTicketRedeemRequest("ticket-32B-base64url-abcdefghijklmnop"), cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            Assert.Equal("ACCOUNT_FROZEN", await ReadErrorCodeAsync(resp.Content));
+        }
+        finally
+        {
+            AuthCenterEndpointHost.TicketRedeem.Throw = null;
+        }
+    }
+
+    [Fact]
+    public async Task TicketRedeem_RateLimited_429()
+    {
+        // 频控（P0-2 独立桶）：RateLimitedException TICKET_RATE_LIMITED → 429 + ProblemDetails.errorCode
+        AuthCenterEndpointHost.TicketRedeem.RateLimitedMessage = "TICKET_RATE_LIMITED";
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket/redeem",
+                new ExternalTicketRedeemRequest("ticket-32B-base64url-abcdefghijklmnop"), cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.TooManyRequests, resp.StatusCode);
+            Assert.Equal("TICKET_RATE_LIMITED", await ReadErrorCodeAsync(resp.Content));
+        }
+        finally
+        {
+            AuthCenterEndpointHost.TicketRedeem.RateLimitedMessage = null;   // 共享宿主还原
+        }
+    }
+
+    [Fact]
+    public async Task TicketRedeem_Guard_503()
+    {
+        // fail-hard→B3b：ISealedTicketService 未装配 → 门面捕获守卫转 ServiceNotConfiguredException（503）
+        AuthCenterEndpointHost.TicketRedeem.GuardExceptionMessage = "领域架构守卫：AddConstructibleService 实现类（ExternalTicketRedeemService）帧外解析";
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/ticket/redeem",
+                new ExternalTicketRedeemRequest("ticket-32B-base64url-abcdefghijklmnop"), cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+            Assert.Equal("TICKET_SERVICE_NOT_CONFIGURED", await ReadErrorCodeAsync(resp.Content));
+        }
+        finally
+        {
+            AuthCenterEndpointHost.TicketRedeem.GuardExceptionMessage = null;   // 共享宿主还原
+        }
+    }
+
     // ═══════════════════ 配置绑定（RoutePrefix/端点开关可配性——DomainHost 单例禁多宿主黑盒） ═══════════════════
 
     [Fact]
@@ -526,7 +628,8 @@ public sealed class AuthCenterWebExtensionTests
             ["TKWF:AuthCenter:Web:TokenVerifyEndpointEnabled"] = "false",   // V0.8.0 新开关
             ["TKWF:AuthCenter:Web:GrantsEndpointEnabled"] = "false",         // V0.8.0 新开关
             ["TKWF:AuthCenter:Web:SmsVerifyEndpointEnabled"] = "false",       // V0.8.0 新开关
-            ["TKWF:AuthCenter:Web:TicketLoginEndpointEnabled"] = "false"      // V0.10.0 新开关（票据 SPA 兑现）
+            ["TKWF:AuthCenter:Web:TicketLoginEndpointEnabled"] = "false",      // V0.10.0 新开关（票据 SPA 兑现）
+            ["TKWF:AuthCenter:Web:TicketRedeemEndpointEnabled"] = "false"      // V0.14.0 新开关（业务兑票）
         }).Build();
         var options = new AuthCenterEndpointOptions();
         config.GetSection("TKWF:AuthCenter:Web").Bind(options);
@@ -537,6 +640,7 @@ public sealed class AuthCenterWebExtensionTests
         Assert.False(options.GrantsEndpointEnabled);
         Assert.False(options.SmsVerifyEndpointEnabled);
         Assert.False(options.TicketLoginEndpointEnabled);   // V0.10.0 新开关配置覆盖
+        Assert.False(options.TicketRedeemEndpointEnabled);  // V0.14.0 新开关配置覆盖
         Assert.True(options.SmsSendCodeEndpointEnabled);    // 未配置保持默认
         Assert.True(options.TicketExchangeEndpointEnabled); // 未配置保持默认
     }
@@ -551,6 +655,7 @@ public sealed class AuthCenterWebExtensionTests
         Assert.True(options.SmsVerifyEndpointEnabled);
         Assert.True(options.ExternalLoginEndpointEnabled);   // T5 外部 IdP 登录端点默认开放
         Assert.True(options.TicketLoginEndpointEnabled);     // V0.10.0 票据兑现端点默认开放（暴露面，安全由领域频控承载）
+        Assert.True(options.TicketRedeemEndpointEnabled);    // V0.14.0 业务兑票端点默认开放（暴露面，安全由领域频控承载）
     }
 
     [Fact]
@@ -649,5 +754,25 @@ public sealed class AuthCenterWebExtensionTests
         ext.DeclareEndpoints(registry);
 
         Assert.DoesNotContain(typeof(ISmsVerificationService), registry.MappedFacades);   // 全关 → 不挂载
+    }
+
+    [Fact]
+    public void DeclareEndpoints_TicketRedeemOff_NotMapped_LoginStillMapped()
+    {
+        // V0.14.0 门控独立（P1 结构裁决：MapGenerated 门面级门控——兑票开关独立于登录开关）：
+        // 兑票关 → IExternalTicketRedeemService 不挂载，登录 IExternalTicketLoginService 不受影响
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TKWF:AuthCenter:Web:TicketRedeemEndpointEnabled"] = "false",
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        var registry = new FakeEndpointRegistry(services.BuildServiceProvider());
+
+        var ext = new AuthCenterWebExtension<TestUserInfo>();
+        ext.DeclareEndpoints(registry);
+
+        Assert.DoesNotContain(typeof(IExternalTicketRedeemService), registry.MappedFacades);  // 兑票关 → 不挂载
+        Assert.Contains(typeof(IExternalTicketLoginService), registry.MappedFacades);          // 登录门面独立不受影响
     }
 }

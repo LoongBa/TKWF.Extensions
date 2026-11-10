@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Utility.DataPort;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Utility.DataPort.Providers.MiniExcel;
 using TKWF.Ext.Testing.Shared;
 
@@ -98,7 +99,7 @@ public class DataPortExtensionInitializerTests
         Assert.NotNull(descriptor.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<DataImportTaskService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<DataImportTaskService>());
     }
 
     [Fact]
@@ -110,7 +111,7 @@ public class DataPortExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IDataImportTaskService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IDataImportTaskService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IDataImportTaskService", ex.Message);
     }
@@ -164,7 +165,7 @@ public class DataPortExtensionInitializerTests
         Assert.NotNull(descriptor.ImplementationFactory);
 
         var provider = services.BuildServiceProvider();
-        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<StaleImportRecoveryService>());
+        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<StaleImportRecoveryService>());
     }
 
     [Fact]
@@ -176,7 +177,7 @@ public class DataPortExtensionInitializerTests
         services.AddLogging();
         var provider = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IStaleImportRecoveryService>());
+        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IStaleImportRecoveryService>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IStaleImportRecoveryService", ex.Message);
     }

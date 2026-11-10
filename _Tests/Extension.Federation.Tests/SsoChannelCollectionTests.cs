@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKWF.Ext.Testing.Shared;
 
 using TKWF.Ext.Federation;
@@ -81,7 +82,7 @@ public class SsoChannelCollectionTests : TestHostBase
             services.TryAddEnumerableConstructible<ISsoChannel, StubOauthChannel>());
 
         using var scope = provider.CreateScope();
-        var ex = Assert.Throws<InvalidOperationException>(
+        var ex = Assert.Throws<DomainGuardException>(
             () => scope.ServiceProvider.GetServices<ISsoChannel>().ToArray());
         Assert.Contains("域作用域帧外被枚举构造", ex.Message);
     }

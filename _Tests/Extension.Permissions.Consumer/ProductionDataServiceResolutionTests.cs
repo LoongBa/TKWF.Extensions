@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions;
 using TKWF.Ext.Permissions.Abstractions;
@@ -77,7 +78,7 @@ public class ProductionDataServiceResolutionTests
             foreach (var reg in dataServiceRegs)
             {
                 services.AddScoped(reg.Implementation,
-                    _ => throw new InvalidOperationException(
+                    _ => throw new DomainGuardException(
                         $"[领域架构守卫] 类型 {reg.Implementation.Name} 必须通过 User.Use<T>() 解析，不允许直接从 DI 容器获取。"));
             }
 
@@ -86,8 +87,8 @@ public class ProductionDataServiceResolutionTests
 
             var sp = services.BuildServiceProvider();
 
-            // 3. 直接 DI 解析 → throw-factory 抛「领域架构守卫」（禁止绕过 Use<T> 创建——领域自治铁律）
-            var ex = Assert.Throws<InvalidOperationException>(
+            // 3. 直接 DI 解析 → throw-factory 抛「领域架构守卫」（禁止绕过 Use<T> 创建——领域自治铁律；v4.10.118 类型化 DomainGuardException）
+            var ex = Assert.Throws<DomainGuardException>(
                 () => sp.GetRequiredService<PermissionGrantEntityDataService>());
             Assert.Contains("领域架构守卫", ex.Message);
 

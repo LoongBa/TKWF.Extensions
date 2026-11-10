@@ -11,7 +11,7 @@
       "url": "https://github.com/LoongBa/TKWF.Extensions.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "3dd778f343fb347c1fb980bc1ad96e85f1b4c3bb"
+      "revision": "05c748b25df6c643c5052029fc4513b6759b1ba9"
     }
   },
   "components": [
@@ -20,12 +20,12 @@
       "type": "backend",
       "label": "扩展测试宿主",
       "sublabel": "_Tests · 43 测试项目",
-      "tag": "2233 用例",
+      "tag": "2343 用例",
       "pos": [20, 140],
       "size": [170, 62],
       "sources": [
-        { "path": "README.md", "line": 62, "end_line": 62, "label": "测试基线 2233 用例全绿（43 测试项目）" },
-        { "path": "README.md", "line": 117, "end_line": 138, "label": "目录结构 _Tests 测试项目列表" }
+        { "path": "README.md", "line": 90, "end_line": 90, "label": "测试基线 2343 用例全绿（43 测试项目）" },
+        { "path": "README.md", "line": 162, "end_line": 183, "label": "目录结构 _Tests 测试项目列表" }
       ]
     },
     {
@@ -33,12 +33,12 @@
       "type": "backend",
       "label": "身份与认证",
       "sublabel": "AuthCenter · Identity · Account · MFA · SecurityLog",
-      "pos": [230, 140],
+      "pos": [200, 140],
       "size": [280, 62],
       "sources": [
         { "path": "_Framework/AuthCenter/README.md", "line": 11, "end_line": 25, "label": "认证中心定位与能力表" },
-        { "path": "README.md", "line": 18, "end_line": 21, "label": "Identity/Account/AuthCenter 一览" },
-        { "path": "README.md", "line": 30, "end_line": 30, "label": "MFA 一览" }
+        { "path": "README.md", "line": 30, "end_line": 35, "label": "Identity/Account/AuthCenter/AuthSurface 一览" },
+        { "path": "README.md", "line": 53, "end_line": 53, "label": "MFA 一览" }
       ]
     },
     {
@@ -47,12 +47,12 @@
       "label": "联邦与信任",
       "sublabel": "Federation · Federation.Abstractions · TrustCenter · 平台网关×8",
       "tag": "8 平台库",
-      "pos": [550, 140],
+      "pos": [500, 140],
       "size": [280, 62],
       "sources": [
         { "path": "_Framework/Federation/README.md", "line": 13, "end_line": 51, "label": "三层架构连接层定位与组合矩阵" },
         { "path": "_Framework/TrustCenter/README.md", "line": 11, "end_line": 27, "label": "信任内核定位与平台库引目标" },
-        { "path": "README.md", "line": 22, "end_line": 27, "label": "Federation/Abstractions/TrustCenter/平台库一览" }
+        { "path": "README.md", "line": 36, "end_line": 44, "label": "Federation/Abstractions/TrustCenter/平台库一览" }
       ]
     },
     {
@@ -60,25 +60,25 @@
       "type": "backend",
       "label": "权限与组织",
       "sublabel": "Permissions · Navigation · OrganizationUnit · FeatureManagement",
-      "pos": [870, 140],
+      "pos": [790, 140],
       "size": [280, 62],
       "sources": [
         { "path": "_Framework/Permissions/README.md", "line": 51, "end_line": 58, "label": "权限扩展白名单启用与注册" },
-        { "path": "README.md", "line": 15, "end_line": 17, "label": "Permissions 一览（含 Abstractions/Validation）" },
-        { "path": "README.md", "line": 54, "end_line": 54, "label": "OrganizationUnit 一览" }
+        { "path": "README.md", "line": 27, "end_line": 29, "label": "Permissions 一览（含 Abstractions/Validation）" },
+        { "path": "README.md", "line": 77, "end_line": 77, "label": "OrganizationUnit 一览" }
       ]
     },
     {
       "id": "g-msg",
       "type": "backend",
       "label": "消息与触达",
-      "sublabel": "Notifications · Emailing · SignalR · WeChatOperations",
-      "pos": [1190, 140],
-      "size": [280, 62],
+      "sublabel": "Notifications · Emailing · SignalR · WeChatOperations · WeChatChannels",
+      "pos": [1078, 140],
+      "size": [300, 62],
       "sources": [
-        { "path": "README.md", "line": 36, "end_line": 37, "label": "Emailing 一览（含 Abstractions）" },
-        { "path": "README.md", "line": 45, "end_line": 46, "label": "Notifications 与 SignalR 通道一览" },
-        { "path": "README.md", "line": 27, "end_line": 27, "label": "WeChatOperations 一览" }
+        { "path": "README.md", "line": 59, "end_line": 60, "label": "Emailing 一览（含 Abstractions）" },
+        { "path": "README.md", "line": 68, "end_line": 69, "label": "Notifications 与 SignalR 通道一览" },
+        { "path": "README.md", "line": 42, "end_line": 44, "label": "WeChatOperations/WeChatChannels 一览" }
       ]
     },
     {
@@ -89,8 +89,8 @@
       "pos": [20, 300],
       "size": [170, 62],
       "sources": [
-        { "path": "README.md", "line": 139, "end_line": 161, "label": "docs 目录（使用指南 + 设计文档）" },
-        { "path": "README.md", "line": 271, "end_line": 291, "label": "NuGet 发布记录" }
+        { "path": "README.md", "line": 184, "end_line": 227, "label": "docs 目录（使用指南 + 设计文档）" },
+        { "path": "README.md", "line": 348, "end_line": 359, "label": "NuGet 发布记录" }
       ]
     },
     {
@@ -101,8 +101,8 @@
       "pos": [390, 300],
       "size": [280, 62],
       "sources": [
-        { "path": "README.md", "line": 34, "end_line": 44, "label": "Settings→DataPort 一览表行" },
-        { "path": "README.md", "line": 56, "end_line": 57, "label": "FileManagement 一览（含 BlobStoring.Abstractions）" }
+        { "path": "README.md", "line": 57, "end_line": 67, "label": "Settings→DataPort 一览表行" },
+        { "path": "README.md", "line": 79, "end_line": 80, "label": "FileManagement 一览（含 BlobStoring.Abstractions）" }
       ]
     },
     {
@@ -113,9 +113,9 @@
       "pos": [710, 300],
       "size": [280, 62],
       "sources": [
-        { "path": "README.md", "line": 33, "end_line": 33, "label": "AuditLogging 一览" },
-        { "path": "README.md", "line": 53, "end_line": 53, "label": "Approval 一览" },
-        { "path": "README.md", "line": 55, "end_line": 55, "label": "Calendar 一览" }
+        { "path": "README.md", "line": 56, "end_line": 56, "label": "AuditLogging 一览" },
+        { "path": "README.md", "line": 76, "end_line": 76, "label": "Approval 一览" },
+        { "path": "README.md", "line": 78, "end_line": 78, "label": "Calendar 一览" }
       ]
     },
     {
@@ -126,9 +126,9 @@
       "pos": [1030, 300],
       "size": [280, 62],
       "sources": [
-        { "path": "README.md", "line": 41, "end_line": 43, "label": "Metrics/Analytics/Dashboard 一览" },
-        { "path": "README.md", "line": 47, "end_line": 50, "label": "BackgroundJobs/Quartz/HealthCheck/RateLimiting" },
-        { "path": "README.md", "line": 58, "end_line": 58, "label": "FeatureManagement 一览" }
+        { "path": "README.md", "line": 64, "end_line": 66, "label": "Metrics/Analytics/Dashboard 一览" },
+        { "path": "README.md", "line": 70, "end_line": 73, "label": "BackgroundJobs/Quartz/HealthCheck/RateLimiting" },
+        { "path": "README.md", "line": 81, "end_line": 81, "label": "FeatureManagement 一览" }
       ]
     },
     {
@@ -136,13 +136,13 @@
       "type": "backend",
       "label": "主框架契约",
       "sublabel": "TKWF.Domain · Utility · Core · Abstractions",
-      "tag": "CPM 4.10.80 · PackageReference",
+      "tag": "CPM 4.10.116 · PackageReference",
       "pos": [320, 460],
       "size": [1040, 62],
       "sources": [
-        { "path": "Directory.Packages.props", "line": 66, "end_line": 99, "label": "CPM 主框架 TKWF.* 4.10.80 全量 lockstep" },
+        { "path": "Directory.Packages.props", "line": 207, "end_line": 219, "label": "CPM 主框架 TKWF.* 4.10.116 全量 lockstep" },
         { "path": "Directory.Build.props", "line": 42, "end_line": 66, "label": "UseLocalFw 双模式引用（DLL/NuGet）" },
-        { "path": "README.md", "line": 184, "end_line": 207, "label": "扩展启用白名单 + Abstractions 依赖倒置" }
+        { "path": "README.md", "line": 255, "end_line": 277, "label": "扩展启用白名单 + Abstractions 依赖倒置" }
       ]
     }
   ],
@@ -155,10 +155,10 @@
     }
   ],
   "connections": [
-    { "id": "g-auth-fw", "from": "g-auth", "to": "fw", "label": "User.Use/白名单", "fromSide": "bottom", "toSide": "left" },
+    { "id": "g-auth-fw", "from": "g-auth", "to": "fw", "label": "User.Use/白名单" },
     { "id": "g-fed-fw", "from": "g-fed", "to": "fw", "label": "Abstractions 契约" },
     { "id": "g-rbac-fw", "from": "g-rbac", "to": "fw", "label": "User.Use/白名单" },
-    { "id": "g-msg-fw", "from": "g-msg", "to": "fw", "label": "User.Use/白名单", "fromSide": "bottom", "toSide": "right" },
+    { "id": "g-msg-fw", "from": "g-msg", "to": "fw", "label": "User.Use/白名单" },
     { "id": "g-data-fw", "from": "g-data", "to": "fw", "label": "User.Use/白名单" },
     { "id": "g-biz-fw", "from": "g-biz", "to": "fw", "label": "User.Use/白名单" },
     { "id": "g-plat-fw", "from": "g-plat", "to": "fw", "label": "User.Use/白名单" }
@@ -169,16 +169,17 @@
       "title": "扩展规模",
       "items": [
         "50+ 扩展项目（_Framework/）：实体扩展 + 8 平台网关库 + 运行库 + Abstractions 契约包",
-        "P0 11/11 完成、P1 20 扩展已实施（README 扩展规划 L265-269）",
-        "2233 测试用例全绿（43 测试项目，README L62）"
+        "P0 11/11 完成、P1 20 扩展已实施（README 扩展规划 L342-346）",
+        "2343 测试用例全绿（43 测试项目，README L90）"
       ]
     },
     {
       "dot": "cyan",
       "title": "落地状态",
       "items": [
-        "40+ 包已发布 nuget.org（TKWF.Ext.* + TKWF.Federation.* + Abstractions 契约包，README L271-291）",
+        "40+ 包已发布 nuget.org（TKWF.Ext.* + TKWF.Federation.* + Abstractions 契约包，README L348-359）",
         "2026-10-18 批次：WeChatOperations V0.4.0 + Federation.Abstractions V0.1.0 + Federation V0.10.0 + 8 平台库新版本（12 tag 联动发布）",
+        "2026-11-05 批次：WeChatChannels 通道底座拆分（4 tag，run 41931855000 全绿）",
         "各扩展独立版本（MinVer，各打各的 tag）"
       ]
     },
@@ -188,7 +189,7 @@
       "items": [
         "AuthCenter 身份（内网）＋ TrustCenter 信任（内网）＋ Federation 连接（外网统一出口）",
         "8 平台网关库实现 TrustCenter.Abstractions ISsoChannel（大使馆）+ Federation.Abstractions 编排契约包",
-        "主框架依赖：PackageReference + CPM 4.10.80；白名单启用 + User.Use 门面消费（README L184-207）"
+        "主框架依赖：PackageReference + CPM 4.10.116；白名单启用 + User.Use 门面消费（README L255-277）"
       ]
     },
     {
@@ -198,7 +199,7 @@
         "身份与认证：AuthCenter · AuthSurface · Identity · Account · MFA · SecurityLog",
         "联邦与信任：Federation · Federation.Abstractions · TrustCenter + 8 平台网关库（WeChat · QQ · Alipay · Oidc · Google · Microsoft · DingTalk · WeCom）",
         "权限与组织：Permissions · Navigation · OrganizationUnit · FeatureManagement",
-        "消息与触达：Notifications · Notifications.SignalR · Emailing · WeChatOperations",
+        "消息与触达：Notifications · Notifications.SignalR · Emailing · WeChatOperations · WeChatChannels",
         "数据与内容：BlobStoring · FileManagement · DataDictionary · Settings · Tagging",
         "业务构件：Approval · Calendar · AuditLogging · DataPort · PrintTemplates",
         "平台能力：BackgroundJobs(.Quartz) · HealthCheck · RateLimiting · Metrics · Dashboard · Analytics"

@@ -73,3 +73,4 @@
 | 日期 | 变更 |
 |------|------|
 | 2026-11-10 | 初稿——V0.10.0 实施完成（oracle-pro5 裁定落地 + oracle-pro3 条件闭环；P11 验证：slnx 0 错误 / WeChatOperations 207 / Federation.WeChat 145 / MessageGateway 62 / Consumer 4 断言全绿；变异实弹观察点限制记录——SG2a 需 DMP WebApi 形态，仓库内以契约签名机制断言闭环，DMP 复验委托） |
+| 2026-11-10 | **V0.10.1 延伸议题登记（反向治理对照）**——oracle-pro6 裁决补充 wire 面边界判据：**「wire 方法（被外部消费方经 wire 消费的真实功能）应给 wire 面」vs「C#-only 内部能力应撤出契约面」**。本 ADR 已按此修正 3 方法（GetClickKeysAsync/GetReferencesAsync/DeleteMaterialAsync——补 REST，见 `反向治理-3方法补REST面-开发方案.md`）。**延伸议题（不阻塞，后续迭代）**：其余 5 方法（`GetSnapshotAsync`/`DeleteAsync`(IMenuService)/`DeleteReplyRuleAsync`/`GetWelcomeAsync`/`GetDefaultAsync`——均全通道关闭、无 wire 消费证据、有 C# 门面或 wire 替代路径如 `ListReplyRulesAsync(sceneType)`）评估**撤出 `[GenerateController]` 契约面**（对齐本 ADR「wire 契约只承载 wire 方法」理想；核准形态 = 契约接口外独立 C# 接口或收编为内部能力）——不开放 REST（反向治理仅针对有真实 wire 消费证据的方法） |

@@ -25,8 +25,11 @@ namespace TKWF.Ext.WeChatOperations
         [MaxLength(100)]
         public string ChannelId { get; set; } = "";
 
-        /// <summary>菜单完整 JSON（微信按钮结构，text 大文本——本地权威基线）。</summary>
+        /// <summary>菜单完整 JSON（微信按钮结构，text 大文本——本地权威基线）。
+        /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——缺省映射 varchar(255)
+        /// 会被完整菜单 JSON 撑爆（Pg 22001，2026-11-14 MenuService 拉取首发命中）。</para></summary>
         [FreeSql.DataAnnotations.Column(Position = 3)]
+        [MaxLength(-1)]
         public string MenuJson { get; set; } = "";
 
         /// <summary>更新时间（UTC——基线刷新时刻）。</summary>

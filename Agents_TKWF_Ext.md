@@ -265,6 +265,7 @@ _Tests/Extension.{扩展名}.Tests/
 - **不手写** `IDomainEntity`/`IsFromPersistentSource`（SG1 自动生成）
 - 用 FreeSql `[Column]` 特性（`IsPrimary`/`IsIdentity`/`Position`），不用 BCL `[Key]`/`[DatabaseGenerated]`
 - 扩展自建 `{扩展名}UserInfo : SimpleUserInfo` 作为通用用户类型（扩展不知道消费方 UserInfo 类型）
+- **⛔ 红线：内容/JSON 列必须显式 `[MaxLength(-1)]`（2026-11-14 事故固化——DMP 微信菜单 Pg 22001）**：FreeSql 对无 `[MaxLength]` 的 string 缺省映射 `varchar(255)`（SQLite/Pg=255，SqlServer=NVARCHAR(255)），承载文本正文/JSON/长回复的字段一旦超 255 即 Pg 22001 插入失败。**禁止裸 string 承载内容**——内容列（文本/JSON/完整对象序列化）一律显式 `[MaxLength(-1)]`（无界字符串约定：Pg/SQLite=text、SqlServer=nvarchar(max)，先例 FeatureValueEntity/PlatformCredentialEntity）；标识列（Id/Code/Key/Name 等）按实际上限定长（100/200/500）。事故实证：`MenuSnapshotEntity.MenuJson`/`MenuVersionEntity.BeforeJson|AfterJson`/`MaterialEntity.Content`/`InteractionLogEntity.Content|ReplyContent|MatchTraceJson` 7 列漏标 → 生产 22001（2026-11-14 DMP 微信菜单拉取首发命中）。**存量库加宽**：`UseAutoSyncStructure` 只建新表/加新列、不 ALTER 已有列 → 改实体后须手动 `ALTER TABLE ... ALTER COLUMN ... TYPE text`（对齐 FeatureValueEntity v0.3.0 注释先例）。
 
 **注意**：
 - SG1 自诊断门禁（V4.9.15+）编译语义判断，不依赖 `TKWFRole`——扩展无需设 TKWFRole 即可接入

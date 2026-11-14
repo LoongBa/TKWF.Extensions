@@ -40,16 +40,20 @@ namespace TKWF.Ext.WeChatOperations
         [MaxLength(50)]
         public string MsgType { get; set; } = "";
 
-        /// <summary>请求消息内容（文本——text 正文/事件 EventKey 等）。</summary>
+        /// <summary>请求消息内容（文本——text 正文/事件 EventKey 等）。
+        /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——缺省映射 varchar(255) 会被长消息正文撑爆（Pg 22001）。</para></summary>
         [FreeSql.DataAnnotations.Column(Position = 6)]
+        [MaxLength(-1)]
         public string? Content { get; set; }
 
         /// <summary>触发场景类型（int——同上 TriggerType 值域；回复命中场景）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 7)]
         public int TriggerType { get; set; }
 
-        /// <summary>回复内容（实际下发文本/图文 JSON——null = 未回复）。</summary>
+        /// <summary>回复内容（实际下发文本/图文 JSON——null = 未回复）。
+        /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——缺省映射 varchar(255) 会被长回复/图文 JSON 撑爆（Pg 22001）。</para></summary>
         [FreeSql.DataAnnotations.Column(Position = 8)]
+        [MaxLength(-1)]
         public string? ReplyContent { get; set; }
 
     /// <summary>回复所引素材 id（可空——全局素材引用；直接文本回复为 null）。</summary>
@@ -64,8 +68,10 @@ namespace TKWF.Ext.WeChatOperations
     /// <summary>匹配过程追踪（JSON 数组字符串——V0.3.1 匹配过程逐行推演字段，DMP-Lite 5.6 §4 日志详情"匹配过程"灰框）：
     /// 每次自动回复匹配尝试经 <see cref="WeChatOperationsReplyHandler"/> 逐行记录（规则 id/规则名/场景类型/匹配模式/
     /// 触发键/命中与否/简短原因——如 "TriggerKey==content"/"content contains key"/"无 Default 规则"/"template fallback"），
-    /// 供消费方前端逐行渲染"为什么命中/未命中"；仅旁路采集不改动回复决策；null = 未采集（best-effort）。</summary>
+    /// 供消费方前端逐行渲染"为什么命中/未命中"；仅旁路采集不改动回复决策；null = 未采集（best-effort）。
+    /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——缺省映射 varchar(255) 会被多条规则推演 JSON 撑爆（Pg 22001）。</para></summary>
     [FreeSql.DataAnnotations.Column(Position = 11)]
+    [MaxLength(-1)]
     public string? MatchTraceJson { get; set; }
 
     /// <summary>创建时间（UTC）。</summary>

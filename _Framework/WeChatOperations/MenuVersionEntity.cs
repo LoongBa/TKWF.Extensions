@@ -30,12 +30,16 @@ namespace TKWF.Ext.WeChatOperations
         [FreeSql.DataAnnotations.Column(Position = 3)]
         public int VersionNo { get; set; }
 
-        /// <summary>发布前 JSON（备份——首次发布 null/空；text 大文本）。</summary>
+        /// <summary>发布前 JSON（备份——首次发布 null/空；text 大文本）。
+        /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——缺省映射 varchar(255) 会被完整菜单 JSON 撑爆（Pg 22001）。</para></summary>
         [FreeSql.DataAnnotations.Column(Position = 4)]
+        [MaxLength(-1)]
         public string? BeforeJson { get; set; }
 
-        /// <summary>发布后 JSON（本版本最终结构；text 大文本——回滚数据源）。</summary>
+        /// <summary>发布后 JSON（本版本最终结构；text 大文本——回滚数据源）。
+        /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——同上。</para></summary>
         [FreeSql.DataAnnotations.Column(Position = 5)]
+        [MaxLength(-1)]
         public string AfterJson { get; set; } = "";
 
         /// <summary>操作人（发布执行者标识——合并发布审计）。</summary>

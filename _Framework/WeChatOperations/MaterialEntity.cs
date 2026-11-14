@@ -23,8 +23,11 @@ namespace TKWF.Ext.WeChatOperations
         [MaxLength(200)]
         public string Name { get; set; } = "";
 
-        /// <summary>回复内容（文本——Kind=Text 时承载纯文本回复；News 时承载文章内容 JSON）。</summary>
+        /// <summary>回复内容（文本——Kind=Text 时承载纯文本回复；News 时承载文章内容 JSON）。
+        /// <para>[MaxLength(-1)]：FreeSql 无界字符串约定（Pg=text）——缺省映射 varchar(255)
+        /// 会被长文本素材/文章 JSON 撑爆（Pg 22001，2026-11-14 MenuSnapshot 同型事故复查发现）。</para></summary>
         [FreeSql.DataAnnotations.Column(Position = 3)]
+        [MaxLength(-1)]
         public string? Content { get; set; }
 
         /// <summary>标题（图文——Kind=News）。</summary>

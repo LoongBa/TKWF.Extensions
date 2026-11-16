@@ -130,6 +130,10 @@
   <Folder Name="/_Tests/Extension.SmsCode.Tests/">
     <Project Path="_Tests/Extension.SmsCode.Tests/TKWF.Ext.SmsCode.Tests.csproj" />
   </Folder>
+  <!-- v0.1.0 Captcha M4 测试项目（§7 Capture 行——Issue/Verify 正负 + 尝试上限/TTL/单次消费/IP 频控/Provider 选中 fail-closed；纯内存型零 FreeSql） -->
+  <Folder Name="/_Tests/Extension.Captcha.Tests/">
+    <Project Path="_Tests/Extension.Captcha.Tests/TKWF.Ext.Captcha.Tests.csproj" />
+  </Folder>
   <!-- v0.1.0（2026-10-07 授权面立项——Oracle4 评审 PASS WITH CONDITIONS）：AuthSurface 主包 + 测试项目 -->
   <Folder Name="/_Framework/AuthSurface/">
     <Project Path="_Framework/AuthSurface/TKWF.Ext.AuthSurface.csproj" />

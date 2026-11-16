@@ -39,6 +39,9 @@ internal sealed class SmsCodeTestHost : IDisposable
     /// <summary>当前域用户（AOP 路径 CurrentAopUser 来源）。</summary>
     public DomainUser<TestUserInfo> User => _user;
 
+    /// <summary>根 ServiceProvider（守卫形态断言——实现类直解抛 / 帧外解析抛，对齐 CaptchaTestHost）。</summary>
+    public ServiceProvider Services => _provider;
+
     public T GetRequiredService<T>() where T : notnull => _provider.GetRequiredService<T>();
 
     private SmsCodeTestHost(ServiceProvider provider, DomainUser<TestUserInfo> user, IFreeSql fsql, string? dbPath)

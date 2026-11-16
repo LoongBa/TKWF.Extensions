@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.AuthSurface.DTOs;
 
@@ -61,15 +64,11 @@ partial class RedemptionCodeEntityDataService(IDomainUser user, IEntityDAC<Redem
             ct: ct) > 0;
 
     /// <summary>
-    /// 该批「未兑」（status==0）码计数（v0.3.0 T-3 全吊销判定）——EntitySelectAsync 拉取后 C# 计数
-    /// （<c>GroupCountAsync</c> 按 BatchId 分组聚合的统计归 <c>IRedemptionQueryService/ICodeBatchService</c> 列表路径，
-    /// 本方法仅吊销联动的"==0"终态判定——limit 1 拉取样即可判空，批次量级 ≤5000 全量也可接受）。
+    /// 该批「未兑」（status==0）码计数（v0.3.0 T-3 全吊销判定）——SQL COUNT 下推
+    /// （v0.3.1：替代 V0.3.0 `EntitySelectAsync(limit:int.MaxValue)` 全量拉取 + C# Count）。
     /// </summary>
     public async Task<int> CountActiveByBatchAsync(long batchId, CancellationToken ct = default)
-    {
-        var rows = await EntitySelectAsync(e => e.BatchId == batchId && e.Status == 0, skip: 0, limit: int.MaxValue, ct: ct);
-        return rows.Count;
-    }
+        => (int)await CountAsync(e => e.BatchId == batchId && e.Status == 0, ct);
 
     /// <summary>
     /// 该批统计分桶（v0.3.0 T-2 列表/详情统计口径）——拉取该批全部码行（status + expire_at_utc 两投影列），C# 分桶
@@ -80,7 +79,63 @@ partial class RedemptionCodeEntityDataService(IDomainUser user, IEntityDAC<Redem
     public async Task<CodeBatchStatsDto> GetStatsByBatchIdAsync(long batchId, CancellationToken ct = default)
     {
         var rows = await EntitySelectAsync(e => e.BatchId == batchId, skip: 0, limit: int.MaxValue, ct: ct);
+        return Bucketize(rows, DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// 批量统计分桶（v0.3.1 性能整改——替代列表页 N+1 循环 <see cref="GetStatsByBatchIdAsync"/>）：
+    /// **单查询** <c>GroupByAsync</c> 按 (BatchId, Status, 时间派生过期标志) 复合键 SQL GROUP BY 全下推
+    /// （键含条件表达式——Bool 派生列；验证：SQLite 实测通过，PG 同族翻译由 FreeSql 方言层处理），
+    /// 每批每状态一行（≤5 状态 × 页批次），C# 侧按 now 聚合分桶。
+    /// <para>返回字典键=批次 Id；未命中批次（如 DRAFT 无码）→ 字典无键，调用方按零分桶兜底。</para>
+    /// </summary>
+    public async Task<Dictionary<long, CodeBatchStatsDto>> GetStatsByBatchIdsAsync(
+        IReadOnlyCollection<long> batchIds, CancellationToken ct = default)
+    {
+        var result = new Dictionary<long, CodeBatchStatsDto>(batchIds.Count);
+        if (batchIds.Count == 0) return result;
+
         var now = DateTime.UtcNow;
+        var nullableIds = batchIds.Cast<long?>().ToArray();   // BatchId 为 long?（软引用列）——表达式外 Cast，IN 翻译类型匹配
+        var rows = await Query
+            .Where(e => nullableIds.Contains(e.BatchId))
+            .GroupByAsync(
+                e => new
+                {
+                    e.BatchId,
+                    e.Status,
+                    IsExpired = e.Status == 0 && e.ExpireAtUtc != null && e.ExpireAtUtc <= now,
+                },
+                g => g.Key.BatchId,                 // 排序须选键标量成员（匿名整键不可翻译——YearBucket 同形态）
+                descending: false,
+                topN: null,
+                g => new
+                {
+                    BatchId = g.Key.BatchId,
+                    Status = g.Key.Status,
+                    IsExpired = g.Key.IsExpired,
+                    Count = g.Count(),
+                },
+                ct);
+
+        foreach (var row in rows)
+        {
+            var id = row.BatchId ?? 0;                  // IN 过滤后 null 不可达——纯类型兜底
+            if (!result.TryGetValue(id, out var stats))
+                result[id] = stats = new CodeBatchStatsDto(0, 0, 0, 0);
+            long count = row.Count;
+            if (row.Status == 3) stats = stats with { RevokedCount = (int)(stats.RevokedCount + count) };
+            else if (row.Status == 2 || row.IsExpired) stats = stats with { ExpiredCount = (int)(stats.ExpiredCount + count) };
+            else if (row.Status == 1) stats = stats with { RedeemedCount = (int)(stats.RedeemedCount + count) };
+            else stats = stats with { PendingCount = (int)(stats.PendingCount + count) };
+            result[id] = stats;
+        }
+        return result;
+    }
+
+    /// <summary>码行 C# 分桶（共享口径：red/exp/rev/pend——见 <see cref="GetStatsByBatchIdAsync"/>）。</summary>
+    private static CodeBatchStatsDto Bucketize(List<RedemptionCodeEntity> rows, DateTime now)
+    {
         int redeemed = 0, expired = 0, revoked = 0;
         foreach (var r in rows)
         {

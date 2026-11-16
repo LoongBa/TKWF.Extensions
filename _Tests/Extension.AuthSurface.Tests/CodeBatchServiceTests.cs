@@ -384,6 +384,29 @@ public class CodeBatchServiceTests
         Assert.False(await facade.RevokeCodeAsync(manualId, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task GetBatches_Stats_SingleGroupBySql_NotNPlusOne()
+    {
+        using var fsql = AuthSurfaceTestHost.CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        var user = BindUser(sp);
+        var facade = user.Use<ICodeBatchService>();
+        _ = await SeedBatchWithCodesAsync(fsql, facade, channel: "official", test: false);
+
+        var sqlLog = new List<string>();
+        fsql.Aop.CommandBefore += (_, e) => sqlLog.Add(e.Command.CommandText);
+
+        var page = await facade.GetBatchesAsync(new CodeBatchFilter(Channel: "official"), 1, 20, TestContext.Current.CancellationToken);
+        Assert.Single(page.Items);
+        Assert.Equal(5, page.Items[0].GeneratedCount);
+
+        var statSql = sqlLog.Where(s => s.Contains("GROUP BY", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.Single(statSql);                                  // 单查询分组（非 N+1 逐批拉全量）
+
+        var dto = page.Items[0];
+        Assert.Equal(dto.GeneratedCount, dto.RedeemedCount + dto.PendingCount + dto.ExpiredCount + dto.RevokedCount);
+    }
+
     /// <summary>种子批次 + 5 码（2 已兑 / 2 过期未翻转 / 1 吊销）——经门面生成后直改码行状态（造数）。</summary>
     private static async Task<long> SeedBatchWithCodesAsync(IFreeSql fsql, ICodeBatchService facade, string? channel, bool test)
     {

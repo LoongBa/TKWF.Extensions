@@ -54,9 +54,9 @@ RedemptionErrorCodes / BatchErrorCodes                # 兑换/批次业务错�
 | `ICodeBatchService.CreateBatchAsync(request)` | 创建批次（DRAFT）；通用校验（Name/ProductName/TargetAppId 非空、Quantity 1..`MaxBatchQuantity`、ExpireAtUtc 晚于 now、Channel≤100、ValidityDays>0）；BatchNo=`B{yyyyMMdd}{4 随机}`（`RandomNumberGenerator.GetInt32` 无偏，唯一冲突重试 ≤3 次） |
 | `ICodeBatchService.GenerateBatchAsync(batchId, onPlainCode, ct)` | **生成即导出（回调主方案）**：CAS 抢占 DRAFT→GENERATING（谓词 `Status==0 && GeneratedCount==0`，败者 `BATCH_NOT_EDITABLE`）→ 逐码生成并经 `onPlainCode(明文, ct)` 一次性回调（门面不缓存/不落库/不落日志）→ 全量成功落 GENERATED + GeneratedCount + ExportedAtUtc；**回调异常/ct 取消 → 整体回滚 DRAFT**（已流出明文作废）；**同事务 CAS** ⇒ 进程崩溃 DB 回滚自然回 DRAFT 可重试 |
 | `ICodeBatchService.DeleteBatchAsync(batchId)` | 仅 DRAFT 物理删除（DRAFT 无码）；非 DRAFT → `BATCH_NOT_EDITABLE`；不存在 → `BATCH_NOT_FOUND` |
-| `ICodeBatchService.GetBatchesAsync(filter, page, pageSize)` | 批次列表 + **每批聚合统计一次查询**（filter：状态/渠道/创建时间/名称模糊/Test；pageSize 截断 ≤100） |
+| `ICodeBatchService.GetBatchesAsync(filter, page, pageSize)` | 批次列表 + **每批聚合统计单查询**（v0.3.1：`GroupByAsync (BatchId,Status,时间派生过期)` 复合键 SQL GROUP BY 全下推——替代 v0.3.0 N+1 逐批全量拉取；filter：状态/渠道/创建时间/名称模糊/Test；pageSize 截断 ≤100） |
 | `ICodeBatchService.GetBatchAsync(batchId)` | 详情 + 统计 + 派生 `PartialRevoked`（`Status==GENERATED && RevokedCount>0 && 待兑+过期>0`） |
-| `ICodeBatchService.GetBatchCodesAsync(batchId, page, pageSize, status?)` | 券明细分页（仅掩码/状态/归属/时间——**明文不出现**；越界=空页） |
+| `ICodeBatchService.GetBatchCodesAsync(batchId, page, pageSize, status?)` | 券明细分页（仅掩码/状态/归属/时间——**明文不出现**；越界=空页；v0.3.1：SQL 分页下推 `skip/take` + `CountAsync` 计数——替代 v0.3.0 全量取内存分页） |
 | `ICodeBatchService.RevokeBatchAsync(batchId)` | 整批吊销：单语句条件更新（`BatchId==? && Status==0` → `Status=3`）+ 批次同事务 GENERATED→REVOKED；已兑不动；**吞没「已过期未翻转」码**（统计口径 expired→revoked）；REVOKED 幂等返回；DRAFT/GENERATING → `BATCH_NOT_EDITABLE` |
 | `ICodeBatchService.RevokeCodeAsync(codeId)` | 单码吊销：`Id==? && Status==0` → `Status=3`，返回 bool（已兑/已吊销 → false 幂等不抛）；翻成功 → 同事务判定「该批 `Status==0` 计数==0」→ 批次升 REVOKED |
 
@@ -173,7 +173,7 @@ TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserI
 
 ## 测试基线
 
-`Extension.AuthSurface.Tests`——**49 用例全绿**（v0.3.0：+21——批次创建校验 4 / 生成回调与 CAS 4 / 删除 1 / 统计口径 1 / 明细分页 1 / 吊销 3 / 契约 6〔expireAt 互斥、Revoked 403、GetByCode、GetPayload、T-7 链路、分页〕；既有 28：兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言/软禁用聚合语义；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成**（ProjectReference + 双白名单））。⚠️ **事务边界**：SQLite 单写者锁限制——批次生成/吊销用例验证 Begin/Commit/Rollback **结构**（Recording 事务管理器），**物理原子性归 PostgreSQL**（仓库约定 `docs/测试约定-SQLite物理事务与Noop限制.md` §2.2）。
+`Extension.AuthSurface.Tests`——**51 用例全绿**（v0.3.0：+21——批次创建校验 4 / 生成回调与 CAS 4 / 删除 1 / 统计口径 1 / 明细分页 1 / 吊销 3 / 契约 6〔expireAt 互斥、Revoked 403、GetByCode、GetPayload、T-7 链路、分页〕；**v0.3.1：+1——`GetBatches_Stats_SingleGroupBySql_NotNPlusOne`（GROUP BY 单查询断言）**；既有 28：兑换链路端到端/负路径/并发 CAS 单胜/频控/跨扩展视图 JOIN/仅本人/目录 CRUD/守卫工厂装配断言/软禁用聚合语义；跨扩展基表由 AuthCenter 实体 SyncStructure 建——**双扩展集成**（ProjectReference + 双白名单））。⚠️ **事务边界**：SQLite 单写者锁限制——批次生成/吊销用例验证 Begin/Commit/Rollback **结构**（Recording 事务管理器），**物理原子性归 PostgreSQL**（仓库约定 `docs/测试约定-SQLite物理事务与Noop限制.md` §2.2）。
 
 > ⚠️ **v0.2.0 包（2026-10-10）ViewSql 含 `ac."AuthLevel"` 投影**——与 AuthCenter V0.11.0+ 组合部署建视图存在列失配风险，请升级至含修复的后续版本。
 

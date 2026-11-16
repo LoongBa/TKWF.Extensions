@@ -27,6 +27,10 @@
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
     <!-- v4.10.67 适配：IRateLimitCheck 点检查原语（兑换尝试频控——TKW.Framework.Utility.RateLimitChecks；DLL 模式集中块含 Utility） -->
     <PackageReference Include="TKWF.Utility" Condition="'$(UseLocalFw)' != 'true'" />
+    <!-- SQL 级分组聚合扩展（FreeSqlQueryableExtensions——V4.10.39 F7 分组聚合 API：
+         GetStatsByBatchIdsAsync 批量统计 SQL 下推用，v0.3.1）——双模式条件化 -->
+    <PackageReference Include="TKWF.Domain.FreeSql" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.FreeSql" HintPath="$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.FreeSql.dll')" />
 
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />

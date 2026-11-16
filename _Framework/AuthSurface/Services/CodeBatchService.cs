@@ -221,17 +221,23 @@ internal sealed class CodeBatchService : DomainServiceBase, ICodeBatchService
         if (f.Test is { } t) parts.Add(e => e.Test == t);
         System.Linq.Expressions.Expression<Func<CodeBatchEntity, bool>>? predicate = parts.Count == 0 ? null : CombineAnd(parts);
 
-        // 全量取过滤结果（批次量级小——R2 降级分桶；页内逐批统计）
-        var all = await BatchDataService.EntitySelectAsync(predicate, skip: 0, limit: int.MaxValue,
+        // v0.3.1：SQL 分页下推（skip/take 实参）+ CountAsync 计数——替代 V0.3.0 全量取 + 内存分页
+        var total = (int)await BatchDataService.CountAsync(predicate, ct);
+        var pageRows = await BatchDataService.EntitySelectAsync(predicate,
+            skip: (p - 1) * size, limit: size,
             orderBy: q => q.OrderByDescending(e => e.CreateTime).ThenByDescending(e => e.Id), ct: ct);
-        var total = all.Count;
-        var pageRows = all.Skip((p - 1) * size).Take(size).ToList();
 
         var items = new List<CodeBatchDto>(pageRows.Count);
-        foreach (var b in pageRows)
+        if (pageRows.Count > 0)
         {
-            var stats = await CodeDataService.GetStatsByBatchIdAsync(b.Id, ct);
-            items.Add(ToDto(b, stats));
+            // v0.3.1：单查询批量统计（GroupByAsync 复合键含时间派生——SQL GROUP BY 全下推，替代 N+1 逐批 GetStatsByBatchIdAsync）
+            var statsByBatch = await CodeDataService.GetStatsByBatchIdsAsync(
+                pageRows.Select(b => b.Id).ToArray(), ct);
+            foreach (var b in pageRows)
+            {
+                statsByBatch.TryGetValue(b.Id, out var stats);
+                items.Add(ToDto(b, stats ?? new CodeBatchStatsDto(0, 0, 0, 0)));
+            }
         }
         return new CodeBatchPageDto(items, total);
     }
@@ -241,7 +247,10 @@ internal sealed class CodeBatchService : DomainServiceBase, ICodeBatchService
     {
         var batch = await BatchDataService.GetByIdAsync(batchId, ct)
             ?? throw new AuthenticationException(BatchErrorCodes.BatchNotFound);
-        var stats = await CodeDataService.GetStatsByBatchIdAsync(batchId, ct);
+        var statsByBatch = await CodeDataService.GetStatsByBatchIdsAsync(new[] { batchId }, ct);
+        var stats = statsByBatch.TryGetValue(batchId, out var s)
+            ? s
+            : new CodeBatchStatsDto(0, 0, 0, 0);
         var partial = batch.Status == 2                       // GENERATED（未整体吊销）
             && stats.RevokedCount > 0                          // 已有单张吊销
             && stats.PendingCount + stats.ExpiredCount > 0;    // 仍有未兑码（未全吊——全吊已在 RevokeCodeAsync 升 REVOKED）
@@ -256,15 +265,21 @@ internal sealed class CodeBatchService : DomainServiceBase, ICodeBatchService
         var p = Math.Max(page, 1);
         var size = Math.Clamp(pageSize, 1, 100);
 
+        // v0.3.1：SQL 分页下推（skip/take 实参——EntitySelectAsync 内部 q.Skip().Take()）；Total 经 CountAsync SQL 计数
+        // （替代 V0.3.0 全量取 `limit: int.MaxValue` + 内存 Skip/Take——单批 ≤5000 行不再整批拉取）
+        var predicate = (System.Linq.Expressions.Expression<Func<RedemptionCodeEntity, bool>>)
+            (status == null
+                ? (System.Linq.Expressions.Expression<Func<RedemptionCodeEntity, bool>>)(e => e.BatchId == batchId)
+                : e => e.BatchId == batchId && e.Status == status.Value);
+        var total = (int)await CodeDataService.CountAsync(predicate, ct);
         var rows = await CodeDataService.EntitySelectAsync(
-            e => e.BatchId == batchId && (status == null || e.Status == status.Value),
-            skip: 0, limit: int.MaxValue,
+            predicate,
+            skip: (p - 1) * size, limit: size,
             orderBy: q => q.OrderByDescending(e => e.RedeemedAtUtc).ThenByDescending(e => e.Id), ct: ct);
         return new CodePageDto(
-            rows.Skip((p - 1) * size).Take(size)
-                .Select(r => new CodeMaskedRowDto(r.Id, r.CodeMasked, r.Status, r.RedeemedByUId, r.RedeemedAtUtc))
+            rows.Select(r => new CodeMaskedRowDto(r.Id, r.CodeMasked, r.Status, r.RedeemedByUId, r.RedeemedAtUtc))
                 .ToList(),
-            rows.Count);
+            total);
     }
 
     /// <inheritdoc />

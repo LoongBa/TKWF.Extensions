@@ -115,6 +115,21 @@
 <Folder Name="/_Framework/AuthCenter.Abstractions/">
     <Project Path="_Framework/AuthCenter.Abstractions/TKWF.Ext.AuthCenter.Abstractions.csproj" />
   </Folder>
+  <!-- v0.1.0（2026-11-15 SmsCode + Captcha 立项——M0 方案评审 PASS 闭环）：SmsCode 主包（短信验证码引擎——M1 骨架实施中） -->
+  <Folder Name="/_Framework/SmsCode/">
+    <Project Path="_Framework/SmsCode/TKWF.Ext.SmsCode.csproj" />
+  </Folder>
+  <!-- v0.1.0（2026-11-15 M2 里程碑）：Captcha 主包（人机验证——SPI + 本地图形 Provider + 挑战态 + 门面，零实体零 SG1）+ 契约包 -->
+  <Folder Name="/_Framework/Captcha.Abstractions/">
+    <Project Path="_Framework/Captcha.Abstractions/TKWF.Ext.Captcha.Abstractions.csproj" />
+  </Folder>
+  <Folder Name="/_Framework/Captcha/">
+    <Project Path="_Framework/Captcha/TKWF.Ext.Captcha.csproj" />
+  </Folder>
+  <!-- v0.1.0 SmsCode M1 测试项目（引擎 + 实体 DataService 生产路径；⚠️[FACADE-M3] 门面测试待 SmsCodeService/Initializer 落地） -->
+  <Folder Name="/_Tests/Extension.SmsCode.Tests/">
+    <Project Path="_Tests/Extension.SmsCode.Tests/TKWF.Ext.SmsCode.Tests.csproj" />
+  </Folder>
   <!-- v0.1.0（2026-10-07 授权面立项——Oracle4 评审 PASS WITH CONDITIONS）：AuthSurface 主包 + 测试项目 -->
   <Folder Name="/_Framework/AuthSurface/">
     <Project Path="_Framework/AuthSurface/TKWF.Ext.AuthSurface.csproj" />

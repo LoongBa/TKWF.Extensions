@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Captcha</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Captcha/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.Captcha</PackageId>
+    <Description>TKWF 扩展：人机验证（Captcha）——ICaptchaProvider SPI + 本地图形 Provider（v1 SVG 零第三方依赖）+ 挑战门面（Issue/Verify fail-closed）+ 挑战态存储（v1 in-memory TTL/尝试上限/单次消费）；扩展零端点（wire 契约归消费方；SmsCode 门禁内联消费）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用（Directory.Build.props）；false→PackageReference -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+  </ItemGroup>
+
+  <!-- v0.1.0（方案 §5.1/§5.4）：SPI + 门面契约在 Captcha.Abstractions（L2 门控合法——契约包非主包，
+       对齐 AuthCenter → AuthCenter.Abstractions 先例；Abstractions 仅依赖 TKWF.Domain 无循环） -->
+  <ItemGroup>
+    <ProjectReference Include="..\Captcha.Abstractions\TKWF.Ext.Captcha.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- 挑战态存储（v1 in-memory IMemoryCache——方案 §5.2）+ 取题 IP 频控（IRateLimitCheck——框架 v4.10.67） -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+  </ItemGroup>
+
+  <!-- 取题 IP 频控依赖 IHttpContextAccessor（RemoteIpAddress）——FrameworkReference Microsoft.AspNetCore.App
+       （net10 共享框架零 NuGet 依赖），对齐 AuthCenter 先例 -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- 测试项目访问 internal（M4 测试里程碑） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Captcha.Tests" />
+  </ItemGroup>
+
+</Project>

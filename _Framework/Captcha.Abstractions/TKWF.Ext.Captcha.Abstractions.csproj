@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.Captcha</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>Captcha.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.Captcha.Abstractions</PackageId>
+    <Description>TKWF 人机验证契约抽象（Captcha.Abstractions——ICaptchaProvider / ICaptchaService / CaptchaChallenge / CaptchaVerifyResult）——依赖倒置（ADR48 D7 / v0.1.0 方案）：Captcha 主包实现契约，SmsCode 模块与消费方经契约包消费（零实体、零 SG1、零 Initializer；namespace 保持 TKWF.Ext.Captcha——跨程序集同 namespace，消费方零 using 迁移）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 2026-11-15（v0.1.0 方案 §5.4）：契约包只放接口 + 不可变 DTO（record）——零实体、零 SG1 分析器
+         （对齐 Federation.Abstractions / AuthCenter.Abstractions 形态）；但契约继承 IDomainService
+         （User.Use 帧内解析准入）需要 TKWF.Domain——非零框架引用（双模式条件化） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+  </ItemGroup>
+
+  <!-- M2：测试项目访问 internal（M4 测试里程碑） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.Captcha.Tests" />
+  </ItemGroup>
+
+</Project>

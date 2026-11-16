@@ -41,7 +41,7 @@ public class RedemptionAndAppsQueryServiceTests
         await RedeemCodeAsync(fsql, sp, "u-1001", "精品课程 B");
 
         var user = BindUser(sp, "u-1001");
-        var list = await user.Use<IRedemptionQueryService>().GetRedemptionsAsync("u-1001", CancellationToken.None);
+        var list = await user.Use<IRedemptionQueryService>().GetRedemptionsAsync("u-1001", ct: CancellationToken.None);
 
         Assert.Equal(2, list.Count);
         Assert.All(list, r => Assert.Equal("edu-course", r.TargetAppId));
@@ -60,7 +60,7 @@ public class RedemptionAndAppsQueryServiceTests
         await RedeemCodeAsync(fsql, sp, "u-1001", "精品课程 A");
 
         var user = BindUser(sp, "u-1002");
-        var list = await user.Use<IRedemptionQueryService>().GetRedemptionsAsync("u-1002", CancellationToken.None);
+        var list = await user.Use<IRedemptionQueryService>().GetRedemptionsAsync("u-1002", ct: CancellationToken.None);
 
         Assert.Empty(list);                                        // 不泄露 u-1001 的兑换记录
     }

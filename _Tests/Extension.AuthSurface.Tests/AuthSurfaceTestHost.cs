@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TKWF.Ext.AuthCenter;
 using TKWF.Ext.Testing.Shared;
+using TKW.Framework.Domain.FreeSql;
+using TKW.Framework.Domain.Transactions;
 
 namespace TKWF.Ext.AuthSurface.Tests;
 
@@ -14,11 +16,12 @@ namespace TKWF.Ext.AuthSurface.Tests;
 /// </summary>
 internal static class AuthSurfaceTestHost
 {
-    /// <summary>AuthSurface 实体（IEntityDAC 读写注册）。</summary>
+    /// <summary>AuthSurface 实体（IEntityDAC 读写注册——v0.3.0 + CodeBatchEntity 批次头）。</summary>
     private static readonly Type[] SurfaceEntityTypes =
     [
         typeof(RedemptionCodeEntity),
         typeof(AuthAppEntity),
+        typeof(CodeBatchEntity),
     ];
 
     /// <summary>AuthCenter 跨扩展实体（vm 视图 JOIN 基表 + 测试造数——身份锚 / 应用授权底座）。</summary>
@@ -58,6 +61,7 @@ internal static class AuthSurfaceTestHost
         // AuthSurface 表（先）
         fsql.CodeFirst.SyncStructure<RedemptionCodeEntity>();
         fsql.CodeFirst.SyncStructure<AuthAppEntity>();
+        fsql.CodeFirst.SyncStructure<CodeBatchEntity>();
         // AuthCenter 表（跨扩展——vm 视图 JOIN 基表；V0.9.0 表名 TKWF_AuthAccount/TKWF_AuthGrant，ADR100）
         fsql.CodeFirst.SyncStructure<AuthAccountEntity>();
         fsql.CodeFirst.SyncStructure<AuthGrantEntity>();
@@ -97,6 +101,8 @@ LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");
         var services = new ServiceCollection();
         services.AddLogging();
         new AuthSurfaceExtensionInitializer<TestUserInfo>().ConfigureServices(services);
+        // 双扩展集成（ConsumerHostInitializer 双白名单的测试宿主等价接线——T-7 redeem 源授权写入经 AuthCenter 门面）
+        new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
         services.AddOptions<AuthSurfaceOptions>().Configure(o =>
         {
             // 测试宿主 dev 模式——FileSymmetricKeyProvider 未配置密钥路径时随机 32 字节兜底（生产 fail-fast 语义由生产路径测试锁定）
@@ -105,6 +111,10 @@ LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");
 
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();
+        // v0.3.0：批次门面事务结构验证（CodeBatchService 注入 ITransactionManager）——Recording 记录型
+        // （docs/测试约定-SQLite物理事务与Noop限制.md §2.2：SQLite 单写者锁 + uow/池连接不一致 → 禁真实 FreeSqlTransactionManager；
+        //  物理原子性归 PostgreSQL，本宿主验证 Begin/Commit/Rollback 调用形态）
+        services.AddSingleton<ITransactionManager, RecordingTransactionManager>();
         RegisterDacs(services);
 
         configure?.Invoke(services);
@@ -135,4 +145,90 @@ LEFT JOIN ""TKWF_AuthApp"" a ON g.""AppId"" = a.""AppId""");
             CreateTime = DateTime.UtcNow,
             UpdateTime = DateTime.UtcNow,
         }).ExecuteAffrowsAsync();
+}
+
+/// <summary>
+/// 记录型事务管理器（v0.3.0 批次门面事务结构验证）——统计 Begin/Commit/Rollback 调用；
+/// 未 Commit 的 Scope 释放计入 Rollback（对齐 FreeSql UnitOfWork 释放即回滚语义）。
+/// <para>SQLite 上不投入真实事务（测试约定 §2.2）；物理原子性由 PostgreSQL 场景验证。</para>
+/// </summary>
+internal sealed class RecordingTransactionManager : ITransactionManager
+{
+    private int _begins;
+    private int _commits;
+    private int _rollbacks;
+
+    public int BeginCount => Volatile.Read(ref _begins);
+    public int CommitCount => Volatile.Read(ref _commits);
+    public int RollbackCount => Volatile.Read(ref _rollbacks);
+
+    public bool IsActive => false;
+
+    public ITransactionScope Begin(System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Serializable)
+    {
+        Interlocked.Increment(ref _begins);
+        return new Scope(this);
+    }
+
+    public Task<ITransactionScope> BeginAsync(
+        System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Serializable,
+        CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _begins);
+        return Task.FromResult<ITransactionScope>(new Scope(this));
+    }
+
+    private sealed class Scope(RecordingTransactionManager owner) : ITransactionScope
+    {
+        private bool _completed;
+
+        public bool IsActive => !_completed;
+
+        public void Commit()
+        {
+            if (_completed) return;
+            _completed = true;
+            Interlocked.Increment(ref owner._commits);
+        }
+
+        public Task CommitAsync(CancellationToken ct = default)
+        {
+            Commit();
+            return Task.CompletedTask;
+        }
+
+        public Task RollbackAsync(CancellationToken ct = default)
+        {
+            if (!_completed)
+            {
+                _completed = true;
+                Interlocked.Increment(ref owner._rollbacks);
+            }
+            return Task.CompletedTask;
+        }
+
+        public void Rollback()
+        {
+            if (!_completed)
+            {
+                _completed = true;
+                Interlocked.Increment(ref owner._rollbacks);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                _completed = true;
+                Interlocked.Increment(ref owner._rollbacks);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }

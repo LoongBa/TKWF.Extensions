@@ -19,13 +19,22 @@ public static class AuthGrantSources
 }
 
 /// <summary>
-/// 应用授权写入门面——跨聚合写归门面（V0.8.0，Oracle P1-1：OAuthTicketService 不得直触 AuthGrantEntityDataService）。
-/// <para>upsert 幂等：UserId+AppId+Source 唯一约束（UX_AuthGrant_User_App_Source），存在刷新 Active / 不存在创建；
+/// 应用授权写入门面——跨聚合写归门面（V0.8.0，Oracle P1-1：OAuthTicketService 不得直触 AuthGrantEntityDataService；
+/// V0.3.0 泛化 T-7：<see cref="RecordGrantAsync"/> Source/ValidUntil 参数化——redeem 源写路径）。
+/// <para>upsert 幂等：UserId+AppId+Source 唯一约束（UX_AuthGrant_User_App_Source），存在刷新 Active+覆写 ValidUntil / 不存在创建；
 /// DB 唯一约束兜底 TOCTOU（并发两写败者冲突 → catch → 重查转 update）。</para>
 /// </summary>
 public interface IAuthGrantCommandService : IDomainService
 {
-    /// <summary>记录登录授权（upsert 幂等：UserId+AppId+Source=Login 唯一约束，存在刷新 Active / 不存在创建）。</summary>
+    /// <summary>记录应用授权（upsert 幂等泛化——Source/ValidUntil 参数化；redeem 源写路径 T-7）。
+    /// 复合键 (UserId+AppId+Source) 存在 → 以传入 validUntilUtc 覆写 + Status=Active + UpdateTime；
+    /// 不存在 → 创建（ValidUntil=传入值）。⚠️ 覆写=last-writer-wins，并发叠加防丢失更新（B1 I-5c 按用户串行化）归消费方编排。</summary>
+    /// <remarks>匿名面声明：redeem 源为匿名/服务间调用链内触发（门面帧内）。</remarks>
+    [AllowAnonymousFlag]
+    Task RecordGrantAsync(string userId, string appId, string source, DateTime? validUntilUtc, CancellationToken ct = default);
+
+    /// <summary>记录登录授权（upsert 幂等：UserId+AppId+Source=Login 唯一约束，存在刷新 Active / 不存在创建）。
+    /// 委托 <see cref="RecordGrantAsync"/>——login 源 ValidUntil 恒 null。</summary>
     /// <remarks>匿名面声明：exchange 为匿名端点调用链内触发（门面帧内）。</remarks>
     [AllowAnonymousFlag]
     Task RecordLoginGrantAsync(string userId, string appId, CancellationToken ct = default);
@@ -49,15 +58,17 @@ internal sealed class AuthGrantCommandService : DomainServiceBase, IAuthGrantCom
     }
 
     /// <inheritdoc />
-    public async Task RecordLoginGrantAsync(string userId, string appId, CancellationToken ct = default)
-    {
-        var source = AuthGrantSources.Login;
+    public Task RecordLoginGrantAsync(string userId, string appId, CancellationToken ct = default)
+        => RecordGrantAsync(userId, appId, AuthGrantSources.Login, null, ct);   // login 源 ValidUntil 恒 null（T-7 委托——行为保持）
 
-        // (a) upsert 幂等：复合键存在 → 刷新 Active 态（UpdateTime），不存在 → 创建
+    /// <inheritdoc />
+    public async Task RecordGrantAsync(string userId, string appId, string source, DateTime? validUntilUtc, CancellationToken ct = default)
+    {
+        // (a) upsert 幂等：复合键存在 → 覆写 ValidUntil + 刷新 Active 态（UpdateTime），不存在 → 创建
         var existing = await DataService.GetByKeyAsync(userId, appId, source, ct);
         if (existing is not null)
         {
-            await DataService.RefreshActiveAsync(existing.Id, DateTime.UtcNow, ct);
+            await DataService.RefreshActiveWithValidUntilAsync(existing.Id, validUntilUtc, DateTime.UtcNow, ct);
             return;
         }
 
@@ -67,8 +78,8 @@ internal sealed class AuthGrantCommandService : DomainServiceBase, IAuthGrantCom
             {
                 UserId = userId,
                 AppId = appId,
-                Scopes = "",           // login 源 v0.8.0 空串（scope 授权后续迭代）
-                ValidUntil = null,     // 应用授权有效期 null = 持续至吊销（非会话有效期）
+                Scopes = "",           // v0.8.0 空串（scope 授权后续迭代）
+                ValidUntil = validUntilUtc,
                 Source = source,
                 Status = 0             // Active
             }, ct);
@@ -79,7 +90,7 @@ internal sealed class AuthGrantCommandService : DomainServiceBase, IAuthGrantCom
             var winner = await DataService.GetByKeyAsync(userId, appId, source, ct);
             if (winner is not null)
             {
-                await DataService.RefreshActiveAsync(winner.Id, DateTime.UtcNow, ct);
+                await DataService.RefreshActiveWithValidUntilAsync(winner.Id, validUntilUtc, DateTime.UtcNow, ct);
             }
             else
             {

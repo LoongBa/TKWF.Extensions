@@ -52,4 +52,11 @@ partial class AuthGrantEntityDataService(IDomainUser user, IEntityDAC<AuthGrantE
             ct);
         return affected == 1;
     }
+
+    /// <summary>刷新 Active + 覆写 ValidUntil（T-7 redeem 源冲突路径——现 RefreshActiveAsync 不动 ValidUntil 的缺口修复）。</summary>
+    public async Task<bool> RefreshActiveWithValidUntilAsync(long id, DateTime? validUntilUtc, DateTime updateTime, CancellationToken ct = default)
+        => await EntityUpdateWhereAsync(
+            where: e => e.Id == id,
+            setColumns: e => new AuthGrantEntity { ValidUntil = validUntilUtc, Status = 0, UpdateTime = updateTime },
+            ct: ct) > 0;
 }

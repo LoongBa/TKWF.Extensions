@@ -14,6 +14,7 @@ namespace TKWF.Ext.AuthSurface;
 /// </summary>
 [Table("TKWF_RedemptionCode")]
 [FreeSql.DataAnnotations.Index("TKWFIX_RedemptionCode_CodeHash", nameof(CodeHash), IsUnique = true)]
+[FreeSql.DataAnnotations.Index("TKWFIX_RedemptionCode_BatchId", nameof(BatchId))]
 [DomainGenerateCode(DefaultPageSize = 50)]
 public partial class RedemptionCodeEntity
 {
@@ -37,8 +38,9 @@ public partial class RedemptionCodeEntity
     public string TargetAppId { get; set; } = "";
 
     /// <summary>
-    /// 状态——<remarks>0=Available / 1=Redeemed / 2=Expired（惰性翻转——查询时发现过期顺手标记）；
-    /// 对齐 AuthGrantEntity.Status(int) 先例；v0.2.0 考虑 RedemptionCodeStatus 枚举 + Revoked(管理作废)。</remarks>
+    /// 状态——<remarks>0=Available / 1=Redeemed / 2=Expired（惰性翻转——查询时发现过期顺手标记）/
+    /// 3=Revoked（v0.3.0 批次管理端整批/单码吊销——CAS 谓词 Status==0 天然排斥，兑换链路归 REDEMPTION_CODE_REVOKED）；
+    /// 对齐 AuthGrantEntity.Status(int) 先例；int 值域扩展不引枚举类型避免破坏。</remarks>
     /// </summary>
     [FreeSql.DataAnnotations.Column(Position = 6)]
     public int Status { get; set; }
@@ -68,4 +70,12 @@ public partial class RedemptionCodeEntity
     /// </summary>
     [FreeSql.DataAnnotations.Column(Position = 12, IsNullable = true, StringLength = 4000)]
     public string? PayloadEncrypted { get; set; }
+
+    /// <summary>
+    /// 批次软引用（v0.3.0 T-1——批次管理端）——对齐 <c>ManagedFileVersionEntity.FileId</c> 先例：
+    /// <c>long?</c> 直接存 <see cref="CodeBatchEntity.Id"/>，非唯一索引（<c>TKWFIX_RedemptionCode_BatchId</c>），
+    /// 代码级生命周期保证（批次仅 DRAFT 可删，DRAFT 无码）；手工造码（非批次）为 null。
+    /// </summary>
+    [FreeSql.DataAnnotations.Column(Position = 13, IsNullable = true)]
+    public long? BatchId { get; set; }
 }

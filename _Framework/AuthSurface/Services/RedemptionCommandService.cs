@@ -22,12 +22,14 @@ public interface IRedemptionCommandService : IDomainService
 {
     /// <summary>
     /// 创建兑换码（单码——v0.1.0 无批次管理端；返回<b>明文 code 一次性</b>——不落库不日志，库中仅存 SHA256 哈希 + 脱敏值）。
+    /// <para><paramref name="validity"/> = 券有效期相对时长（<c>ExpireAtUtc = UtcNow + validity</c>）；<paramref name="expireAtUtc"/>（v0.3.0 T-4）=
+    /// <b>绝对 UTC 瞬间</b>覆盖（<c>ExpireAtUtc = expireAtUtc ?? (validity 映射)</c>）；两者同传互斥校验抛 <see cref="ArgumentException"/>。</para>
     /// <para>v0.2.0 核验场景：<paramref name="payload"/> 为<b>核验业务信息明文</b>（如购买人信息/权益明细 JSON——运营侧传入），
     /// 门面经 keyed <see cref="ISymmetricKeyProvider"/> AES-GCM 加密落 <c>PayloadEncrypted</c>——<b>明文不落库</b>；
     /// null = 无附加信息（兼容 v0.1.0 调用）。<b>payload 长度上限 2800 字符</b>（密文列 VARCHAR(4000) 容量保障），超限抛 <see cref="ArgumentException"/>。</para>
     /// <para>运营侧调用（装配层管理员上下文；v0.2.0 批次管理端/权限控制）。</para>
     /// </summary>
-    Task<string> CreateCodeAsync(string productName, string targetAppId, TimeSpan? validity = null, CancellationToken ct = default, string? payload = null);
+    Task<string> CreateCodeAsync(string productName, string targetAppId, TimeSpan? validity = null, CancellationToken ct = default, string? payload = null, DateTime? expireAtUtc = null);
 
     /// <summary>
     /// 兑换（校验 → CAS 原子兑换 → 返回历史 DTO）；失败抛 <see cref="AuthenticationException"/>（错误码见 <see cref="RedemptionErrorCodes"/>）。
@@ -76,10 +78,14 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
     }
 
     /// <inheritdoc />
-    public async Task<string> CreateCodeAsync(string productName, string targetAppId, TimeSpan? validity = null, CancellationToken ct = default, string? payload = null)
+    public async Task<string> CreateCodeAsync(string productName, string targetAppId, TimeSpan? validity = null, CancellationToken ct = default, string? payload = null, DateTime? expireAtUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(productName);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetAppId);
+
+        // T-4（v0.3.0）：validity 相对时长 与 expireAtUtc 绝对瞬间 互斥（同传歧义——抛参）
+        if (validity is not null && expireAtUtc is not null)
+            throw new ArgumentException("validity（相对时长）与 expireAtUtc（绝对 UTC）互斥——同传二义", nameof(expireAtUtc));
 
         // payload 上限 2800 字符——密文列 VARCHAR(4000) 容量保障（ASCII 2800 字符 → base64(nonce‖cipher‖tag) 约 3740 ≤ 4000）
         if (payload is { Length: > MaxPayloadChars })
@@ -94,7 +100,7 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
             ProductName = productName,
             TargetAppId = targetAppId,
             Status = 0,                       // Available
-            ExpireAtUtc = validity is { } v ? now.Add(v) : null,
+            ExpireAtUtc = expireAtUtc ?? (validity is { } v ? now.Add(v) : null),
             PayloadEncrypted = string.IsNullOrWhiteSpace(payload) ? null : _keys.Encrypt(payload),
             CreateTime = now,
             UpdateTime = now,
@@ -128,11 +134,16 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
             throw new AuthenticationException(RedemptionErrorCodes.CodeInvalid);
         }
 
-        // 状态判定（已兑/过期——过期顺手惰性翻转 Status=2）
+        // 状态判定（已兑/过期/已吊销——过期顺手惰性翻转 Status=2；v0.3.0 T-3：Revoked 等价前置判定——TryAcquire 同计数，防枚举探态一致性）
         if (code.Status == 1)
         {
             _rateLimitCheck.TryAcquire(key, maxAttempts, window, out _);
             throw new AuthenticationException(RedemptionErrorCodes.CodeUsed);
+        }
+        if (code.Status == 3)
+        {
+            _rateLimitCheck.TryAcquire(key, maxAttempts, window, out _);
+            throw new AuthenticationException(RedemptionErrorCodes.RedemptionCodeRevoked);
         }
         if (code.Status == 2 || code.ExpireAtUtc is { } exp && exp <= DateTime.UtcNow)
         {
@@ -146,11 +157,11 @@ internal sealed class RedemptionCommandService : DomainServiceBase, IRedemptionC
         var ok = await CodeDataService.RedeemCodeAsync(code.Id, userId, redeemedAt, ct);
         if (!ok)
         {
-            // CAS 败者——重查判定（并发双兑/刚过期）
+            // CAS 败者——重查判定（并发双兑/刚过期/刚吊销；v0.3.0 T-3 三分：Used / Revoked / Expired）
             var fresh = await CodeDataService.GetByCodeHashAsync(hash, ct);
             _rateLimitCheck.TryAcquire(key, maxAttempts, window, out _);
-            throw fresh is { Status: 1 }
-                ? new AuthenticationException(RedemptionErrorCodes.CodeUsed)
+            throw fresh is { Status: 1 } ? new AuthenticationException(RedemptionErrorCodes.CodeUsed)
+                : fresh is { Status: 3 } ? new AuthenticationException(RedemptionErrorCodes.RedemptionCodeRevoked)
                 : new AuthenticationException(RedemptionErrorCodes.CodeExpired);
         }
 

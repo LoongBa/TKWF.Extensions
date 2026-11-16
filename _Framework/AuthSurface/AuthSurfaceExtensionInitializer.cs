@@ -12,7 +12,7 @@ namespace TKWF.Ext.AuthSurface;
 
 /// <summary>
 /// 授权面扩展初始化器——口令兑换体系 + 我的应用聚合 + 授权快照候选（数据属主 = 兑换/授权记录）。
-/// <para>DI 注册（V0.1.0）：4 门面 <c>AddConstructibleService</c>（守卫工厂，消费方 <c>User.Use&lt;接口&gt;()</c> 解析）；
+/// <para>DI 注册（V0.1.0 四门面 + V0.3.0 批次门面共 5 门面）：<c>AddConstructibleService</c>（守卫工厂，消费方 <c>User.Use&lt;接口&gt;()</c> 解析）；
 /// 实体 DataService + VEntity 只读 DataService 由 SG1/ADR61 自动注册（Initializer 零手动）；<c>IRateLimitCheck</c>
 /// 内存默认 fallback（v4.10.67——未启用 RateLimiting 扩展时兑换频控不消失；R2 SqlCount 提供后可替换，TryAdd 语义）。</para>
 /// </summary>
@@ -23,7 +23,7 @@ public class AuthSurfaceExtensionInitializer<TUserInfo> : ExtensionInitializer<T
     public override string Name => "AuthSurface";
 
     public override string Description
-        => "授权面——口令兑换体系（code/redemption/grant/batch + 管理端 v0.2.0）+ 我的应用聚合 + 授权快照候选；行级 FK=AuthAccount.UId（P4）；兑换/应用查询经本扩展自有门面（跨扩展 VEntity——UserCenter 退役后唯一通道）；兑换码 SHA256 哈希存储 + CAS 原子兑换 + 频控";
+        => "授权面——口令兑换体系（code/redemption/grant + 批次域 v0.3.0：CodeBatch/批次门面）+ 我的应用聚合 + 授权快照候选；行级 FK=AuthAccount.UId（P4）；兑换/应用查询经本扩展自有门面（跨扩展 VEntity——UserCenter 退役后唯一通道）；兑换码 SHA256 哈希存储 + CAS 原子兑换 + 频控 + Revoked 吊销态";
 
     public override void ConfigureServices(IServiceCollection services)
     {
@@ -47,6 +47,7 @@ public class AuthSurfaceExtensionInitializer<TUserInfo> : ExtensionInitializer<T
         services.AddConstructibleService<IRedemptionQueryService, RedemptionQueryService>();
         services.AddConstructibleService<IUserAppsQueryService, UserAppsQueryService>();
         services.AddConstructibleService<IAuthAppService, AuthAppService>();
+        services.AddConstructibleService<ICodeBatchService, CodeBatchService>();   // v0.3.0 批次管理门面（T-0~T-3）
     }
 
     // ConfigureFilters: 空（非过滤器扩展）

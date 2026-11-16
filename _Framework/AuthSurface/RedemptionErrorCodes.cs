@@ -15,6 +15,9 @@ public static class RedemptionErrorCodes
     /// <summary>兑换码已过期（ExpireAtUtc 已过——顺手惰性翻转 Status=2）。</summary>
     public const string CodeExpired = "REDEMPTION_CODE_EXPIRED";
 
+    /// <summary>兑换码已被吊销（v0.3.0 批次管理端整批/单码吊销——Status=3，CAS 谓词 Status==0 天然排斥）。</summary>
+    public const string RedemptionCodeRevoked = "REDEMPTION_CODE_REVOKED";
+
     /// <summary>兑换尝试频控超限（窗口内无效码尝试超上限）。</summary>
     public const string TooManyAttempts = "REDEMPTION_TOO_MANY_ATTEMPTS";
 }

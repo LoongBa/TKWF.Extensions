@@ -419,5 +419,11 @@ internal static class AuthCenterEndpointHost
             Invoked = true;
             return Task.CompletedTask;
         }
+
+        public Task RecordGrantAsync(string userId, string appId, string source, DateTime? validUntilUtc, CancellationToken ct = default)
+        {
+            Invoked = true;
+            return Task.CompletedTask;
+        }
     }
 }

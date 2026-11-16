@@ -27,4 +27,7 @@ public class AuthSurfaceOptions
     /// 开发环境置 false 允许自动生成随机密钥 + Warning）。
     /// </summary>
     public bool IsProduction { get; set; } = true;
+
+    /// <summary>单批计划数量上限（v0.3.0 批次管理端，默认 5000——通用校验；业务政策白名单归消费方）。</summary>
+    public int MaxBatchQuantity { get; set; } = 5000;
 }

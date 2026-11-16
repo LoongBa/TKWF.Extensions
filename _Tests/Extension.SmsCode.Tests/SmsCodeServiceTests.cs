@@ -188,6 +188,31 @@ public class SmsCodeServiceTests
     }
 
     [Fact]
+    public async Task VerifyCodeAsync_IpBucketShared_FromSend_RejectsVerify()
+    {
+        var sender = new TestSmsSender();
+        // P1 审核修复：verify 亦消费 IP 桶（smscode:ip:{scope}:{ip}——与 send 共享配额，防换 subject 枚举 verify 面）
+        // SmsHourlyLimitPerIp=2；宿主无 IHttpContextAccessor → unknown 桶
+        using var host = CreateHost(TestOptions(o =>
+        {
+            o.SmsHourlyLimitPerIp = 2;
+            o.SmsResendIntervalSeconds = 0;
+            o.SmsDailyLimitPerSubject = 100;
+            o.SmsHourlyLimitPerSubject = 100;
+        }), sender);
+        var svc = host.User.Use<ISmsCodeService>();
+
+        // send 消耗 2 次 IP 配额（不同 subject 同桶）
+        Assert.True((await Send(svc, "13800000001")).Sent);
+        Assert.True((await Send(svc, "13800000002")).Sent);
+        // verify（不同 subject）也应被 IP 桶拒——共享单桶语义
+        var verify = await svc.VerifyCodeAsync(SmsScenes.Login, "13800000003", "000000", TestContext.Current.CancellationToken);
+
+        Assert.False(verify.Verified);
+        Assert.Equal(SmsCodeFailure.RateLimited, verify.Failure);
+    }
+
+    [Fact]
     public async Task SendCodeAsync_ProductionNoSender_ReturnsSenderUnavailable()
     {
         using var host = CreateHost(TestOptions());   // IsProduction=true，无 sender

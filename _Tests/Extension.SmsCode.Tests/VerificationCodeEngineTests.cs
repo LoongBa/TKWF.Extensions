@@ -56,6 +56,16 @@ public class VerificationCodeEngineTests
         Assert.True(Regex.IsMatch(code, $"^\\d{{{length}}}$"), $"生成码应全为 {length} 位数字，实际：{code}");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(16)]
+    public void GenerateCode_OutOfRangeLength_Throws(int length)
+    {
+        // P2 审核修复：10⁹ 超出 int.MaxValue——显式 ArgumentOutOfRangeException（防 Math.Pow 溢出异常）
+        Assert.Throws<ArgumentOutOfRangeException>(() => VerificationCodeEngine.GenerateCode(length));
+    }
+
     // ── HashCode ────────────────────────────────────────────────────
 
     [Fact]

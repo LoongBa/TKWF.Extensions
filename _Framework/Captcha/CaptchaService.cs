@@ -40,8 +40,11 @@ internal sealed class CaptchaService : DomainServiceBase, ICaptchaService
         IEnumerable<ICaptchaProvider> providers,
         IOptions<CaptchaOptions> options,
         IRateLimitCheck rateLimit,
-        IHttpContextAccessor? httpContextAccessor,
-        ILogger<CaptchaService> logger)
+        // 审核观察修复：= null 默认值——ActivatorUtilities 将无默认值的可空引用类型视为必选，
+        // 裸 ServiceCollection 宿主（控制台/后台任务）未注册 IHttpContextAccessor 时门面激活失败；
+        // Web 宿主自动注册天然覆盖；缺省 null → "unknown" 桶（fail-closed）
+        IHttpContextAccessor? httpContextAccessor = null,
+        ILogger<CaptchaService>? logger = null)
         : base(user)
     {
         _providers = providers?.ToList() ?? throw new ArgumentNullException(nameof(providers));

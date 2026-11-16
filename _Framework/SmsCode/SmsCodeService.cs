@@ -87,6 +87,8 @@ internal sealed class SmsCodeService : DomainServiceBase, ISmsCodeService
         var options = _options.Value;
 
         // (1) 频控检查——重发间隔 / 小时 / 日（SmsCodeRecord 为频控数据源，含已消费与过期记录）
+        //     retryAfter 语义（方案 §6）："距最严约束重置秒数"= 窗口内最老记录 + 窗口 - now（审核 P2 修复：
+        //     旧实现给"窗长"或"到午夜"——非真实重置时刻，误导消费方自推）
         var latest = await DataService.GetLatestUnverifiedAsync(subject, scene, ct);
         if (latest is not null
             && now.Subtract(latest.CreateTime).TotalSeconds < options.SmsResendIntervalSeconds)
@@ -97,13 +99,15 @@ internal sealed class SmsCodeService : DomainServiceBase, ISmsCodeService
 
         if (await DataService.CountSentAsync(subject, scene, now.AddHours(-1), ct) >= options.SmsHourlyLimitPerSubject)
         {
-            var retryAfter = 3600 - (int)now.Subtract(now.AddHours(-1)).TotalSeconds;
+            var oldest = await DataService.GetOldestInWindowAsync(subject, scene, now.AddHours(-1), ct);
+            var retryAfter = oldest is null ? 3600 : 3600 - (int)now.Subtract(oldest.Value).TotalSeconds;
             return new SmsCodeSendResult(false, SmsCodeSendFailure.RateLimited, retryAfter);
         }
 
         if (await DataService.CountSentAsync(subject, scene, now.AddDays(-1), ct) >= options.SmsDailyLimitPerSubject)
         {
-            var retryAfter = 86400 - (int)now.TimeOfDay.TotalSeconds;
+            var oldest = await DataService.GetOldestInWindowAsync(subject, scene, now.AddDays(-1), ct);
+            var retryAfter = oldest is null ? 86400 : 86400 - (int)now.Subtract(oldest.Value).TotalSeconds;
             return new SmsCodeSendResult(false, SmsCodeSendFailure.RateLimited, retryAfter);
         }
 
@@ -181,7 +185,16 @@ internal sealed class SmsCodeService : DomainServiceBase, ISmsCodeService
         var now = DateTime.UtcNow;
         var options = _options.Value;
 
-        // (1) 校验频控——verify 调用计数（15min 窗，IRateLimitCheck 点检查——修正 AuthCenter 缺陷落点：
+        // (1) IP 维度频控——send + verify 共享单桶（smscode:ip:{scope}:{ip}，fail-closed unknown 桶；
+        //     审核 P1 修复：verify 亦消费 IP 桶——防攻击者换 subject 无限枚举 verify 面；
+        //     与 SendCodeAsync 同一配额（SmsHourlyLimitPerIp），单向打通即双向封口）
+        var ipAddress = _httpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+        var ipKey = string.IsNullOrWhiteSpace(ipAddress) ? "unknown" : ipAddress;
+        if (_rateLimit is not null
+            && !_rateLimit.TryAcquire($"smscode:ip:{scope}:{ipKey}", options.SmsHourlyLimitPerIp, TimeSpan.FromHours(1), out _))
+            return new SmsCodeVerifyResult(false, SmsCodeFailure.RateLimited);
+
+        // (2) 校验频控——verify 调用计数（15min 窗，IRateLimitCheck 点检查——修正 AuthCenter 缺陷落点：
         //     计数调用而非活跃记录，防"成功消费后换新码无限试"）
         if (_rateLimit is not null
             && !_rateLimit.TryAcquire($"smscode:verify:{scope}:{scene}:{subject}", options.VerifyAttemptsPerWindow, TimeSpan.FromMinutes(15), out _))

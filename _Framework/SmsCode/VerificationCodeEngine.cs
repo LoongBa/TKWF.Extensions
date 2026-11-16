@@ -28,9 +28,13 @@ namespace TKWF.Ext.SmsCode
     internal static class VerificationCodeEngine
     {
         /// <summary>生成 N 位数字验证码（加密安全随机，禁 System.Random）。</summary>
-        /// <param name="length">位数（默认 6）。</param>
+        /// <param name="length">位数（默认 6；≤ 9——超出 int 上界抛 <see cref="ArgumentOutOfRangeException"/>，防 Pow 溢出）。</param>
         public static string GenerateCode(int length = 6)
         {
+            // 审核 P2 修复：Math.Pow(10, length) 在 length≥10 时超出 int.MaxValue（2,147,483,647）→ 显式拒绝
+            if (length is < 1 or > 9)
+                throw new ArgumentOutOfRangeException(nameof(length), "验证码位数须在 1-9 之间（10⁹ 超出 int 上界）");
+
             var code = RandomNumberGenerator.GetInt32((int)Math.Pow(10, length)).ToString("D" + length);
 
             // 边界防御：GetInt32 上限可能恰好落在 10^length 内——若生成位数不足（不走运的边界值），重试

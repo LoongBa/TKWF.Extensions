@@ -50,13 +50,10 @@ public class CaptchaServiceTests
         var code = ExtractCodeFromSvg(challenge.Payload);
         Assert.InRange(code.Length, 4, 6);
 
-        // ⚠️ [BUG-CAPTCHA-STORE] 正演：正确作答 → Passed=true——M2 规范语义。
-        // 实测：CaptchaChallengeStateStore.ExecuteAtomicAsync 移除路径（CaptchaChallengeState.cs:71 DropLock
-        // 先行 Dispose 仍持有的 SemaphoreSlim → 83 行 finally gate.Release 抛 ObjectDisposedException——
-        // 单次消费成功路径恒崩，Passed 不可达）。锁定为缺陷证据（修复后本断言自动恢复通过）。
-        var ex = await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken));
-        Assert.Contains("ObjectDisposedException", ex.GetType().Name);
+        // 正演：正确作答 → Passed=true（M2 规范语义——BUG-CAPTCHA-STORE 修复后恢复）
+        var ok = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.True(ok.Passed);
+        Assert.Null(ok.Score);
     }
 
     [Fact]
@@ -72,10 +69,9 @@ public class CaptchaServiceTests
         Assert.False(wrong.Passed);
         Assert.Null(wrong.Score);
 
-        // ⚠️ [BUG-CAPTCHA-STORE] 错答不消费——正确作答仍可过（M2 规范语义；当前被同源 Store 缺陷阻断，见
-        // IssueAsync_Success_... 注记）——快照锁定缺陷证据，修复后恢复「Assert.True(ok.Passed)」断言
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken));
+        // 错答不消费——正确作答仍可过（M2 规范语义；BUG-CAPTCHA-STORE 修复后恢复正演）
+        var ok = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.True(ok.Passed);
     }
 
     [Fact]
@@ -86,11 +82,9 @@ public class CaptchaServiceTests
         var challenge = await svc.IssueAsync("login", TestContext.Current.CancellationToken);
         var code = ExtractCodeFromSvg(challenge.Payload);
 
-        // 大小写容错（码为大写无歧义字母表——`Trim().ToUpperInvariant()` 归一）；小写作答归一后命中散列 →
-        // 进入消费移除路径——⚠️ [BUG-CAPTCHA-STORE] 同源缺陷（见 IssueAsync_Success 注记）——缺陷快照：
-        // 修复前锁定 ObjectDisposedException；修复后本方法恢复「Assert.True(ok.Passed)」语义断言
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code.ToLowerInvariant(), TestContext.Current.CancellationToken));
+        // 大小写容错（码为大写无歧义字母表——`Trim().ToUpperInvariant()` 归一）；小写作答归一后命中散列 → 通过
+        var ok = await svc.VerifyAsync(challenge.ChallengeId, code.ToLowerInvariant(), TestContext.Current.CancellationToken);
+        Assert.True(ok.Passed);
     }
 
     [Fact]
@@ -123,10 +117,11 @@ public class CaptchaServiceTests
             Assert.False(w.Passed, $"第 {i + 1} 次错答应 Passed=false");
         }
 
-        // 第 3 次错答 = 耗尽作废（达上限移除路径）——⚠️ [BUG-CAPTCHA-STORE] 同源缺陷（见
-        // IssueAsync_Success 注记）——缺陷快照；修复后本方法恢复断言「3 次错答 → 正确码也 Passed=false」
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, "XXXXXX", TestContext.Current.CancellationToken));
+        // 第 3 次错答 = 耗尽作废（达上限移除路径）——3 次错答后正确码也 Passed=false（M2 规范语义）
+        var third = await svc.VerifyAsync(challenge.ChallengeId, "XXXXXX", TestContext.Current.CancellationToken);
+        Assert.False(third.Passed, "第 3 次错答应 Passed=false（耗尽作废）");
+        var after = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.False(after.Passed, "作废后正确码也应 Passed=false");
     }
 
     [Fact]
@@ -140,9 +135,9 @@ public class CaptchaServiceTests
         Assert.False((await svc.VerifyAsync(challenge.ChallengeId, "XXXXXX", TestContext.Current.CancellationToken)).Passed);
         Assert.False((await svc.VerifyAsync(challenge.ChallengeId, "YYYYYY", TestContext.Current.CancellationToken)).Passed);
 
-        // 2 次错答未达上限——第 3 次正确仍可过（M2 规范语义）——⚠️ [BUG-CAPTCHA-STORE] 消费路径缺陷快照
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken));
+        // 2 次错答未达上限——第 3 次正确仍可过（M2 规范语义）
+        var ok = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.True(ok.Passed);
     }
 
     [Fact]
@@ -154,10 +149,11 @@ public class CaptchaServiceTests
         var challenge = await svc.IssueAsync("login", TestContext.Current.CancellationToken);
         var code = ExtractCodeFromSvg(challenge.Payload);
 
-        // ⚠️ [BUG-CAPTCHA-STORE] M2 规范语义：第 1 次错答 → Passed=false 且挑战作废（正确码亦拒）。
-        // 实测：归零移除路径同源崩溃（见 IssueAsync_Success 注记）——缺陷快照
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, "XXXXXX", TestContext.Current.CancellationToken));
+        // M2 规范语义：第 1 次错答 → Passed=false 且挑战作废（归零即移除——正确码亦拒）
+        var first = await svc.VerifyAsync(challenge.ChallengeId, "XXXXXX", TestContext.Current.CancellationToken);
+        Assert.False(first.Passed, "第 1 次错答应 Passed=false（AttemptsPerChallenge=1 即作废）");
+        var after = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.False(after.Passed, "作废后正确码也应 Passed=false");
     }
 
     // ── 单次消费 CAS（重放拒绝）───────────────────────────────────────────
@@ -170,12 +166,11 @@ public class CaptchaServiceTests
         var challenge = await svc.IssueAsync("login", TestContext.Current.CancellationToken);
         var code = ExtractCodeFromSvg(challenge.Payload);
 
-        // ⚠️ [BUG-CAPTCHA-STORE] M2 规范语义：首次正确 → 通过并消费；同 challengeId+answer 重放 → 拒绝。
-        // 实测：首次校验即崩（消费移除路径 `DropLock` 先行 Dispose 仍持有 gate → finally Release 抛
-        // ObjectDisposedException，CaptchaChallengeState.cs:71/83）——重放语义不可达。缺陷快照：
-        var ex = await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken));
-        Assert.Contains("disposed", ex.Message);
+        // M2 规范语义：首次正确 → 通过并消费；同 challengeId+answer 重放 → 拒绝（单次消费 CAS）
+        var first = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.True(first.Passed, "首次正确应通过");
+        var replay = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.False(replay.Passed, "重放应拒绝（单次消费）");
     }
 
     [Fact]
@@ -189,9 +184,9 @@ public class CaptchaServiceTests
 
         await Task.Delay(1100, TestContext.Current.CancellationToken);
 
-        // 过期移除路径——⚠️ [BUG-CAPTCHA-STORE] 同源缺陷（过期同属 next is null 移除分支）——缺陷快照
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken));
+        // 过期移除路径——过期校验（即便答案正确）→ Passed=false（M2 规范语义）
+        var expired = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.False(expired.Passed, "过期后应 Passed=false");
     }
 
     [Fact]
@@ -202,9 +197,9 @@ public class CaptchaServiceTests
         var challenge = await svc.IssueAsync("login", TestContext.Current.CancellationToken);
         var code = ExtractCodeFromSvg(challenge.Payload);
 
-        // ⚠️ [BUG-CAPTCHA-STORE] TTL 内正确作答 → Passed=true（M2 规范语义）——消费路径缺陷快照
-        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
-            svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken));
+        // TTL 内正确作答 → Passed=true（M2 规范语义）
+        var ok = await svc.VerifyAsync(challenge.ChallengeId, code, TestContext.Current.CancellationToken);
+        Assert.True(ok.Passed);
     }
 
     // ── 取题 IP 频控 ─────────────────────────────────────────────────────

@@ -39,6 +39,21 @@ partial class SmsCodeRecordEntityDataService(IDomainUser user, IEntityDAC<SmsCod
     public async Task<int> CountSentAsync(string subject, string scene, DateTime fromUtc, CancellationToken ct = default)
         => (int)await CountAsync(e => e.Subject == subject && e.Scene == scene && e.CreateTime >= fromUtc, ct);
 
+    /// <summary>
+    /// 频控窗口内【最老】记录创建时间（滑动窗口 retryAfter 计算——"距最严约束重置秒数"= oldest+window-now；
+    /// 审核 P2 修复：旧实现在命中时给"窗长"或"到午夜"，非真实重置时刻）。
+    /// </summary>
+    /// <returns>窗口内最老记录 CreateTime；窗口内无记录则 null（理论不达——命中即≥1 条）。</returns>
+    public async Task<DateTime?> GetOldestInWindowAsync(string subject, string scene, DateTime fromUtc, CancellationToken ct = default)
+    {
+        var rows = await EntitySelectAsync(
+            e => e.Subject == subject && e.Scene == scene && e.CreateTime >= fromUtc,
+            0, 1,
+            q => q.OrderBy(e => e.CreateTime),
+            ct);
+        return rows.Count > 0 ? rows[0].CreateTime : null;
+    }
+
     /// <summary>活跃未消费码计数（MaxActiveCodesPerSubject——只统计未失效记录；重发作废旧码机制保证旧码已失效不膨胀计数）。</summary>
     public async Task<int> CountActiveAsync(string subject, string scene, CancellationToken ct = default)
         => (int)await CountAsync(

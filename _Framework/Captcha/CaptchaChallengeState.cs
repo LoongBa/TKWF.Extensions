@@ -53,6 +53,11 @@ internal sealed class CaptchaChallengeStateStore
     /// <summary>
     /// 原子读-改-写（per-challengeId 自锁）：<paramref name="update"/> 在锁内执行，接收当前状态
     /// （null = 不存在/已过期/轻量移除），返回下一状态（null = 移除作废；非 null = 回写且过期时刻不变）。
+    /// <para><b>BUG-CAPTCHA-STORE 修复（M4 测试逮住）</b>：移除分支只做 <c>TryRemove</c> 摘除锁条目
+    /// （拒绝新请求拿到旧锁），<b>不 Dispose</b> SemaphoreSlim——旧实现 DropLock 在 <c>finally Release</c> 之前
+    /// Dispose 当前方法仍持有的信号量 → 所有状态移除路径（答对消费/答错作废/过期）抛 ObjectDisposedException。
+    /// SemaphoreSlim 仅持有托管资源，不 Dispose 由 GC 终结；已摘除条目的在途等待者（TryRemove 前已获得
+    /// 同一引用）WaitAsync 唤醒后进锁体、finally Release 正常——不再有已释放对象。</para>
     /// </summary>
     public async Task<CaptchaChallengeState?> ExecuteAtomicAsync(string challengeId, Func<CaptchaChallengeState?, CaptchaChallengeState?> update, CancellationToken ct)
     {
@@ -68,7 +73,8 @@ internal sealed class CaptchaChallengeStateStore
             if (next is null)
             {
                 _cache.Remove(key);
-                DropLock(challengeId);
+                // 摘除锁条目（拒绝新请求复用旧锁）；不 Dispose——本方法 finally 仍需 Release（BUG-CAPTCHA-STORE 修复核心）
+                _locks.TryRemove(challengeId, out _);
                 return null;
             }
 
@@ -85,11 +91,4 @@ internal sealed class CaptchaChallengeStateStore
     }
 
     private static string Key(string challengeId) => KeyPrefix + challengeId;
-
-    /// <summary>移除已作废挑战的锁条目（释放 SemaphoreSlim 资源；并发窗口内新请求会重建新锁——不串旧锁）。</summary>
-    private void DropLock(string challengeId)
-    {
-        if (_locks.TryRemove(challengeId, out var gate))
-            gate.Dispose();
-    }
 }

@@ -1,7 +1,7 @@
 # DMP 侧接入说明 —— SmsCode + Captcha 扩展
 
 > **关联**：DMP-Lite `v0.10.8-手机号验证码登录与CHAPTCHA扩展模块-需求转达.md`（契约需求源）、SmsCode 使用指南（[「SMS 验证码扩展（TKWF.Ext.SmsCode）使用指南」](../SmsCode/SMS验证码扩展-使用指南.md)）
-> **状态**：扩展侧 M3 完成（门禁内联接线 + 45 测试全绿），待 DMP 侧接入
+> **状态**：扩展侧 M1-M4 完成（门禁内联接线 + 测试全矩阵 78 全绿——SmsCode 49 + Captcha 29；迭代审核 5 项闭环），待 DMP 侧接入
 
 ---
 
@@ -88,10 +88,19 @@ app.MapPost("/m/{mid}/api/auth/sms/chaptcha", async (string mid, ...) =>
 {
     var guest = /* UseWebSession 游客 DomainUser */;
     var captcha = guest.Use<ICaptchaService>();
-    var challenge = await captcha.IssueAsync("login", ct);
-    return Results.Ok(new { challengeId = challenge.ChallengeId, payload = challenge.Payload, ttlSeconds = challenge.TtlSeconds });
+    try
+    {
+        var challenge = await captcha.IssueAsync("login", ct);
+        return Results.Ok(new { challengeId = challenge.ChallengeId, payload = challenge.Payload, ttlSeconds = challenge.TtlSeconds });
+    }
+    catch (RateLimitedException)   // using TKW.Framework.Domain.Exceptions——取题频控命中（IssuePerMinutePerIp）
+    {
+        return Results.Json(new { error = "rate_limited" }, statusCode: 429);
+    }
 });
 ```
+
+> **chaptcha 端点契约补充（P1-3）**：`POST /m/{mid}/api/auth/sms/chaptcha` → **`429 rate_limited`（取题频控命中——`IssuePerMinutePerIp`）**——`IssueAsync` 频控命中抛 `RateLimitedException`，端点须 catch 映射 429（见上样例）。
 
 ---
 
@@ -105,7 +114,7 @@ app.MapPost("/m/{mid}/api/auth/sms/chaptcha", async (string mid, ...) =>
 
 ### 前端流程（send-code 门禁序）
 
-1. `POST /m/{mid}/api/auth/sms/chaptcha`（body: `{}`）→ `{challengeId, payload, ttlSeconds}`（payload = 图形码 SVG/图片）
+1. `POST /m/{mid}/api/auth/sms/chaptcha`（body: `{}`）→ `{challengeId, payload, ttlSeconds}`（payload = 图形码 SVG/图片）；**取题频控命中 → 429 rate_limited（前端提示稍后再试）**
 2. 用户看图输入答案 → 调 `POST /m/{mid}/api/auth/sms/send-code` body: `{mobile, chaptcha: "{challengeId}:{answer}"}`
 3. 门禁通过 + 频控允许 → 200 `{sent:true, retryAfterSeconds}`；失败 → `chaptcha_failed`(400)/`rate_limited`(429)
 4. 用户输入短信码 → `POST /m/{mid}/api/auth/sms/login` body: `{mobile, code}` → 200 IdentitySession / 400/403/429/500 错误码

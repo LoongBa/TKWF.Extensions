@@ -1,6 +1,6 @@
 # SMS 验证码扩展（TKWF.Ext.SmsCode）使用指南
 
-> **版本**：v0.1.0（M1+M3 里程碑——门禁内联接线完成）
+> **版本**：v0.1.0（M3+M4：门禁内联 + 测试全矩阵 78 全绿）
 > **关联**：[开发方案](./v0.1.0-SmsCode-Captcha-开发方案.md)（契约冻结与设计裁定）、[设计梳理](./验证能力谱系与模块架构-设计梳理.md)（谱系基座）、DMP-Lite `v0.10.8` 需求转达（契约需求源）
 > **配套**：人机验证扩展 `TKWF.Ext.Captcha`（+ `.Captcha.Abstractions`）——SmsCode 场景门禁区经契约包可空依赖
 
@@ -153,7 +153,7 @@ POST /m/{mid}/api/auth/sms/chaptcha     Body: {}
 
 ## 八、测试基线
 
-`Extension.SmsCode.Tests` —— **45 用例全绿**（引擎原语 5 + DataService 原子方法 6 + 门面全矩阵 28 + **门禁集成 6**）。Tier 1.5 隔离契约（每 Fact 独立 SQLite 文件库）。门禁测试经 `Captcha.Abstractions` 契约面 fake 装配（不引 Captcha 主包——聚焦门禁契约语义）。
+`Extension.SmsCode.Tests` —— **49 用例全绿**（引擎原语 16 + DataService 原子方法 10 + 门面全矩阵 17 + **门禁集成 6**）。Tier 1.5 隔离契约（每 Fact 独立 SQLite 文件库）。门禁测试经 `Captcha.Abstractions` 契约面 fake 装配（不引 Captcha 主包——聚焦门禁契约语义）。Captcha 配套 29 用例（门面 16 + Initializer 13）——双模块合计 **78 用例全绿**。
 
 ---
 
@@ -161,4 +161,4 @@ POST /m/{mid}/api/auth/sms/chaptcha     Body: {}
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
-| 2026-11-15 | v0.1.0 | 首发：SmsCode 门面/引擎/实体/频控/场景注册表 + M3 门禁内联接线（Q6/m7）+ 45 测试全绿 |
+| 2026-11-15 | v0.1.0 | 首发：SmsCode 门面/引擎/实体/频控/场景注册表 + M3 门禁内联接线（Q6/m7）+ 49 测试全绿（M4 全矩阵刷新） |

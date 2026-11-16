@@ -1,6 +1,6 @@
 # TKWF.Ext.Captcha 人机验证扩展技术规范
 
-**状态**: 人机验证扩展（纯内存型——零实体零持久化） | **版本**: V0.1.0（M2 里程碑，未发布） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain（IDomainService / DomainServiceBase / [Options]）+ `TKWF.Ext.Captcha.Abstractions`（契约包，L2）+ Microsoft.Extensions.Caching.Memory（挑战态）+ FrameworkReference Microsoft.AspNetCore.App（IHttpContextAccessor——取题 IP 频控）
+**状态**: 人机验证扩展（纯内存型——零实体零持久化） | **版本**: V0.1.0（M4 完成） | **框架**: .NET 10 | **依赖**: 主框架 TKWF.Domain（IDomainService / DomainServiceBase / [Options]）+ `TKWF.Ext.Captcha.Abstractions`（契约包，L2）+ Microsoft.Extensions.Caching.Memory（挑战态）+ FrameworkReference Microsoft.AspNetCore.App（IHttpContextAccessor——取题 IP 频控）
 
 **核心约束**: 零第三方依赖图形渲染（SVG 字符串）/ 答案 SHA256 散列永不进客户端载荷 / in-memory 挑战态 per-challengeId 自锁（CAS 非原子防护）/ 恒 fail-closed（全局关 + 场景门禁 = 配置冲突守卫异常）/ 扩展零端点（wire 契约归消费方 DMP 端点层）
 
@@ -80,6 +80,6 @@ var result = await user.Use<ICaptchaService>().VerifyAsync(challenge.ChallengeId
 ## 五、版本与发布
 
 - MinVerTagPrefix：`Captcha/v`（`TKWF.Ext.Captcha`）；契约包 `Captcha.Abstractions/v`（`TKWF.Ext.Captcha.Abstractions`）——独立演进。
-- **M2 里程碑**（2026-11-15）：SPI + 本地图形 Provider + 挑战态存储 + 门面 + Options + Initializer + 契约包（零实体零 SG1——无 xCodeGen 配置）；M4 测试、M3 SmsCode 门禁内联接线待排期。
+- **V0.1.0（2026-11-16）**：SPI + 本地图形 Provider + 挑战态存储 + 门面 + Options + Initializer + 契约包（零实体零 SG1——无 xCodeGen 配置）；M3 门禁内联接线完成（SmsCode→Captcha.Abstractions）；M4 测试全矩阵 **29 用例全绿（门面 16 + Initializer 13）**。
 
 <!-- EOF -->

@@ -19,8 +19,13 @@ namespace TKWF.Ext.SmsCode;
 /// <item>ConfigureFilters——空（非过滤器扩展）。</item>
 /// <item>InitializeAsync——空（无启动预载；验证码无种子数据）。</item>
 /// </list>
+/// <para>依赖（可空，方案 §4.2 / AuthCenter⇄Emailing.Abstractions 先例）：Captcha.Abstractions 契约包
+/// （<see cref="TKWF.Ext.Captcha.ICaptchaService"/>）——Captcha 未装配 → 场景要求门禁时守卫异常 fail-closed；
+/// MinVersion 门 0.1.0（契约包首版；预发布下限 0.1.0-preview.0——Abstractions 未打 tag 时本地构建满足，
+/// 正式 Captcha.Abstractions/v0.1.0 发布后仍满足，对齐 Federation/AuthCenter.Abstractions V0.11.0 先例）。</para>
 /// </summary>
 [TKWFExtension("SmsCode")]
+[TKWFExtensionDependency(DependencyType = typeof(TKWF.Ext.Captcha.ICaptchaService), MinVersion = "0.1.0-preview.0")]
 public class SmsCodeExtensionInitializer<TUserInfo> : ExtensionInitializer<TUserInfo>
     where TUserInfo : class, IUserInfo, new()
 {

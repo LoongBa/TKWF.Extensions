@@ -63,11 +63,34 @@
 - 优点：一次收敛。
 - 缺点：P1 关键路径上为 MFA 猜测接口（X-now 要求 v1 即长出 subject 泛化+句柄验证+每用户频控——SmsCode 契约已冻结，无消费方验证）；迁移风险大收益不确定；与"验证码登录 P1"目标冲突。已在 X' 裁定否决（Y-forever 被实证漂移否决——AuthCenter string.Equals+大写 hex vs MFA FixedTimeEquals+小写 hex 即为漂移实证）。
 
-## 五、结论
+### 否决 (a)：现在建统一核心（TKWF.Ext.Verification）
+
+- 理由：14 种验证形态的价值在**语义**（场景注册表/门禁序/主语模型）而非 150 行机制原语（CSPRNG/SHA256/TTL/CAS/恒时比较）——统一只收原语 ≈ 捕获 10% 价值，另增多模块协调成本；**强收语义**（把第一因素/MFA/找回/兑票全部语义统一进一个内核）撞 MFA Oracle Q1 既有边界（subject=user×method 不可压缩进 phone 模型），且无消费者验证。故本模块引擎从第一天写**通用胚胎形态**（场景注册表驱动、零 DMP 逻辑、Subject 不透明键控）——收原语不收语义，等第二消费者（X' 双轨触发器）出现再收拢。
+
+### 否决 (c)：现在建 Verification.Abstractions 契约包
+
+- 理由：契约租（维护/版本/门控）需 **≥2 实现方或跨扩展消费者**才付得起；今日唯一真实跨扩展边 = SmsCode→CAPTCHA 门禁，已用 `Captcha.Abstractions` 承接（即日拆分独立模块）；为"未来可能的第二个 SMS 引擎"预置契约包 = 错冻结 > 不冻结（契约形状未经验证即冻结，收敛零改名承诺反而被猜测接口破坏）。名字预留（`ISmsCodeService`/`ISmsSender`/场景注册表形状）已写入收敛出口 ADR 条款，届时契约包按需新建（参考 AuthCenter/TrustCenter/Federation.Abstractions 既有先例形态）。
+
+## 五、场景注册与租户维度归属（X' 冻结项）
+
+### 场景注册表（多场景=单引擎）
+
+- **归属**：场景注册表驱动（scene → 策略：码长/TTL/频控/是否 CAPTCHA 门禁）内建于 SmsCode 引擎——`SmsCodeOptions.Scenes` 字典（Django scene-as-config 先例；每场景一引擎 = 复制频控/TTL/消费语义，正是本裁决要消灭的重复）。
+- **v1 闭集**：`SmsScenes.Login`（DMP 所需）；扩场景 = 加注册表条目**不加引擎**（b+ 共识）。
+- **门禁开关 per-scene**：`Scenes:login:RequiresCaptcha=true`（M3 接线完成态）——"哪些场景要门禁"归消费方场景注册表（CAPTCHA 本身场景无关，ADR-Captcha）。
+- **fail-closed**：场景不在注册表 → `UnknownScene`（不落入任何频控键，防换场景绕限）；场景要求门禁但 Captcha 未装配 → 守卫异常（m7，禁静默跳过）。
+
+### 租户维度（归消费方）
+
+- **裁定**：租户维度**归消费方**（`ISmsCodeScopeResolver`——消费方注入 scope 前缀如 `merchant:{MerchantUId}`，模块保持租户无关）。
+- **形态**：SPI `string? GetScopePrefix()`——`null` = 租户缺失（`ScopeMissing` fail-closed，DMP mid 缺失场景）；空串 = 无租户消费方（合法默认）；扩展提供默认空串单例（`EmptyScopeResolver` TryAdd，消费方 Scoped 覆盖——m4 闭环：ambient 读取路由值，非单例）。
+- **频控键作用域**：`smscode:{scope}:{scene}:{subject}`——scope 前缀入键，跨商户天然隔离；跨商户单手机上限（租户库 COUNT 无法跨商户限额）由消费方裁定（DMP 侧，扩展不内置）。
+
+## 六、结论
 
 采纳选项 A：独立立项 `TKWF.Ext.SmsCode`；引擎按统一核心胚胎写；X' 六项 ADR 冻结保未来廉价收敛；CAPTCHA 即日拆分（拼写约定见 ADR-Captcha）；MFA/AuthCenter 不迁移，由双轨触发器驱动（主触发=MFA 迭代触及机制路径且 SmsCode v1.0+；加速=安全修复回植 ≥2 引擎）。
 
-## 六、关联
+## 七、关联
 
 - 设计梳理：`docs/SmsCode/验证能力谱系与模块架构-设计梳理.md`（§4.3.1 X' 裁定、§6 NOW 六项冻结）
 - 开发方案：`docs/SmsCode/v0.1.0-SmsCode-Captcha-开发方案.md`（M0 评审 PASS WITH CONDITIONS 闭环）

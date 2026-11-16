@@ -15,6 +15,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>Captcha.Abstractions/v</MinVerTagPrefix>
+    <!-- 预发布下限（对齐 AuthCenter.Abstractions 先例）：未打 tag 时本地 MinVer 版本 0.1.0-preview.x——[TKWFExtensionDependency] 消费方（SmsCode）声明 "0.1.0-preview.0" 即满足 DEP002 门；正式 Captcha.Abstractions/v0.1.0 发布后版本 0.1.0 仍满足 -->
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
     <PackageId>TKWF.Ext.Captcha.Abstractions</PackageId>
     <Description>TKWF 人机验证契约抽象（Captcha.Abstractions——ICaptchaProvider / ICaptchaService / CaptchaChallenge / CaptchaVerifyResult）——依赖倒置（ADR48 D7 / v0.1.0 方案）：Captcha 主包实现契约，SmsCode 模块与消费方经契约包消费（零实体、零 SG1、零 Initializer；namespace 保持 TKWF.Ext.Captcha——跨程序集同 namespace，消费方零 using 迁移）</Description>
   </PropertyGroup>

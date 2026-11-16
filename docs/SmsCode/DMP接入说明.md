@@ -121,6 +121,22 @@ app.MapPost("/m/{mid}/api/auth/sms/chaptcha", async (string mid, ...) =>
 
 > ⚠️ **captchaToken 格式冻结**：`"{challengeId}:{answer}"`（challengeId 与 answer 均不含 `:`，分隔安全）——前端按此直接拼装。
 
+### SDK 适配（@tkwf/tsclient v1.1.0——建议前端直接采用）
+
+前端**无需手写 fetch/拼装凭据**——v1.1.0 已内置三方法（组串内化 + wire 键 `chaptcha` 单点保证，
+urlMap 覆盖 DMP 路径，仅 REST 通道；GraphQL 下抛 `EXTERNAL_LOGIN_FAILED` fail-closed）：
+
+```typescript
+const guest = Tkwf.Guest;
+// ① 取题 → ② 发码（内部拼 "{challengeId}:{answer}"）→ ③ 登录（泛型返回 IdentitySession，不持久化）
+const chaptcha = await guest.issueChaptcha();                            // { challengeId, payload, ttlSeconds }
+await guest.sendSmsCode(mobile, chaptcha.challengeId, userAnswer);        // 429 → err.retryAfterSeconds
+const session = await guest.loginBySmsCode<IdentitySession>(mobile, code);
+```
+
+- urlMap 覆盖示例：`urlMap: { "auth/sms/chaptcha": "/m/{mid}/api/auth/sms/chaptcha", "auth/sms/send-code": "/m/{mid}/api/auth/sms/send-code", "auth/sms/login": "/m/{mid}/api/auth/sms/login" }`（`{mid}` 运行时替换）
+- 错误码：门禁/频控/发送失败经 `body.error` 透传（`chaptcha_failed`/`rate_limited`/`sms_sender_unavailable`）+ `err.retryAfterSeconds` 驱动倒计时——前端错误码表同步 v1.1.0 语义
+
 ---
 
 ## 三、配置

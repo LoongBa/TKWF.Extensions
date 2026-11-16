@@ -9,7 +9,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.AuthSurface` |
-| 版本 | V0.1.0（独立起点——2026-10-07 立项，Oracle4 评审 PASS WITH CONDITIONS）+ **v0.2.0（兑换码附加信息——核验场景，2026-10-10 已发布）** + **v0.1.1（UserCenter 退役——DTO 归主包）** + **v0.2.1（软禁用——视图 IsEnabled 投影 + NULL 视同启用，已发布 tag）** + **V0.3.0（功能线，批次管理端 + 码侧契约——T-0~T-8：`CodeBatch` 批次域 / BatchId 列 / Revoked 状态 / expireAt 参数 / 按明文读码 / 分页 / payload 解密；AuthCenter `RecordGrantAsync` 泛化协同）** |
+| 版本 | V0.1.0（独立起点——2026-10-07 立项，Oracle4 评审 PASS WITH CONDITIONS）+ **v0.2.0（兑换码附加信息——核验场景，2026-10-10 已发布）** + **v0.1.1（UserCenter 退役——DTO 归主包）** + **v0.2.1（软禁用——视图 IsEnabled 投影 + NULL 视同启用，已发布 tag）** + **V0.3.0（批次管理端 + 码侧契约——T-0~T-8：`CodeBatch` 批次域 / BatchId 列 / Revoked 状态 / expireAt 参数 / 按明文读码 / 分页 / payload 解密；AuthCenter `RecordGrantAsync` 泛化协同；已含于 v0.3.1 发布）** + **v0.3.1（批次查询性能整改——分组统计 `GroupByAsync` 单查询 + 明细分页 SQL 下推；CPM lockstep 4.10.121（框架 GroupByAsync 整键排序 NRE 修复响应）；2026-11-17 已发布）** |
 | 依赖 | `TKWF.Domain`（CPM）+ `TKWF.Utility`（v4.10.67 `IRateLimitCheck` 点检查原语——兑换频控）+ `TKWF.CodeGeneration`（SG1 纯 Analyzer）+ FreeSql——**DTO 归本扩展主包**（`Contracts/AuthSurfaceDtos.cs`：`RedemptionRecordDto`/`UserAppDto`，零跨扩展契约依赖） |
 | 数据 | 表 `TKWF_RedemptionCode` + `TKWF_AuthApp`（本扩展）；视图 `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`（跨扩展 JOIN AuthCenter `TKWF_AuthAccount`/`TKWF_AuthGrant`——视图归本扩展，P3） |
 | 边界 | **零扩展间实现依赖**（ViewSql 字符串跨扩展引用 AuthCenter 表名，无代码引用——L2 零 TKWF0022） |
@@ -169,7 +169,7 @@ TKWFV_UserApps               = TKWF_AuthGrant INNER JOIN TKWF_AuthAccount (UserI
 
 > **✅ v0.2.0 已发布（2026-10-10——兑换码附加信息，核验场景，2026-10-09 转告落档待办）**：`PayloadEncrypted` 列 + `CreateCodeAsync(payload:)` 加密落库 + `RedeemAsync` 解密取回 + keyed 密钥基础设施。
 >
-> **🟡 V0.3.0 功能线（未发布）**：批次域（T-0~T-3）+ 码侧契约（T-4~T-6/T-8）+ AuthCenter `RecordGrantAsync` 泛化协同（T-7）——开发方案 `docs/授权面/v0.3.0-AuthSurface-批次管理端与码侧契约-开发方案.md`。
+> **✅ 已发布（2026-11-17，tag `AuthSurface/v0.3.1`——含 V0.3.0 批次域 + V0.3.1 SQL 下推整改）**：批次域（T-0~T-3）+ 码侧契约（T-4~T-6/T-8）+ AuthCenter `RecordGrantAsync` 泛化协同（T-7）+ 批次查询性能整改（分组统计/分页下推）——开发方案 `docs/授权面/v0.3.0-AuthSurface-批次管理端与码侧契约-开发方案.md`。
 
 ## 测试基线
 

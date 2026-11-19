@@ -23,6 +23,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <see cref="WeChatOperationsReplyHandlerTests"/> 形态：handler 经 <c>user.Use&lt;WeChatOperationsReplyHandler&gt;()</c>
 /// NoAop 直建，内部 DataService 经基类 <c>User.Use&lt;具体类&gt;()</c> 懒加载——真实生产路径。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class WeChatOperationsMatchTraceTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-a";

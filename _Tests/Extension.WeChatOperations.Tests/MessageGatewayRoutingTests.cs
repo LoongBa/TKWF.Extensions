@@ -25,6 +25,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <para>运行库 matcher/decider/熔断纯逻辑单测见 Extension.Federation.WeChat.MessageGateway.Tests（52 用例）；
 /// 本单元为网关侧集成（经门面 RouteAsync 验证真实规则投影→匹配→决策→出站→落库全链）。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class MessageGatewayRoutingTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-gw-route";

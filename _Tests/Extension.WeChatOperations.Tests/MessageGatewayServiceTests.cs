@@ -20,6 +20,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// （<see cref="MessageGatewayService"/>._gatewayEnabledOverride）——测试 finally 复位 +
 /// <see cref="WeChatOperationsTestHost.ResetGatewayEnabledOverride"/>（宿主 Dispose 兜底），防测试间泄漏。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class MessageGatewayServiceTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-gw-a";

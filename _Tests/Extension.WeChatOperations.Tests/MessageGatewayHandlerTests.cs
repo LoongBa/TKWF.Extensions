@@ -21,6 +21,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// 网关开 + 幂等跳过（同事件两次——第二次不触发交互日志）/ <b>LOCATION 事件挂载</b>（P2-2——
 /// OnLocationEventAsync 挂载后 LOCATION 事件可转发）。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class MessageGatewayHandlerTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-gw-h";

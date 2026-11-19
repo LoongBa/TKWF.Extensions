@@ -23,6 +23,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// IDomainUser + IOptions 从 DI 解析——<see cref="WeChatOperationsTestHost.ConfigureOperationsOptions"/> 编程覆盖）；
 /// 总开关每测试独立宿主（<c>ConfigureOperationsOptions</c> 逐宿主注入——无静态污染）。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class MessageBusinessSwitchTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-switch";

@@ -25,6 +25,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// ctor 可选 IOptions/ILogger）；内部 DataService 经基类 <c>User.Use&lt;具体类&gt;()</c> 懒加载——
 /// I2-10 起订阅/取关统计写路径移除（归编排层 IFollowStateService.RecordAsync，方案 §8.2 C3），handler 只留交互日志。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-a";

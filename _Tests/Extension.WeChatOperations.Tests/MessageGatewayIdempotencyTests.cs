@@ -19,6 +19,7 @@ namespace TKWF.Ext.WeChatOperations.Tests;
 /// <para>运行库键构建纯逻辑（<see cref="WeChatMessageIdempotencyKeyBuilder"/>）直测 + 门面集成双覆盖；
 /// matcher/decider 纯逻辑单测见 Extension.Federation.WeChat.MessageGateway.Tests（52 用例——本单元不重复）。</para>
 /// </summary>
+[Collection(GatewayStaticStateCollection.Name)]
 public class MessageGatewayIdempotencyTests : WeChatOperationsTestHost
 {
     private const string ChA = "ch-gw-idem";

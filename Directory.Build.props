@@ -111,7 +111,8 @@
     扩展 DLL 与主框架 DLL 统一进部署包 build\refs，消费端统一经环境变量引用（去 junction）；
     未设置环境变量时 fallback 本仓库 build\refs（独立构建场景，消费者经 $(TKWExtRoot) 引用）。
   -->
-  <Target Name="_PushToRefs" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(NoBuild)' != 'true'">
+  <!-- 2026-11-20 部署包纯度收口：测试工程不推送 refs（IsTestProject 由 Microsoft.NET.Test.Sdk 在导入链置位，Target 执行期求值可见）。一条条件同时关断 dll/xml 与部署根/源码树双写。 -->
+  <Target Name="_PushToRefs" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(NoBuild)' != 'true' And '$(IsTestProject)' != 'true'">
     <PropertyGroup>
       <!-- 优先部署根环境变量（去软链、真实复制），fallback 本仓库 build\refs -->
       <_RefsDir Condition="'$(TKWFDeployPath)' != ''">$([System.IO.Path]::GetFullPath('$(TKWFDeployPath)'))\build\refs\</_RefsDir>

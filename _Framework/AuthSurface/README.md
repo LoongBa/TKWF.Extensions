@@ -1,8 +1,9 @@
-﻿# TKWF.Ext.AuthSurface
+# TKWF.Ext.AuthSurface
 
 > TKWF 扩展：**授权面**——口令兑换体系（code/redemption/grant/batch + 批次管理端 v0.3.0）+ 我的应用聚合 + 授权快照候选。
 > **数据属主** = 兑换/授权记录（非账号）——行级身份引用一律 `AuthAccount.UId`（前置裁定 P4 白名单）。
 > **✅ UserCenter 退役（2026-10-08）**：UserCenter 独立扩展已完整删除——兑换/应用查询唯一通道 = 本扩展自有门面（跨扩展 VEntity `TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`）；DTO（`RedemptionRecordDto`/`UserAppDto`）归本扩展主包（`Contracts/AuthSurfaceDtos.cs`）。原"P2 FREEZE（不实现 UserCenter Source 契约）"已随 UserCenter 删除完结——无契约可 Freeze。
+> **分发形态：自包含型**（框架 A6 裁定，v4.10.122；G17A §7.8 / G17B §10.2）——零跨扩展契约消费，DTO 归主包 `Contracts/`；终端应用**单包引用**。本扩展**不存在也未创建** `*.Abstractions` 契约包（非分发缺口）；升格契约型须待真实跨扩展消费方出现后再抽契约包，禁止先建空 Abstractions。
 
 ## 定位
 

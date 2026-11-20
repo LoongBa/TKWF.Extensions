@@ -3,7 +3,7 @@
   扩展仓库（_TKWF.Extensions）全量部署脚本——部署根（TKWFDeployPath）build\refs\ 一致性收口。
 
 .DESCRIPTION
-  对偶主框架 _TKWF\build\build-deployment.ps1（框架侧负责提取框架 DLL + xCodeGen + AC-Kit，
+  对偶主框架 _TKWF\build\build-deployment.ps1（框架侧负责提取框架 DLL + xCodeGen + AE-Kit，
   本脚本只负责扩展侧产物：TKWF.Ext.* 与 TKWF.Federation.* 前缀 DLL——与框架 DLL 混驻同一
   %TKWFDeployPath%\build\refs\，消费方 DLL 模式经 $(TKWFDeployPath)build\refs\ 统一引用）。
 

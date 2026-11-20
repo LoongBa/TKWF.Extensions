@@ -28,7 +28,7 @@ DMP-Lite 已有 6 个分析型 VEntity（销售趋势/支付分布/门店排行/
 - **JsonDocument 透传**：spec JSON 原样返回，不镜像强类型——flint schema 是单一真相（D20B §4.3），杜绝双 schema 漂移。
 - **路径安全**：`domain`/`specKey` 命名正则（`AnalyticsSpecConstants`）+ chartType 文件名消毒——防路径遍历（Oracle P0-3）。
 - **manifest 状态校验**：stale → `SpecStaleException`（强制重生）；deprecated → 放行（前端读 status 展示警告）；`GetManifestAsync` 不校验 status（状态展示载体，P1-4）。
-- **flint 不硬编码**：核心不内置 48 模板名（第三真相源，P1-2）——chartType ∉ 注册表由前端 flint assemble 抛错；快照文档（主框架 `docs/AC-Kit/references/D20-附-flint模板注册表快照.md`，2026-11-07 自 `docs/` 迁入）作设计期参考。
+- **flint 不硬编码**：核心不内置 48 模板名（第三真相源，P1-2）——chartType ∉ 注册表由前端 flint assemble 抛错；快照文档（主框架 `docs/AE-Kit/skills/tkwf-analytics-view/references/D20-附-flint模板注册表快照.md`，2026-11-07 自 `docs/` 迁入）作设计期参考。
 - **一数多图归 flint pivot**：spec 只声明主图 + 可选 pivot-hint；可切换图型由 flint 前端按数据形态门控裁决（D20B §5.2 删除候选推导）。
 
 ## 三、核心组件清单 (Component List)
@@ -74,7 +74,7 @@ docs/analytics-specs/{Domain}/{specKey}/
 - **specKey 命名**：`{VEntityName}--{intent}`（如 `PaymentLogStatView--daily-sales-trend`）。
 - **semantic_types**：flint flat map，**不含自造 `$schema`**（D20B §4.3）；聚合语义在 chart_spec encoding 层。
 - **chart_spec**：`chartType` 用 flint 模板注册表名（`"Line Chart"` 等，见使用指南 §六）。
-- **生成工具**：`tkwf-analytics-view` skill（产物契约，见主框架 AC-Kit）。
+- **生成工具**：`tkwf-analytics-view` skill（产物契约，见主框架 AE-Kit）。
 
 ## 六、消费方接线 (Usage)
 

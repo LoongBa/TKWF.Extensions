@@ -178,6 +178,10 @@ namespace TKWF.Ext.AuthCenter;
         // 共享映射/建号内核）+ 弱身份清理能力门面（能力归 AuthCenter、策略归业务——调用方传 inactiveDays）。
         services.AddConstructibleService<IExternalIdentityProvisioningService, ExternalIdentityProvisioningService>();
         services.AddConstructibleService<IWeakIdentityCleanupService, WeakIdentityCleanupService>();
+        // V0.3.0（契约包门面提取）：登录/票据契约基接口双注册——消费方仅引 Abstractions 即可
+        // User.Use<I*Contract>()；实现类同时满足契约基接口 + 主包门面（门面继承契约基接口 + new 重声明端点面）
+        services.AddConstructibleService<IPasswordLoginServiceContract, PasswordLoginService>();
+        services.AddConstructibleService<IExternalTicketLoginServiceContract, ExternalTicketLoginService>();
     }
 
     /// <summary>

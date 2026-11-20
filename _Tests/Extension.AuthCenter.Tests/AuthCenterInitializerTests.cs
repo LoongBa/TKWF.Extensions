@@ -63,7 +63,10 @@ public class AuthCenterInitializerTests
         (typeof(IAuthFactorService), typeof(AuthFactorService)),
         (typeof(IFreezeService), typeof(FreezeService)),
         (typeof(IFreezeStateProvider), typeof(FreezeStateProvider)),
-        (typeof(IExternalIdentityService), typeof(PlatformAccountMapService))
+        (typeof(IExternalIdentityService), typeof(PlatformAccountMapService)),
+        // V0.3.0 契约包基接口双注册（门面留主包，契约面进 Abstractions——消费方只引契约包即可 User.Use<IContract>()）
+        (typeof(IPasswordLoginServiceContract), typeof(PasswordLoginService)),
+        (typeof(IExternalTicketLoginServiceContract), typeof(ExternalTicketLoginService))
     ];
 
     [Fact]

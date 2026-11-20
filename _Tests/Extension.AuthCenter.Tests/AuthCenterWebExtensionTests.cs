@@ -775,4 +775,37 @@ public sealed class AuthCenterWebExtensionTests
         Assert.DoesNotContain(typeof(IExternalTicketRedeemService), registry.MappedFacades);  // 兑票关 → 不挂载
         Assert.Contains(typeof(IExternalTicketLoginService), registry.MappedFacades);          // 登录门面独立不受影响
     }
+    // ═══════════════════ V0.3.0 契约包门面提取：POST /login/password 端点冒烟（门面留主包） ═══════════════════
+
+    [Fact]
+    public async Task PasswordLogin_Success_ReturnsTokenResponse()
+    {
+        var client = AuthCenterEndpointHost.Server.CreateClient();
+        var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/password",
+            new PasswordLoginRequest("u-p", "client-hash", "salt"),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotNull(body);
+        Assert.Equal("at-p", body!.AccessToken);
+        Assert.True(AuthCenterEndpointHost.PasswordLogin.Invoked);
+        Assert.Equal("u-p", AuthCenterEndpointHost.PasswordLogin.LastIdentifier);
+    }
+
+    [Fact]
+    public async Task PasswordLogin_BusinessFailure_ProblemDetails_CarriesErrorCode()
+    {
+        AuthCenterEndpointHost.PasswordLogin.Throw = new DomainException("PASSWORD_MISMATCH") { ErrorCode = "PASSWORD_MISMATCH" };
+        try
+        {
+            var client = AuthCenterEndpointHost.Server.CreateClient();
+            var resp = await client.PostAsJsonAsync($"{DefaultPrefix}/login/password",
+                new PasswordLoginRequest("u-p", "bad-hash", "salt"),
+                cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            Assert.Equal("PASSWORD_MISMATCH", await ReadErrorCodeAsync(resp.Content));
+        }
+        finally { AuthCenterEndpointHost.PasswordLogin.Throw = null; }
+    }
 }

@@ -47,6 +47,7 @@ internal static class AuthCenterEndpointHost
     public static FakeAuthGrantCommandService GrantCommand { get; } = new(); // V0.8.0 /grants 写入门面（未暴露端点，注册保真）
     public static FakeExternalTicketLoginService TicketLogin { get; } = new();  // V0.10.0 /login/ticket 票据 SPA 兑现门面
     public static FakeExternalTicketRedeemService TicketRedeem { get; } = new();  // V0.14.0 /login/ticket/redeem 业务兑票门面
+    public static FakePasswordLoginService PasswordLogin { get; } = new();  // V0.3.0 契约包提取 /login/password 端点冒烟
 
     private static TestServer CreateServer()
     {
@@ -75,6 +76,7 @@ internal static class AuthCenterEndpointHost
             svc.Replace(ServiceDescriptor.Scoped<IAuthGrantCommandService>(_ => GrantCommand)); // V0.8.0 写入门面（未暴露端点，注册保真）
             svc.Replace(ServiceDescriptor.Scoped<IExternalTicketLoginService>(_ => TicketLogin)); // V0.10.0 /login/ticket 票据兑现
             svc.Replace(ServiceDescriptor.Scoped<IExternalTicketRedeemService>(_ => TicketRedeem)); // V0.14.0 /login/ticket/redeem 业务兑票
+            svc.Replace(ServiceDescriptor.Scoped<IPasswordLoginService>(_ => PasswordLogin)); // V0.3.0 /login/password 端点冒烟
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -424,6 +426,24 @@ internal static class AuthCenterEndpointHost
         {
             Invoked = true;
             return Task.CompletedTask;
+        }
+    }
+    /// <summary>密码登录门面 Fake（V0.3.0——POST /login/password）：Invoked/LastIdentifier + Result/Throw。</summary>
+    internal sealed class FakePasswordLoginService : IPasswordLoginService
+    {
+        public bool Invoked { get; private set; }
+        public string? LastIdentifier { get; private set; }
+        public TokenResponse Result { get; set; } = new("at-p", "rt-p", "Bearer", 7200);
+        public DomainException? Throw { get; set; }
+
+        public Task<TokenResponse> LoginAsync(PasswordLoginRequest request, CancellationToken ct = default)
+        {
+            Invoked = true;
+            LastIdentifier = request.Identifier;
+            if (Throw is not null) throw Throw;
+            if (string.IsNullOrWhiteSpace(request.Identifier) || string.IsNullOrWhiteSpace(request.ClientHash))
+                throw new DomainException("INVALID_ARGUMENT") { ErrorCode = "INVALID_ARGUMENT" };
+            return Task.FromResult(Result);
         }
     }
 }

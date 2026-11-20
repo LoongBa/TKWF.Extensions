@@ -24,7 +24,7 @@ namespace TKWF.Ext.AuthCenter;
 /// Initializer fallback <c>MemoryRateLimitCheck</c> 兜底"始终在"，fail-closed）；命中抛
 /// <see cref="TKW.Framework.Domain.Exceptions.RateLimitedException"/>（429）。</para>
 /// </summary>
-public interface IExternalTicketLoginService : IDomainService
+public interface IExternalTicketLoginService : IExternalTicketLoginServiceContract
 {
     /// <summary>票据 SPA 兑现登录——验票 → 取 FederatedIdentity → 委托 <see cref="IFederatedLoginOrchestrator"/> →
     /// 签 token1 → <see cref="TokenResponse"/>。
@@ -33,5 +33,5 @@ public interface IExternalTicketLoginService : IDomainService
     /// <c>RemoteIpAddress</c>（不为客户端可伪造输入——B3b 生成端点无法注入 Web 层参数，IP 取读下沉门面）。</summary>
     [AllowAnonymousFlag]
     [ApiExpose(RestRoute = "/login/ticket", RestMethod = "POST", AllowAnonymous = true)]
-    Task<TokenResponse> LoginAsync(ExternalTicketLoginRequest request, CancellationToken ct = default);
+    new Task<TokenResponse> LoginAsync(ExternalTicketLoginRequest request, CancellationToken ct = default);
 }

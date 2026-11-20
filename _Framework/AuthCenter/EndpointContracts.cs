@@ -6,41 +6,11 @@ namespace TKWF.Ext.AuthCenter;
 // ─────────────────────────── 请求/响应 DTO（B3a/B3b MapGenerated 生成化——自 AuthCenterWebExtension 迁出，
 // Web 层协议契约；minimal API handler 删除后由门面接口 [ApiExpose] 生成端点消费，双键 JSON 契约保持） ───────────────────────────
 
-/// <summary>令牌响应（标准形态——access_token/refresh_token/token_type/expires_in）。
-/// ⚠️ V0.10.1 双发收口：文档契约键（snake_case）自 V0.6.0 起即如此约定、实现此前仅 camelCase——现补 4 个
-/// snake_case 别名属性双键并存，两类消费方零破坏；同传同名冲突不存在（响应只读）。</summary>
-/// <param name="AccessToken">JWT access token（RS256）。</param>
-/// <param name="RefreshToken">Refresh token（rotation——SHA256 落库）。</param>
-/// <param name="TokenType">固定 <c>Bearer</c>。</param>
-/// <param name="ExpiresIn">access token 有效期（秒）。</param>
-public sealed record TokenResponse(string AccessToken, string RefreshToken, string TokenType, int ExpiresIn)
-{
-    /// <summary>文档契约键 <c>access_token</c>（V0.6.0 起使用指南即如此约定）。</summary>
-    [JsonPropertyName("access_token")]
-    public string AccessTokenAlias => AccessToken;
-
-    /// <summary>文档契约键 <c>refresh_token</c>。</summary>
-    [JsonPropertyName("refresh_token")]
-    public string RefreshTokenAlias => RefreshToken;
-
-    /// <summary>文档契约键 <c>token_type</c>。</summary>
-    [JsonPropertyName("token_type")]
-    public string TokenTypeAlias => TokenType;
-
-    /// <summary>文档契约键 <c>expires_in</c>。</summary>
-    [JsonPropertyName("expires_in")]
-    public int ExpiresInAlias => ExpiresIn;
-}
-
 /// <summary>短信验证码发送请求。</summary>
 public sealed record SendSmsCodeRequest(string Phone, string Scene);
 
 /// <summary>短信登录请求。</summary>
 public sealed record SmsLoginRequest(string Phone, string Code);
-/// <summary>密码登录请求（V0.9.0 B.9 + ADR 决策 1——SecurePassword 协议：Identifier 为 UId 或 Phone 凭据标识；
-/// ClientHash/Salt 为客户端算的 PBKDF2 产物，服务端零明文）。</summary>
-public sealed record PasswordLoginRequest(string Identifier, string ClientHash, string Salt);
-
 /// <summary>刷新请求（V0.10.1 双收：文档契约 body = <c>{refresh_token}</c>；camelCase <c>refreshToken</c> 亦接受，
 /// 同传时 camelCase 优先——默认 Web JSON 绑定大小写不敏感但不做下划线归一，别名键保证文档契约可用）。</summary>
 public sealed record RefreshRequest(string RefreshToken)
@@ -53,24 +23,6 @@ public sealed record RefreshRequest(string RefreshToken)
     [JsonIgnore]
     public string EffectiveRefreshToken
         => !string.IsNullOrWhiteSpace(RefreshToken) ? RefreshToken : RefreshTokenSnakeCase ?? string.Empty;
-}
-
-/// <summary>外部 IdP 票据 SPA 兑现请求（V0.10.0——POST {prefix}/login/ticket；channel_id 可选——多通道消歧，
-/// 正常由票载荷 ChannelId 签入，提供时须一致否则 TICKET_INVALID）。</summary>
-/// <param name="Ticket">32B base64url 密封票据。</param>
-/// <param name="ChannelId">通道 id（键 <c>channelId</c>——默认 Web JSON 绑定）。</param>
-public sealed record ExternalTicketLoginRequest(string Ticket, string? ChannelId)
-{
-    /// <summary>snake_case 契约别名（使用指南 body 写作 <c>{"ticket", "channel_id"}</c>；默认绑定大小写不敏感
-    /// 但不做下划线归一，<c>channel_id</c> 不会命中 <see cref="ChannelId"/>——显式映射保证文档契约可用，
-    /// 同时保留 camelCase 客户端可用：两条键并存，不因客户端命名风格静默丢失消歧参数）。</summary>
-    [JsonPropertyName("channel_id")]
-    public string? ChannelIdSnakeCase { get; init; }
-
-    /// <summary>生效通道 id（<c>channelId</c> 优先，其次 <c>channel_id</c>；均空 → null = 由票载荷决定）。</summary>
-    [JsonIgnore]
-    public string? EffectiveChannelId
-        => !string.IsNullOrWhiteSpace(ChannelId) ? ChannelId : ChannelIdSnakeCase;
 }
 
 /// <summary>业务兑票请求（V0.14.0——POST {prefix}/login/ticket/redeem；DMP ADR05 方案 B 冻结契约 body =

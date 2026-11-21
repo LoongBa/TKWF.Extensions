@@ -10,7 +10,7 @@
 - 仓库：TKWF.Extensions — TKWF 业务扩展包仓库
 - 定位：`TKWF.Ext.*` 扩展（Tagging/Permissions/Navigation 等）独立开发、独立版本，不进入主框架 slnx
 - 主框架：`../_TKWF/`（TKW.Framework，经 **PackageReference** 引用主框架**发布的 NuGet 包**（CPM 集中 `Directory.Packages.props`；本地联调为 DLL 模式 `UseLocalFw=true` 引用部署根 `build\refs\`）——2026-09-15 迁移，独立于主框架源码构建）
-- 扩展进度：主框架私有 `docs/03_扩展模块/总览和跟踪.md`（扩展迭代/跟踪不公开；公开仓库存代码/指南/**设计文档**）
+- 扩展进度：主框架私有 `../_TKWF/docs/03_扩展模块/总览和跟踪.md`（扩展迭代/跟踪不公开；公开仓库存代码/指南/**设计文档**）
 - 本仓库文档：`docs/`（设计文档/指南/模板/规则）
 - 设计思路与 ABP 兼容策略：`docs/扩展模块设计思路与ABP兼容策略.md`（公开——最优设计为默认，兼容 ABP 为特殊需求）
 
@@ -32,6 +32,7 @@
 | 讨论中未定稿？ | `docs/草稿/` |
 | 扩展测试事务约定（SQLite 物理事务边界 / Noop 限制 / PG 测试容器评估）？ | `docs/测试约定-SQLite物理事务与Noop限制.md` |
 | 评审开发方案？ | **Oracle**（Momus 仅评审 `.sisyphus/plans/` 目录工作计划，不评审 TKWF 开发方案） |
+| 自检 / 优化（文档-代码同步、跨模块一致性、版本表漂移）？ | 说「自检」或「优化」→ `docs/扩展模块健康自检与优化机制.md`（一键：`pwsh build/build-ext-healthcheck.ps1`，报告落 `docs/健康自检/`） |
 
 ---
 
@@ -39,7 +40,7 @@
 
 - **扩展 = 独立单元**：项目 + 测试 + 文档 + 版本各自独立；`TKWF.Extensions.slnx` 统一注册，**不进** `TKW.Framework.slnx`
 - **跨仓库引用**：主框架经 **PackageReference**（CPM 集中版本，`Directory.Packages.props`；`UseLocalFw=true` DLL 模式引用部署根 refs；`false` NuGet 发布模式走 nuget.org）；扩展间用 ProjectReference（编译期依赖），跨扩展消费契约走 `.Abstractions`（L2 门控 `TKWF0022`）
-- **MinVer 版本**：`V{major}.{minor}.{patch}`，tag 前缀 `v`，扩展版本独立于主框架
+- **MinVer 版本**：`V{major}.{minor}.{patch}`；扩展 tag 前缀 `{扩展名}/v`（各扩展独立），公共内容（构建基建）用无前缀 `v`；扩展版本独立于主框架
 - **扩展 ADR 命名**：`ADR-{扩展名称}-{title}.md`（不走主框架 ADR01-39 序号），三问必填
 - **Commit 纪律**：避免频繁，积累后统一提交（一次迭代 1-4 个）
 - **Tag 纪律**：必须有开发方案 + 审核报告且征得同意，才能打 tag

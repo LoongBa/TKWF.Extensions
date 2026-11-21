@@ -1,0 +1,29 @@
+[
+  {
+    "file": "Agents_TKWF_Ext.md",
+    "mustContain": ["build-ext-healthcheck\\.ps1", "扩展模块健康自检与优化机制"],
+    "note": "AGENTS 必须保留一句话自检入口（否则机制无法被发现与执行）"
+  },
+  {
+    "file": "docs/AGENTS.md",
+    "mustContain": ["\\{扩展名\\}/v"],
+    "mustNotContain": ["tag 前缀 `v`，扩展版本独立于主框架"],
+    "note": "扩展 tag 前缀是 {扩展名}/v（各扩展独立），公共内容才用无前缀 v；'tag 前缀 v' 为 2026-11-21 前旧口径"
+  },
+  {
+    "file": "docs/目录结构与版本管理规则.md",
+    "mustContain": ["PackageReference"],
+    "mustNotContain": ["ProjectReference 跨仓库引用主框架源码"],
+    "note": "2026-09-15 已迁移 PackageReference（本地联调 DLL 模式）；文档不得再教源码 ProjectReference"
+  },
+  {
+    "file": "docs/目录结构与版本管理规则.md",
+    "mustNotContain": ["各扩展各自独立迭代，不公开"],
+    "note": "2026-09-15 裁定：新开发方案/审核报告/ADR 落公开仓库 docs/（私有仓仅承载历史）"
+  },
+  {
+    "file": "README.md",
+    "mustContain": ["docs/versions.json"],
+    "note": "根 README 必须保留机器可读版本清单指引（tag 为事实源）"
+  }
+]

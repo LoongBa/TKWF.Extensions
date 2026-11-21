@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-11-21",
+  "note": "存量债务棘轮基线（A5/A6/G2）。只允许收紧：修复后重跑 -UpdateBaseline；新增条目应修复而非入基线。键不含行号（稳定）。生成：build/build-ext-healthcheck.ps1 -UpdateBaseline",
+  "counts": {
+    "HK-A6": 6,
+    "HK-A5": 40
+  },
+  "items": {
+    "HK-A5": [
+      "HK-A5|Account|AccountLockoutStore",
+      "HK-A5|Account|IAccountLockoutStore",
+      "HK-A5|Account|IPasswordResetStore",
+      "HK-A5|Account|PasswordResetStore",
+      "HK-A5|AuditLogging|AuditLogStore",
+      "HK-A5|BlobStoring|BlobRecordStore",
+      "HK-A5|BlobStoring|IBlobRecordStore",
+      "HK-A5|Calendar|CalendarStore",
+      "HK-A5|Calendar|ICalendarStore",
+      "HK-A5|Captcha|CaptchaChallengeStateStore",
+      "HK-A5|DataDictionary|DictionaryStore",
+      "HK-A5|DataDictionary|IDictionaryStore",
+      "HK-A5|Emailing|EmailRecordStore",
+      "HK-A5|Emailing|IEmailRecordStore",
+      "HK-A5|FeatureManagement|FeatureValueStore",
+      "HK-A5|FeatureManagement|IFeatureValueStore",
+      "HK-A5|FileManagement|FileFolderStore",
+      "HK-A5|FileManagement|IFileFolderStore",
+      "HK-A5|FileManagement|IManagedFileStore",
+      "HK-A5|FileManagement|IManagedFileVersionStore",
+      "HK-A5|FileManagement|ManagedFileStore",
+      "HK-A5|FileManagement|ManagedFileVersionStore",
+      "HK-A5|Identity|IRoleStore",
+      "HK-A5|Identity|IUserStore",
+      "HK-A5|Identity|RoleStore",
+      "HK-A5|Identity|UserStore",
+      "HK-A5|Notifications|INotificationStore",
+      "HK-A5|Notifications|NotificationPreferenceStore",
+      "HK-A5|Notifications|NotificationStore",
+      "HK-A5|Notifications|NotificationSubscriptionStore",
+      "HK-A5|OrganizationUnit|IOrganizationUnitStore",
+      "HK-A5|OrganizationUnit|OrganizationUnitStore",
+      "HK-A5|Permissions|NoOpPermissionStore",
+      "HK-A5|PrintTemplates|ITemplateStore",
+      "HK-A5|PrintTemplates|TemplateStore",
+      "HK-A5|SecurityLog|SecurityLogStore",
+      "HK-A5|Tagging|FreeSqlTagHitStore",
+      "HK-A5|Tagging|FreeSqlTagRuleStore",
+      "HK-A5|Tagging|ITagHitStore",
+      "HK-A5|Tagging|ITagRuleStore"
+    ],
+    "HK-A6": [
+      "HK-A6|_Framework/AuditLogging/AuditLogEntity.cs|属性 ArgumentsJson",
+      "HK-A6|_Framework/Emailing/EmailRecordEntity.cs|属性 ErrorMessage",
+      "HK-A6|_Framework/Notifications/NotificationEntity.cs|属性 DataJson",
+      "HK-A6|_Framework/Notifications/NotificationPreferenceEntity.cs|属性 ChannelsJson",
+      "HK-A6|_Framework/WeChatOperations/ArticleReplyOpsConfigEntity.cs|属性 UrlTemplate",
+      "HK-A6|_Framework/WeChatOperations/ReplyTextOpsConfigEntity.cs|属性 DisabledChannelReplyTemplate"
+    ]
+  }
+}

@@ -54,6 +54,6 @@ app.UseWebExtensions(e => e.Add<NotificationsHubWebExtension>());   // AddSignal
 | **V0.2.0** | Web 装配钩子（v4.10.45）——`NotificationsHubWebExtension`（AddSignalR D6 内聚 + MapHub），旧 `MapTkfwNotificationsHub` 删除；`AllowAnonymous` 配置化 |
 
 - MinVerTagPrefix：`Notifications.SignalR/v`（独立 tag 独立演进）；当前 tag `Notifications.SignalR/v0.2.0`
-- 详细用法见 [通知中心使用指南](../docs/Notifications/通知中心扩展-使用指南.md)（本通道并入主包指南）
+- 详细用法见 [通知中心使用指南](../../docs/Notifications/通知中心扩展-使用指南.md)（本通道并入主包指南）
 
 <!-- EOF -->

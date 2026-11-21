@@ -1,6 +1,6 @@
 # TKWF.Ext.Navigation 导航扩展技术规范
 
-**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0 (菜单数据模型与贡献机制 + 多菜单分区——MenuName 精确过滤 + DefaultMenuName 驱动；2026-09-17 实施，Oracle PASS WITH CONDITIONS 4 条件全闭环，测试 11 项落地) | **框架**: .NET 10
+**状态**: 核心业务扩展 (Core Business Extension) | **版本**: V0.2.0（功能线）／已发布 v0.1.2 (菜单数据模型与贡献机制 + 多菜单分区——MenuName 精确过滤 + DefaultMenuName 驱动；2026-09-17 实施，Oracle PASS WITH CONDITIONS 4 条件全闭环，测试 11 项落地) | **框架**: .NET 10
 
 > **V4.10.53 领域自治评估（2026-10-04）**：`MenuManager<TUserInfo>`（实现 `IMenuManager : IDomainService`）判定为**接线型保留**——ctor（`IMenuDefinitionRepository` + `IServiceProvider` + `IOptions<NavigationOptions>`）零 IDomainUser 依赖（权限过滤经 `GetService<IPermissionChecker>()` 可空解析，checker 未注册降级不过滤）；注册保持 `TryAddSingleton`（消费方 `User.Use<IMenuManager>()` AOP 解析普通描述符）。**零代码改动**。
 

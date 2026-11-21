@@ -21,8 +21,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Condition="'$(UseLocalFw)' != 'true'" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <!-- TestServer（HTTP 级限流验证）。VersionOverride：CPM 未收录 ASP.NET Core 测试包——按 CSP 规则
-         本条目显式覆盖版本（对齐 Microsoft.Extensions 10.0.11），不改 Directory.Packages.props（no CPM 接线） -->
+    <!-- TestServer（HTTP 级限流验证）——CPM 统一版本（对齐 Microsoft.Extensions 10.0.15） -->
     <PackageReference Include="Microsoft.AspNetCore.TestHost"  />
     <!-- SqlCountRateLimitCheck 测试（v0.3.0）：FreeSql SQLite 内存/文件库 + 真实 FreeSqlEntityDAC 驱动 -->
     <PackageReference Include="FreeSql" />

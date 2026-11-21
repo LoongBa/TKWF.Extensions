@@ -53,3 +53,6 @@ Thumbs.db
 appsettings*.local.json
 # 本地工具状态（OpenCode 会话延续/计划）不入库
 .omo/
+
+# 健康自检：最近一次机器摘要（每次运行变化；证据以同日报告 md 为准）
+docs/健康自检/healthcheck-latest.json

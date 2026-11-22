@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 6d3c9bc6f2f9f91b05468875c465af492bd6a92d0bb9c1e051362ee52d1c7ff4]
 // 模型: ManagedFileVersionEntity (TKWF.Ext.FileManagement.ManagedFileVersionEntity)
-// 生成时间: 2026-10-07 17:19:54
+// 生成时间: 2026-11-23 00:27:25
 // </auto-generated>
 #nullable enable
 using System;

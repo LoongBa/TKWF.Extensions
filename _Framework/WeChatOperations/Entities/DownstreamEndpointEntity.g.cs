@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 8ebeca9920d7151e5cc84edc84f1e8e853cd0540b84633d99aa14cf52af1009d]
 // 模型: DownstreamEndpointEntity (TKWF.Ext.WeChatOperations.DownstreamEndpointEntity)
-// 生成时间: 2026-10-18 04:42:42
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

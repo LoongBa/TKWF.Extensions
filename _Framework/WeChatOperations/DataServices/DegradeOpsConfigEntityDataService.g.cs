@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: ceea728c5850aff87ef02cb9fb89dc045eaa27107bac9bb5c544e7d004e0b953]
 // 模型: DegradeOpsConfigEntity (TKWF.Ext.WeChatOperations.DegradeOpsConfigEntity)
-// 生成时间: 2026-11-05 22:27:20
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

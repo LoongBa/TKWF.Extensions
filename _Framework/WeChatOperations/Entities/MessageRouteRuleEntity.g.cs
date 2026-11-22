@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 64130391d832c63c6f4fd21938c5fdd2f174b2ad00f78c89fc0263c923b221e0]
 // 模型: MessageRouteRuleEntity (TKWF.Ext.WeChatOperations.MessageRouteRuleEntity)
-// 生成时间: 2026-10-18 04:42:42
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

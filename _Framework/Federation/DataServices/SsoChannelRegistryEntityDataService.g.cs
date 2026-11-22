@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 56b3bebd0b56e4aa409215848f65bd95cf378c956462b688f76922b0a734068d]
 // 模型: SsoChannelRegistryEntity (TKWF.Ext.Federation.SsoChannelRegistryEntity)
-// 生成时间: 2026-11-05 22:26:12
+// 生成时间: 2026-11-23 00:27:23
 // </auto-generated>
 #nullable enable
 using System;

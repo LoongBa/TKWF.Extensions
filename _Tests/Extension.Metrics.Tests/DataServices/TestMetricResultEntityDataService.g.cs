@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 14c70ccfb141aecef9d3ef5d390ca02cf4d470319a86b15856a0ddac94bcffd4]
 // 模型: TestMetricResultEntity (TKWF.Ext.Metrics.Tests.TestMetricResultEntity)
-// 生成时间: 2026-11-20 03:35:57
+// 生成时间: 2026-11-23 00:27:28
 // </auto-generated>
 #nullable enable
 using System;

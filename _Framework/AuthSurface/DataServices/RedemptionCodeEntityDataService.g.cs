@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: f961a5cd42c0e680cb255de1e873083f05a5237748ba05dd417a0d609697c6c2]
 // 模型: RedemptionCodeEntity (TKWF.Ext.AuthSurface.RedemptionCodeEntity)
-// 生成时间: 2026-11-17 00:08:21
+// 生成时间: 2026-11-23 00:27:09
 // </auto-generated>
 #nullable enable
 using System;

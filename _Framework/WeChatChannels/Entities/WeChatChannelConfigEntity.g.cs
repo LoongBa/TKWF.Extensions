@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: f9984b078673b291dcd73f703201f00d519dec767ae6f57df2f51d8ce8cae3e9]
 // 模型: WeChatChannelConfigEntity (TKWF.Ext.WeChatChannels.WeChatChannelConfigEntity)
-// 生成时间: 2026-11-20 03:36:18
+// 生成时间: 2026-11-23 00:27:49
 // </auto-generated>
 #nullable enable
 using System;

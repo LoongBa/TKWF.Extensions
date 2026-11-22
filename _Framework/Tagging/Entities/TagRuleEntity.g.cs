@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: b02606d1a59e8ae4f36ca9e96811cfabffc7c1773ed95aea02e5f1d451e9b050]
 // 模型: TagRuleEntity (TKWF.Ext.Tagging.TagRuleEntity)
-// 生成时间: 2026-10-07 17:20:07
+// 生成时间: 2026-11-23 00:27:46
 // </auto-generated>
 #nullable enable
 using System;

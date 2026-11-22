@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 24bdef31aa844ca881099c0737bfccc8efc2533ca24fec029045d0fc1dd1dbbe]
 // 模型: PermissionGrantEntity (TKWF.Ext.Permissions.PermissionGrantEntity)
-// 生成时间: 2026-11-20 03:36:04
+// 生成时间: 2026-11-23 00:27:35
 // </auto-generated>
 #nullable enable
 using System;

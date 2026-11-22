@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: a4e841546e18978ada33ca5b07f594d3a47f50581e5a84e7ccaa34dcbac8cb66]
 // 模型: DataImportRecordEntity (TKWF.Ext.DataPort.DataImportRecordEntity)
-// 生成时间: 2026-11-09 02:59:46
+// 生成时间: 2026-11-23 00:27:18
 // </auto-generated>
 #nullable enable
 using System;

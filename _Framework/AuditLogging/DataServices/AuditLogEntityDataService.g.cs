@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: bd29e267b3ae0df6a14664d359da7d92c80e792f03c78f473130764137570bf2]
 // 模型: AuditLogEntity (TKWF.Ext.AuditLogging.AuditLogEntity)
-// 生成时间: 2026-11-20 03:35:34
+// 生成时间: 2026-11-23 00:27:05
 // </auto-generated>
 #nullable enable
 using System;

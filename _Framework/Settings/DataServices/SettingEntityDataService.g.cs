@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 1ee7f1349eeb50e2ae30a443063e880617efb5a4a13e684251f46476e7e8051d]
 // 模型: SettingEntity (TKWF.Ext.Settings.SettingEntity)
-// 生成时间: 2026-11-20 03:36:11
+// 生成时间: 2026-11-23 00:27:42
 // </auto-generated>
 #nullable enable
 using System;

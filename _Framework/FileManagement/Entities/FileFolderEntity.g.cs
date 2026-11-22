@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 452c73b1795f8120aa3bcd66bdc1583bfbe83e369189ac988a69615dc12bfcd3]
 // 模型: FileFolderEntity (TKWF.Ext.FileManagement.FileFolderEntity)
-// 生成时间: 2026-10-07 17:19:54
+// 生成时间: 2026-11-23 00:27:24
 // </auto-generated>
 #nullable enable
 using System;

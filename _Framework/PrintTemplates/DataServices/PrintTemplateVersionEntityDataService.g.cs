@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 57480e23ac02e9c8a144dec06ec865be1d565ccd552b52d2bb68623da19fb959]
 // 模型: PrintTemplateVersionEntity (TKWF.Ext.PrintTemplates.PrintTemplateVersionEntity)
-// 生成时间: 2026-11-20 03:36:06
+// 生成时间: 2026-11-23 00:27:37
 // </auto-generated>
 #nullable enable
 using System;

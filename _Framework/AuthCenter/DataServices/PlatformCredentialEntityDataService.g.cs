@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 6061a7ff18e8c47b0cf60c25418c82fb044d6f92240ab7fe32fd7cadd4c0b0c9]
 // 模型: PlatformCredentialEntity (TKWF.Ext.AuthCenter.PlatformCredentialEntity)
-// 生成时间: 2026-11-09 02:52:46
+// 生成时间: 2026-11-23 00:27:07
 // </auto-generated>
 #nullable enable
 using System;

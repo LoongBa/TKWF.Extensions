@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 9566243c014488e0268f82e5a3bd12e5910e627fc020338b414b3ddd03a93fb0]
 // 模型: DictionaryItemView (TKWF.Ext.DataDictionary.DictionaryItemView)
-// 生成时间: 2026-10-07 17:19:47
+// 生成时间: 2026-11-23 00:27:16
 // </auto-generated>
 #nullable enable
 using System;

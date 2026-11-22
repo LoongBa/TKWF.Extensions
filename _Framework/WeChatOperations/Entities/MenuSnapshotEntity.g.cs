@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: f27879b07b7b091d8710f3a795cf4959e49de2be2b56bc1bf88d94c20082db12]
 // 模型: MenuSnapshotEntity (TKWF.Ext.WeChatOperations.MenuSnapshotEntity)
-// 生成时间: 2026-10-18 02:55:18
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

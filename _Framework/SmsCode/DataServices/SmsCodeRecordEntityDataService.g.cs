@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: a90481fa665534705f4177c4326cb727075bb7a565faed54cd250112a7d0392f]
 // 模型: SmsCodeRecordEntity (TKWF.Ext.SmsCode.SmsCodeRecordEntity)
-// 生成时间: 2026-11-20 03:36:13
+// 生成时间: 2026-11-23 00:27:44
 // </auto-generated>
 #nullable enable
 using System;

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: fce9a42da0e94f45a8cd86b1f25aaf79bc8b0b9d7e96ad50619ded547fb1cafe]
 // 模型: AuthAccountFreezeEntity (TKWF.Ext.AuthCenter.AuthAccountFreezeEntity)
-// 生成时间: 2026-10-20 14:08:35
+// 生成时间: 2026-11-23 00:27:07
 // </auto-generated>
 #nullable enable
 using System;

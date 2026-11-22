@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: e878cfe705d49be61a3afd452aaf14ced70a8a5a6b4f240145187b57a9242ae8]
 // 模型: SecurityLogEntity (TKWF.Ext.SecurityLog.SecurityLogEntity)
-// 生成时间: 2026-10-07 17:20:05
+// 生成时间: 2026-11-23 00:27:40
 // </auto-generated>
 #nullable enable
 using System;

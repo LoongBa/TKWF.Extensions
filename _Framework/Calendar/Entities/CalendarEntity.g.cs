@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 19f09d52aec4a12630eaea8dc552ccb98c6ad343838881f062c3ae2a591d49ef]
 // 模型: CalendarEntity (TKWF.Ext.Calendar.CalendarEntity)
-// 生成时间: 2026-10-07 17:19:46
+// 生成时间: 2026-11-23 00:27:14
 // </auto-generated>
 #nullable enable
 using System;

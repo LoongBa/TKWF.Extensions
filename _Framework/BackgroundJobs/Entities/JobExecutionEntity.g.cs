@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 29a6ca6f7f5397534f7935664b3ebe0f9f02d067de551be9b1e5eef30f1c063d]
 // 模型: JobExecutionEntity (TKWF.Ext.BackgroundJobs.JobExecutionEntity)
-// 生成时间: 2026-10-07 17:19:42
+// 生成时间: 2026-11-23 00:27:10
 // </auto-generated>
 #nullable enable
 using System;

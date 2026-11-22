@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 6023a430bd010954ebd04c2ae7f3edbda978085dc917e1212ee22b95aa0141bd]
 // 模型: CodeBatchEntity (TKWF.Ext.AuthSurface.CodeBatchEntity)
-// 生成时间: 2026-11-20 03:35:38
+// 生成时间: 2026-11-23 00:27:09
 // </auto-generated>
 #nullable enable
 using System;

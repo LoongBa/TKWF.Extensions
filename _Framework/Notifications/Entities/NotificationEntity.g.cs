@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 11e61a9a461bbfc90f6fdf5ad878b67b6f138ff90847bf789d829ba3b9c95bf7]
 // 模型: NotificationEntity (TKWF.Ext.Notifications.NotificationEntity)
-// 生成时间: 2026-10-07 17:19:59
+// 生成时间: 2026-11-23 00:27:31
 // </auto-generated>
 #nullable enable
 using System;

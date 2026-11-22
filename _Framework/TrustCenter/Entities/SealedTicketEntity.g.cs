@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 202ecc7ea968bed9e1c3173b2d059f83079617faa9252f8b09f6ad85f0f6b9ec]
 // 模型: SealedTicketEntity (TKWF.Ext.TrustCenter.SealedTicketEntity)
-// 生成时间: 2026-10-17 12:30:01
+// 生成时间: 2026-11-23 00:27:48
 // </auto-generated>
 #nullable enable
 using System;

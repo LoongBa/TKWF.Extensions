@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 6216425b48c34ff5d379d3786ff2a15a2910173bfa1393ceccbacce5af51df1a]
 // 模型: PlatformAccountMapEntity (TKWF.Ext.AuthCenter.PlatformAccountMapEntity)
-// 生成时间: 2026-10-20 14:08:35
+// 生成时间: 2026-11-23 00:27:07
 // </auto-generated>
 #nullable enable
 using System;

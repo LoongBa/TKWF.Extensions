@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: fbfc1202d5da83e56c7594f43df83fe7403fcf9ce8fe7a4e9cd8e2594808dc39]
 // 模型: OrganizationUnitUserEntity (TKWF.Ext.OrganizationUnit.OrganizationUnitUserEntity)
-// 生成时间: 2026-10-01 02:34:16
+// 生成时间: 2026-11-23 00:27:33
 // </auto-generated>
 #nullable enable
 using System;

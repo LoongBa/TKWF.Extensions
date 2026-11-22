@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 1ebb8bb1a350a869c5ec8d4bce610c1abdd05be7c0f170b05063812e9cb1a116]
 // 模型: WeChatMessageIdempotencyEntity (TKWF.Ext.WeChatOperations.WeChatMessageIdempotencyEntity)
-// 生成时间: 2026-11-05 22:27:20
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

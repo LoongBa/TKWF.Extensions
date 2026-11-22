@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 32437fab2bbe1112b1e507378cf6f4364acbe95b6ee7b82873ed8c7b0bdbd184]
 // 模型: RoleEntity (TKWF.Ext.Identity.RoleEntity)
-// 生成时间: 2026-11-20 03:35:55
+// 生成时间: 2026-11-23 00:27:26
 // </auto-generated>
 #nullable enable
 using System;

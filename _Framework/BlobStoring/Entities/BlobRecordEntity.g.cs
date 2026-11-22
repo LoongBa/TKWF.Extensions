@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: a7134cb99095d25985c1637f40c1df12d712ecabc5cca11ef46a1d75a40be5be]
 // 模型: BlobRecordEntity (TKWF.Ext.BlobStoring.BlobRecordEntity)
-// 生成时间: 2026-10-07 17:19:44
+// 生成时间: 2026-11-23 00:27:12
 // </auto-generated>
 #nullable enable
 using System;

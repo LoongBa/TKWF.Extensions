@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: eabe02569fb2731a83e9b0b5e3398c31799c093aee365aad7be84c4879d0dc0f]
 // 模型: FeatureValueEntity (TKWF.Ext.FeatureManagement.FeatureValueEntity)
-// 生成时间: 2026-10-07 17:19:52
+// 生成时间: 2026-11-23 00:27:21
 // </auto-generated>
 #nullable enable
 using System;

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 39b2693a2bd941efafdd071c445235734ebb839c9f6082af322ed12b02494d7c]
 // 模型: AccountLockoutEntity (TKWF.Ext.Account.AccountLockoutEntity)
-// 生成时间: 2026-10-07 17:19:34
+// 生成时间: 2026-11-23 00:27:01
 // </auto-generated>
 #nullable enable
 using System;

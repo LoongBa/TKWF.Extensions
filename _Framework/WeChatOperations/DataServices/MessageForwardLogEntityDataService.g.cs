@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 62d8e850134c6cbcce67a4f0ee21763a9ed41805faa2e291ce8d48dff68753e2]
 // 模型: MessageForwardLogEntity (TKWF.Ext.WeChatOperations.MessageForwardLogEntity)
-// 生成时间: 2026-11-05 22:27:20
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

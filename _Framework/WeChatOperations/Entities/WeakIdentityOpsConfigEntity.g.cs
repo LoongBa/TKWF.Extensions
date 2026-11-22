@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: aa4e9c695398ae69f0160fcc60fc354343a572a954a4cdc94a8898bbb7013daf]
 // 模型: WeakIdentityOpsConfigEntity (TKWF.Ext.WeChatOperations.WeakIdentityOpsConfigEntity)
-// 生成时间: 2026-10-30 06:16:01
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

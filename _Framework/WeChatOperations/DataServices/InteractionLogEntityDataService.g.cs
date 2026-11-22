@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: c37cbb6d8e01ab9d3d376c1a16348d02daaa0e7d2670e2c33cd897502c9bb05b]
 // 模型: InteractionLogEntity (TKWF.Ext.WeChatOperations.InteractionLogEntity)
-// 生成时间: 2026-11-05 22:27:20
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

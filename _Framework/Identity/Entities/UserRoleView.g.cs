@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 5150de0cac08aff0ec1adcbe35dd808d5cbae01f37cc0dc9241363c709253870]
 // 模型: UserRoleView (TKWF.Ext.Identity.UserRoleView)
-// 生成时间: 2026-10-07 17:19:55
+// 生成时间: 2026-11-23 00:27:26
 // </auto-generated>
 #nullable enable
 using System;

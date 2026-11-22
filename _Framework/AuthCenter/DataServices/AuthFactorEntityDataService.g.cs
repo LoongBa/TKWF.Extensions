@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: c931c0387805c81a6107cd30b31ba5d54a57cca30413b00a4256b654dc5da70c]
 // 模型: AuthFactorEntity (TKWF.Ext.AuthCenter.AuthFactorEntity)
-// 生成时间: 2026-11-09 02:52:45
+// 生成时间: 2026-11-23 00:27:07
 // </auto-generated>
 #nullable enable
 using System;

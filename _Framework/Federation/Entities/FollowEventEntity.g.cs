@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: fc6b2c4aa9f5a35b7f9deeb222c9ec303ab24058be8d42e40c86fc5259e396eb]
 // 模型: FollowEventEntity (TKWF.Ext.Federation.FollowEventEntity)
-// 生成时间: 2026-11-05 22:26:12
+// 生成时间: 2026-11-23 00:27:22
 // </auto-generated>
 #nullable enable
 using System;

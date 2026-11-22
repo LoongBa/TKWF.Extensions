@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 3c9f9bea310d5628221dd7fb7913c6d1278909c010b113d3c33d2b715d23a9da]
 // 模型: ApprovalFlowEntity (TKWF.Ext.Approval.ApprovalFlowEntity)
-// 生成时间: 2026-10-01 00:13:13
+// 生成时间: 2026-11-23 00:27:04
 // </auto-generated>
 #nullable enable
 using System;

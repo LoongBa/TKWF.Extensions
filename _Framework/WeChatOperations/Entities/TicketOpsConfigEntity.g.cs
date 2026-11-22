@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: e8d31f5107b93438992f0da6c323494840e99ee883fd121cb9e5e6424b4a0797]
 // 模型: TicketOpsConfigEntity (TKWF.Ext.WeChatOperations.TicketOpsConfigEntity)
-// 生成时间: 2026-10-30 06:16:01
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

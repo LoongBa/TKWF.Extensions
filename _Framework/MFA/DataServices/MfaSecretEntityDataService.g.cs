@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: c6a6a187b434b32bd6be388d099eb05494b586aa59457e21e62a6867a4165f31]
 // 模型: MfaSecretEntity (TKWF.Ext.MFA.MfaSecretEntity)
-// 生成时间: 2026-11-09 02:33:07
+// 生成时间: 2026-11-23 00:27:30
 // </auto-generated>
 #nullable enable
 using System;

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: f3b2654ad61f3a76f68c4d68bc7c8368419ac32304421a40cfbb7b5646805a17]
 // 模型: RateLimitCounterEntity (TKWF.Ext.RateLimiting.RateLimitCounterEntity)
-// 生成时间: 2026-10-07 18:43:46
+// 生成时间: 2026-11-23 00:27:38
 // </auto-generated>
 #nullable enable
 using System;

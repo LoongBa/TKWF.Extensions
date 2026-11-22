@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 31b10a8bde72c9875334d407e9712e58d8ece508fe631614b63d1a54dac13e98]
 // 模型: MenuPublishLogEntity (TKWF.Ext.WeChatOperations.MenuPublishLogEntity)
-// 生成时间: 2026-10-18 02:55:18
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: b8efcafb5266e7be3c8fc970bccd30fdf4875d1fe5b28db2f9e657c80ad5c9d7]
 // 模型: ReplyTextOpsConfigEntity (TKWF.Ext.WeChatOperations.ReplyTextOpsConfigEntity)
-// 生成时间: 2026-10-30 06:16:01
+// 生成时间: 2026-11-23 00:27:52
 // </auto-generated>
 #nullable enable
 using System;

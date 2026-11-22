@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 0bc3ad4f6deedb5966f5e1924fe686a5d19fa3405988a7fca49d92e4e5d9d38c]
 // 模型: UserRedemptionHistoryView (TKWF.Ext.AuthSurface.UserRedemptionHistoryView)
-// 生成时间: 2026-10-20 14:29:07
+// 生成时间: 2026-11-23 00:27:09
 // </auto-generated>
 #nullable enable
 using System;

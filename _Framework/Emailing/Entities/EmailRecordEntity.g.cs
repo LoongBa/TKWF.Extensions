@@ -2,7 +2,7 @@
 // 此文件由 xCodeGen 自动生成，请勿手动修改。
 // @[xCodeGen.Hash: 23184150d768739e5b1a809839a37b57ac4eb6fa6244a30a07d6e8ed51c40df1]
 // 模型: EmailRecordEntity (TKWF.Ext.Emailing.EmailRecordEntity)
-// 生成时间: 2026-10-07 17:19:50
+// 生成时间: 2026-11-23 00:27:19
 // </auto-generated>
 #nullable enable
 using System;

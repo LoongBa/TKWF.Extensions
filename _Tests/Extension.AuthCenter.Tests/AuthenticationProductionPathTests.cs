@@ -34,6 +34,7 @@ public class AuthenticationProductionPathTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddHttpContextAccessor();
         new AuthCenterExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         // Options 值绑定（消费方 DomainHost 等价——TKWF:AuthCenter 节绑定 RSA 密钥 + Issuer）
@@ -60,6 +61,22 @@ public class AuthenticationProductionPathTests
         configure?.Invoke(services);
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>V0.3.0 契约包门面提取的正向证据：域帧内 User.Use&lt;I*Contract&gt;() 经守卫工厂解析到真实实现
+    ///（消费方仅引用 AuthCenter.Abstractions 即可调用契约基接口——本迭代的核心目标）。</summary>
+    [Fact]
+    public void Use_ContractFacades_ThroughGuardFactory_ResolvesImplementations()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        DomainUser<TestUserInfo>.BindScope(sp);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("user-contract", "契约测试") };
+
+        Assert.NotNull(user.Use<IPasswordLoginServiceContract>());
+        Assert.NotNull(user.Use<IExternalTicketLoginServiceContract>());
+        Assert.IsAssignableFrom<IPasswordLoginServiceContract>(user.Use<IPasswordLoginService>());
+        Assert.IsAssignableFrom<IExternalTicketLoginServiceContract>(user.Use<IExternalTicketLoginService>());
     }
 
     /// <summary>生产路径：User.Use&lt;ITokenService&gt;()——AOP 路径（守卫工厂 → 直建 TokenService）→ 签发/验签/撤销全链落库。</summary>

@@ -1,7 +1,7 @@
 # ADR-AuthCenter-契约包门面提取
 
 > **版本**：v1.1（实施阻断后机制修订，Oracle5 裁定）
-> **状态**：待重审（v1.0 已批准；v1.1 因实施阻断修订机制，须 Oracle 重审）
+> **状态**：v1.1 已重审通过（Oracle5 裁定契约基接口模式；2026-11-20 实施闭环 + code-reviewer PASS WITH CONDITIONS 3 项条件闭环）；v1.0 已批准
 > **关联**：开发方案 `docs/AuthCenter/v0.3.0-AuthCenter.Abstractions契约包门面提取-开发方案.md`；EduPlatform 反馈 B1/B2 核实裁定 `docs/转告/2026-11-20-B1B2三方处置转告.md`；G17A §7.6/7.8、G17B §10.2、ADR03（消费方仓）
 
 ## 目的与目标
@@ -36,7 +36,8 @@
 |---|---|
 | 新建 `AuthCenter.Abstractions.V2` 独立包 | 契约型已成立（Federation 活跃消费）；存量包 minor 演进零 using 迁移，新包徒增版本面 |
 | 消费方 Domain 直接引主包 | 违反 ADR03/ExtensionBoundaryTests（Domain 零 `TKWF.Ext.*` 引用回归契约） |
-| 为 AuthSurface 同步建 Abstractions | 违反 A6 裁定（终端应用不算跨扩展消费方；空包 = 禁止的第三形态） | 的接口整体迁契约包 + 框架 registry 跨程序集定位 | 已实证不可行且非本方案可修：`DefaultExtensionEndpointRegistry.cs:167/:238-243` 按门面程序集找 SG1b 特性（契约包按 G17A §7.8 永不产出）；路由组/模块前缀同样按该程序集取键（`:80/:189-198/:220-231`）——只修查找会致 `/api/auth/*` 静默漂移；SG2 让路链亦按门面程序集判定。WeChatChannels v0.9.0 同型 BLOCKER。已登记非阻塞转告框架组，不作本方案前置 |
+| 为 AuthSurface 同步建 Abstractions | 违反 A6 裁定（终端应用不算跨扩展消费方；空包 = 禁止的第三形态） |
+| 带 `[ApiExpose]` 的门面接口整体迁契约包 + 框架 registry 跨程序集定位 | 已实证不可行且非本方案可修：`DefaultExtensionEndpointRegistry.cs:167/:238-243` 按门面程序集找 SG1b 特性（契约包按 G17A §7.8 永不产出）；路由组/模块前缀同样按该程序集取键（`:80/:189-198/:220-231`）——只修查找会致 `/api/auth/*` 静默漂移；SG2 让路链亦按门面程序集判定。WeChatChannels v0.9.0 同型 BLOCKER。已登记非阻塞转告框架组，不作本方案前置 |
 
 ## 后果
 

@@ -65,6 +65,10 @@ jobs:
     outputs:
       docs-only: ${{ steps.filter.outputs.docs-only }}
       test-targets: ${{ steps.filter.outputs.test-targets }}
+      # 2026-11-23（用户裁定：临时走 local-feed 快速开发，阶段性稳定后发 NuGet）：
+      # 框架基线（CPM TKWF.Domain 版本）是否已上架 nuget.org——未上架时 build-test 跳过并给出 notice，
+      # 避免 main 长期红（NU1102）；框架上架后本预检自动转 true，CI 恢复 NuGet 模式全量验证，无需改代码。
+      fw-online: ${{ steps.fw.outputs.fw-online }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -130,9 +134,29 @@ jobs:
           echo "test-targets=$TARGETS" >> "$GITHUB_OUTPUT"
           echo "test-targets resolved: '$TARGETS'"
 
+      - name: Resolve framework baseline availability
+        id: fw
+        shell: bash
+        run: |
+          VER=$(grep -oE 'Include="TKWF\.Domain" Version="[^"]+"' Directory.Packages.props | head -1 | sed -E 's/.*Version="([^"]+)".*/\1/')
+          echo "TKWF.Domain CPM version: '$VER'"
+          if [[ -z "$VER" || "$VER" == *-local ]]; then
+            echo "fw-online=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Framework baseline '$VER' is a local/dev version (not on nuget.org) — NuGet-mode CI skipped (AGENTS §6 local-feed mode)."
+            exit 0
+          fi
+          IDX=$(curl -fsS "https://api.nuget.org/v3-flatcontainer/tkwf.domain/index.json" || true)
+          if echo "$IDX" | grep -q "\"$VER\""; then
+            echo "fw-online=true" >> "$GITHUB_OUTPUT"
+            echo "Framework $VER is available on nuget.org — NuGet-mode CI enabled."
+          else
+            echo "fw-online=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Framework $VER is NOT published on nuget.org — NuGet-mode CI skipped until framework publish (AGENTS §6)."
+          fi
+
   build-test:
     needs: changes
-    if: needs.changes.outputs.docs-only != 'true'
+    if: needs.changes.outputs.docs-only != 'true' && needs.changes.outputs.fw-online == 'true'
     runs-on: ubuntu-latest
     # 2026-09-19（对齐主框架 V5 前收尾）：显式声明权限——cleanup 步经 API 删除制品需 actions: write，
     # 指定 permissions 会覆盖默认集，须一并保留 contents: read（checkout）。
@@ -241,9 +265,20 @@ jobs:
       # v4.10.101：Pack/Upload artifacts 从 build-test 移除——tag 不再触发本 job；
       # 发布由 publish job 对每个待发布 tag 自包含 build+pack（不依赖制品，跨 tag 复用制品会串版本）。
 
+  # 框架基线未上架时的占位 job：显式成功 + notice（main 不再因 NU1102 长期红）。
+  # 真实质量门为本地 L0（slnx 构建）+ L2（48 项目全量测试，AGENTS §8 测试纪律）；框架上架后 build-test 自动恢复。
+  fw-pending:
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true' && needs.changes.outputs.fw-online != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Framework baseline pending (local-feed mode)
+        run: |
+          echo "::notice title=CI skipped::Framework baseline not on nuget.org — local-feed mode (AGENTS §6). Local L0/L2 is the gate until framework publish."
+
   publish:
-    needs: build-test
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: [changes, build-test]
+    if: (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && needs.changes.outputs.fw-online == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

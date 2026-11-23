@@ -90,9 +90,10 @@ public class AuthCenterInitializerTests
 
         foreach (var (interfaceType, _) in Facades)
         {
-            var descriptor = services.FirstOrDefault(d => d.ServiceType == interfaceType);
-            Assert.NotNull(descriptor);
-            Assert.Null(descriptor!.ImplementationType);      // 非实现映射——可构造守卫工厂
+            var descriptors = services.Where(d => d.ServiceType == interfaceType).ToList();
+            Assert.Single(descriptors);
+            var descriptor = descriptors[0];
+            Assert.Null(descriptor.ImplementationType);      // 非实现映射——可构造守卫工厂
             Assert.NotNull(descriptor.ImplementationFactory);
             Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
         }

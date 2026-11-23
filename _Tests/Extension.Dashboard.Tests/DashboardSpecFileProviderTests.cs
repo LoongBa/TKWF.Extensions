@@ -118,6 +118,17 @@ public class DashboardSpecFileProviderTests
         Assert.Contains("非法", ex.Message);
     }
 
+    /// <summary>B 档 D-01 回归锁：盘符冒号出现在**中间段**也必须拒绝——旧校验只查首尾段会放行。</summary>
+    [Fact]
+    public void LoadDashboard_MiddleSegmentColon_Rejected()
+    {
+        using var root = DashboardTestInfra.CreateTempRoot();
+        var provider = CreateProvider(root.Path, root.Path);
+
+        var ex = Assert.Throws<DashboardDefinitionException>(() => provider.LoadDashboard("x/C:evil/y"));
+        Assert.Contains("非法", ex.Message);
+    }
+
     [Fact]
     public void LoadMetricsSpec_PathTraversal_Throws()
     {

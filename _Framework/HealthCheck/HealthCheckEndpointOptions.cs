@@ -19,6 +19,7 @@ namespace TKWF.Ext.HealthCheck
         public bool Enabled { get; set; } = true;
 
         /// <summary>（已删功能残留——v0.3.0 起无组件级输出）是否返回详细诊断。框架不读此键：Detailed 组件级输出已随方案 A（f8425d4）移除，MapHealthCheckCore 恒用摘要 writer，设置不再生效。</summary>
+        [System.Obsolete("已删除功能残留——框架恒用摘要 writer，此键不再生效；仅保留配置兼容。")]
         public bool Detailed { get; set; } = false;
 
         /// <summary>端点是否匿名可访问（默认 true——健康探测无需认证；与 D04 /health /healthz 豁免一致；false 时遵循应用认证管线）。</summary>

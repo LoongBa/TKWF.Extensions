@@ -38,7 +38,7 @@ namespace TKWF.Ext.Metrics
         public MetricsSpecFileProvider(IOptions<MetricsOptions> options)
         {
             if (options is null) throw new ArgumentNullException(nameof(options));
-            _options = options.Value;
+            _options = options.Value ?? throw new ArgumentNullException(nameof(options), "Options value is null");
         }
 
         /// <summary>
@@ -59,7 +59,8 @@ namespace TKWF.Ext.Metrics
 
             var path = Path.Combine(_options.SpecRoot, domain, specKey, "metric-definitions.json");
             if (!File.Exists(path))
-                throw new MetricDefinitionException(specKey, null, $"规格文件不存在：{path}");
+                throw new MetricDefinitionException(specKey, null,
+                    $"规格文件不存在：{domain}/{specKey}/metric-definitions.json");   // 不回显绝对 SpecRoot（M-01 残留收敛）
             return MetricDefinitionLoader.Load(path);
         }
     }

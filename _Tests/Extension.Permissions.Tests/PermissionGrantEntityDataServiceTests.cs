@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Linq.Expressions;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 
 namespace TKWF.Ext.Permissions.Tests;
 
@@ -44,6 +45,21 @@ public class PermissionGrantEntityDataServiceTests
         Assert.Contains("GetGrantedNamesByProviderAsync", attr.ExcludeMethods);   // V0.9.9：归因查询（集合）排除
         Assert.DoesNotContain("SetGrantAsync", attr.ExcludeMethods);              // upsert 写入口保留
         Assert.DoesNotContain("RevokeGrantAsync", attr.ExcludeMethods);           // 撤销写入口保留
+    }
+
+    /// <summary>P0 收敛回归锁（2026-11-23）：两个写授予入口必须带 Admin.All 权限门（防任意已认证用户自授）。</summary>
+    [Fact]
+    public void GrantWriteMethods_RequireAdminAllPermission()
+    {
+        foreach (var name in new[] { "SetGrantAsync", "RevokeGrantAsync" })
+        {
+            var method = typeof(PermissionGrantEntityDataService).GetMethod(name);
+            Assert.NotNull(method);
+            var gate = method!.GetCustomAttributes(typeof(RequirePermissionAttribute), inherit: false)
+                .Cast<RequirePermissionAttribute>().SingleOrDefault();
+            Assert.NotNull(gate);
+            Assert.Contains(PermissionNames.AdminAll, gate!.Permissions);
+        }
     }
 
     [Fact]

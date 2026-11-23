@@ -44,14 +44,14 @@
       "created": "2026-10-25"
     },
     "AuthCenter": {
-      "version": "0.14.2",
-      "tag": "AuthCenter/v0.14.2",
-      "created": "2026-11-17"
+      "version": "0.15.0",
+      "tag": "AuthCenter/v0.15.0",
+      "created": "2026-11-23"
     },
     "AuthCenter.Abstractions": {
-      "version": "0.2.0",
-      "tag": "AuthCenter.Abstractions/v0.2.0",
-      "created": "2026-10-30"
+      "version": "0.3.0",
+      "tag": "AuthCenter.Abstractions/v0.3.0",
+      "created": "2026-11-23"
     },
     "Authentication": {
       "version": "0.5.4",

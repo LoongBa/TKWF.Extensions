@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 using TKWF.Ext.Permissions.DTOs;
 
 namespace TKWF.Ext.Permissions;
@@ -136,6 +137,7 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
     /// 设置权限授予（upsert）——存在则更新 IsGranted，不存在则插入。
     /// </summary>
     [GenerateControllerMethod]
+    [RequirePermission(PermissionNames.AdminAll)]   // P0 收敛：仅系统管理员可写授予（防任意已认证用户自授 Admin.All）
     public async Task<PermissionGrantEntityDto> SetGrantAsync(
         string permissionName, string providerName, string providerKey,
         bool isGranted, CancellationToken ct = default)
@@ -168,6 +170,7 @@ public partial class PermissionGrantEntityDataService(IDomainUser user, IEntityD
 
     /// <summary>撤销权限授予（删除记录）。</summary>
     [GenerateControllerMethod]
+    [RequirePermission(PermissionNames.AdminAll)]   // P0 收敛：仅系统管理员可撤销授予（与 SetGrantAsync 同门）
     public async Task<bool> RevokeGrantAsync(
         string permissionName, string providerName, string providerKey,
         CancellationToken ct = default)

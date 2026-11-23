@@ -234,9 +234,9 @@
       "created": "2026-10-04"
     },
     "Permissions": {
-      "version": "0.9.9",
-      "tag": "Permissions/v0.9.9",
-      "created": "2026-11-07"
+      "version": "0.9.10",
+      "tag": "Permissions/v0.9.10",
+      "created": "2026-11-23"
     },
     "Permissions.Abstractions": {
       "version": "0.2.2",
@@ -284,9 +284,9 @@
       "created": "2026-10-05"
     },
     "TrustCenter": {
-      "version": "0.3.3",
-      "tag": "TrustCenter/v0.3.3",
-      "created": "2026-10-21"
+      "version": "0.4.0",
+      "tag": "TrustCenter/v0.4.0",
+      "created": "2026-11-23"
     },
     "TrustCenter.Abstractions": {
       "version": "0.4.0",

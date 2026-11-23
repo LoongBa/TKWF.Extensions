@@ -10,6 +10,10 @@ namespace TKWF.Ext.RateLimiting;
 /// 分区器工厂——IP（RemoteIpAddress）与 User（HttpContext.User ClaimsPrincipal 解析）分区。
 /// <para>Oracle C1：用户分区器从 <see cref="HttpContext.User"/>（ClaimsPrincipal）解析——Web 中间件
 /// 管线早于 Domain 层，DomainUser/ISessionManager 在此不可用；匿名请求 fallback IP 分区。</para>
+/// <para>⚠️ 已知限制（2026-11-23 代码审核）：本扩展默认锚点 <c>BeforeAuthentication</c>——
+/// <c>UseRateLimiter</c> 在认证中间件之前执行，此时 <see cref="HttpContext.User"/> 尚未填充，
+/// <b>已认证请求同样会落入 IP 匿名桶</b>（user 分区名义生效、实际退化为 per-IP）。需真正 per-user 限流时：
+/// 消费方将 <c>UseRateLimiter</c> 挂到认证之后，或改用 Domain 层 <c>IRateLimitCheck</c>（以 user id 为 key）。</para>
 /// </summary>
 public static class RateLimitPartitioners
 {

@@ -17,7 +17,7 @@ namespace TKWF.Ext.AuditLogging.Tests;
 /// <list type="bullet">
 /// <item><see cref="IAuditLogStore"/>（主框架契约，非 IDomainService——不可修改主框架；AuditLogFilterAttribute 经
 ///     <c>context.ServiceProvider.GetService&lt;IAuditLogStore&gt;()</c> 普通 DI 解析）→ <b>接线型 TryAddScoped</b>
-///     （ImplementationType = AuditLogStore，普通 DI 可解析）；</item>
+///     （ImplementationType = AuditLogWriter，普通 DI 可解析）；</item>
 /// <item><see cref="IAuditLogQueryService"/> / <see cref="IAuditLogAnalyticsService"/>（接口 : IDomainService）→
 ///     <b>AddConstructibleService</b>：接口 = 可构造守卫工厂（非实现映射）+ 实现类 = throw-factory；
 ///     域作用域外直接 DI 解析接口必抛领域架构守卫。</item>
@@ -48,7 +48,7 @@ public class AuditLoggingExtensionInitializerTests
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IAuditLogStore));
 
         Assert.NotNull(descriptor);
-        Assert.Equal(typeof(AuditLogStore), descriptor!.ImplementationType);
+        Assert.Equal(typeof(AuditLogWriter), descriptor!.ImplementationType);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
@@ -57,13 +57,13 @@ public class AuditLoggingExtensionInitializerTests
     {
         var services = new ServiceCollection();
         // 消费方先注册自定义 IAuditLogStore → TryAddScoped 不应覆盖
-        services.AddScoped<IAuditLogStore, ConsumerAuditLogStore>();
+        services.AddScoped<IAuditLogStore, ConsumerAuditLogWriter>();
         new AuditLoggingExtensionInitializer<AuditLoggingUserInfo>().ConfigureServices(services);
 
         // TryAddScoped 语义：只有 1 个 IAuditLogStore descriptor（消费方的）
         var storeDescriptors = services.Where(d => d.ServiceType == typeof(IAuditLogStore)).ToList();
         Assert.Single(storeDescriptors);
-        Assert.Equal(typeof(ConsumerAuditLogStore), storeDescriptors[0].ImplementationType);
+        Assert.Equal(typeof(ConsumerAuditLogWriter), storeDescriptors[0].ImplementationType);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class AuditLoggingExtensionInitializerTests
         new AuditLoggingExtensionInitializer<AuditLoggingUserInfo>().ConfigureServices(services);
 
         var descriptor = services.First(d => d.ServiceType == typeof(IAuditLogStore));
-        Assert.Equal(typeof(AuditLogStore), descriptor.ImplementationType);
+        Assert.Equal(typeof(AuditLogWriter), descriptor.ImplementationType);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class AuditLoggingExtensionInitializerTests
         var provider = services.BuildServiceProvider();
 
         var store = provider.GetRequiredService<IAuditLogStore>();
-        Assert.IsType<AuditLogStore>(store);
+        Assert.IsType<AuditLogWriter>(store);
     }
 
     // ── 类2：IAuditLogQueryService AddConstructibleService（标准门面）──
@@ -220,7 +220,7 @@ public class AuditLoggingExtensionInitializerTests
     }
 
     /// <summary>测试专用 IAuditLogStore：标记消费方自定义实现。</summary>
-    private sealed class ConsumerAuditLogStore : IAuditLogStore
+    private sealed class ConsumerAuditLogWriter : IAuditLogStore
     {
         public Task SaveAsync(AuditLogEntry entry, CancellationToken ct = default)
             => Task.CompletedTask;

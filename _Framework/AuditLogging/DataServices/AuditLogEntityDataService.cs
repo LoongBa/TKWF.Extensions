@@ -54,7 +54,7 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
          return await DeleteAsync(id, ct);
      }
 
-    // ── 数据访问红线整改（2026-09-07）：AuditLogStore/AuditLogQueryService 委托路径的业务方法 ──
+    // ── 数据访问红线整改（2026-09-07）：AuditLogWriter/AuditLogQueryService 委托路径的业务方法 ──
 
     /// <summary>按 predicate 计数（SQL COUNT——V0.3.0 修复：原实现 EntitySelectAsync(0, int.MaxValue) 内存计数全文拉取，
     /// 改为委托基类 SQL COUNT（QueryForUser + Dac.CountAsync 下推）；签名保留避免 QueryService 破坏）。</summary>

@@ -4,10 +4,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
+using TKW.Framework.Domain.Interception.Auditing;
 
 namespace TKWF.Ext.AuditLogging.Tests;
 
@@ -16,9 +18,9 @@ namespace TKWF.Ext.AuditLogging.Tests;
 /// <para>弃旧 StubDomainUser + 手写 DataService 单例注册（掩盖 IDomainUser 生产解析失败）；
 /// 改对齐 Settings/Account 整改后宿主：</para>
 /// <list type="bullet">
-/// <item><b>接线型 Store</b>（<see cref="AuditLogStore"/>，主框架契约非 IDomainService——不可修改主框架）——
-///     真实 DI 解析链：ctor(IServiceProvider, ILogger) 直构 + <c>sp.GetRequiredService&lt;AuditLogEntityDataService&gt;()</c>
-///     C1 延迟解析（DataService 在 provider 中可构造注册）；</item>
+/// <item><b>接线型 Writer</b>（<see cref="AuditLogWriter"/>，实现主框架 IAuditLogStore 契约、非 IDomainService）——
+///     真实 DI 解析链：ctor(IServiceProvider, ILogger, 基础设施...) + <c>sp.GetRequiredService&lt;AuditLogEntityDataService&gt;()</c>
+///     延迟解析（DataService 在 provider 中可构造注册）；</item>
 /// <item><b>标准门面</b>（<see cref="AuditLogQueryService"/> / <see cref="AuditLogAnalyticsService"/>，继承 DomainServiceBase）——
 ///     可配置 stub 直构（经基类 User 取上下文），其 <c>Use&lt;T&gt;()</c> 按生产 NoAop 路径等价
 ///     （<c>ActivatorUtilities.CreateInstance(provider, typeof(T), this)</c>，IEntityDAC 从 DI 解析）。</item>
@@ -44,25 +46,33 @@ internal static class AuditLoggingTestHost
     /// <summary>构建接线型 Store 解析链 provider——DataService 经普通 DI 可构造解析
     /// （<c>GetRequiredService&lt;AuditLogEntityDataService&gt;()</c> 需 IDomainUser + IEntityDAC 可解析；
     /// 对齐生产 DataService 消费方聚合可构造工厂形态）。</summary>
-    private static ServiceProvider BuildWiringProvider(IFreeSql fsql)
+    public static ServiceProvider BuildWriterProvider(
+        IFreeSql fsql, bool failOpen = true, bool publishEvents = false)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();
         services.AddSingleton<IEntityDAC<AuditLogEntity>, FreeSqlEntityDAC<AuditLogEntity>>();
-        // ⚠️ 测试内部接线桩：接线型 Store 的 DataService C1 延迟解析链需要 IDomainUser 可解析（测试模拟消费方 DataService
-        // 聚合可构造工厂形态——DataService ctor 有 IDomainUser 参数）；生产环境 DataService 经 User.Use<具体类>() NoAop
-        // 直建不注册 IDomainUser（D01 铁律）。此桩仅测试宿主，非生产注册（T3 候选：DataService 可构造工厂形态待框架统一）。
+        // 测试内部接线桩：DataService ctor 需要 IDomainUser（生产经 User.Use<具体类>() NoAop 直建，不注册 DI）
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.AddScoped<AuditLogEntityDataService>();
+
+        // Writer 依赖（对齐扩展 ConfigureServices 生产注册）
+        services.AddSingleton<AuditDiagnostics>();
+        services.AddSingleton<ILogger<AuditLogWriter>>(NullLogger<AuditLogWriter>.Instance);
+        services.AddSingleton<IAuditFailureHook, NullAuditFailureHook>();
+        services.AddSingleton<IAuditMaskingPolicy>(_ => new DefaultAuditMaskingPolicy(Array.Empty<string>()));
+        services.Configure<AuditFailurePolicyOptions>(o => o.FailOpen = failOpen);
+        services.Configure<AuditEventPublishingOptions>(o => o.PublishEvents = publishEvents);
+        services.AddScoped<IAuditLogStore, AuditLogWriter>();
         return services.BuildServiceProvider();
     }
 
-    /// <summary>创建基于 SQLite 内存库的 AuditLogStore（接线型——真实 DI 解析链，DataService 经 SP 延迟解析）。</summary>
-    public static AuditLogStore CreateStore(IFreeSql fsql)
+    /// <summary>创建基于 SQLite 内存库的 AuditLogWriter（真实 DI 解析链，DataService 经 SP 延迟解析）。</summary>
+    public static AuditLogWriter CreateStore(IFreeSql fsql)
     {
-        var sp = BuildWiringProvider(fsql);
-        return new AuditLogStore(sp, NullLogger<AuditLogStore>.Instance);
+        var sp = BuildWriterProvider(fsql);
+        return (AuditLogWriter)sp.GetRequiredService<IAuditLogStore>();
     }
 
     /// <summary>创建基于 SQLite 内存库的 AuditLogQueryService（标准门面——经基类 User 懒加载 DataService）。</summary>

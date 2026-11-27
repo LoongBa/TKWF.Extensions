@@ -144,7 +144,7 @@ public class AuditLogProductionPathTests
         // 主框架 AuditLogFilterAttribute 解析链：context.ServiceProvider.GetService<IAuditLogStore>()（普通 DI，非 Use<T>）
         var store = sp.GetService<IAuditLogStore>();
         Assert.NotNull(store);
-        Assert.IsType<AuditLogStore>(store);
+        Assert.IsType<AuditLogWriter>(store);
 
         await store!.SaveAsync(new AuditLogEntry(
             UserName: "testuser",

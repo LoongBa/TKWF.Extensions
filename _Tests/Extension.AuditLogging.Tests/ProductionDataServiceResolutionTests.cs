@@ -57,21 +57,26 @@ public class ProductionDataServiceResolutionTests
         foreach (var reg in dataServiceRegs)
             AddConstructibleDataService(services, reg.Implementation);
 
-        // 2. 消费方注册默认存储（AuditLogStore 接线型：ctor(IServiceProvider, ILogger)——DataService 经 SP 延迟解析）+ 空日志
-        services.AddScoped<IAuditLogStore, AuditLogStore>();
+        // 2. 消费方注册默认存储（AuditLogWriter 接线型：ctor(IServiceProvider, ILogger)——DataService 经 SP 延迟解析）+ 空日志
+        services.AddScoped<IAuditLogStore, AuditLogWriter>();
 
         // 3. 基础设施：IDomainUser + IEntityDAC + ILogger（空日志）
         // ⚠️ IDomainUser 为测试内部桩（DataService 可构造解析链需要）——生产 DataService 经 User.Use<具体类>() NoAop 直建
         // 不注册 IDomainUser（D01 铁律）；T3 候选：DataService 可构造工厂形态待框架统一。
         services.AddScoped<IDomainUser>(_ => new StubDomainUser());
         services.AddScoped<IEntityDAC<AuditLogEntity>>(_ => new InMemoryEntityDac());
-        services.AddScoped<ILogger<AuditLogStore>>(_ => NullLogger<AuditLogStore>.Instance);
+        services.AddScoped<ILogger<AuditLogWriter>>(_ => NullLogger<AuditLogWriter>.Instance);
+        services.AddSingleton<AuditDiagnostics>();
+        services.AddSingleton<IAuditFailureHook, NullAuditFailureHook>();
+        services.AddSingleton<IAuditMaskingPolicy>(_ => new DefaultAuditMaskingPolicy(Array.Empty<string>()));
+        services.AddOptions<AuditFailurePolicyOptions>();
+        services.AddOptions<AuditEventPublishingOptions>();
 
         var sp = services.BuildServiceProvider();
 
         // 4. 生产解析：Store 可解析（接线型——普通 DI GetService 形态，即主框架 AuditLogFilter 的解析链）
         var store = sp.GetRequiredService<IAuditLogStore>();
-        Assert.IsType<AuditLogStore>(store);
+        Assert.IsType<AuditLogWriter>(store);
 
         // 5. DataService 具体类本身生产可解析（缺口 3 核心断言 + Store 内 C1 延迟解析的前置条件）
         var dataService = sp.GetRequiredService<AuditLogEntityDataService>();

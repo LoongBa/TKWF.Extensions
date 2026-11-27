@@ -3,15 +3,16 @@ using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interception.Auditing;
 
 namespace TKWF.Ext.AuditLogging.Tests;
 
 /// <summary>
-/// AuditLogStore 测试——使用 SQLite 内存库验证真实写入 + 异常静默。
+/// AuditLogWriter 测试——使用 SQLite 内存库验证真实写入 + 异常静默。
 /// </summary>
-public class AuditLogStoreTests
+public class AuditLogWriterTests
 {
     /// <summary>创建使用 SQLite 内存库的 IFreeSql 实例（每次调用新连接 = 独立内存库）。</summary>
     private static IFreeSql CreateInMemoryFreeSql()
@@ -28,7 +29,7 @@ public class AuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<AuditLogStore>();
+        var logger = new FakeLogger<AuditLogWriter>();
         var store = AuditLoggingTestHost.CreateStore(fsql);
 
         var entry = new AuditLogEntry(
@@ -69,7 +70,7 @@ public class AuditLogStoreTests
         // Arrange — 使用已 Dispose 的 FreeSql，Insert 必定抛异常
         var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<AuditLogStore>();
+        var logger = new FakeLogger<AuditLogWriter>();
         var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Dispose 后使用 → 抛 ObjectDisposedException
@@ -101,7 +102,7 @@ public class AuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<AuditLogStore>();
+        var logger = new FakeLogger<AuditLogWriter>();
         var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Act — null entry should be silently skipped
@@ -119,7 +120,7 @@ public class AuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<AuditLogStore>();
+        var logger = new FakeLogger<AuditLogWriter>();
         var store = AuditLoggingTestHost.CreateStore(fsql);
 
         var execTime = new DateTime(2026, 6, 1, 14, 0, 0, DateTimeKind.Utc);
@@ -160,17 +161,33 @@ public class AuditLogStoreTests
     [Fact]
     public void Constructor_NullServiceProvider_Throws()
     {
-        var logger = new FakeLogger<AuditLogStore>();
-        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(null!, logger));
+        var logger = new FakeLogger<AuditLogWriter>();
+        Assert.Throws<ArgumentNullException>(() => CreateWriter(null!, logger));
     }
 
     [Fact]
     public void Constructor_NullLogger_Throws()
     {
+        var sp = new ServiceCollection().BuildServiceProvider();
+        Assert.Throws<ArgumentNullException>(() => CreateWriter(sp, null!));
+    }
+
+    [Fact]
+    public async Task SaveAsync_FailOpenFalse_Throws()
+    {
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var sp = new ServiceCollection().BuildServiceProvider();
-        Assert.Throws<ArgumentNullException>(() => new AuditLogStore(sp, null!));
+        var sp = AuditLoggingTestHost.BuildWriterProvider(fsql, failOpen: false);
+        var writer = sp.GetRequiredService<IAuditLogStore>();
+
+        var entry = new AuditLogEntry(
+            UserName: "u", UserId: "u1", ServiceName: "Svc", MethodName: "M",
+            ArgumentsJson: null, ExecutionTime: DateTimeOffset.Now, DurationMs: 1,
+            Success: true, Exception: null, CorrelationId: "fail-closed");
+
+        // 令 DataService 不可用（释放底层 FreeSql）→ 写入失败 → fail-closed 抛
+        fsql.Dispose();
+        await Assert.ThrowsAnyAsync<Exception>(() => writer.SaveAsync(entry, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -179,7 +196,7 @@ public class AuditLogStoreTests
         // Arrange
         using var fsql = CreateInMemoryFreeSql();
         fsql.CodeFirst.SyncStructure<AuditLogEntity>();
-        var logger = new FakeLogger<AuditLogStore>();
+        var logger = new FakeLogger<AuditLogWriter>();
         var store = AuditLoggingTestHost.CreateStore(fsql);
 
         // Act
@@ -206,6 +223,16 @@ public class AuditLogStoreTests
     }
 
     // ── Test helpers ──
+
+    private static AuditLogWriter CreateWriter(IServiceProvider sp, ILogger<AuditLogWriter> logger)
+        => new(
+            sp,
+            logger,
+            new DefaultAuditMaskingPolicy(Array.Empty<string>()),
+            new NullAuditFailureHook(),
+            new AuditDiagnostics(),
+            Options.Create(new AuditFailurePolicyOptions()),
+            Options.Create(new AuditEventPublishingOptions()));
 
     /// <summary>简化 ILogger 桩：捕获 Warning 日志。</summary>
     private sealed class FakeLogger<T> : ILogger<T>

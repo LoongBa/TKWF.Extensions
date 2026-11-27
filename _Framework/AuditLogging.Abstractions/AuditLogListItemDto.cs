@@ -3,7 +3,7 @@ using System;
 namespace TKWF.Ext.AuditLogging
 {
     /// <summary>
-    /// 审计日志列表项 DTO——从 <see cref="AuditLogEntity"/> 投影，不含 <c>ArgumentsJson</c>（安全决策 D5：防止敏感参数结构泄露）。
+    /// 审计日志列表项 DTO——从 <c>AuditLogEntity</c> 投影，不含 <c>ArgumentsJson</c>（安全决策 D5：防止敏感参数结构泄露）。
     /// </summary>
     public record AuditLogListItemDto
     {

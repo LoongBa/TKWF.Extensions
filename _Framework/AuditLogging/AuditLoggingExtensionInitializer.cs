@@ -62,7 +62,7 @@ namespace TKWF.Ext.AuditLogging
 
             // V0.1.0：审计日志写入存储——主框架契约接线型（IAuditLogStore 非 IDomainService，不可修改主框架；
             // AuditLogFilterAttribute 经 context.ServiceProvider.GetService<IAuditLogStore>() 普通 DI 解析）→ TryAddScoped
-            services.TryAddScoped<IAuditLogStore, AuditLogStore>();
+            services.TryAddScoped<IAuditLogStore, AuditLogWriter>();
 
             // V0.2.0：审计日志查询服务——接口 : IDomainService → AddConstructibleService（接口可构造守卫工厂 +
             // 实现类 throw-factory，消费方经 User.Use<IAuditLogQueryService>() 解析）

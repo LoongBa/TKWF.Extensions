@@ -8,9 +8,9 @@ namespace TKWF.Ext.AuditLogging
 {
     /// <summary>
     /// 审计日志分析服务接口（V0.3.0 统计聚合 + 保留天数清理）——扩展侧自建，不修改主框架。
-    /// <para><b>数据访问红线合规</b>：本服务只依赖 <see cref="AuditLogEntityDataService"/>（SG1 DataService）委托——
+    /// <para><b>数据访问红线合规</b>：本服务只依赖 <c>AuditLogEntityDataService</c>（SG1 DataService）委托——
     /// 绝不注入 IFreeSql / IEntityDAC；异常静默对齐扩展既有模式（失败记 Warning 日志，返回空结果/0，不抛异常）。</para>
-    /// <para><b>边界</b>：聚合仅查不改（只读 TopN/统计）；唯一的写路径是保留清理 <see cref="CleanupExpiredAsync"/>
+    /// <para><b>边界</b>：聚合仅查不改（只读 TopN/统计）；唯一的写路径是保留清理 <c>CleanupExpiredAsync</c>
     /// （DataService <c>DeleteExpiredAsync</c> 物理删，限定单点，无管理端点）。</para>
     /// </summary>
     public interface IAuditLogAnalyticsService : IDomainService

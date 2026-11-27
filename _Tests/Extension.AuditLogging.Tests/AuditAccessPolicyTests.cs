@@ -52,6 +52,24 @@ public class AuditAccessPolicyTests
     }
 
     [Fact]
+    public async Task Sensitive_AllowWithoutPermissions_Anonymous_Denied()
+    {
+        var decision = await CreatePolicy(true)
+            .EvaluateAsync(new AuditAccessRequest(AuditOperation.Export), CancellationToken.None);
+
+        Assert.False(decision.Allowed);
+    }
+
+    [Fact]
+    public async Task Sensitive_AllowWithoutPermissions_SystemActor_Allowed()
+    {
+        var decision = await CreatePolicy(true)
+            .EvaluateAsync(new AuditAccessRequest(AuditOperation.Export, IsSystemActor: true), CancellationToken.None);
+
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
     public async Task NullRequest_Denied()
     {
         var decision = await CreatePolicy(true).EvaluateAsync(null!, CancellationToken.None);

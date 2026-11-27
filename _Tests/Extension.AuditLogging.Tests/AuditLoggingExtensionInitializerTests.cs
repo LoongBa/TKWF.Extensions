@@ -221,6 +221,19 @@ public class AuditLoggingExtensionInitializerTests
         Assert.Equal(500, options.Value.CleanupBatchSize);
     }
 
+    [Fact]
+    public void ConfigureServices_Registers_ReadModel_Services()
+    {
+        var services = new ServiceCollection();
+        new AuditLoggingExtensionInitializer<AuditLoggingUserInfo>().ConfigureServices(services);
+
+        Assert.Equal(2, services.Count(d => d.ServiceType == typeof(IAuditFacetReader)));
+        Assert.Contains(services, d => d.ServiceType == typeof(IAuditQueryService));
+        Assert.Contains(services, d => d.ServiceType == typeof(IAuditExportService));
+        Assert.Contains(services, d => d.ServiceType == typeof(IAuditIntegrityProvider));
+        Assert.Contains(services, d => d.ServiceType == typeof(IAuditWatermarkStore));
+    }
+
     /// <summary>测试专用 IAuditLogStore：标记消费方自定义实现。</summary>
     private sealed class ConsumerAuditLogWriter : IAuditLogStore
     {

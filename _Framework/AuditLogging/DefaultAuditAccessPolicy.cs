@@ -9,7 +9,7 @@ namespace TKWF.Ext.AuditLogging
     /// <summary>
     /// 默认审计访问策略（fail-closed）。<c>QueryOwn</c> 放行（宿主已认证）；
     /// 其余敏感操作仅当 <see cref="AuditAccessPolicyOptions.AllowWithoutPermissions"/> 为 true 时放行，否则拒绝。
-    /// <para>消费方启用 Permissions 时，可 <c>TryAdd</c> 替换为按 <see cref="AuditPermissionNames"/> 判定的实现。</para>
+    /// <para>消费方可 <c>services.Replace</c> 替换为自定义实现（可基于 Permissions 判定）。</para>
     /// </summary>
     internal sealed class DefaultAuditAccessPolicy : DomainServiceBase, IAuditAccessPolicy
     {
@@ -29,13 +29,13 @@ namespace TKWF.Ext.AuditLogging
 
             if (request.Operation == AuditOperation.QueryOwn)
             {
-                return Task.FromResult(request.IsAuthenticated
+                return Task.FromResult(request.IsAuthenticated || request.IsSystemActor
                     ? AuditAccessDecision.Allow()
-                    : AuditAccessDecision.Deny("未认证（QueryOwn 需已认证，fail-closed）"));
+                    : AuditAccessDecision.Deny("未认证（QueryOwn 需已认证或系统帧，fail-closed）"));
             }
 
-            if (!request.IsAuthenticated)
-                return Task.FromResult(AuditAccessDecision.Deny("未认证（敏感操作需已认证，fail-closed）"));
+            if (!request.IsAuthenticated && !request.IsSystemActor)
+                return Task.FromResult(AuditAccessDecision.Deny("未认证（敏感操作需已认证或系统帧，fail-closed）"));
 
             return Task.FromResult(_allowWithoutPermissions
                 ? AuditAccessDecision.Allow()

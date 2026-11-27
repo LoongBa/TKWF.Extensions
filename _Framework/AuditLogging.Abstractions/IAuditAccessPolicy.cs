@@ -28,7 +28,8 @@ namespace TKWF.Ext.AuditLogging
 
     /// <summary>访问请求（<paramref name="IsAuthenticated"/> 供 QueryOwn 认证判定）。</summary>
     public sealed record AuditAccessRequest(
-        AuditOperation Operation, string? UserId = null, string? TenantId = null, bool IsAuthenticated = false);
+        AuditOperation Operation, string? UserId = null, string? TenantId = null, bool IsAuthenticated = false,
+        bool IsSystemActor = false);
 
     /// <summary>访问决策。</summary>
     public sealed record AuditAccessDecision(bool Allowed, string? Reason = null)
@@ -40,7 +41,7 @@ namespace TKWF.Ext.AuditLogging
     /// <summary>
     /// 审计访问策略（<b>fail-closed 默认</b>）。
     /// <para>默认实现（主包）：<c>QueryOwn</c> 已认证放行；<c>QueryAll/Detail/Export/Delete/Purge</c>
-    /// 需 <see cref="AuditPermissionNames"/> 授权，否则仅当 <c>AuditAccessPolicyOptions.AllowWithoutPermissions=true</c> 放行（默认 false → 拒绝）。
+    /// 需已认证或系统帧，且仅当 <c>AuditAccessPolicyOptions.AllowWithoutPermissions=true</c> 放行（默认 false → 拒绝）。
     /// 策略独立于 Permissions 扩展生效（Permissions 未启用时仍 fail-closed）。</para>
     /// </summary>
     public interface IAuditAccessPolicy : IDomainService

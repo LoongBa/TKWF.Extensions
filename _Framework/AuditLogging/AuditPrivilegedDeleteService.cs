@@ -44,7 +44,7 @@ namespace TKWF.Ext.AuditLogging
                 throw new AuditAccessDeniedException("安全日志 append-only，不支持特权删除。");
 
             var decision = await Policy.EvaluateAsync(
-                new AuditAccessRequest(AuditOperation.Delete, User.UserId, User.TenantId?.ToString(), User.IsAuthenticated), ct);
+                new AuditAccessRequest(AuditOperation.Delete, User.UserId, User.TenantId?.ToString(), User.IsAuthenticated, User.IsSystemActor), ct);
             if (!decision.Allowed)
                 throw new AuditAccessDeniedException(decision.Reason);
 

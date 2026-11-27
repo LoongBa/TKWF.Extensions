@@ -152,7 +152,7 @@ namespace TKWF.Ext.AuditLogging
             var policy = AccessPolicy;
             if (policy is null) return AuditAccessDecision.Deny("审计访问策略未注册（fail-closed）");
             return await policy.EvaluateAsync(
-                new AuditAccessRequest(operation, User.UserId, tenantId, User.IsAuthenticated), ct);
+                new AuditAccessRequest(operation, User.UserId, tenantId, User.IsAuthenticated, User.IsSystemActor), ct);
         }
 
         private static Expression<Func<BusinessAuditEntity, bool>> BuildPredicate(

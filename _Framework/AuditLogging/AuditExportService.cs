@@ -47,7 +47,7 @@ namespace TKWF.Ext.AuditLogging
             var policy = User.GetService<IAuditAccessPolicy>()
                          ?? throw new AuditAccessDeniedException("审计访问策略未注册（fail-closed）");
             var decision = await policy.EvaluateAsync(
-                new AuditAccessRequest(AuditOperation.Export, User.UserId, User.TenantId?.ToString(), User.IsAuthenticated), ct);
+                new AuditAccessRequest(AuditOperation.Export, User.UserId, User.TenantId?.ToString(), User.IsAuthenticated, User.IsSystemActor), ct);
             if (!decision.Allowed)
                 throw new AuditAccessDeniedException(decision.Reason);
 

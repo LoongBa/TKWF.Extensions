@@ -47,7 +47,7 @@ namespace TKWF.Ext.AuditLogging
         string? UserName)
         : AuditRecordView(AuditFacet.Security, Id, Actor, Target, ActionType, Summary, CorrelationId, ExecutionTime);
 
-    /// <summary>业务事实视图（含 Before/After/Attributes）。</summary>
+    /// <summary>业务事实视图（Attributes 经脱敏；Before/After 统一视图恒 null，受控详情见 v0.7.1）。</summary>
     public sealed record BusinessAuditView(
         long Id,
         AuditActor? Actor,

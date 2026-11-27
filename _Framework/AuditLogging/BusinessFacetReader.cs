@@ -129,8 +129,8 @@ namespace TKWF.Ext.AuditLogging
                 e.Summary,
                 e.CorrelationId,
                 new DateTimeOffset(DateTime.SpecifyKind(e.ExecutionTime, DateTimeKind.Utc)),
-                e.BeforeJson,
-                e.AfterJson,
+                null,
+                null,
                 ParseAttributes(e.AttributesJson));
         }
 

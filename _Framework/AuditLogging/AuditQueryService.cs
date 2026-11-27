@@ -55,14 +55,18 @@ namespace TKWF.Ext.AuditLogging
 
             var readers = Readers;
             var items = new List<AuditRecordView>();
+            var truncated = false;
             foreach (var reader in readers)
             {
                 var page = await reader.QueryAsync(
                     new AuditFacetQuery { CorrelationId = correlationId, Take = 200 }, ct);
                 items.AddRange(page.Items);
+                truncated |= page.Items.Count >= 200;
             }
 
-            return new AuditCrossFacetResult(readers.Select(r => r.Facet).Distinct().ToList(), items);
+            var ordered = items.OrderBy(i => i.ExecutionTime).ThenBy(i => i.Id).ToList();
+            return new AuditCrossFacetResult(
+                readers.Select(r => r.Facet).Distinct().ToList(), ordered, truncated);
         }
 
         /// <inheritdoc />
@@ -72,10 +76,12 @@ namespace TKWF.Ext.AuditLogging
 
         private IAuditFacetReader Require(AuditFacet facet)
         {
-            var reader = Readers.FirstOrDefault(r => r.Facet == facet);
-            if (reader is null)
+            var matches = Readers.Where(r => r.Facet == facet).ToList();
+            if (matches.Count == 0)
                 throw new AuditFacetUnavailableException(facet);
-            return reader;
+            if (matches.Count > 1)
+                throw new InvalidOperationException($"审计面 {facet} 注册了多个 Reader（配置错误）。");
+            return matches[0];
         }
     }
 }

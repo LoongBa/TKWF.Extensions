@@ -34,6 +34,9 @@ namespace TKWF.Ext.AuditLogging
                     : AuditAccessDecision.Deny("未认证（QueryOwn 需已认证，fail-closed）"));
             }
 
+            if (!request.IsAuthenticated)
+                return Task.FromResult(AuditAccessDecision.Deny("未认证（敏感操作需已认证，fail-closed）"));
+
             return Task.FromResult(_allowWithoutPermissions
                 ? AuditAccessDecision.Allow()
                 : AuditAccessDecision.Deny("审计权限未启用且未显式允许（fail-closed）"));

@@ -54,11 +54,16 @@ namespace TKWF.Ext.AuditLogging
 
                 var total = await DataService.CountAsync(predicate, ct);
                 var rows = await DataService.EntitySelectAsync(
-                    predicate, skip, take, q => q.OrderByDescending(x => x.Id), ct);
+                    predicate, skip, take,
+                    q => input.AfterId != null ? q.OrderBy(x => x.Id) : q.OrderByDescending(x => x.Id), ct);
 
                 return new BusinessAuditPagedResult(total, rows.Select(Map).ToList());
             }
             catch (AuditAccessDeniedException)
+            {
+                throw;
+            }
+            catch (ArgumentException)
             {
                 throw;
             }
@@ -113,6 +118,10 @@ namespace TKWF.Ext.AuditLogging
             {
                 throw;
             }
+            catch (ArgumentException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "业务审计统计失败: CountAsync");
@@ -127,12 +136,15 @@ namespace TKWF.Ext.AuditLogging
             var decision = await EvaluateAsync(operation, input.TenantId, ct);
             if (!decision.Allowed) return (false, null, decision.Reason);
 
-            var tenantFilter = operation == AuditOperation.QueryOwn ? User.TenantId?.ToString() : input.TenantId;
-            if (operation == AuditOperation.QueryOwn && tenantFilter is null)
-            {
+            if (operation == AuditOperation.QueryAll)
+                return (true, input.TenantId, null);
+
+            var ownTenant = User.TenantId?.ToString();
+            if (ownTenant is null)
                 return (false, null, "QueryOwn 调用方无租户（fail-closed，防跨租户读）");
-            }
-            return (true, tenantFilter, null);
+            if (!string.Equals(input.TenantId, ownTenant, StringComparison.Ordinal))
+                return (false, null, "指定 TenantId 与调用方租户不一致（fail-closed）");
+            return (true, ownTenant, null);
         }
 
         private async Task<AuditAccessDecision> EvaluateAsync(AuditOperation operation, string? tenantId, CancellationToken ct)

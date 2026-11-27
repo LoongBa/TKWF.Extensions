@@ -20,7 +20,8 @@ namespace TKWF.Ext.AuditLogging
     [DiContractIgnore]
     internal sealed class AuditExportService : DomainServiceBase, IAuditExportService
     {
-        private const int PageSize = 500;
+        private const int PageSize = 200;
+        private const long MaxExportRows = 10_000;
 
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -43,6 +44,13 @@ namespace TKWF.Ext.AuditLogging
             if (query is null) throw new ArgumentNullException(nameof(query));
             if (output is null) throw new ArgumentNullException(nameof(output));
 
+            var policy = User.GetService<IAuditAccessPolicy>()
+                         ?? throw new AuditAccessDeniedException("审计访问策略未注册（fail-closed）");
+            var decision = await policy.EvaluateAsync(
+                new AuditAccessRequest(AuditOperation.Export, User.UserId, User.TenantId?.ToString(), User.IsAuthenticated), ct);
+            if (!decision.Allowed)
+                throw new AuditAccessDeniedException(decision.Reason);
+
             var reader = Readers.FirstOrDefault(r => r.Facet == facet)
                          ?? throw new AuditFacetUnavailableException(facet);
 
@@ -64,6 +72,8 @@ namespace TKWF.Ext.AuditLogging
 
                     foreach (var item in page.Items)
                     {
+                        if (total >= MaxExportRows)
+                            throw new InvalidOperationException($"导出超过上限 {MaxExportRows} 行，请缩小查询范围。");
                         await WriteRowAsync(writer, item, format);
                         total++;
                     }
@@ -73,6 +83,7 @@ namespace TKWF.Ext.AuditLogging
                 }
 
                 await writer.FlushAsync(ct);
+                _logger.LogInformation("审计导出 {Facet} {Format} 共 {Count} 条", facet, format, total);
                 return total;
             }
             finally
@@ -117,6 +128,8 @@ namespace TKWF.Ext.AuditLogging
         private static string Csv(string? value)
         {
             if (string.IsNullOrEmpty(value)) return "";
+            if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+                value = "'" + value;
             if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
                 return "\"" + value.Replace("\"", "\"\"") + "\"";
             return value;

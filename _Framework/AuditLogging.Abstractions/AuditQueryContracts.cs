@@ -38,5 +38,6 @@ namespace TKWF.Ext.AuditLogging
     /// </summary>
     public sealed record AuditCrossFacetResult(
         IReadOnlyList<AuditFacet> ParticipatingFacets,
-        IReadOnlyList<AuditRecordView> Items);
+        IReadOnlyList<AuditRecordView> Items,
+        bool Truncated = false);
 }

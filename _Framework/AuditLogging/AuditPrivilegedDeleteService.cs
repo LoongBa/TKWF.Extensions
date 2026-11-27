@@ -49,7 +49,7 @@ namespace TKWF.Ext.AuditLogging
                 throw new AuditAccessDeniedException(decision.Reason);
 
             var snapshot = await TrySnapshotAsync(facet, id, ct);
-            await Writer.SaveAsync(new BusinessAuditEntry(
+            await Writer.SaveStrictAsync(new BusinessAuditEntry(
                 Actor,
                 new AuditTarget("audit", $"{facet}:{id}"),
                 "Audit.PrivilegedDelete",

@@ -26,7 +26,7 @@
 | `AuditCorrelationId` | CorrelationId 单源（MaxLength=128，三面同域） |
 | `AuditLogPersisted` / `AuditLogPersistFailed` / `SecurityLogPersisted` / `SecurityLogPersistFailed` / `AuditCleanupCompleted` | 本地事件载荷（最小化、无原文） |
 | `IBusinessAuditQueryService` / `BusinessAuditQueryInput` / `BusinessAuditListItemDto` / `BusinessAuditPagedResult` | 业务审计查询（v0.6 单面；统一 `IAuditQueryService` 为 v0.7 additive） |
-| `AuditFailurePolicyOptions` / `AuditEventPublishingOptions` / `AuditAccessPolicyOptions` / `AuditImmutabilityOptions` | 配置 POCO |
+| `AuditFailurePolicyOptions` / `AuditEventPublishingOptions` / `AuditAccessPolicyOptions` | 配置 POCO |
 
 ## 零破坏铁律
 

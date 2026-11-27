@@ -85,6 +85,29 @@ namespace TKWF.Ext.AuditLogging
             }
         }
 
+        /// <summary>严格写入——写失败必定抛出（不受 FailOpen 影响；特权删除留痕用）。</summary>
+        public async Task SaveStrictAsync(BusinessAuditEntry entry, CancellationToken ct = default)
+        {
+            if (entry is null) return;
+            ArgumentNullException.ThrowIfNull(entry.Actor, "审计 Actor 必填（为空会导致审计静默丢失）");
+            ArgumentNullException.ThrowIfNull(entry.Target, "审计 Target 必填");
+
+            try
+            {
+                var entity = Map(entry);
+                await DataService.EntityCreateAsync(entity, ct);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.IncrementWriteFailures();
+                RaiseFailure(entry, ex);
+                _logger.LogWarning(ex,
+                    "业务审计严格写入失败 Target={TargetType}/{TargetId}（facet=Business，strict）",
+                    entry.Target.TargetType, entry.Target.TargetId);
+                throw;
+            }
+        }
+
         private void RaiseFailure(BusinessAuditEntry entry, Exception ex)
         {
             var failure = new AuditPersistFailure(
@@ -122,7 +145,7 @@ namespace TKWF.Ext.AuditLogging
                 AttributesJson = SerializeMasked(entry.Attributes),
                 CorrelationId = entry.CorrelationId,
                 ExecutionTime = entry.ExecutionTime.UtcDateTime,
-                CreateTime = DateTimeOffset.Now,
+                CreateTime = DateTimeOffset.UtcNow,
             };
         }
 

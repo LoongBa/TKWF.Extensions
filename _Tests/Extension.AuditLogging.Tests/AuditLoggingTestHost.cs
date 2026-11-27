@@ -50,6 +50,8 @@ internal static class AuditLoggingTestHost
         IFreeSql fsql, bool failOpen = true, bool publishEvents = false)
     {
         var services = new ServiceCollection();
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
         services.AddSingleton<IFreeSql>(fsql);
         services.AddSingleton<UnitOfWorkManager>();
         services.AddSingleton<IEntityDAC<AuditLogEntity>, FreeSqlEntityDAC<AuditLogEntity>>();
@@ -136,6 +138,9 @@ internal sealed class StubDomainUser : IDomainUser
     {
         if (ServiceProvider is null)
             throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+
+        if (typeof(TDomainService).IsInterface)
+            return ServiceProvider.GetRequiredService<TDomainService>();
 
         // 生产 NoAop 路径等价（具体类）：ActivatorUtilities 直建，IDomainUser 参数显式传 this
         return (TDomainService)ActivatorUtilities.CreateInstance(ServiceProvider, typeof(TDomainService), this);

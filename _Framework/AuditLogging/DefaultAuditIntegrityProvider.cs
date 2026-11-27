@@ -16,17 +16,19 @@ namespace TKWF.Ext.AuditLogging
         {
             if (record is null) throw new ArgumentNullException(nameof(record));
 
-            var canonical = string.Join('|',
-                record.Facet.ToString(),
-                record.Id.ToString(),
-                record.Actor?.Type.ToString(),
-                record.Actor?.Id,
-                record.Target?.TargetType,
-                record.Target?.TargetId,
-                record.ActionType,
-                record.Summary,
-                record.CorrelationId,
-                record.ExecutionTime.UtcDateTime.ToString("O"));
+            static string F(string? s) => s is null ? "-1:" : s.Length + ":" + s;
+
+            var canonical = string.Concat(
+                F(record.Facet.ToString()),
+                F(record.Id.ToString()),
+                F(record.Actor?.Type.ToString()),
+                F(record.Actor?.Id),
+                F(record.Target?.TargetType),
+                F(record.Target?.TargetId),
+                F(record.ActionType),
+                F(record.Summary),
+                F(record.CorrelationId),
+                F(record.ExecutionTime.UtcDateTime.ToString("O")));
 
             var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
             return Task.FromResult(Convert.ToHexString(hash).ToLowerInvariant());

@@ -18,7 +18,7 @@ namespace TKWF.Ext.AuditLogging
         /// <inheritdoc />
         public Task SetAsync(string name, long value, CancellationToken ct = default)
         {
-            _watermarks[name] = value;
+            _watermarks.AddOrUpdate(name, value, (_, current) => value > current ? value : current);
             return Task.CompletedTask;
         }
     }

@@ -123,7 +123,7 @@ namespace TKWF.Ext.SecurityLog
                 actor,
                 null,
                 e.EventType,
-                e.Detail,
+                null,
                 e.CorrelationId,
                 new DateTimeOffset(DateTime.SpecifyKind(e.CreateTime, DateTimeKind.Utc)),
                 e.EventType,

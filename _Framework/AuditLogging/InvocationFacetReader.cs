@@ -121,7 +121,7 @@ namespace TKWF.Ext.AuditLogging
                 actor,
                 new AuditTarget(e.ServiceName, e.MethodName),
                 e.MethodName,
-                e.ArgumentsJson,
+                null,
                 e.CorrelationId,
                 new DateTimeOffset(DateTime.SpecifyKind(e.ExecutionTime, DateTimeKind.Utc)),
                 e.ServiceName,

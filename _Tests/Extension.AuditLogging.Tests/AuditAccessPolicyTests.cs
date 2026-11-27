@@ -46,7 +46,7 @@ public class AuditAccessPolicyTests
     public async Task Sensitive_AllowWithoutPermissions_Allowed()
     {
         var decision = await CreatePolicy(true)
-            .EvaluateAsync(new AuditAccessRequest(AuditOperation.Export), CancellationToken.None);
+            .EvaluateAsync(new AuditAccessRequest(AuditOperation.Export, IsAuthenticated: true), CancellationToken.None);
 
         Assert.True(decision.Allowed);
     }

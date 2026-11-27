@@ -73,9 +73,9 @@ namespace TKWF.Ext.AuditLogging
             services.AddConstructibleService<IAuditLogAnalyticsService, AuditLogAnalyticsService>();
 
             // V0.6.0：业务事实审计 + 脱敏/失败信号/诊断（Oracle E1/E2/E7 闭环）
-            services.AddOptions<AuditFailurePolicyOptions>();
-            services.AddOptions<AuditEventPublishingOptions>();
-            services.AddOptions<AuditAccessPolicyOptions>();
+            services.AddOptions<AuditFailurePolicyOptions>().BindConfiguration("TKWF:AuditLogging:FailurePolicy");
+            services.AddOptions<AuditEventPublishingOptions>().BindConfiguration("TKWF:AuditLogging:EventPublishing");
+            services.AddOptions<AuditAccessPolicyOptions>().BindConfiguration("TKWF:AuditLogging:AccessPolicy");
 
             services.TryAddSingleton<AuditDiagnostics>();
             services.TryAddSingleton<IAuditDiagnostics>(sp => sp.GetRequiredService<AuditDiagnostics>());

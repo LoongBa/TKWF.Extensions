@@ -43,6 +43,8 @@ public class AuditLogProductionPathTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
         new AuditLoggingExtensionInitializer<TestUserInfo>().ConfigureServices(services);
 
         // FreeSql 基础设施（消费方 DomainHost 等价注册）

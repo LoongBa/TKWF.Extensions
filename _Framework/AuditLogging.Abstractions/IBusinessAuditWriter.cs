@@ -18,5 +18,10 @@ namespace TKWF.Ext.AuditLogging
 
         /// <summary>批量追加写入。</summary>
         Task SaveBatchAsync(IReadOnlyList<BusinessAuditEntry> entries, CancellationToken ct = default);
+
+        /// <summary>
+        /// 严格追加写入——写失败<b>必定抛出</b>（不受 <c>FailOpen</c> 影响），用于特权删除等"留痕失败即中止"的场景。
+        /// </summary>
+        Task SaveStrictAsync(BusinessAuditEntry entry, CancellationToken ct = default);
     }
 }

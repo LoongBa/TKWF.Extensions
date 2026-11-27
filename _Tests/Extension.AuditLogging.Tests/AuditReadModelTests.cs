@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,6 +50,7 @@ public class AuditReadModelTests
         services.AddScoped<BusinessAuditEntityDataService>();
         services.AddScoped<IAuditFacetReader>(_ => new InvocationFacetReader(user, NullLogger<InvocationFacetReader>.Instance));
         services.AddScoped<IAuditFacetReader>(_ => new BusinessFacetReader(user, NullLogger<BusinessFacetReader>.Instance));
+        services.AddSingleton<IAuditAccessPolicy>(_ => new AllowAllPolicy());
 
         var sp = services.BuildServiceProvider();
         user.ServiceProvider = sp;
@@ -177,5 +179,76 @@ public class AuditReadModelTests
 
         await Assert.ThrowsAsync<AuditAccessDeniedException>(
             () => service.DeleteAsync(AuditFacet.Security, 1, "test"));
+    }
+
+    [Fact]
+    public async Task ExportAsync_Csv_MoreThan200Rows()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql);
+        for (var i = 0; i < 201; i++)
+            await SeedAsync(host.Sp, $"M{i}", $"c{i}");
+
+        using var ms = new MemoryStream();
+        var count = await host.Export.ExportAsync(
+            AuditFacet.Invocation, new AuditFacetQuery(), AuditExportFormat.Csv, ms);
+
+        Assert.Equal(201, count);
+        var lines = Encoding.UTF8.GetString(ms.ToArray()).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(202, lines.Length);
+    }
+
+    [Fact]
+    public async Task BusinessQuery_Keyset_MultiPage()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql);
+        var first = await SeedBusinessAsync(host.Sp, 5, "A");
+        await SeedBusinessAsync(host.Sp, 5, "B");
+        await SeedBusinessAsync(host.Sp, 5, "C");
+
+        var user = new StubDomainUser("u1", 5, true) { ServiceProvider = host.Sp };
+        var svc = new BusinessAuditQueryService(user, NullLogger<BusinessAuditQueryService>.Instance);
+
+        var page = await svc.GetListAsync(new BusinessAuditQueryInput { TenantId = "5", AfterId = first.Id, Take = 10 });
+
+        Assert.Equal(2, page.Total);
+        Assert.Equal(new[] { "B", "C" }, page.Items.Select(i => i.ActionType).ToArray());
+    }
+
+    [Fact]
+    public async Task BusinessQuery_TenantMismatch_Throws()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql);
+        var user = new StubDomainUser("u1", 5, true) { ServiceProvider = host.Sp };
+        var svc = new BusinessAuditQueryService(user, NullLogger<BusinessAuditQueryService>.Instance);
+
+        await Assert.ThrowsAsync<AuditAccessDeniedException>(
+            () => svc.GetListAsync(new BusinessAuditQueryInput { TenantId = "9" }));
+    }
+
+    private static async Task<BusinessAuditEntity> SeedBusinessAsync(ServiceProvider sp, long tenantId, string action)
+    {
+        var ds = sp.GetRequiredService<BusinessAuditEntityDataService>();
+        var entity = new BusinessAuditEntity
+        {
+            TenantId = tenantId,
+            ActorType = "User",
+            ActorId = "u1",
+            ActorName = "tester",
+            TargetType = "t",
+            TargetId = "1",
+            ActionType = action,
+            ExecutionTime = DateTime.UtcNow,
+        };
+        await ds.EntityCreateAsync(entity);
+        return entity;
+    }
+
+    private sealed class AllowAllPolicy : IAuditAccessPolicy
+    {
+        public Task<AuditAccessDecision> EvaluateAsync(AuditAccessRequest request, CancellationToken ct = default)
+            => Task.FromResult(AuditAccessDecision.Allow());
     }
 }

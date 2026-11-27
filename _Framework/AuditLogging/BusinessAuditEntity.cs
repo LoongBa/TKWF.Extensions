@@ -91,6 +91,6 @@ namespace TKWF.Ext.AuditLogging
 
         /// <summary>落库时间。</summary>
         [FreeSql.DataAnnotations.Column(Position = 15)]
-        public DateTimeOffset CreateTime { get; set; } = DateTimeOffset.Now;
+        public DateTimeOffset CreateTime { get; set; } = DateTimeOffset.UtcNow;
     }
 }

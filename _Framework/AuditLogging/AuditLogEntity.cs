@@ -71,7 +71,7 @@ namespace TKWF.Ext.AuditLogging
 
         /// <summary>记录创建时间。</summary>
         [FreeSql.DataAnnotations.Column(Position = 12)]
-        public DateTimeOffset CreateTime { get; set; } = DateTimeOffset.Now;
+        public DateTimeOffset CreateTime { get; set; } = DateTimeOffset.UtcNow;
 
         /// <summary>租户 Id（可空单义；C11 预留）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 13)]

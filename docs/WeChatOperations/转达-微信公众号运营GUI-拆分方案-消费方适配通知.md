@@ -4,6 +4,7 @@
 > - 运营面（单通道商户端）：`docs/WeChatOperations/管理UI-运营面-开发方案.md`
 > - 通道治理面（多通道平台端）：`docs/WeChatChannels/管理UI-通道治理面-开发方案.md`
 > - 边界裁定：`docs/WeChatOperations/ADR/ADR-WeChatOperations-管理UI单双通道扩展边界.md`
+> - **DMP 实施任务书（交 DMP-Lite）**：`docs/WeChatOperations/转达-DMP-Lite-管理UI双面实施任务书.md`
 >
 > **本轮新增/变化的消费方适配要点**（相对本旧通知）：
 > 1. **双面择一**：商户端只接 `WeChatOperations.UI.BlazorAntDesign`（运营面），平台端只接 `WeChatChannels.UI.BlazorAntDesign`（通道治理面）；平台代运营 = 两面双挂。两 UI 扩展镜像后端扩展命名，**UI 选择 ≠ 后端白名单集合**（运营域仍须 WeChatChannels + WeChatOperations 双白名单）。

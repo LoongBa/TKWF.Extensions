@@ -4,6 +4,7 @@
 > **类型**：UI 扩展（零持久化 / 零配置 / R2→IPageContributor 演进）｜ **边界裁定**：`docs/WeChatOperations/ADR/ADR-WeChatOperations-管理UI单双通道扩展边界.md`
 > **取代**：混装方案 `docs/WeChatOperations/微信公众号运营GUI-拆分方案.md`（标注 superseded，租户页集由本篇承接；平台页集由 `docs/WeChatChannels/管理UI-通道治理面-开发方案.md` 承接）
 > **关联**：常态分工 `docs/扩展模块通用指南.md` §四之三；路径所有权 `docs/端点契约化与路径所有权-开发方案.md` §D1；后端能力 `docs/WeChatOperations/微信公众号运营扩展-使用指南.md`；通道底座双白名单 `docs/WeChatChannels/微信通道底座扩展拆分-开发方案.md`
+> **DMP 实施任务书**：`docs/WeChatOperations/转达-DMP-Lite-管理UI双面实施任务书.md`（交 DMP-Lite 实现 → 拆回）
 > **分工**：装配**模式**设计归框架组/扩展组（本篇）；UI **实现**归消费方 DMP-Lite Merchant.AdminUI；IPageContributor 落地并稳定后拆回本仓库为 `TKWF.Ext.WeChatOperations.UI.BlazorAntDesign`（独立版本线）
 
 ---

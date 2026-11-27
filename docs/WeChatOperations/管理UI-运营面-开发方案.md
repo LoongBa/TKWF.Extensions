@@ -1,18 +1,18 @@
-# 管理UI-运营面-开发方案（TKWF.Ext.WeChatOperations.UI）
+# 管理UI-运营面-开发方案（TKWF.Ext.WeChatOperations.UI.BlazorAntDesign）
 
-> **版本**：v0.1 ｜ **日期**：2026-11-27 ｜ **状态**：提议（待 Oracle 方案评审；架构裁定 oracle5 D1–D7 已给出）
+> **版本**：v0.1 ｜ **日期**：2026-11-27 ｜ **状态**：已评审通过（Oracle PASS WITH CONDITIONS，C-2/C-3 已闭环）
 > **类型**：UI 扩展（零持久化 / 零配置 / R2→IPageContributor 演进）｜ **边界裁定**：`docs/WeChatOperations/ADR/ADR-WeChatOperations-管理UI单双通道扩展边界.md`
 > **取代**：混装方案 `docs/WeChatOperations/微信公众号运营GUI-拆分方案.md`（标注 superseded，租户页集由本篇承接；平台页集由 `docs/WeChatChannels/管理UI-通道治理面-开发方案.md` 承接）
 > **关联**：常态分工 `docs/扩展模块通用指南.md` §四之三；路径所有权 `docs/端点契约化与路径所有权-开发方案.md` §D1；后端能力 `docs/WeChatOperations/微信公众号运营扩展-使用指南.md`；通道底座双白名单 `docs/WeChatChannels/微信通道底座扩展拆分-开发方案.md`
-> **分工**：装配**模式**设计归框架组/扩展组（本篇）；UI **实现**归消费方 DMP-Lite Merchant.AdminUI；IPageContributor 落地并稳定后拆回本仓库为 `TKWF.Ext.WeChatOperations.UI`（独立版本线）
+> **分工**：装配**模式**设计归框架组/扩展组（本篇）；UI **实现**归消费方 DMP-Lite Merchant.AdminUI；IPageContributor 落地并稳定后拆回本仓库为 `TKWF.Ext.WeChatOperations.UI.BlazorAntDesign`（独立版本线）
 
 ---
 
 ## 一、目的与目标
 
-为**单通道商户运营面**提供一套独立、可按需装配的管理 UI 扩展 `TKWF.Ext.WeChatOperations.UI`。目标状态：
+为**单通道商户运营面**提供一套独立、可按需装配的管理 UI 扩展 `TKWF.Ext.WeChatOperations.UI.BlazorAntDesign`。目标状态：
 
-1. 消费方（DMP-Lite Merchant.AdminUI）只接本 UI 包即得全套运营页面（素材/回复规则/菜单/统计/日志/网关/状态/运营配置），**不含**通道 CRUD/凭据页（那是平台治理面 `WeChatChannels.UI` 的职责）。
+1. 消费方（DMP-Lite Merchant.AdminUI）只接本 UI 包即得全套运营页面（素材/回复规则/菜单/统计/日志/网关/状态/运营配置），**不含**通道 CRUD/凭据页（那是平台治理面 `WeChatChannels.UI.BlazorAntDesign` 的职责）。
 2. UI 只消费既有的 `/api/wechat-ops/*` REST 端点，**不发明新 API 面**、不直连 DB/ORM/微信、不引平台库 DLL。
 3. "单通道/多通道"作为本 UI 内的**形态变体**处理（N=1 无选择器；N>1 错误驱动选择器），不新增模式开关、不复制后端 B 守卫逻辑。
 4. 页面契约（路由/权限键/REST 消费面）在 R2 阶段冻结，IPageContributor 落地后零破坏收敛为声明式贡献。
@@ -22,7 +22,7 @@
 **In scope**：运营域 8 个门面所支撑的全部管理页面；UI-local 通道上下文（selected channel id）；R2 消费方托管形态 + IPageContributor 落地后的声明式形态。
 
 **Out of scope**：
-- **通道治理页**（通道列表/新建/编辑/凭据/能力状态/删除）——归 `WeChatChannels.UI`，本面只以只读 status 卡展示当前通道状态，**不碰** `/api/wechat-channels/*`（避免为看状态给商户授 `WeChatChannels.Query`）。
+- **通道治理页**（通道列表/新建/编辑/凭据/能力状态/删除）——归 `WeChatChannels.UI.BlazorAntDesign`，本面只以只读 status 卡展示当前通道状态，**不碰** `/api/wechat-channels/*`（避免为看状态给商户授 `WeChatChannels.Query`）。
 - 任何后端门面/端点/DTO 的新增或修改——缺能力走转达环（反馈扩展组补契约原语），UI 侧禁止发明平行 API 面（P2 单一事实源）。
 - UI 技术栈/布局/UX——消费方自治（分工裁定）。
 
@@ -59,7 +59,7 @@
 ### 5.1 单通道商户端（只接运营面）
 
 ```text
-NuGet:  TKWF.Ext.WeChatOperations.UI  +  TKWF.Ext.WeChatOperations  +  TKWF.Ext.WeChatChannels
+NuGet:  TKWF.Ext.WeChatOperations.UI.BlazorAntDesign  +  TKWF.Ext.WeChatOperations  +  TKWF.Ext.WeChatChannels
 ```
 ```csharp
 // 领域初始化器——后端白名单【双声明】（UI 选择 ≠ 后端白名单集合）
@@ -74,7 +74,7 @@ public class MerchantDomainInitializer : DomainHostInitializerBase<MerchantUserI
 
 ### 5.2 平台"代运营"组合（同时接两面）
 
-在平台端既有 `WeChatChannels.UI` 装配基础上，追加本 UI 包 + 后端 `WeChatOperations` 白名单；运营页出现通道选择器（§四），属能力轴的自然组合，**不是第三个扩展**。
+在平台端既有 `WeChatChannels.UI.BlazorAntDesign` 装配基础上，追加本 UI 包 + 后端 `WeChatOperations` 白名单；运营页出现通道选择器（§四），属能力轴的自然组合，**不是第三个扩展**。
 
 ### 5.3 路由 / 权限 / 配置
 
@@ -90,7 +90,7 @@ public class MerchantDomainInitializer : DomainHostInitializerBase<MerchantUserI
 | 阶段 | 形态 | 页面资产归属 | 消费 |
 |------|------|-------------|------|
 | Phase 1（当前） | **R2**：消费方自研前端直连 REST | 消费方 DMP-Lite Merchant.AdminUI | 本方案 §三 端点 + §五 装配 |
-| Phase 2（机制落地后） | **声明式贡献**：`IPageContributor` + `PageDescriptor` + spec 词汇 | 拆回本仓库 `TKWF.Ext.WeChatOperations.UI`（RCL/StaticWebAssets） | `Tkwf.Page.load(Pages.X)`，业务层零修改 |
+| Phase 2（机制落地后） | **声明式贡献**：`IPageContributor` + `PageDescriptor` + spec 词汇 | 拆回本仓库 `TKWF.Ext.WeChatOperations.UI.BlazorAntDesign`（RCL/StaticWebAssets） | `Tkwf.Page.load(Pages.X)`，业务层零修改 |
 
 **约束**：Phase 1 冻结页面契约（路由/权限键/REST 消费面），Phase 2 迁移 = 纯接线、零破坏。IPageContributor 落地后**新页面必须声明式贡献**（R2 增长上限，`docs/扩展模块通用指南.md:190`），R2 不得用于新页面。
 

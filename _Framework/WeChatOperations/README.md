@@ -37,7 +37,7 @@
 | **消息转发网关** | 消息路由规则（ChannelId+MsgType+Event+MatchMode+TriggerKey 五键匹配，同键覆盖更新）+ 下游端点（AuthToken AES-GCM 密文落库 + DTO 投影无密文）+ 消息幂等（规范化键防微信重推——幂等检查最前短路）+ 转发日志全链留痕（Queued/Success/Fail/Timeout/SkippedDuplicate/NoRule）+ BackgroundJob 异步抄送（at-least-once + 指数退避重试，幂等键透传下游自去重）+ **SyncProxy/PreprocessSync 同步透传（V0.3.0——出站透传 → 下游 XML RawXml 逃逸口原样接管回复；超时/失败/非 XML 经运行库熔断 + 转发日志 Timeout/Fail → 降级本地渲染链）** |
 | **运营配置面（D03 1.10）** | **5 域单行配置**（`TKWF_OpsConfig_ArticleReply`/`ReplyText`/`Degrade`/`WeakIdentity`/`Ticket`——图 文 URL 模板三级回退中间级 / S3·S5 回复文案 / S2 未知通道开关 / 弱身份策略 / 票据行为）+ `IOperationsConfigService` 管理门面（5 域 GET/PUT `/api/wechat-ops/ops-config/*` + 乐观并发 R7 `OPS_CONFIG_VERSION_CONFLICT`）+ FA 只读契约 `IOperationsConfigQuery`（Federation 编排链读 DB 权威配置，未配置 → Options 降级） |
 
-**GUI（阶段二）**：本扩展不含 GUI——菜单编辑器/素材管理/规则配置页面由 **DMP-Lite 消费方自研**（R2 路径直连 REST），实证后拆回本仓库为 `WeChatOperations.UI` 扩展（见方案 §八）。
+**GUI（阶段二）**：本扩展不含 GUI——菜单编辑器/素材管理/规则配置页面由 **DMP-Lite 消费方自研**（R2 路径直连 REST），实证后拆回本仓库为 `WeChatOperations.UI.BlazorAntDesign` 扩展（见方案 §八）。
 
 ## 二、安装与接线
 

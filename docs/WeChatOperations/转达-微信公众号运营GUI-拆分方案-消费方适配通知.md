@@ -1,5 +1,19 @@
 # 转达-微信公众号运营GUI-拆分方案-消费方适配通知
 
+> ⚠️ **已 superseded（2026-11-27）**：本通知基于「单一 UI 扩展混装平台/租户页集」的旧方案，已被管理 UI **按能力域拆两面**的新设计取代。**新实施一律以下列文档为准**：
+> - 运营面（单通道商户端）：`docs/WeChatOperations/管理UI-运营面-开发方案.md`
+> - 通道治理面（多通道平台端）：`docs/WeChatChannels/管理UI-通道治理面-开发方案.md`
+> - 边界裁定：`docs/WeChatOperations/ADR/ADR-WeChatOperations-管理UI单双通道扩展边界.md`
+>
+> **本轮新增/变化的消费方适配要点**（相对本旧通知）：
+> 1. **双面择一**：商户端只接 `WeChatOperations.UI.BlazorAntDesign`（运营面），平台端只接 `WeChatChannels.UI.BlazorAntDesign`（通道治理面）；平台代运营 = 两面双挂。两 UI 扩展镜像后端扩展命名，**UI 选择 ≠ 后端白名单集合**（运营域仍须 WeChatChannels + WeChatOperations 双白名单）。
+> 2. **通道端点补暴露（待发布版本）**：`IChannelConfigService` 新增 `GET /channels/{channelId}`、`GET /channels/by-app/{appId}`、`DELETE /channels/{id}`（`ExposeGraphQL=false`，只开 REST）——通道治理面详情/删除页依赖该版本，消费方锁 `WeChatChannels.Abstractions` 对应 bump 版本及以上。
+> 3. **在用通道禁硬删守卫**：`DELETE /channels/{id}` 现经 `IChannelUsageGuard` 门禁——通道仍被运营配置引用（回复规则/菜单/网关端点等）时抛 `CHANNEL_IN_USE`；UI 建议默认走停用（`IsEnabled=false`），物理删仅确认无引用时提供。
+>
+> 原文保留如下作历史溯源（零删除）。
+>
+> ---
+
 > **来源**: TKWF 扩展组
 > **日期**: 2026-11-06
 > **关联**: `docs/WeChatOperations/微信公众号运营GUI-拆分方案.md`（Oracle2 PASS WITH CONDITIONS C1-C6 闭环）；`docs/WeChatChannels/微信通道底座扩展拆分-开发方案.md`（2026-11-05 已发布）；`docs/扩展模块通用指南.md` §四之三（UI 装配分工模式）
@@ -10,7 +24,7 @@
 
 ## 一、背景
 
-2026-10-18 公众号运营方案（§八）承诺：GUI 阶段二可视化编辑器——扩展组**出拆分方案交 DMP-Lite 实现**，磨合界面装配机制后**拆回 `WeChatOperations.UI` 扩展** + 沉淀 skill。该承诺文档现已产出并通过 Oracle2 评审（**PASS WITH CONDITIONS，C1-C6 全部闭环**）：`docs/WeChatOperations/微信公众号运营GUI-拆分方案.md`。
+2026-10-18 公众号运营方案（§八）承诺：GUI 阶段二可视化编辑器——扩展组**出拆分方案交 DMP-Lite 实现**，磨合界面装配机制后**拆回 `WeChatOperations.UI.BlazorAntDesign` 扩展** + 沉淀 skill。该承诺文档现已产出并通过 Oracle2 评审（**PASS WITH CONDITIONS，C1-C6 全部闭环**）：`docs/WeChatOperations/微信公众号运营GUI-拆分方案.md`。
 
 **本篇是实施任务书**——DMP-Lite 可按本通知开工 GUI，无需等待其他前置（唯一依赖：`WeChatChannels` v0.1.1 / `WeChatOperations` v0.9.1 已发布，双白名单形态已就绪）。
 
@@ -72,7 +86,7 @@
 
 ---
 
-## 六、回收验收（DMP 实现后扩展组拆回 `WeChatOperations.UI` 的条件）
+## 六、回收验收（DMP 实现后扩展组拆回 `WeChatOperations.UI.BlazorAntDesign` 的条件）
 
 1. **IPageContributor 落地**（框架侧页面贡献机制可用）
 2. **GUI 稳定**：(a) §三 全量页面（含网关管理页）已实现并上线生产；(b) 无 P0/P1 UI 缺陷 open；(c) **最近 2 次迭代转达环静默**（无契约缺口返工）
@@ -81,7 +95,7 @@
 5. **契约稳定性**：最近 K 次迭代门面契约无破坏性变更
 6. **权限键定稿**：`WeChatChannels.Query/Manage` / `WeChatOperations.Query/Manage` 回归前定稿
 
-> 拆回动作本身 = 新建 `WeChatOperations.UI` 扩展（独立方案 + Oracle 评审 + code-reviewer 审核，循 AGENTS §3）——**此后续动作由扩展组执行，DMP 无需等待**。
+> 拆回动作本身 = 新建 `WeChatOperations.UI.BlazorAntDesign` 扩展（独立方案 + Oracle 评审 + code-reviewer 审核，循 AGENTS §3）——**此后续动作由扩展组执行，DMP 无需等待**。
 
 ---
 

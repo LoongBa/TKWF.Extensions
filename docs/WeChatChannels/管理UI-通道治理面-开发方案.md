@@ -1,18 +1,18 @@
-# 管理UI-通道治理面-开发方案（TKWF.Ext.WeChatChannels.UI）
+# 管理UI-通道治理面-开发方案（TKWF.Ext.WeChatChannels.UI.BlazorAntDesign）
 
-> **版本**：v0.1 ｜ **日期**：2026-11-27 ｜ **状态**：提议（待 Oracle 方案评审；架构裁定 oracle5 D1–D7 已给出）
+> **版本**：v0.1 ｜ **日期**：2026-11-27 ｜ **状态**：已评审通过（Oracle PASS WITH CONDITIONS + code-reviewer APPROVE WITH CONDITIONS，C-1/C-2/CR-1~CR-4 已闭环）
 > **类型**：UI 扩展（零持久化 / 零配置 / R2→IPageContributor 演进）｜ **边界裁定**：`docs/WeChatOperations/ADR/ADR-WeChatOperations-管理UI单双通道扩展边界.md`（归 WeChatOperations 名下，本篇交叉引用）
 > **取代**：混装方案 `docs/WeChatOperations/微信公众号运营GUI-拆分方案.md`（标注 superseded，平台通道页集由本篇承接；租户运营页集由 `docs/WeChatOperations/管理UI-运营面-开发方案.md` 承接）
 > **关联**：常态分工 `docs/扩展模块通用指南.md` §四之三；路径所有权 `docs/端点契约化与路径所有权-开发方案.md` §D1；后端能力 `docs/WeChatChannels/微信通道底座-使用指南.md`；通道底座拆分 `docs/WeChatChannels/微信通道底座扩展拆分-开发方案.md`
-> **分工**：装配**模式**设计归框架组/扩展组（本篇）；UI **实现**归消费方 DMP-Lite Platform.Web；IPageContributor 落地并稳定后拆回本仓库为 `TKWF.Ext.WeChatChannels.UI`（独立版本线）
+> **分工**：装配**模式**设计归框架组/扩展组（本篇）；UI **实现**归消费方 DMP-Lite Platform.Web；IPageContributor 落地并稳定后拆回本仓库为 `TKWF.Ext.WeChatChannels.UI.BlazorAntDesign`（独立版本线）
 
 ---
 
 ## 一、目的与目标
 
-为**多通道平台治理面**提供一套独立、可按需装配的管理 UI 扩展 `TKWF.Ext.WeChatChannels.UI`。目标状态：
+为**多通道平台治理面**提供一套独立、可按需装配的管理 UI 扩展 `TKWF.Ext.WeChatChannels.UI.BlazorAntDesign`。目标状态：
 
-1. 消费方（DMP-Lite Platform.Web）只接本 UI 包即得通道治理页面（通道列表/详情/新建/编辑/凭证/能力状态/启停）。**不含**任何运营页（素材/回复/菜单/统计/日志/网关）——那是运营面 `WeChatOperations.UI` 的职责。
+1. 消费方（DMP-Lite Platform.Web）只接本 UI 包即得通道治理页面（通道列表/详情/新建/编辑/凭证/能力状态/启停）。**不含**任何运营页（素材/回复/菜单/统计/日志/网关）——那是运营面 `WeChatOperations.UI.BlazorAntDesign` 的职责。
 2. UI 只消费既有 `/api/wechat-channels/*` REST 端点，不发明新 API 面、不直连 DB/ORM/微信、不引运营扩展 DLL。
 3. 通道列表天然按多实例呈现（`ListChannelsAsync` 返回全量），通道上下文 = 平台显式选择（与运营面的"后端自动绑定"语义相反，见 §四）。
 4. 页面契约在 R2 阶段冻结，IPageContributor 落地后零破坏收敛。
@@ -22,7 +22,7 @@
 **In scope**：通道配置门面所支撑的治理页面；平台侧通道选择上下文；R2 消费方托管形态 + IPageContributor 声明式形态。
 
 **Out of scope**：
-- **全部运营页**（素材/回复规则/菜单/统计/日志/网关/运营配置）——归 `WeChatOperations.UI`。
+- **全部运营页**（素材/回复规则/菜单/统计/日志/网关/运营配置）——归 `WeChatOperations.UI.BlazorAntDesign`。
 - 后端门面/端点/DTO 新增或修改——缺能力走转达环；特别是**通道 REST 薄面缺口**（见 §三.2）须转达扩展组评估，不由 UI 侧发明平行端点。
 - UI 技术栈/布局/UX——消费方自治。
 
@@ -72,16 +72,16 @@
 | 面 | 通道上下文来源 | 选择器 | CRUD |
 |----|---------------|--------|------|
 | 平台治理面（本 UI） | 平台显式选中的通道（列表行 / 编辑目标） | 列表即选择器（点行进入编辑） | 有（新建/编辑/详情/删除——删除受在用守卫，被引用即拒） |
-| 运营面（WeChatOperations.UI） | 后端 B 守卫自动绑定（N==1）；N>1 错误驱动选择器 | N==1 无 / N>1 有 | 无通道 CRUD |
+| 运营面（WeChatOperations.UI.BlazorAntDesign） | 后端 B 守卫自动绑定（N==1）；N>1 错误驱动选择器 | N==1 无 / N>1 有 | 无通道 CRUD |
 
-**纪律**：本 UI 不做身份选区（那是后端 `IChannelRegistry` / B 守卫的职责），只做治理对象的显式选择；不复制后端选区逻辑到 UI。平台"代运营"场景 = 本 UI + `WeChatOperations.UI` 双挂，运营页的选择器由后端 `CHANNEL_REQUIRED` 驱动。
+**纪律**：本 UI 不做身份选区（那是后端 `IChannelRegistry` / B 守卫的职责），只做治理对象的显式选择；不复制后端选区逻辑到 UI。平台"代运营"场景 = 本 UI + `WeChatOperations.UI.BlazorAntDesign` 双挂，运营页的选择器由后端 `CHANNEL_REQUIRED` 驱动。
 
 ## 五、消费方装配规格
 
 ### 5.1 平台管理端（只接治理面）
 
 ```text
-NuGet:  TKWF.Ext.WeChatChannels.UI  +  TKWF.Ext.WeChatChannels   // + Federation（平台已有）
+NuGet:  TKWF.Ext.WeChatChannels.UI.BlazorAntDesign  +  TKWF.Ext.WeChatChannels   // + Federation（平台已有）
 ```
 ```csharp
 // 领域初始化器——后端白名单【单声明】（平台模式，无运营依赖）
@@ -104,7 +104,7 @@ public class PlatformDomainInitializer : DomainHostInitializerBase<PlatformUserI
 
 ## 六、演进路径（R2 → IPageContributor）
 
-同运营面 §六：Phase 1 R2（消费方 Platform.Web 自研前端直连 REST）；Phase 2 声明式贡献拆回 `TKWF.Ext.WeChatChannels.UI`（RCL/StaticWebAssets）。页面契约 Phase 1 冻结，迁移纯接线、零破坏；IPageContributor 落地后新页面必须声明式贡献。
+同运营面 §六：Phase 1 R2（消费方 Platform.Web 自研前端直连 REST）；Phase 2 声明式贡献拆回 `TKWF.Ext.WeChatChannels.UI.BlazorAntDesign`（RCL/StaticWebAssets）。页面契约 Phase 1 冻结，迁移纯接线、零破坏；IPageContributor 落地后新页面必须声明式贡献。
 
 ## 七、验收标准
 
@@ -123,7 +123,8 @@ public class PlatformDomainInitializer : DomainHostInitializerBase<PlatformUserI
 
 | 风险 | 影响 | 对策 |
 |------|------|------|
-| 在用通道硬删（9 张 WeChatOperations 表按 ChannelId 关联 → 悬空） | 数据完整性 / 历史链路断裂 | ✅ 已实现 `IChannelUsageGuard`（配置引用即拒删 `CHANNEL_IN_USE`；日志类放行）；UI 默认停用 |
+| 在用通道硬删（WeChatOperations 9 张表按 ChannelId 关联 → 悬空） | 数据完整性 / 历史链路断裂 | ✅ 已实现 `IChannelUsageGuard`（配置引用即拒删 `CHANNEL_IN_USE`；日志类放行）；UI 默认停用 |
+| **守卫覆盖范围**（当前仅 WeChatOperations 配置表；`Federation` FollowEvent/FollowState/SsoChannelRegistry、`TrustCenter` AuthorizationCode 等按 ChannelId 关联但**未门禁**） | 删通道仍可能悬空这些域行 | **已知限制（已文档化）**；下一迭代：`Federation`/`TrustCenter` 各自实现 `IChannelUsageGuard`（契约已是多实现 SPI，天然支持）；不扩 WeChatOperations 到日志表（避免阻断下线清理） |
 | 三端点补暴露待发布 bump | 消费方锁版本 | §3.2.3 版本依赖；发布前按 C-4 跑受影响面测试 |
 | 误把运营页塞进本面 | 权限域混装（复辟 Mode 方案） | §二 Out of scope + ADR 决策 4 |
 | 单白名单误加运营扩展 | 平台被迫打包运营全链（后端拆分否决理由） | §5.1 单声明 + C4 |

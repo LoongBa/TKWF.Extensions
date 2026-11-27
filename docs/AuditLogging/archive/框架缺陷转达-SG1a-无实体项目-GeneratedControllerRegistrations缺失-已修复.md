@@ -1,5 +1,7 @@
 # 框架缺陷转达：SG1a 无实体项目 + [GenerateController] → `GeneratedControllerRegistrations` 缺失
 
+> **状态：已修复并归档（框架 v4.10.147，2026-11-27）**——缺陷已由框架修复（"无实体 + `[GenerateController]` 门面"为受支持形态）；`TKWF.Ext.AuditLogging.Web` 已回迁独立包（`AuditLogging.Web/v0.1.0`，主包 `AuditLogging/v0.9.0` 移除 AspNetCore 依赖）。本文保留作历史记录，不再作为待办。
+
 > 提交方：TKWF 扩展模块组（扩展仓 `F:\LoongBa_Git\_TKWF.Extensions`）
 > 接收方：主框架组（`F:\LoongBa_Git\_TKWF`）
 > 发现日期：2026-11-27

@@ -39,13 +39,13 @@
       "created": "2026-10-04"
     },
     "AuditLogging": {
-      "version": "0.7.0",
-      "tag": "AuditLogging/v0.7.0",
+      "version": "0.7.1",
+      "tag": "AuditLogging/v0.7.1",
       "created": "2026-11-27"
     },
     "AuditLogging.Abstractions": {
-      "version": "0.2.0",
-      "tag": "AuditLogging.Abstractions/v0.2.0",
+      "version": "0.2.1",
+      "tag": "AuditLogging.Abstractions/v0.2.1",
       "created": "2026-11-27"
     },
     "AuthCenter": {
@@ -264,8 +264,8 @@
       "created": "2026-11-02"
     },
     "SecurityLog": {
-      "version": "0.5.1",
-      "tag": "SecurityLog/v0.5.1",
+      "version": "0.5.2",
+      "tag": "SecurityLog/v0.5.2",
       "created": "2026-11-27"
     },
     "SecurityLog.Abstractions": {

@@ -29,13 +29,4 @@ namespace TKWF.Ext.AuditLogging
     {
         public bool AllowWithoutPermissions { get; set; }
     }
-
-    /// <summary>
-    /// 审计不可变配置。
-    /// <para>默认 append-only：特权删除能力**不注册即不存在**。设为 true 才启用特权删除（仍需 <see cref="IAuditAccessPolicy"/> 校验 + 留痕）。</para>
-    /// </summary>
-    public class AuditImmutabilityOptions
-    {
-        public bool AllowPrivilegedDelete { get; set; }
-    }
 }

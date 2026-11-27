@@ -75,17 +75,22 @@ namespace TKWF.Ext.AuditLogging
         [MaxLength(-1)]
         public string? AfterJson { get; set; }
 
-        /// <summary>关联 Id（三面同域，长度对齐 AuditCorrelationId.MaxLength = 128）。</summary>
+        /// <summary>扩展属性（脱敏 JSON；业务面独有，C12）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 12)]
+        [MaxLength(-1)]
+        public string? AttributesJson { get; set; }
+
+        /// <summary>关联 Id（三面同域，长度对齐 AuditCorrelationId.MaxLength = 128）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 13)]
         [MaxLength(128)]
         public string? CorrelationId { get; set; }
 
         /// <summary>业务发生时间（UTC）。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 13)]
+        [FreeSql.DataAnnotations.Column(Position = 14)]
         public DateTime ExecutionTime { get; set; }
 
         /// <summary>落库时间。</summary>
-        [FreeSql.DataAnnotations.Column(Position = 14)]
+        [FreeSql.DataAnnotations.Column(Position = 15)]
         public DateTimeOffset CreateTime { get; set; } = DateTimeOffset.Now;
     }
 }

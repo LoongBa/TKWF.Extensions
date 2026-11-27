@@ -119,6 +119,7 @@ namespace TKWF.Ext.AuditLogging
                 Summary = _masking.MaskText(entry.Summary),
                 BeforeJson = SerializeMasked(entry.Before),
                 AfterJson = SerializeMasked(entry.After),
+                AttributesJson = SerializeMasked(entry.Attributes),
                 CorrelationId = entry.CorrelationId,
                 ExecutionTime = entry.ExecutionTime.UtcDateTime,
                 CreateTime = DateTimeOffset.Now,

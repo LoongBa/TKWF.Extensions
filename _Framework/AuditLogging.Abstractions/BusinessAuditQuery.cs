@@ -15,6 +15,10 @@ namespace TKWF.Ext.AuditLogging
         public string? CorrelationId { get; init; }
         public DateTimeOffset? FromUtc { get; init; }
         public DateTimeOffset? ToUtc { get; init; }
+
+        /// <summary>keyset 游标：仅返回 Id &gt; AfterId（Id 升序决胜），供导出/深分页。</summary>
+        public long? AfterId { get; init; }
+
         public int Skip { get; init; }
         public int Take { get; init; } = 50;
     }

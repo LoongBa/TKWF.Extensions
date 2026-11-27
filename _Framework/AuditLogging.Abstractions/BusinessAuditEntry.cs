@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace TKWF.Ext.AuditLogging
 {
@@ -16,5 +17,6 @@ namespace TKWF.Ext.AuditLogging
         string? Summary = null,
         object? Before = null,
         object? After = null,
-        string? CorrelationId = null);
+        string? CorrelationId = null,
+        IReadOnlyDictionary<string, object?>? Attributes = null);
 }

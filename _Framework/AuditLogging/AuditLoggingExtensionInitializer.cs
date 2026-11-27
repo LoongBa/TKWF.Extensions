@@ -76,7 +76,6 @@ namespace TKWF.Ext.AuditLogging
             services.AddOptions<AuditFailurePolicyOptions>();
             services.AddOptions<AuditEventPublishingOptions>();
             services.AddOptions<AuditAccessPolicyOptions>();
-            services.AddOptions<AuditImmutabilityOptions>();
 
             services.TryAddSingleton<AuditDiagnostics>();
             services.TryAddSingleton<IAuditDiagnostics>(sp => sp.GetRequiredService<AuditDiagnostics>());
@@ -93,6 +92,12 @@ namespace TKWF.Ext.AuditLogging
 
             // 审计访问策略（fail-closed 默认；消费方可 TryAdd 替换为按 AuditPermissionNames 判定的实现）
             services.TryAddSingleton<IAuditAccessPolicy, DefaultAuditAccessPolicy>();
+
+            // V0.7.0：统一读模型——分面 Reader 集合（ADR92 TryAddEnumerableConstructible）+ 读门面
+            //   Invocation/Business 两面由本扩展提供；Security 面由 SecurityLog 扩展注册（启用即出现）
+            services.TryAddEnumerableConstructible<IAuditFacetReader, InvocationFacetReader>();
+            services.TryAddEnumerableConstructible<IAuditFacetReader, BusinessFacetReader>();
+            services.AddConstructibleService<IAuditQueryService, AuditQueryService>();
         }
     }
 }

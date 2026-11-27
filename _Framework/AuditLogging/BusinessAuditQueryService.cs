@@ -45,7 +45,7 @@ namespace TKWF.Ext.AuditLogging
                 if (!allowed)
                 {
                     _logger.LogWarning("业务审计查询被拒绝：{Reason}", reason);
-                    return new BusinessAuditPagedResult(0, Array.Empty<BusinessAuditListItemDto>());
+                    throw new AuditAccessDeniedException(reason);
                 }
 
                 var predicate = BuildPredicate(input, tenantFilter);
@@ -57,6 +57,10 @@ namespace TKWF.Ext.AuditLogging
                     predicate, skip, take, q => q.OrderByDescending(x => x.Id), ct);
 
                 return new BusinessAuditPagedResult(total, rows.Select(Map).ToList());
+            }
+            catch (AuditAccessDeniedException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -73,11 +77,15 @@ namespace TKWF.Ext.AuditLogging
                 if (!access.Allowed)
                 {
                     _logger.LogWarning("业务审计详情被拒绝：{Reason}", access.Reason);
-                    return null;
+                    throw new AuditAccessDeniedException(access.Reason);
                 }
 
                 var entity = await DataService.EntityGetAsync(x => x.Id == id, ct);
                 return entity is null ? null : Map(entity);
+            }
+            catch (AuditAccessDeniedException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -96,10 +104,14 @@ namespace TKWF.Ext.AuditLogging
                 if (!allowed)
                 {
                     _logger.LogWarning("业务审计统计被拒绝：{Reason}", reason);
-                    return 0;
+                    throw new AuditAccessDeniedException(reason);
                 }
 
                 return await DataService.CountAsync(BuildPredicate(input, tenantFilter), ct);
+            }
+            catch (AuditAccessDeniedException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -149,6 +161,7 @@ namespace TKWF.Ext.AuditLogging
             var actorType = input.ActorType;
             var actorId = input.ActorId;
             var correlationId = input.CorrelationId;
+            var afterId = input.AfterId;
             var from = input.FromUtc?.UtcDateTime;
             var to = input.ToUtc?.UtcDateTime;
 
@@ -160,6 +173,7 @@ namespace TKWF.Ext.AuditLogging
                 (actorType == null || x.ActorType == actorType) &&
                 (actorId == null || x.ActorId == actorId) &&
                 (correlationId == null || x.CorrelationId == correlationId) &&
+                (afterId == null || x.Id > afterId) &&
                 (from == null || x.ExecutionTime >= from) &&
                 (to == null || x.ExecutionTime <= to);
         }

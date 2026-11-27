@@ -64,7 +64,8 @@ RestRoute 为**全段**（含模块段，不含 RestBasePath）——URL = `Rest
 - 解密仅出站瞬时（`DbWeChatCredentialResolver`）；解密失败异常消息不含明文
 - 注册表投影：Token/EncodingAESKey 解密进 Extra（事件验签信任根需明文）；AppSecret 不进公共列
 - 权限标注在契约接口（`WeChatChannels.Query/Manage`）
-- ✅ **在用通道硬删守卫（已实现 2026-11-27）**：`DeleteChannelAsync` 枚举已注册 `IChannelUsageGuard`（契约在 Abstractions），任一报告在用即抛 `DomainException`（ErrorCode=`CHANNEL_IN_USE`）；运营数据属主 `WeChatOperations` 实现 `WeChatOperationsChannelUsageGuard`（检查回复规则/菜单快照/菜单版本/网关规则/下游端点等配置引用；日志类放行）。零守卫实现（平台独用）= 放行；治理 UI 建议默认停用（`IsEnabled=false`）
+- ✅ **在用通道硬删守卫（已实现 2026-11-27）**：`DeleteChannelAsync` 枚举已注册 `IChannelUsageGuard`（契约在 Abstractions），任一报告在用即抛 `DomainException`（ErrorCode=`CHANNEL_IN_USE`）；运营数据属主 `WeChatOperations` 实现 `WeChatOperationsChannelUsageGuard`（检查回复规则/菜单内容（快照 MenuJson 非空）/网关规则/下游端点等配置引用；菜单版本/日志类放行）。零守卫实现（平台独用）= 放行；治理 UI 建议默认停用（`IsEnabled=false`）
+  - ⚠️ **覆盖范围（已知限制）**：守卫当前只覆盖 WeChatOperations 运营配置；`Federation`（FollowEvent/FollowState/SsoChannelRegistry）与 `TrustCenter`（AuthorizationCode）等按 ChannelId 关联的跨域数据**未门禁**——需各扩展自行实现 `IChannelUsageGuard`（契约天然支持多实现；下一迭代）
 
 ## 五、与既有资产边界
 

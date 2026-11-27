@@ -59,6 +59,9 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         "wechat_event",
     };
 
+    /// <summary>构造——<paramref name="usageGuards"/> 为集合版守卫工厂帧内供给（对齐 SsoChannelFactory 的
+    /// <c>IEnumerable&lt;ISsoChannel&gt;</c> 形态）。⚠️ 守卫元素工厂要求 <c>CurrentAopUser</c> 非空，故本门面须经
+    /// <c>User.Use&lt;IChannelConfigService&gt;()</c> 帧内构造；禁止在帧外用 <c>Use&lt;ChannelConfigService&gt;()</c>（具体类 NoAop）直解。</summary>
     public ChannelConfigService(
         IDomainUser user,
         [Microsoft.Extensions.DependencyInjection.FromKeyedServices(TKW.Framework.Domain.KeyManagement.SymmetricKeyProviderKeys.WeChatChannels)]

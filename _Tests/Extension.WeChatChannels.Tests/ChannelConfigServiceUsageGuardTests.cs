@@ -25,10 +25,18 @@ public class ChannelConfigServiceUsageGuardTests : WeChatChannelsTestHost
                 : new ChannelUsageCheck(false));
     }
 
+    /// <summary>第二守卫（恒放行）——与 <see cref="StubUsageGuard"/> 并存，验证多守卫枚举「一在用即拒」。</summary>
+    private sealed class AlwaysClearGuard : IChannelUsageGuard
+    {
+        public Task<ChannelUsageCheck> CheckAsync(string channelId, CancellationToken ct = default)
+            => Task.FromResult(new ChannelUsageCheck(false));
+    }
+
     protected override void ConfigureHost(IServiceCollection services)
     {
         base.ConfigureHost(services);
         services.AddScoped<IChannelUsageGuard>(_ => new StubUsageGuard());
+        services.AddScoped<IChannelUsageGuard>(_ => new AlwaysClearGuard());
     }
 
     [Fact]

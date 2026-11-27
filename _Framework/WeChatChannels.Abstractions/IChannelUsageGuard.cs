@@ -13,9 +13,11 @@ namespace TKWF.Ext.WeChatChannels;
 /// </summary>
 public interface IChannelUsageGuard : IDomainService
 {
-    /// <summary>检查通道是否在用（存在会因删除而悬空的引用时返回 InUse）。</summary>
+    /// <summary>检查通道是否在用（存在会因删除而悬空的引用时返回 InUse）。
+    /// <para>约定：<paramref name="channelId"/> 为空/空白时返回 <c>InUse=false</c>（fail-open——调用方仅传入持久化行的有效 ChannelId）。</para></summary>
     Task<ChannelUsageCheck> CheckAsync(string channelId, CancellationToken ct = default);
 }
 
-/// <summary>通道在用检查结果（<see cref="Reason"/> 供拒绝消息说明引用来源）。</summary>
+/// <summary>通道在用检查结果（<see cref="Reason"/> 供拒绝消息说明引用来源）。
+/// <para>⚠️ <see cref="Reason"/> 会嵌入面向终端用户的拒绝消息——实现方**禁止**放入密钥/个人敏感信息。</para></summary>
 public sealed record ChannelUsageCheck(bool InUse, string? Reason = null);

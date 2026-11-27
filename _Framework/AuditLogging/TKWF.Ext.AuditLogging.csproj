@@ -24,6 +24,8 @@
   <ItemGroup>
     <!-- 双模式（2026-09-16 DLL 模式定案）：UseLocalFw=true→集中 DLL 引用；false→PackageReference -->
     <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
 
     <!-- SQL 级聚合扩展（FreeSqlQueryableExtensions——ADR15 聚合 API 分层：DataService 内 AvgAsync/MaxAsync
          经 RestoreToSelect 走 FreeSql ISelect 原生聚合，SQL AVG/MAX 下推——GetStatsAsync 用，V0.3.0）
@@ -39,6 +41,11 @@
     <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
 
     <!-- VS FastUpToDateCheck：让 VS 识别 SG 依赖 -->
+  </ItemGroup>
+
+  <!-- V0.7：业务审计 Web 端点（in-package Web 扩展——IWebExtension + MapGenerated） -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <!-- SG1 化：实体使用 FreeSql [Column] 特性（FreeSql.DataAnnotations） -->

@@ -169,4 +169,13 @@ public class AuditReadModelTests
         Assert.True(await provider.VerifyAsync(record, hash));
         Assert.False(await provider.VerifyAsync(record, new string('0', 64)));
     }
+
+    [Fact]
+    public async Task PrivilegedDelete_SecurityFacet_IsAppendOnly()
+    {
+        var service = new AuditPrivilegedDeleteService(new StubDomainUser("u1", null, true));
+
+        await Assert.ThrowsAsync<AuditAccessDeniedException>(
+            () => service.DeleteAsync(AuditFacet.Security, 1, "test"));
+    }
 }

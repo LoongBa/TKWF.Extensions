@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.AuditLogging</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>AuditLogging.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.AuditLogging.Abstractions</PackageId>
+    <Description>TKWF 扩展抽象：审计契约（业务事实审计门面 + 脱敏/失败信号/访问策略 + 事件载荷 + 业务审计查询）——依赖倒置（ADR48 D7），消费方只引契约包</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- IBusinessAuditQueryService : IDomainService 需要 TKWF.Domain；双模式（UseLocalFw=true→Directory.Build.props 集中 DLL 引用；false→PackageReference） -->
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+  </ItemGroup>
+
+</Project>

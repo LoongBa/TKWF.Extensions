@@ -103,27 +103,44 @@ namespace TKWF.Ext.AuditLogging
         {
             try
             {
-                var options = _options.Value;
-                var retentionDays = Math.Max(0, options.RetentionDays);
-                var cutoffUtc = DateTime.UtcNow.AddDays(-retentionDays);
-                var batchSize = Math.Max(1, options.CleanupBatchSize);
-
-                int totalDeleted = 0;
-                while (true)
-                {
-                    // 每批独立查询 + 删除（DeleteExpiredAsync 内部各自 QueryForUser，防 FreeSql ISelect 原地可变陷阱）
-                    var deleted = await DataService.DeleteExpiredAsync(cutoffUtc, batchSize, ct);
-                    if (deleted <= 0) break;             // 无过期记录 → 清完
-                    totalDeleted += deleted;
-                    if (deleted < batchSize) break;      // 不足一批 → 本批已清空剩余
-                }
-                return totalDeleted;
+                var result = await PurgeAsync(ct: ct);
+                return (int)result.DeletedCount;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "审计日志保留清理失败: CleanupExpiredAsync");
                 return 0;
             }
+        }
+
+        /// <inheritdoc />
+        public async Task<AuditCleanupCompleted> PurgeAsync(
+            int? retentionDays = null, int? batchSize = null, int maxRounds = 100, CancellationToken ct = default)
+        {
+            var options = _options.Value;
+            var days = Math.Max(0, retentionDays ?? options.RetentionDays);
+            var batch = Math.Max(1, batchSize ?? options.CleanupBatchSize);
+            var rounds = Math.Max(1, maxRounds);
+            var cutoffUtc = DateTime.UtcNow.AddDays(-days);
+
+            var started = DateTime.UtcNow;
+            long totalDeleted = 0;
+            var executedRounds = 0;
+
+            for (var round = 0; round < rounds; round++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // 每批独立查询 + 删除（DeleteExpiredAsync 内部各自 QueryForUser，防 FreeSql ISelect 原地可变陷阱）
+                var deleted = await DataService.DeleteExpiredAsync(cutoffUtc, batch, ct);
+                totalDeleted += deleted;
+                executedRounds = round + 1;
+
+                if (deleted < batch) break;
+            }
+
+            return new AuditCleanupCompleted(
+                AuditFacet.Invocation, days, totalDeleted, executedRounds, DateTime.UtcNow - started);
         }
 
         /// <summary>规范化 TopN：&lt;=0 回退默认，上限 100。</summary>

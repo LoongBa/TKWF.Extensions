@@ -32,6 +32,9 @@
     <!-- V0.3.0 提取（ADR48 D7 依赖倒置）：公开契约（ISecurityLogStore/ISecurityLogQueryService/ISecurityLogAnalyticsService + DTO/Options）→ Abstractions 项目 -->
     <ProjectReference Include="..\SecurityLog.Abstractions\TKWF.Ext.SecurityLog.Abstractions.csproj" />
 
+    <!-- V0.5.0：复用审计落库失败信号契约（IAuditFailureHook/AuditPersistFailure/AuditFacet）——契约包依赖（ADR48 D7） -->
+    <ProjectReference Include="..\AuditLogging.Abstractions\TKWF.Ext.AuditLogging.Abstractions.csproj" />
+
     <!-- SG1 化：框架抽象引用（[DomainGenerateCode] 属性所在程序集）——双模式条件化 -->
     <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
     <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />

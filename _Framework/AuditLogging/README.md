@@ -294,3 +294,15 @@ Console.WriteLine($"清理审计日志 {deleted} 条");
 - `AuditLogDetailDto`（含 ArgumentsJson——详情显式暴露，列表 D5 保持）
 - QueryService 单一真相源委托（谓词/分页/映射集中 DataService）
 - **推翻 v0.3.0 "无管理端点/单条删除"限定**（ADR-AuditLogging-管理API与删除端点）
+
+### V0.6.0（功能线，待 tag）
+- **业务事实审计面**：`BusinessAuditEntity`（表 `TKWF_BusinessAudit`，内容列显式 `[MaxLength(-1)]`）+ `IBusinessAuditWriter`（接线型；域帧 `User.GetService<T>()`，系统帧 `provider.GetRequiredService<T>()`）+ 查询门面 `IBusinessAuditQueryService`（裁剪 DTO，不含 Before/After）。
+- **新契约包** `TKWF.Ext.AuditLogging.Abstractions`（消费方只引契约）：Actor/Target/Action、脱敏/失败/访问策略、事件载荷、业务审计查询、Options。
+- **脱敏单源（G3）**：`IAuditMaskingPolicy` 在 store 层统一应用——调用审计 `ArgumentsJson` 与业务审计 `Before/After`（默认字段集 + `AdditionalSensitiveFields`）。
+- **失败信号（G7）**：同步 `IAuditFailureHook` + `IAuditDiagnostics`（替代静默；默认 fail-open 不阻断业务但必触发 hook，可切 fail-closed）。
+- **不可抵赖（G4）**：管理端点默认排除单条删除（`ExcludeMethods` 含 `DeleteAsync`/`AdminDeleteAsync`，append-only）。
+- **清理收敛（G12）**：`PurgeAsync`（有界轮次 + 取消 + 失败可见）；旧 `CleanupExpiredAsync` 委托之（保留静默契约）。
+- **访问策略（G5）**：`IAuditAccessPolicy` 接入业务查询（`QueryOwn` 需已认证；敏感操作 fail-closed）。
+- **事件（E1/E2）**：`AuditLogPersisted`/`AuditLogPersistFailed` 默认关（落库后发布、失败隔离、载荷无原文）。
+- **SecurityLog（V0.5.0）**：`CorrelationId` 64→128（三面同域，存量库需 ALTER）；复用同一失败信号契约（默认 no-op，可 `services.Replace`）。
+- **延后 v0.7**：既有两查询契约随迁 Abstractions、业务审计 REST/GraphQL 与受控详情 DTO、`IAuditActorProvider` 接线、Permissions 集成、`IAuditIntegrityProvider` 实装、TenantId 存量迁移。

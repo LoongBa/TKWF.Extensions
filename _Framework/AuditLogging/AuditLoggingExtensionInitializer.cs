@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.Interception.Auditing;
@@ -70,6 +71,28 @@ namespace TKWF.Ext.AuditLogging
             // V0.3.0：审计日志分析服务（统计聚合 + 保留天数清理）——接口 : IDomainService → AddConstructibleService
             // （消费方经 User.Use<IAuditLogAnalyticsService>() 解析）
             services.AddConstructibleService<IAuditLogAnalyticsService, AuditLogAnalyticsService>();
+
+            // V0.6.0：业务事实审计 + 脱敏/失败信号/诊断（Oracle E1/E2/E7 闭环）
+            services.AddOptions<AuditFailurePolicyOptions>();
+            services.AddOptions<AuditEventPublishingOptions>();
+            services.AddOptions<AuditAccessPolicyOptions>();
+            services.AddOptions<AuditImmutabilityOptions>();
+
+            services.TryAddSingleton<AuditDiagnostics>();
+            services.TryAddSingleton<IAuditDiagnostics>(sp => sp.GetRequiredService<AuditDiagnostics>());
+            services.TryAddSingleton<IAuditFailureHook, NullAuditFailureHook>();
+            services.TryAddSingleton<IAuditActorProvider, NullAuditActorProvider>();
+            services.TryAddSingleton<IAuditMaskingPolicy>(sp =>
+                new DefaultAuditMaskingPolicy(sp.GetRequiredService<IOptions<AuditLoggingOptions>>().Value.AdditionalSensitiveFields));
+
+            // 业务事实审计门面——接线型 TryAddScoped（ctor IServiceProvider+ILogger+..., 懒解析 DataService）
+            services.TryAddScoped<IBusinessAuditWriter, BusinessAuditWriter>();
+
+            // 业务事实审计查询门面——接口 : IDomainService → AddConstructibleService
+            services.AddConstructibleService<IBusinessAuditQueryService, BusinessAuditQueryService>();
+
+            // 审计访问策略（fail-closed 默认；消费方可 TryAdd 替换为按 AuditPermissionNames 判定的实现）
+            services.TryAddSingleton<IAuditAccessPolicy, DefaultAuditAccessPolicy>();
         }
     }
 }

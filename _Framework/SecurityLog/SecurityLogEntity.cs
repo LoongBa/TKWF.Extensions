@@ -70,9 +70,9 @@ namespace TKWF.Ext.SecurityLog
         [FreeSql.DataAnnotations.Column(Position = 9, StringLength = -1)]
         public string? Detail { get; set; }
 
-        /// <summary>关联 ID（分布式链路追踪，对齐 AuditLog 追踪链）。</summary>
+        /// <summary>关联 ID（分布式链路追踪，对齐 AuditLog 追踪链；长度对齐 AuditCorrelationId.MaxLength = 128）。</summary>
         [FreeSql.DataAnnotations.Column(Position = 10)]
-        [MaxLength(64)]
+        [MaxLength(128)]
         public string? CorrelationId { get; set; }
 
         /// <summary>记录创建时间（UTC）。CanUpdate=false——只增不改语义的列级兜底。</summary>

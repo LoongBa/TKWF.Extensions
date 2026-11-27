@@ -60,8 +60,10 @@ public class AuditLogManagementApiTests
         Assert.Contains("SelectPageAsync", attr.ExcludeMethods);
         Assert.Contains("CreateAsync", attr.ExcludeMethods);
         Assert.Contains("UpdateAsync", attr.ExcludeMethods);
-        // DeleteAsync 保留（单条删除端点）
-        Assert.DoesNotContain("DeleteAsync", attr.ExcludeMethods);
+        // V0.6.0 G4 不可抵赖：删除能力默认不暴露（append-only，能力=注册）
+        Assert.Contains("DeleteAsync", attr.ExcludeMethods);
+        Assert.Contains("AdminDeleteAsync", attr.ExcludeMethods);
+        Assert.Contains("DeleteExpiredAsync", attr.ExcludeMethods);
     }
 
     [Fact]

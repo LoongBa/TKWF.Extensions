@@ -1,7 +1,9 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.AuditLogging;
 
 namespace TKWF.Ext.SecurityLog
 {
@@ -59,6 +61,9 @@ namespace TKWF.Ext.SecurityLog
 
             // 5. 分析服务（v0.2.0：失败次数 TopN 聚合 + 保留天数清理）
             services.AddConstructibleService<ISecurityLogAnalyticsService, SecurityLogAnalyticsService>();
+
+            // 6. V0.5.0：落库失败信号默认 no-op（消费方 services.Replace 替换；仅启用 SecurityLog 时也保证 G7 信号非 null）
+            services.TryAddSingleton<IAuditFailureHook, NullSecurityLogFailureHook>();
         }
 
         /// <summary>过滤器不自动注册——消费方 opt-in：<c>builder.AddSecurityLog()</c>（对齐 AddAuditLog 先例）。</summary>

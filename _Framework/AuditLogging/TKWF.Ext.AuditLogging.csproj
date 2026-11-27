@@ -65,4 +65,9 @@
     <InternalsVisibleTo Include="TKWF.Ext.AuditLogging.Tests" />
   </ItemGroup>
 
+  <!-- V0.6.0：契约包（ADR-AuditLogging-Abstractions契约包；消费方只引契约，实现引契约） -->
+  <ItemGroup>
+    <ProjectReference Include="..\AuditLogging.Abstractions\TKWF.Ext.AuditLogging.Abstractions.csproj" />
+  </ItemGroup>
+
 </Project>

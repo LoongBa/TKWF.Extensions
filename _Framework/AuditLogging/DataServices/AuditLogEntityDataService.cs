@@ -35,14 +35,15 @@ namespace TKWF.Ext.AuditLogging;
 //
 // 【V0.4.0 管理 API（Oracle P1-1~6 + P2-1~5 修订）】
 // - [GenerateController(FromDataService=true, ExcludeMethods=*)]——排除含 ArgumentsJson 的标准 CRUD
-//   （GetById/Select/SelectPage/Create/Update/Count）防 D5 泄露 + 防伪造审计；仅保留 DeleteAsync 单条删除。
-// - 5 管理方法：SearchLogsAsync（列表裁剪 DTO）/ GetDetailAsync（含 ArgumentsJson，权限门控）/
-//   CleanupAsync（直接实现批量循环——不委托 AnalyticsService 避免循环依赖，P1-4）/
-//   GetStatsAsync（统计）/ DeleteAsync（单条删除）。
+//   （GetById/Select/SelectPage/Create/Update/Count/Delete/AdminDelete/DeleteExpired）防 D5 泄露 + 防伪造审计；
+//   删除能力（DeleteAsync/AdminDeleteAsync/DeleteExpiredAsync）默认不暴露（G4 append-only）；仅 CleanupAsync 保留（服务端自算 cutoff + 有界）。
+// - 4 管理端点：SearchLogsAsync（列表裁剪 DTO）/ GetDetailAsync（含 ArgumentsJson，权限门控）/
+//   CleanupAsync（直接实现批量循环——不委托 AnalyticsService 避免循环依赖，P1-4）/ GetStatsAsync（统计）。
+//   V0.6.0 G4：DeleteAsync/AdminDeleteAsync/DeleteExpiredAsync 均不暴露（append-only）。
 // - DataService 改 public sealed partial（[GenerateController] 须 public——消费方 SG1 跨程序集引用，P1-6）。
 /// <summary>V0.4.0 管理 API 端点——经 ExcludeMethods 排除含 ArgumentsJson 的标准 CRUD，仅暴露受控自定义端点。</summary>
 [GenerateController(FromDataService = true,
-    ExcludeMethods = new[] { "GetByIdAsync", "SelectAsync", "SelectPageAsync", "CountAsync", "CreateAsync", "UpdateAsync" })]
+    ExcludeMethods = new[] { "GetByIdAsync", "SelectAsync", "SelectPageAsync", "CountAsync", "CreateAsync", "UpdateAsync", "DeleteAsync", "AdminDeleteAsync", "DeleteExpiredAsync" })]
 public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityDAC<AuditLogEntity> dac)
         : DomainDataServiceBase<AuditLogEntity, AuditLogEntityDto>(user, dac, hasSoftDelete: false) 
 {
@@ -140,6 +141,7 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
     /// <param name="cutoffUtc">截止时间（UTC）——仅删 <c>ExecutionTime &lt; cutoffUtc</c> 的记录。</param>
     /// <param name="batchSize">单批最大删除条数（&gt; 0）。</param>
     /// <param name="ct">取消令牌。</param>
+    [GenerateIgnore]
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct = default)
     {
         var rows = await Dac.ToListAsync(
@@ -232,10 +234,9 @@ public sealed partial class AuditLogEntityDataService(IDomainUser user, IEntityD
         return totalDeleted;
     }
 
-    /// <summary>统计（管理 API）——暴露现有 <see cref="GetStatsAsync"/>（SQL 级聚合，Oracle P1-5）。</summary>
-    /// <summary>单条物理删除（管理 API）——经基类 DeleteAsync 分派（hasSoftDelete:false → 物理删），推翻 v0.3.0 "无单条删除"限定。
-    /// <c>new</c> 有意隐藏基类同签名方法（此方法加 [GenerateControllerMethod] 标注暴露端点，CS0108 预期）。</summary>
-    [GenerateControllerMethod]
+    /// <summary>单条物理删除——经基类 DeleteAsync 分派（hasSoftDelete:false → 物理删）。
+    /// V0.6.0 G4：<c>ExcludeMethods</c> 优先于 <c>[GenerateControllerMethod]</c>，故该删除能力**默认不暴露**（append-only，端点 404）；
+    /// 保留 public 仅供内部/特权路径。同理 <c>AdminDeleteAsync</c>/<c>DeleteExpiredAsync</c> 一并不暴露。</summary>
     public new Task<bool> DeleteAsync(long id, CancellationToken ct = default)
         => base.DeleteAsync(id, ct);
 

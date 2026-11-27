@@ -156,7 +156,7 @@ public class SecurityAuditService : DomainServiceBase
 | UserAgent | NVARCHAR(512) | 客户端 UA（IAmbientContext["UserAgent"]，无则 null） |
 | Result | NVARCHAR(16) | Success/Failed |
 | Detail | NVARCHAR(MAX) | 详情（异常消息，脱敏——不含密码/令牌） |
-| CorrelationId | NVARCHAR(64) | 关联 ID（链路追踪） |
+| CorrelationId | NVARCHAR(128) | 关联 ID（链路追踪；V0.5.0 由 64 加宽至 128，对齐 AuditLog/`AuditCorrelationId.MaxLength`） |
 | CreateTime | DATETIME (UTC) | 记录创建时间 |
 
 **索引**：`TKWFIX_SecurityLog_UserEventTime`（UserName+EventType+CreateTime）/ `TKWFIX_SecurityLog_IpTime`（IpAddress+CreateTime）

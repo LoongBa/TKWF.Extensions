@@ -45,5 +45,13 @@ namespace TKWF.Ext.AuditLogging
         /// 返回实际删除总条数。可周期性调用（如每日后台任务）。
         /// </summary>
         Task<int> CleanupExpiredAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// 有界清理（<b>推荐入口</b>，G12 收敛）——有界轮次 + 取消 + <b>失败可见</b>（异常向上抛出），返回清理结果。
+        /// <para><paramref name="retentionDays"/>/<paramref name="batchSize"/> 为 null 时取 Options（RetentionDays/CleanupBatchSize）；
+        /// <paramref name="maxRounds"/> 为死循环保护上限（默认 100）。</para>
+        /// </summary>
+        Task<AuditCleanupCompleted> PurgeAsync(
+            int? retentionDays = null, int? batchSize = null, int maxRounds = 100, CancellationToken ct = default);
     }
 }

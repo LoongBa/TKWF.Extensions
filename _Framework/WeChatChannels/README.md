@@ -52,6 +52,9 @@ public class PlatformDomainInitializer : DomainHostInitializerBase<MyUserInfo> {
 |------|---------|
 | `GET /api/wechat-channels/channels` | `ListChannelsAsync` |
 | `POST /api/wechat-channels/channels` | `SaveChannelAsync`（`SaveChannelRequest` [FromBody]，凭证明文 body 传输） |
+| `GET /api/wechat-channels/channels/{channelId}` | `GetByChannelIdAsync`（详情单查；`ExposeGraphQL=false`） |
+| `GET /api/wechat-channels/channels/by-app/{appId}` | `GetAsync`（按 AppId 单查；`by-app` 段靠段数隔离；`ExposeGraphQL=false`） |
+| `DELETE /api/wechat-channels/channels/{id}` | `DeleteChannelAsync`（物理删；`ExposeGraphQL=false`；**在用通道禁硬删守卫待补**，见 §四） |
 
 RestRoute 为**全段**（含模块段，不含 RestBasePath）——URL = `RestBasePath`（缺省 `/api`）+ RestRoute。控制器由消费方 SG2 按 `GeneratedControllerCatalog`（`ModuleKey=WeChatChannels` / `InterfaceNames=IChannelConfigService` / `ImplementationTypes=ChannelConfigService`）生成（ADR47 能力清单机制）。
 
@@ -61,6 +64,7 @@ RestRoute 为**全段**（含模块段，不含 RestBasePath）——URL = `Rest
 - 解密仅出站瞬时（`DbWeChatCredentialResolver`）；解密失败异常消息不含明文
 - 注册表投影：Token/EncodingAESKey 解密进 Extra（事件验签信任根需明文）；AppSecret 不进公共列
 - 权限标注在契约接口（`WeChatChannels.Query/Manage`）
+- ✅ **在用通道硬删守卫（已实现 2026-11-27）**：`DeleteChannelAsync` 枚举已注册 `IChannelUsageGuard`（契约在 Abstractions），任一报告在用即抛 `DomainException`（ErrorCode=`CHANNEL_IN_USE`）；运营数据属主 `WeChatOperations` 实现 `WeChatOperationsChannelUsageGuard`（检查回复规则/菜单快照/菜单版本/网关规则/下游端点等配置引用；日志类放行）。零守卫实现（平台独用）= 放行；治理 UI 建议默认停用（`IsEnabled=false`）
 
 ## 五、与既有资产边界
 
@@ -75,6 +79,7 @@ RestRoute 为**全段**（含模块段，不含 RestBasePath）——URL = `Rest
 
 | 版本 | 内容 |
 |------|------|
+| 待发布（2026-11-27） | **通道治理面三端点补暴露 + 在用守卫**——`GetByChannelIdAsync`/`GetAsync`/`DeleteChannelAsync` 补 REST（`ExposeGraphQL=false`；REST 加法 + GraphQL 收口）；`IChannelUsageGuard` 契约 + `DeleteChannelAsync` 在用门禁（`CHANNEL_IN_USE`）；运营侧实现 `WeChatOperationsChannelUsageGuard`。发布前按契约包变更跑受影响面测试（建议 L2） |
 | V0.1.1（2026-11-05 发布） | **密钥键收口（C11 第 6 扩展边界闭环）**——删除过渡常量 `WeChatChannelsKeyProviderKeys`，6 生产文件统一改引主框架 `SymmetricKeyProviderKeys.WeChatChannels`（v4.10.104 并入）；CPM lockstep 4.10.105；行为零变化（键名与密钥派生路径不变）；测试 **15** 用例全绿 |
 | V0.1.0（2026-11-05 发布） | 拆分下沉首发：通道实体 + `IChannelConfigService` + 凭证两源并存 + 注册源（Priority=100）+ 能力派生 + keyed 密钥 + 非 Web 形态端点（`/api/wechat-channels/channels`）+ 权限键 `WeChatChannels.Query/Manage`；测试 15 用例全绿（契约 8 + Initializer 形态 6 + 特性 1） |
 

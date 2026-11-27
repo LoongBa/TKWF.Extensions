@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Reflection;
 using TKW.Framework.CodeGeneration;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations;
 
 namespace TKWF.Ext.WeChatOperations.Consumer.Tests;
@@ -95,6 +96,33 @@ public class ConsumerContractShapeTests
 
             Assert.NotNull(expose);
             Assert.True(expose!.RestRoute == route, $"{method.Name} RestRoute 应为 {route}");
+            Assert.Equal(verb, expose.RestMethod);
+            Assert.False(expose.ExposeGraphQL, $"{method.Name} ExposeGraphQL 应保持 false（最小暴露面）");
+        }
+    }
+
+    /// <summary>2026-11-27 通道治理面三端点补暴露（WeChatChannels.Abstractions）——GetByChannelId/GetByAppId/Delete
+    /// 显式 RestRoute + RestMethod + ExposeGraphQL=false。契约级防回归：消费方视角锁定 3 方法 REST 面，
+    /// 未来误关/误改即红（对齐 <see cref="Contract_DisputedMethods_HaveRestRoutes_GraphQLClosed"/> 模式）。</summary>
+    [Fact]
+    public void WeChatChannels_GovernanceEndpoints_HaveRestRoutes_GraphQLClosed()
+    {
+        var cases = new (MethodInfo Method, string Route, string Verb)[]
+        {
+            (typeof(IChannelConfigService).GetMethod("GetAsync")!, "/wechat-channels/channels/by-app/{appId}", "GET"),
+            (typeof(IChannelConfigService).GetMethod("GetByChannelIdAsync")!, "/wechat-channels/channels/{channelId}", "GET"),
+            (typeof(IChannelConfigService).GetMethod("DeleteChannelAsync")!, "/wechat-channels/channels/{id}", "DELETE"),
+        };
+
+        foreach (var (method, route, verb) in cases)
+        {
+            var expose = method.GetCustomAttributes()
+                .OfType<TKW.Framework.CodeGeneration.ApiExposeAttribute>()
+                .SingleOrDefault();
+
+            Assert.NotNull(expose);
+            Assert.True(expose!.ExposeRest, $"{method.Name} 应暴露 REST");
+            Assert.Equal(route, expose.RestRoute);
             Assert.Equal(verb, expose.RestMethod);
             Assert.False(expose.ExposeGraphQL, $"{method.Name} ExposeGraphQL 应保持 false（最小暴露面）");
         }

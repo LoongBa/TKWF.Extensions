@@ -29,16 +29,17 @@ namespace TKWF.Ext.WeChatChannels;
 public interface IChannelConfigService : IDomainService
 {
     /// <summary>按 AppId 查询公众号配置（DTO 投影不含凭证密文；未命中 → null）。
-    /// <para><c>ExposeRest=false</c>：单查为运营内部能力（列表已含全部配置），不生成 REST 端点。</para></summary>
+    /// <para>REST：<c>GET /api/wechat-channels/channels/by-app/{appId}</c>（通道治理面详情单查——by-app 段避免与
+    /// <c>/{channelId}</c> 路由撞形）。</para></summary>
     [RequirePermission("WeChatChannels.Query")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(RestRoute = "/wechat-channels/channels/by-app/{appId}", RestMethod = "GET", ExposeGraphQL = false)]
     Task<WeChatChannelConfigDto?> GetAsync(string appId, CancellationToken ct = default);
 
     /// <summary>按 ChannelId 查询公众号配置（DTO 投影不含凭证密文；未命中 → null）。
     /// <para>2026-11-05 Oracle O2 新增——运营侧按 channelId 解析配置（如 MenuService 发布链）的契约入口，替代跨扩展直引 DataService。</para>
-    /// <para><c>ExposeRest=false</c>：单查为运营内部能力，不生成 REST 端点。</para></summary>
+    /// <para>REST：<c>GET /api/wechat-channels/channels/{channelId}</c>（通道治理面详情单查）。</para></summary>
     [RequirePermission("WeChatChannels.Query")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(RestRoute = "/wechat-channels/channels/{channelId}", RestMethod = "GET", ExposeGraphQL = false)]
     Task<WeChatChannelConfigDto?> GetByChannelIdAsync(string channelId, CancellationToken ct = default);
 
     /// <summary>全部公众号配置列表（DTO 投影不含凭证密文）。<para>REST：<c>GET /api/wechat-channels/channels</c>。</para></summary>
@@ -54,8 +55,9 @@ public interface IChannelConfigService : IDomainService
     Task<long> SaveChannelAsync(SaveChannelRequest request, CancellationToken ct = default);
 
     /// <summary>删除公众号配置（物理删——配置删除后出站凭证经 Options 降级解析）。
-    /// <para><c>ExposeRest=false</c>：删除为高操作权限能力，不新增暴露面。</para></summary>
+    /// <para>REST：<c>DELETE /api/wechat-channels/channels/{id}</c>（通道治理面删除——权限键 WeChatChannels.Manage；
+    /// 在用通道的引用保护/禁硬删语义由消费方治理流程保障）。</para></summary>
     [RequirePermission("WeChatChannels.Manage")]
-    [ApiExpose(ExposeRest = false)]
+    [ApiExpose(RestRoute = "/wechat-channels/channels/{id}", RestMethod = "DELETE", ExposeGraphQL = false)]
     Task<bool> DeleteChannelAsync(long id, CancellationToken ct = default);
 }

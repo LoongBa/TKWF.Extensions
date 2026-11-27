@@ -36,6 +36,7 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
 {
     private readonly TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider _keys;
     private readonly ILogger<ChannelConfigService>? _logger;
+    private readonly IReadOnlyList<IChannelUsageGuard> _usageGuards;
 
     private WeChatChannelConfigEntityDataService? _ds;
     private WeChatChannelConfigEntityDataService Ds => _ds ??= User.Use<WeChatChannelConfigEntityDataService>();
@@ -62,10 +63,12 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
         IDomainUser user,
         [Microsoft.Extensions.DependencyInjection.FromKeyedServices(TKW.Framework.Domain.KeyManagement.SymmetricKeyProviderKeys.WeChatChannels)]
         TKW.Framework.Domain.KeyManagement.ISymmetricKeyProvider keys,
-        ILogger<ChannelConfigService>? logger = null) : base(user)
+        ILogger<ChannelConfigService>? logger = null,
+        IEnumerable<IChannelUsageGuard>? usageGuards = null) : base(user)
     {
         _keys = keys ?? throw new ArgumentNullException(nameof(keys));
         _logger = logger;
+        _usageGuards = usageGuards?.ToList() ?? new List<IChannelUsageGuard>();
     }
 
     /// <inheritdoc />
@@ -237,10 +240,27 @@ public sealed class ChannelConfigService : DomainServiceBase, IChannelConfigServ
     public async Task<bool> DeleteChannelAsync(long id, CancellationToken ct = default)
     {
         var db = await Ds.EntityGetAsync(e => e.Id == id, ct);
+        if (db is not null)
+            await EnsureNotInUseAsync(db.ChannelId, ct);
         var affected = await Ds.EntityDeleteBatchAsync(new[] { id }, ct);
         if (affected > 0 && db is not null)
             await PublishChangedAsync(db.ChannelId, db.UpdateTime.Ticks);   // D03 三机制-事件失效（删除后发布）
         return affected > 0;
+    }
+
+    /// <summary>在用守卫：枚举构造期注入的 <see cref="IChannelUsageGuard"/>（运营数据属主实现），任一在用即拒绝物理删。
+    /// 集合为集合版守卫工厂帧内供给（对齐 SsoChannelFactory 的 IEnumerable&lt;ISsoChannel&gt; 形态）；零实现 = 平台独用，放行。</summary>
+    private async Task EnsureNotInUseAsync(string channelId, CancellationToken ct)
+    {
+        foreach (var guard in _usageGuards)
+        {
+            var check = await guard.CheckAsync(channelId, ct);
+            if (check.InUse)
+                throw new DomainException($"通道在用，禁止硬删：{channelId}（{check.Reason ?? "存在引用"}）")
+                {
+                    ErrorCode = "CHANNEL_IN_USE",
+                };
+        }
     }
 
     /// <summary>

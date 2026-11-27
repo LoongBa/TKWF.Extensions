@@ -9,6 +9,7 @@ using TKW.Framework.Domain.BackgroundJobs;
 using TKW.Framework.Domain.Interfaces;
 using TKW.Framework.Domain.KeyManagement;
 using TKWF.Ext.Federation;
+using TKWF.Ext.WeChatChannels;
 using TKWF.Federation.WeChat.MessageGateway;
 
 namespace TKWF.Ext.WeChatOperations;
@@ -81,6 +82,10 @@ public class WeChatOperationsExtensionInitializer<TUserInfo> : ExtensionInitiali
         // 事件回复 handler（ADR92 集合版守卫工厂——平台基类二级分发 + 内部 template 兜底；
         //   V0.9.0 拆分保留——handler 为运营侧能力，不随通道面下沉）
         services.TryAddEnumerableConstructible<IEventReplyHandler, WeChatOperationsReplyHandler>();
+
+        // 通道在用守卫（2026-11-27）——运营配置引用即拒删通道（契约在 WeChatChannels.Abstractions；集合版注册，
+        //   IChannelConfigService.DeleteChannelAsync 帧内枚举；零运营数据时放行停用/删除）
+        services.TryAddEnumerableConstructible<IChannelUsageGuard, WeChatOperationsChannelUsageGuard>();
 
         // V0.2.0 网关装配：
         //   ① 下游转发 typed client（AddHttpClient<DownstreamForwardClient>——DI 生命周期托管防 socket 悬挂，

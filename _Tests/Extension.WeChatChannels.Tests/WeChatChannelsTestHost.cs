@@ -60,7 +60,7 @@ public class WeChatChannelsTestHost : IDisposable
     }
 
     /// <summary>额外服务/基础设施注册（AddLogging + IFreeSql + UnitOfWorkManager 已在 BindScope 注册）。</summary>
-    protected void ConfigureHost(IServiceCollection services)
+    protected virtual void ConfigureHost(IServiceCollection services)
     {
         // ① 扩展装配——生产形态（消费方白名单启用后三钩子执行 ConfigureServices：
         //    AddConstructibleService 门面 + keyed ISymmetricKeyProvider + DB 凭证解析器/通道来源两源并存）

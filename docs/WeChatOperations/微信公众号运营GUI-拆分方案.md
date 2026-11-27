@@ -1,5 +1,7 @@
 # 微信公众号运营 GUI 拆分方案（WeChatOperations.UI 前置契约）
 
+> ⚠️ **已 superseded（2026-11-27）**：本方案的「单 UI 包混装平台页集 + 租户页集」边界已被 **oracle5 架构裁定**取代——管理 UI 按**能力域**而非通道数切分为两个独立扩展。租户页集（运营面）迁入 `docs/WeChatOperations/管理UI-运营面-开发方案.md`，平台页集（通道治理面）迁入 `docs/WeChatChannels/管理UI-通道治理面-开发方案.md`；边界判据见 `docs/WeChatOperations/ADR/ADR-WeChatOperations-管理UI单双通道扩展边界.md`。本文件保留作历史溯源（原文零删除），**新实施一律以上述两份新方案 + ADR 为准**。
+>
 > **状态**：评审中（待 Oracle 审核） · **日期**：2026-11-06 · **版本线**：WeChatOperations.UI（未来拆回，独立版本线）
 > **关联**：`docs/WeChatOperations/微信公众号运营扩展-开发方案.md` §八（2026-10-18 承诺交付物 6——**本文件履约**）；`docs/WeChatChannels/微信通道底座扩展拆分-开发方案.md`（2026-11-05 WeChatChannels 拆分）；主框架 v4.10.73 ADR106（页面装配机制：IPageContributor + PageAssemblyWebExtension + spec 词汇）
 > **分工裁定（2026-11-06 用户）**：扩展模块的**业务装配 / UI 装配的设计方案与模式由框架组/扩展模块组设计**（不限于联邦/微信，常态规则）——**实现/拆分在 DMP-Lite 项目的 Merchant.AdminUI / Platform.Web 完成**，验证后回归扩展项目

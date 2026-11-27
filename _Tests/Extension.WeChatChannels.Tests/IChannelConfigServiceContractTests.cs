@@ -65,8 +65,8 @@ public class IChannelConfigServiceContractTests
         Assert.Equal("POST", save.RestMethod);
     }
 
-    /// <summary>O2 新增：GetByChannelIdAsync（MenuService 门面化 channelId 查询入口）——契约存在 + ExposeRest=false
-    /// （内部能力不扩暴露面）+ 读权限键。</summary>
+    /// <summary>O2 新增：GetByChannelIdAsync（MenuService 门面化 channelId 查询入口）——契约存在 + 读权限键
+    /// （REST 形态由 <see cref="GovernanceEndpoints_ExposeRest_GraphQLClosed"/> 断言）。</summary>
     [Fact]
     public void GetByChannelIdAsync_Contract_Declared()
     {
@@ -74,10 +74,25 @@ public class IChannelConfigServiceContractTests
         Assert.NotNull(m);
         Assert.Equal(typeof(Task<WeChatChannelConfigDto?>), m!.ReturnType);
         Assert.Equal(typeof(string), m.GetParameters()[0].ParameterType);
+        Assert.Equal("WeChatChannels.Query", m.GetCustomAttribute<RequirePermissionAttribute>()!.Permissions[0]);
+    }
+
+    /// <summary>通道治理面三端点补暴露（2026-11-27）——GetAsync/GetByChannelIdAsync/DeleteChannelAsync
+    /// 显式 RestRoute + RestMethod + ExposeGraphQL=false（ADR 纪律：ExposeRest=false ≠ 不暴露，
+    /// GraphQL 默认开须显式关闭；by-app 段避免与 {channelId} 路由撞形）。</summary>
+    [Theory]
+    [InlineData(nameof(IChannelConfigService.GetAsync), "/wechat-channels/channels/by-app/{appId}", "GET")]
+    [InlineData(nameof(IChannelConfigService.GetByChannelIdAsync), "/wechat-channels/channels/{channelId}", "GET")]
+    [InlineData(nameof(IChannelConfigService.DeleteChannelAsync), "/wechat-channels/channels/{id}", "DELETE")]
+    public void GovernanceEndpoints_ExposeRest_GraphQLClosed(string methodName, string route, string verb)
+    {
+        var m = Contract.GetMethod(methodName)!;
         var expose = m.GetCustomAttribute<ApiExposeAttribute>();
         Assert.NotNull(expose);
-        Assert.False(expose!.ExposeRest);
-        Assert.Equal("WeChatChannels.Query", m.GetCustomAttribute<RequirePermissionAttribute>()!.Permissions[0]);
+        Assert.True(expose!.ExposeRest);
+        Assert.Equal(route, expose.RestRoute);
+        Assert.Equal(verb, expose.RestMethod);
+        Assert.False(expose.ExposeGraphQL);
     }
 
     /// <summary>wire DTO：SaveChannelRequest 承载凭证明文可选（null = 保持既有密文）；同契约包（消费方零传输层漂移）。</summary>

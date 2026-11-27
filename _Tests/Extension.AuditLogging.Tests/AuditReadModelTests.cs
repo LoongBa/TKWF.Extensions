@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -37,7 +38,7 @@ public class AuditReadModelTests
         public AuditExportService Export = null!;
     }
 
-    private static Host Build(IFreeSql fsql)
+    private static Host Build(IFreeSql fsql, IBusinessAuditWriter? writer = null)
     {
         var user = new StubDomainUser("u1", null, true);
         var services = new ServiceCollection();
@@ -51,6 +52,8 @@ public class AuditReadModelTests
         services.AddScoped<IAuditFacetReader>(_ => new InvocationFacetReader(user, NullLogger<InvocationFacetReader>.Instance));
         services.AddScoped<IAuditFacetReader>(_ => new BusinessFacetReader(user, NullLogger<BusinessFacetReader>.Instance));
         services.AddSingleton<IAuditAccessPolicy>(_ => new AllowAllPolicy());
+        if (writer is not null)
+            services.AddSingleton<IBusinessAuditWriter>(writer);
 
         var sp = services.BuildServiceProvider();
         user.ServiceProvider = sp;
@@ -58,8 +61,9 @@ public class AuditReadModelTests
         {
             Sp = sp,
             User = user,
-            Facade = new AuditQueryService(user, NullLogger<AuditQueryService>.Instance),
-            Export = new AuditExportService(user, NullLogger<AuditExportService>.Instance),
+            Facade = new AuditQueryService(user, NullLogger<AuditQueryService>.Instance, sp.GetServices<IAuditFacetReader>()),
+            Export = new AuditExportService(user, NullLogger<AuditExportService>.Instance,
+                Microsoft.Extensions.Options.Options.Create(new AuditExportOptions()), sp.GetServices<IAuditFacetReader>()),
         };
     }
 
@@ -175,7 +179,7 @@ public class AuditReadModelTests
     [Fact]
     public async Task PrivilegedDelete_SecurityFacet_IsAppendOnly()
     {
-        var service = new AuditPrivilegedDeleteService(new StubDomainUser("u1", null, true));
+        var service = new AuditPrivilegedDeleteService(new StubDomainUser("u1", null, true), Array.Empty<IAuditFacetReader>());
 
         await Assert.ThrowsAsync<AuditAccessDeniedException>(
             () => service.DeleteAsync(AuditFacet.Security, 1, "test"));
@@ -244,6 +248,52 @@ public class AuditReadModelTests
         };
         await ds.EntityCreateAsync(entity);
         return entity;
+    }
+
+    [Fact]
+    public async Task ExportAsync_ExceedsMaxRows_ThrowsTyped()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql);
+        for (var i = 0; i < 6; i++)
+            await SeedAsync(host.Sp, $"X{i}", $"c{i}");
+
+        var export = new AuditExportService(host.User, NullLogger<AuditExportService>.Instance,
+            Microsoft.Extensions.Options.Options.Create(new AuditExportOptions { MaxRows = 5 }), host.Sp.GetServices<IAuditFacetReader>());
+        using var ms = new MemoryStream();
+
+        var ex = await Assert.ThrowsAsync<AuditExportLimitExceededException>(
+            () => export.ExportAsync(AuditFacet.Invocation, new AuditFacetQuery(), AuditExportFormat.Csv, ms));
+
+        Assert.Equal(5, ex.MaxRows);
+    }
+
+    [Fact]
+    public async Task PrivilegedDelete_TrailFails_AbortsDelete()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql, new ThrowingWriter());
+        var record = await SeedAsync(host.Sp, "DoX", "c-x");
+        var svc = new AuditPrivilegedDeleteService(host.User, host.Sp.GetServices<IAuditFacetReader>());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DeleteAsync(AuditFacet.Invocation, record.Id, "test"));
+
+        var ds = host.Sp.GetRequiredService<AuditLogEntityDataService>();
+        var still = await ds.EntityGetAsync(x => x.Id == record.Id);
+        Assert.NotNull(still);
+    }
+
+    private sealed class ThrowingWriter : IBusinessAuditWriter
+    {
+        public Task SaveAsync(BusinessAuditEntry entry, CancellationToken ct = default)
+            => throw new InvalidOperationException("trail failed");
+
+        public Task SaveBatchAsync(IReadOnlyList<BusinessAuditEntry> entries, CancellationToken ct = default)
+            => throw new InvalidOperationException("trail failed");
+
+        public Task SaveStrictAsync(BusinessAuditEntry entry, CancellationToken ct = default)
+            => throw new InvalidOperationException("trail failed");
     }
 
     private sealed class AllowAllPolicy : IAuditAccessPolicy

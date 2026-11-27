@@ -52,7 +52,7 @@ namespace TKWF.Ext.AuditLogging
             if (entry is null) return;
             ArgumentNullException.ThrowIfNull(entry.Actor, "审计 Actor 必填（为空会导致审计静默丢失）");
             ArgumentNullException.ThrowIfNull(entry.Target, "审计 Target 必填");
-            _ = ParseTenantId(entry.TenantId);
+            ValidateTenant(entry);
 
             try
             {
@@ -88,9 +88,10 @@ namespace TKWF.Ext.AuditLogging
         /// <summary>严格写入——写失败必定抛出（不受 FailOpen 影响；特权删除留痕用）。</summary>
         public async Task SaveStrictAsync(BusinessAuditEntry entry, CancellationToken ct = default)
         {
-            if (entry is null) return;
+            if (entry is null) throw new ArgumentNullException(nameof(entry));
             ArgumentNullException.ThrowIfNull(entry.Actor, "审计 Actor 必填（为空会导致审计静默丢失）");
             ArgumentNullException.ThrowIfNull(entry.Target, "审计 Target 必填");
+            ValidateTenant(entry);
 
             try
             {
@@ -104,6 +105,20 @@ namespace TKWF.Ext.AuditLogging
                 _logger.LogWarning(ex,
                     "业务审计严格写入失败 Target={TargetType}/{TargetId}（facet=Business，strict）",
                     entry.Target.TargetType, entry.Target.TargetId);
+                throw;
+            }
+        }
+
+        private void ValidateTenant(BusinessAuditEntry entry)
+        {
+            try
+            {
+                _ = ParseTenantId(entry.TenantId);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.IncrementWriteFailures();
+                RaiseFailure(entry, ex);
                 throw;
             }
         }

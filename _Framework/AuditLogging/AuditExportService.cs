@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -21,21 +22,23 @@ namespace TKWF.Ext.AuditLogging
     internal sealed class AuditExportService : DomainServiceBase, IAuditExportService
     {
         private const int PageSize = 200;
-        private const long MaxExportRows = 10_000;
 
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
         private readonly ILogger<AuditExportService> _logger;
+        private readonly long _maxRows;
+        private readonly IReadOnlyList<IAuditFacetReader> _readers;
 
-        private IReadOnlyList<IAuditFacetReader>? _readers;
-
-        public AuditExportService(IDomainUser user, ILogger<AuditExportService> logger) : base(user)
+        public AuditExportService(
+            IDomainUser user, ILogger<AuditExportService> logger, IOptions<AuditExportOptions> options,
+            IEnumerable<IAuditFacetReader> readers) : base(user)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _maxRows = options?.Value.MaxRows ?? 10_000;
+            _readers = (readers ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
         }
 
-        private IReadOnlyList<IAuditFacetReader> Readers =>
-            _readers ??= (User.GetService<IEnumerable<IAuditFacetReader>>() ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
+        private IReadOnlyList<IAuditFacetReader> Readers => _readers;
 
         /// <inheritdoc />
         public async Task<long> ExportAsync(
@@ -72,8 +75,8 @@ namespace TKWF.Ext.AuditLogging
 
                     foreach (var item in page.Items)
                     {
-                        if (total >= MaxExportRows)
-                            throw new InvalidOperationException($"导出超过上限 {MaxExportRows} 行，请缩小查询范围。");
+                        if (total >= _maxRows)
+                            throw new AuditExportLimitExceededException(facet, _maxRows);
                         await WriteRowAsync(writer, item, format);
                         total++;
                     }

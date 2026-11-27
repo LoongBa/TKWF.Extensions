@@ -76,6 +76,7 @@ namespace TKWF.Ext.AuditLogging
             services.AddOptions<AuditFailurePolicyOptions>().BindConfiguration("TKWF:AuditLogging:FailurePolicy");
             services.AddOptions<AuditEventPublishingOptions>().BindConfiguration("TKWF:AuditLogging:EventPublishing");
             services.AddOptions<AuditAccessPolicyOptions>().BindConfiguration("TKWF:AuditLogging:AccessPolicy");
+            services.AddOptions<AuditExportOptions>().BindConfiguration("TKWF:AuditLogging:Export");
 
             services.TryAddSingleton<AuditDiagnostics>();
             services.TryAddSingleton<IAuditDiagnostics>(sp => sp.GetRequiredService<AuditDiagnostics>());

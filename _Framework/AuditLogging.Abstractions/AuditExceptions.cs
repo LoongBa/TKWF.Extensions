@@ -32,4 +32,23 @@ namespace TKWF.Ext.AuditLogging
         {
         }
     }
+
+    /// <summary>
+    /// 导出超限（单次导出行数上限，防大表一次性拉取）。<b>ErrorCode</b> <c>AUDIT_EXPORT_LIMIT_EXCEEDED</c>。
+    /// </summary>
+    public sealed class AuditExportLimitExceededException : Exception
+    {
+        public AuditFacet Facet { get; }
+
+        public long MaxRows { get; }
+
+        public string ErrorCode { get; } = "AUDIT_EXPORT_LIMIT_EXCEEDED";
+
+        public AuditExportLimitExceededException(AuditFacet facet, long maxRows)
+            : base($"审计面 {facet} 导出超过上限 {maxRows} 行，请缩小查询范围。")
+        {
+            Facet = facet;
+            MaxRows = maxRows;
+        }
+    }
 }

@@ -62,6 +62,19 @@ public class AuditLogProductionPathTests
     }
 
     [Fact]
+    public async Task Use_IAuditQueryService_ExposesRegisteredFacets()
+    {
+        using var fsql = CreateInMemoryFreeSql();
+        using var sp = CreateProvider(fsql);
+        DomainUser<TestUserInfo>.BindScope(sp);
+        var user = new DomainUser<TestUserInfo> { UserInfo = new TestUserInfo("u-1", "测试") };
+
+        var facade = user.Use<IAuditQueryService>();
+
+        Assert.Equal(new[] { AuditFacet.Invocation, AuditFacet.Business }, facade.GetAvailableFacets());
+    }
+
+    [Fact]
     public async Task Use_IAuditLogQueryService_ThroughGuardFactory()
     {
         using var fsql = CreateInMemoryFreeSql();

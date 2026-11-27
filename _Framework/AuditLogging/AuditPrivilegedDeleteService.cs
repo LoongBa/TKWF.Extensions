@@ -28,11 +28,14 @@ namespace TKWF.Ext.AuditLogging
         private IBusinessAuditWriter? _writer;
         private IBusinessAuditWriter Writer => _writer ??= User.GetService<IBusinessAuditWriter>();
 
-        private IReadOnlyList<IAuditFacetReader>? _readers;
-        private IReadOnlyList<IAuditFacetReader> Readers =>
-            _readers ??= (User.GetService<IEnumerable<IAuditFacetReader>>() ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
+        private readonly IReadOnlyList<IAuditFacetReader> _readers;
 
-        public AuditPrivilegedDeleteService(IDomainUser user) : base(user) { }
+        public AuditPrivilegedDeleteService(IDomainUser user, IEnumerable<IAuditFacetReader> readers) : base(user)
+        {
+            _readers = (readers ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
+        }
+
+        private IReadOnlyList<IAuditFacetReader> Readers => _readers;
 
         /// <inheritdoc />
         public async Task<bool> DeleteAsync(AuditFacet facet, long id, string reason, CancellationToken ct = default)

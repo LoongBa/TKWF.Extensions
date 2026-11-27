@@ -20,16 +20,16 @@ namespace TKWF.Ext.AuditLogging
     internal sealed class AuditQueryService : DomainServiceBase, IAuditQueryService
     {
         private readonly ILogger<AuditQueryService> _logger;
+        private readonly IReadOnlyList<IAuditFacetReader> _readers;
 
-        private IReadOnlyList<IAuditFacetReader>? _readers;
-
-        public AuditQueryService(IDomainUser user, ILogger<AuditQueryService> logger) : base(user)
+        public AuditQueryService(
+            IDomainUser user, ILogger<AuditQueryService> logger, IEnumerable<IAuditFacetReader> readers) : base(user)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _readers = (readers ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
         }
 
-        private IReadOnlyList<IAuditFacetReader> Readers =>
-            _readers ??= (User.GetService<IEnumerable<IAuditFacetReader>>() ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
+        private IReadOnlyList<IAuditFacetReader> Readers => _readers;
 
         /// <inheritdoc />
         public IReadOnlyList<AuditFacet> GetAvailableFacets()

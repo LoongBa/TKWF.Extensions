@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-23",
+  "generatedAt": "2026-11-27",
   "repo": "TKWF.Extensions",
   "note": "发布事实源 = git tag（{Package}/vX.Y.Z）；README 版本一览表为展示层，打 tag 后须同步。生成：build/gen-versions.ps1",
   "commonTags": [
@@ -39,9 +39,14 @@
       "created": "2026-10-04"
     },
     "AuditLogging": {
-      "version": "0.5.1",
-      "tag": "AuditLogging/v0.5.1",
-      "created": "2026-10-25"
+      "version": "0.7.0",
+      "tag": "AuditLogging/v0.7.0",
+      "created": "2026-11-27"
+    },
+    "AuditLogging.Abstractions": {
+      "version": "0.2.0",
+      "tag": "AuditLogging.Abstractions/v0.2.0",
+      "created": "2026-11-27"
     },
     "AuthCenter": {
       "version": "0.15.0",
@@ -259,9 +264,9 @@
       "created": "2026-11-02"
     },
     "SecurityLog": {
-      "version": "0.4.0",
-      "tag": "SecurityLog/v0.4.0",
-      "created": "2026-10-04"
+      "version": "0.5.1",
+      "tag": "SecurityLog/v0.5.1",
+      "created": "2026-11-27"
     },
     "SecurityLog.Abstractions": {
       "version": "0.1.1",

@@ -39,13 +39,13 @@
       "created": "2026-10-04"
     },
     "AuditLogging": {
-      "version": "0.8.0",
-      "tag": "AuditLogging/v0.8.0",
+      "version": "0.8.1",
+      "tag": "AuditLogging/v0.8.1",
       "created": "2026-11-27"
     },
     "AuditLogging.Abstractions": {
-      "version": "0.2.1",
-      "tag": "AuditLogging.Abstractions/v0.2.1",
+      "version": "0.2.2",
+      "tag": "AuditLogging.Abstractions/v0.2.2",
       "created": "2026-11-27"
     },
     "AuthCenter": {

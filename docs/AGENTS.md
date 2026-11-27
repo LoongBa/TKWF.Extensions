@@ -33,6 +33,7 @@
 | 扩展测试事务约定（SQLite 物理事务边界 / Noop 限制 / PG 测试容器评估）？ | `docs/测试约定-SQLite物理事务与Noop限制.md` |
 | 评审开发方案？ | **Oracle**（Momus 仅评审 `.sisyphus/plans/` 目录工作计划，不评审 TKWF 开发方案） |
 | 自检 / 优化（文档-代码同步、跨模块一致性、版本表漂移）？ | 说「自检」或「优化」→ `docs/扩展模块健康自检与优化机制.md`（一键：`pwsh build/build-ext-healthcheck.ps1`，报告落 `docs/健康自检/`） |
+| 设计扩展 UI 装配面 / 消费方接扩展 UI / UI 拆回？ | 框架 AE-Kit skills（`.agents/skills/tkwf` Junction 即时生效）：`../_TKWF/docs/AE-Kit/skills/tkwf-extension-ui/SKILL.md`、`../_TKWF/docs/AE-Kit/skills/tkwf-use-extension-ui/SKILL.md`、`../_TKWF/docs/AE-Kit/skills/tkwf-ui-split-back/SKILL.md`；契约单一事实源 = tkwf-extension-ui 技能内的 page-contract.md |
 
 ---
 

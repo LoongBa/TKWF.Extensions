@@ -205,6 +205,9 @@ _Tests/Extension.{扩展名}.Tests/
 | 扩展门面/Service 设计（领域服务门面 + 业务规则 + DataService 组合） | **`tkwf-extension` + `tkwf-service`**（扩展=准消费方：扩展范式 + 领域 Service 设计） | `{Ext}=扩展名` | 禁手动写 Service、禁绕过门面范式（DomainServiceBase + AddConstructibleService） |
 | 扩展实体设计（Entity 数据底座） | **`tkwf-extension` + `tkwf-entity`**（扩展范式 + 实体声明式编写） | `{Ext}=扩展名` `{Entity}=实体名` | 禁手写 `IDomainEntity`/`[Key]`/`IsFromPersistentSource`（SG1 自动生成） |
 | 扩展测试（生产路径 + 契约测试） | **`tkwf-extension` + `tkwf-test`** | `{Ext}=扩展名` | 禁手写测试宿主绕过生产路径（StubDomainUser 掩盖守卫缺陷先例） |
+| 扩展 UI 装配面设计（是否出 UI / 包形态 / 命名 / 页面契约 / 路由权限 / 端点前置 / 贡献者落点） | **`tkwf-extension` + `tkwf-extension-ui`** | `{Ext}=扩展名` | 禁页面进主包；禁 RCL 放贡献者；禁按通道数拆包；禁把 PAGE003·004 当编译门控 |
+| 消费方接入扩展 UI（RCL 引用 / 白名单拓扑 / 双宿主 / 版本锁 / 验证） | **`tkwf-use-extension` + `tkwf-use-extension-ui`** | `{Ext}=扩展名` | 禁把页面复制进 Domain；禁 R2 做新页面；禁按 UI 包数量定白名单 |
+| 消费方 UI 拆回扩展（回收评审与拆包） | **`tkwf-ui-split-back`** | `{Ext}=扩展名` | 禁六标准未满足即回收；禁回收时改路由或权限键 |
 | 接入/启用/使用他扩展（引用→白名单→Web 装配→`User.Use` 门面） | **`tkwf-extension` + `tkwf-use-extension`** | `{Ext}=被消费扩展名` | 禁绕过白名单/门面 AOP 路径 |
 
 > **组合语义**：扩展开发任务**必须**含 `tkwf-extension`（扩展范式总纲——铁律/门面形态/注册/测试宿主约定），按子任务叠加 `tkwf-service`（门面/Service 设计）/`tkwf-entity`（实体）/`tkwf-test`（测试）/`tkwf-use-extension`（消费他扩展）。设计阶段（出方案/设计文档）以 `tkwf-extension` + `tkwf-service` 为主体。

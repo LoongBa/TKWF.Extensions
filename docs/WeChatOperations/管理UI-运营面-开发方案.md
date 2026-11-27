@@ -81,7 +81,7 @@ public class MerchantDomainInitializer : DomainHostInitializerBase<MerchantUserI
 
 | 项 | 值 |
 |----|----|
-| 页面路由前缀（预留） | `/admin/wechat-ops/*`（对齐后端 modulePrefix；PAGE003 路由冲突门控） |
+| 页面路由前缀（预留） | `/admin/wechat-ops/*`（对齐后端 modulePrefix；冲突防护 = 契约冻结 + code-reviewer 门禁，PAGE003 **休眠**） |
 | 端点前缀 | `/api/wechat-ops/*`（三段拼接 §D1：`RestRoute`=契约编译期常量；`modulePrefix`/`basePath`=消费方部署旋钮 `TKWF:Api:Modules:{Key}:Prefix`/`TKWF:Api:RestBasePath`。UI **只读消费**拼接后的路由、不自带 RoutePrefix 开关） |
 | 权限键 | `WeChatOperations.Query` / `WeChatOperations.Manage`（所有端点非匿名，401 fail-closed） |
 | 配置节 | **无新增**（UI 包零配置；领域 `TKWF:WeChatOperations` 由后端 Options 绑定，UI 经既有 Options 透出，不新开节） |
@@ -103,7 +103,7 @@ public class MerchantDomainInitializer : DomainHostInitializerBase<MerchantUserI
 | U2 | 通道上下文仅 UI 本地状态，无扩展级 scope 服务、无 UI 侧通道计数决策 | 代码审查 |
 | U3 | 商户端后端双白名单到位，漏声明有红色警示 | 装配冒烟（漏 channels → 运行时抛为预期） |
 | U4 | N==1 无选择器 / N>1 错误驱动选择器 | 消费方集成测试（双形态各一） |
-| U5 | 页面路由无冲突（PAGE003）、资源键无冲突（PAGE004） | SG1b 门控 0 Error |
+| U5 | 页面路由无冲突、资源键无冲突 | ⚠️ PAGE003/004 **休眠**（依赖结构化提取阶段）——本项以契约冻结表 + code-reviewer 门禁核验，非编译门控 |
 | U6 | 页面契约（路由/权限键/端点面）与后端 35 端点清单对账一致 | 端点清单 diff = 空 |
 | U7 | 权限键两域隔离（本面仅 `WeChatOperations.*`） | 权限审计 |
 | U8 | slnx 构建 0 错误 + 受影响面定向测试全绿 | dotnet build/test |

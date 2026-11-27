@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Globals">
+    <SccProjectName>SAK</SccProjectName>
+    <SccProvider>SAK</SccProvider>
+    <SccAuxPath>SAK</SccAuxPath>
+    <SccLocalPath>SAK</SccLocalPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.UI</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>UI.Abstractions/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.UI.Abstractions</PackageId>
+    <Description>TKWF 扩展：表现层页面装配契约抽象（UI.Abstractions——IPageContributor 页面贡献者契约）——ADR106 决策 1 / D23 §二 定案归属（表现层 Abstractions 包归外部 _TKWF.Extensions 仓）：SG1b 按接口短名收集实现者 → GeneratedPageCatalog → 领域白名单聚合 GeneratedPageRegistrations（当前编译自身 + 白名单扩展程序集两条聚合路径）；零实体、零 SG1、零 Initializer、零 [ApiExpose]（namespace TKWF.Ext.UI）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PageDescriptor / PageTypes 数据形状所在（TKW.Framework.CodeGeneration）——纯类型依赖、非分析器；
+         双模式条件化（对齐 WeChatChannels.Abstractions / Navigation.Abstractions 先例）。
+         ⚠️ 本包永不引用 TKWF.CodeGeneration 分析器包（非扩展项目、不产 Catalog/注册表）、
+         永不引用 Permissions.Abstractions（权限键在 PageDescriptor 中是字面量字符串）。 -->
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+  </ItemGroup>
+
+</Project>

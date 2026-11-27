@@ -52,6 +52,10 @@
   <Folder Name="/_Framework/Navigation.Abstractions/">
     <Project Path="_Framework/Navigation.Abstractions/TKWF.Ext.Navigation.Abstractions.csproj" />
   </Folder>
+  <!-- 表现层页面装配契约（ADR106 决策 1 / D23 §二：IPageContributor 归外部扩展仓的 Abstractions 包） -->
+  <Folder Name="/_Framework/UI.Abstractions/">
+    <Project Path="_Framework/UI.Abstractions/TKWF.Ext.UI.Abstractions.csproj" />
+  </Folder>
   <Folder Name="/_Framework/DataDictionary/">
     <Project Path="_Framework/DataDictionary/TKWF.Ext.DataDictionary.csproj" />
   </Folder>

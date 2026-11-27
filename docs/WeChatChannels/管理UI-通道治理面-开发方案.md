@@ -98,7 +98,7 @@ public class PlatformDomainInitializer : DomainHostInitializerBase<PlatformUserI
 
 | 项 | 值 |
 |----|----|
-| 页面路由前缀（预留） | `/admin/wechat-channels/*`（对齐后端 modulePrefix；PAGE003 门控） |
+| 页面路由前缀（预留） | `/admin/wechat-channels/*`（对齐后端 modulePrefix；冲突防护 = 契约冻结 + code-reviewer 门禁，PAGE003 **休眠**） |
 | 端点前缀 | `/api/wechat-channels/*`（三段拼接 §D1：`RestRoute`=契约编译期常量；`modulePrefix`/`basePath`=消费方部署旋钮 `TKWF:Api:Modules:{Key}:Prefix`/`TKWF:Api:RestBasePath`。UI **只读消费**拼接后的路由、不自带 RoutePrefix 开关） |
 | 权限键 | `WeChatChannels.Query` / `WeChatChannels.Manage`（非匿名，401 fail-closed） |
 | 配置节 | **无新增**（UI 包零配置；凭证密钥路径 `TKWF:WeChatChannels` 由后端读取，UI 不新开节） |
@@ -116,7 +116,7 @@ public class PlatformDomainInitializer : DomainHostInitializerBase<PlatformUserI
 | C3 | 三端点补暴露已落地（源码 + 契约测试）；在用守卫已实现（`WeChatOperationsChannelUsageGuard` + 门禁/端到端测试全绿） | 守卫测试全绿 |
 | C4 | 平台单白名单到位；未误加运营白名单 | 装配冒烟 |
 | C5 | 通道列表能力状态列完整（Alias/HasCredentials/ChannelForm/Verification 等） | 消费方集成测试 |
-| C6 | 页面路由无冲突（PAGE003）、资源键无冲突（PAGE004） | SG1b 门控 0 Error |
+| C6 | 页面路由无冲突、资源键无冲突 | ⚠️ PAGE003/004 **休眠**（依赖结构化提取阶段）——以契约冻结表 + code-reviewer 门禁核验，非编译门控 |
 | C7 | 权限键仅 `WeChatChannels.*`，两域隔离 | 权限审计 |
 | C8 | slnx 构建 0 错误 + 受影响面定向测试全绿 | dotnet build/test |
 
@@ -130,7 +130,7 @@ public class PlatformDomainInitializer : DomainHostInitializerBase<PlatformUserI
 | 三端点补暴露待发布 bump | 消费方锁版本 | §3.2.3 版本依赖；发布前按 C-4 跑受影响面测试 |
 | 误把运营页塞进本面 | 权限域混装（复辟 Mode 方案） | §二 Out of scope + ADR 决策 4 |
 | 单白名单误加运营扩展 | 平台被迫打包运营全链（后端拆分否决理由） | §5.1 单声明 + C4 |
-| 双 UI 组合路由冲突 | PAGE003 | 路由前缀隔离 + C6 |
+| 双 UI 组合路由冲突 | 路由前缀隔离（PAGE003 休眠——当前靠约定 + code-reviewer） | 路由前缀隔离 + C6 |
 | IPageContributor 未落地 | 只能 R2 | 契约冻结，落地后纯接线 |
 
 ## 变更记录

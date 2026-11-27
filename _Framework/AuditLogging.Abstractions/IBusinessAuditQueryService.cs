@@ -14,6 +14,9 @@ namespace TKWF.Ext.AuditLogging
 
         Task<BusinessAuditListItemDto?> GetDetailAsync(long id, CancellationToken ct = default);
 
+        /// <summary>受控详情（含 Before/After/AttributesJson；需 <see cref="AuditOperation.Detail"/> 放行）。</summary>
+        Task<BusinessAuditDetailDto?> GetDetailWithPayloadAsync(long id, CancellationToken ct = default);
+
         Task<long> CountAsync(BusinessAuditQueryInput input, CancellationToken ct = default);
     }
 }

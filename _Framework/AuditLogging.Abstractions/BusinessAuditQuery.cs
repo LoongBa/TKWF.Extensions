@@ -42,4 +42,22 @@ namespace TKWF.Ext.AuditLogging
     public sealed record BusinessAuditPagedResult(
         long Total,
         IReadOnlyList<BusinessAuditListItemDto> Items);
+
+    /// <summary>业务审计详情（<b>受控</b>：含 Before/After/AttributesJson，需 <see cref="AuditOperation.Detail"/> 放行；写入时已脱敏）。</summary>
+    public sealed record BusinessAuditDetailDto(
+        long Id,
+        string? TenantId,
+        string ActorType,
+        string? ActorId,
+        string? ActorName,
+        string TargetType,
+        string? TargetId,
+        string ActionType,
+        string? Summary,
+        string? BeforeJson,
+        string? AfterJson,
+        string? AttributesJson,
+        string? CorrelationId,
+        DateTimeOffset ExecutionTime,
+        DateTimeOffset CreateTime);
 }

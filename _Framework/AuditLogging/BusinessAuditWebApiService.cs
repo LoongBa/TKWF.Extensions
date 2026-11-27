@@ -20,5 +20,8 @@ namespace TKWF.Ext.AuditLogging
 
         public async Task<BusinessAuditListItemDto?> GetDetailAsync(long id, CancellationToken ct = default)
             => await User.Use<IBusinessAuditQueryService>().GetDetailAsync(id, ct);
+
+        public async Task<BusinessAuditDetailDto?> GetDetailWithPayloadAsync(long id, CancellationToken ct = default)
+            => await User.Use<IBusinessAuditQueryService>().GetDetailWithPayloadAsync(id, ct);
     }
 }

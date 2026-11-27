@@ -5,7 +5,6 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -24,15 +23,10 @@ namespace TKWF.Ext.AuditLogging
 
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-        private readonly ILogger<BusinessFacetReader> _logger;
-
         private BusinessAuditEntityDataService? _dataService;
         private BusinessAuditEntityDataService DataService => _dataService ??= User.Use<BusinessAuditEntityDataService>();
 
-        public BusinessFacetReader(IDomainUser user, ILogger<BusinessFacetReader> logger) : base(user)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
+        public BusinessFacetReader(IDomainUser user) : base(user) { }
 
         /// <inheritdoc />
         public AuditFacet Facet => AuditFacet.Business;

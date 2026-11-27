@@ -19,13 +19,13 @@ namespace TKWF.Ext.AuditLogging
     [DiContractIgnore]
     internal sealed class AuditQueryService : DomainServiceBase, IAuditQueryService
     {
-        private readonly ILogger<AuditQueryService> _logger;
         private readonly IReadOnlyList<IAuditFacetReader> _readers;
 
-        public AuditQueryService(
-            IDomainUser user, ILogger<AuditQueryService> logger, IEnumerable<IAuditFacetReader> readers) : base(user)
+        private IAuditAccessPolicy? _policy;
+        private IAuditAccessPolicy Policy => _policy ??= User.Use<IAuditAccessPolicy>();
+
+        public AuditQueryService(IDomainUser user, IEnumerable<IAuditFacetReader> readers) : base(user)
         {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _readers = (readers ?? Enumerable.Empty<IAuditFacetReader>()).ToList();
         }
 
@@ -36,22 +36,33 @@ namespace TKWF.Ext.AuditLogging
             => Readers.Select(r => r.Facet).Distinct().ToList();
 
         /// <inheritdoc />
-        public Task<AuditFacetPageResult> QueryAsync(AuditFacet facet, AuditFacetQuery query, CancellationToken ct = default)
-            => Require(facet).QueryAsync(query, ct);
+        public async Task<AuditFacetPageResult> QueryAsync(AuditFacet facet, AuditFacetQuery query, CancellationToken ct = default)
+        {
+            await AuthorizeAsync(AuditOperation.QueryAll, ct);
+            return await Require(facet).QueryAsync(query, ct);
+        }
 
         /// <inheritdoc />
-        public Task<AuditRecordView?> GetDetailAsync(AuditFacet facet, long id, CancellationToken ct = default)
-            => Require(facet).GetDetailAsync(id, ct);
+        public async Task<AuditRecordView?> GetDetailAsync(AuditFacet facet, long id, CancellationToken ct = default)
+        {
+            await AuthorizeAsync(AuditOperation.Detail, ct);
+            return await Require(facet).GetDetailAsync(id, ct);
+        }
 
         /// <inheritdoc />
-        public Task<long> CountAsync(AuditFacet facet, AuditFacetQuery query, CancellationToken ct = default)
-            => Require(facet).CountAsync(query, ct);
+        public async Task<long> CountAsync(AuditFacet facet, AuditFacetQuery query, CancellationToken ct = default)
+        {
+            await AuthorizeAsync(AuditOperation.QueryAll, ct);
+            return await Require(facet).CountAsync(query, ct);
+        }
 
         /// <inheritdoc />
         public async Task<AuditCrossFacetResult> GetByCorrelationAsync(string correlationId, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(correlationId))
                 throw new ArgumentException("CorrelationId 不能为空。", nameof(correlationId));
+
+            await AuthorizeAsync(AuditOperation.QueryAll, ct);
 
             var readers = Readers;
             var items = new List<AuditRecordView>();
@@ -70,9 +81,20 @@ namespace TKWF.Ext.AuditLogging
         }
 
         /// <inheritdoc />
-        public Task<IReadOnlyList<AuditRecordView>> GetIncrementalAsync(
+        public async Task<IReadOnlyList<AuditRecordView>> GetIncrementalAsync(
             AuditFacet facet, long afterId, int batch, CancellationToken ct = default)
-            => Require(facet).GetIncrementalAsync(afterId, batch, ct);
+        {
+            await AuthorizeAsync(AuditOperation.QueryAll, ct);
+            return await Require(facet).GetIncrementalAsync(afterId, batch, ct);
+        }
+
+        private async Task AuthorizeAsync(AuditOperation operation, CancellationToken ct)
+        {
+            var decision = await Policy.EvaluateAsync(
+                new AuditAccessRequest(operation, User.UserId, User.TenantId?.ToString(), User.IsAuthenticated, User.IsSystemActor), ct);
+            if (!decision.Allowed)
+                throw new AuditAccessDeniedException(decision.Reason);
+        }
 
         private IAuditFacetReader Require(AuditFacet facet)
         {

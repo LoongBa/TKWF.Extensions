@@ -18,5 +18,8 @@ namespace TKWF.Ext.AuditLogging
 
         [ApiExpose(RestRoute = "/business-audit/{id}", RestMethod = "GET")]
         Task<BusinessAuditListItemDto?> GetDetailAsync(long id, CancellationToken ct = default);
+
+        [ApiExpose(RestRoute = "/business-audit/{id}/detail", RestMethod = "GET")]
+        Task<BusinessAuditDetailDto?> GetDetailWithPayloadAsync(long id, CancellationToken ct = default);
     }
 }

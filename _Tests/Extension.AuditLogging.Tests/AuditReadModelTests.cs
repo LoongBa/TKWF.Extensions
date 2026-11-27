@@ -38,7 +38,7 @@ public class AuditReadModelTests
         public AuditExportService Export = null!;
     }
 
-    private static Host Build(IFreeSql fsql, IBusinessAuditWriter? writer = null)
+    private static Host Build(IFreeSql fsql, IBusinessAuditWriter? writer = null, IAuditAccessPolicy? policy = null)
     {
         var user = new StubDomainUser("u1", null, true);
         var services = new ServiceCollection();
@@ -49,9 +49,9 @@ public class AuditReadModelTests
         services.AddSingleton<IDomainUser>(user);
         services.AddScoped<AuditLogEntityDataService>();
         services.AddScoped<BusinessAuditEntityDataService>();
-        services.AddScoped<IAuditFacetReader>(_ => new InvocationFacetReader(user, NullLogger<InvocationFacetReader>.Instance));
-        services.AddScoped<IAuditFacetReader>(_ => new BusinessFacetReader(user, NullLogger<BusinessFacetReader>.Instance));
-        services.AddSingleton<IAuditAccessPolicy>(_ => new AllowAllPolicy());
+        services.AddScoped<IAuditFacetReader>(_ => new InvocationFacetReader(user));
+        services.AddScoped<IAuditFacetReader>(_ => new BusinessFacetReader(user));
+        services.AddSingleton<IAuditAccessPolicy>(policy ?? new AllowAllPolicy());
         if (writer is not null)
             services.AddSingleton<IBusinessAuditWriter>(writer);
 
@@ -61,7 +61,7 @@ public class AuditReadModelTests
         {
             Sp = sp,
             User = user,
-            Facade = new AuditQueryService(user, NullLogger<AuditQueryService>.Instance, sp.GetServices<IAuditFacetReader>()),
+            Facade = new AuditQueryService(user, sp.GetServices<IAuditFacetReader>()),
             Export = new AuditExportService(user, NullLogger<AuditExportService>.Instance,
                 Microsoft.Extensions.Options.Options.Create(new AuditExportOptions()), sp.GetServices<IAuditFacetReader>()),
         };
@@ -232,7 +232,9 @@ public class AuditReadModelTests
             () => svc.GetListAsync(new BusinessAuditQueryInput { TenantId = "9" }));
     }
 
-    private static async Task<BusinessAuditEntity> SeedBusinessAsync(ServiceProvider sp, long tenantId, string action)
+    private static async Task<BusinessAuditEntity> SeedBusinessAsync(
+        ServiceProvider sp, long tenantId, string action,
+        string? beforeJson = null, string? afterJson = null)
     {
         var ds = sp.GetRequiredService<BusinessAuditEntityDataService>();
         var entity = new BusinessAuditEntity
@@ -244,10 +246,40 @@ public class AuditReadModelTests
             TargetType = "t",
             TargetId = "1",
             ActionType = action,
+            BeforeJson = beforeJson,
+            AfterJson = afterJson,
             ExecutionTime = DateTime.UtcNow,
         };
         await ds.EntityCreateAsync(entity);
         return entity;
+    }
+
+    [Fact]
+    public async Task QueryService_DeniedByPolicy_Throws()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql, policy: new DenyPolicy());
+
+        var ex = await Assert.ThrowsAsync<AuditAccessDeniedException>(
+            () => host.Facade.QueryAsync(AuditFacet.Invocation, new AuditFacetQuery()));
+
+        Assert.Equal("AUDIT_ACCESS_DENIED", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task BusinessQuery_PayloadDetail_ReturnsBeforeAfter()
+    {
+        using var fsql = CreateFsql();
+        var host = Build(fsql);
+        var entity = await SeedBusinessAsync(host.Sp, 5, "A", "{\"a\":1}", "{\"a\":2}");
+        var user = new StubDomainUser("u1", 5, true) { ServiceProvider = host.Sp };
+        var svc = new BusinessAuditQueryService(user, NullLogger<BusinessAuditQueryService>.Instance);
+
+        var detail = await svc.GetDetailWithPayloadAsync(entity.Id);
+
+        Assert.NotNull(detail);
+        Assert.Equal("{\"a\":1}", detail!.BeforeJson);
+        Assert.Equal("{\"a\":2}", detail.AfterJson);
     }
 
     [Fact]
@@ -300,5 +332,11 @@ public class AuditReadModelTests
     {
         public Task<AuditAccessDecision> EvaluateAsync(AuditAccessRequest request, CancellationToken ct = default)
             => Task.FromResult(AuditAccessDecision.Allow());
+    }
+
+    private sealed class DenyPolicy : IAuditAccessPolicy
+    {
+        public Task<AuditAccessDecision> EvaluateAsync(AuditAccessRequest request, CancellationToken ct = default)
+            => Task.FromResult(AuditAccessDecision.Deny("denied"));
     }
 }

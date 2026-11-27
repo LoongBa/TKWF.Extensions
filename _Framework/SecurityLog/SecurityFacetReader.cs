@@ -4,7 +4,6 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
@@ -23,15 +22,10 @@ namespace TKWF.Ext.SecurityLog
         private const int DefaultTake = 50;
         private const int MaxTake = 200;
 
-        private readonly ILogger<SecurityFacetReader> _logger;
-
         private SecurityLogEntityDataService? _dataService;
         private SecurityLogEntityDataService DataService => _dataService ??= User.Use<SecurityLogEntityDataService>();
 
-        public SecurityFacetReader(IDomainUser user, ILogger<SecurityFacetReader> logger) : base(user)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
+        public SecurityFacetReader(IDomainUser user) : base(user) { }
 
         /// <inheritdoc />
         public AuditFacet Facet => AuditFacet.Security;

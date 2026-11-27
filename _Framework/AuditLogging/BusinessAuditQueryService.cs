@@ -99,6 +99,31 @@ namespace TKWF.Ext.AuditLogging
             }
         }
 
+        public async Task<BusinessAuditDetailDto?> GetDetailWithPayloadAsync(long id, CancellationToken ct = default)
+        {
+            try
+            {
+                var access = await EvaluateAsync(AuditOperation.Detail, null, ct);
+                if (!access.Allowed)
+                {
+                    _logger.LogWarning("业务审计详情(载荷)被拒绝：{Reason}", access.Reason);
+                    throw new AuditAccessDeniedException(access.Reason);
+                }
+
+                var entity = await DataService.EntityGetAsync(x => x.Id == id, ct);
+                return entity is null ? null : MapDetail(entity);
+            }
+            catch (AuditAccessDeniedException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "业务审计详情(载荷)查询失败: GetDetailWithPayloadAsync id={Id}", id);
+                return null;
+            }
+        }
+
         public async Task<long> CountAsync(BusinessAuditQueryInput input, CancellationToken ct = default)
         {
             if (input is null) throw new ArgumentNullException(nameof(input));
@@ -200,6 +225,23 @@ namespace TKWF.Ext.AuditLogging
             e.TargetId,
             e.ActionType,
             e.Summary,
+            e.CorrelationId,
+            new DateTimeOffset(DateTime.SpecifyKind(e.ExecutionTime, DateTimeKind.Utc)),
+            e.CreateTime);
+
+        private static BusinessAuditDetailDto MapDetail(BusinessAuditEntity e) => new(
+            e.Id,
+            e.TenantId?.ToString(),
+            e.ActorType,
+            e.ActorId,
+            e.ActorName,
+            e.TargetType,
+            e.TargetId,
+            e.ActionType,
+            e.Summary,
+            e.BeforeJson,
+            e.AfterJson,
+            e.AttributesJson,
             e.CorrelationId,
             new DateTimeOffset(DateTime.SpecifyKind(e.ExecutionTime, DateTimeKind.Utc)),
             e.CreateTime);

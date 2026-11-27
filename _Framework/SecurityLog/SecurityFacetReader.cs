@@ -79,11 +79,13 @@ namespace TKWF.Ext.SecurityLog
             var eventType = q.EventType ?? q.ActionType;
             var result = q.Result;
             var correlationId = q.CorrelationId;
+            var tenantId = ParseTenant(q.TenantId);
             var afterId = q.AfterId;
             var from = q.FromUtc?.UtcDateTime;
             var to = q.ToUtc?.UtcDateTime;
 
             return x =>
+                (tenantId == null || x.TenantId == tenantId) &&
                 (userName == null || x.UserName == userName) &&
                 (eventType == null || x.EventType == eventType) &&
                 (result == null || x.Result == result) &&
@@ -91,6 +93,14 @@ namespace TKWF.Ext.SecurityLog
                 (afterId == null || x.Id > afterId) &&
                 (from == null || x.CreateTime >= from) &&
                 (to == null || x.CreateTime <= to);
+        }
+
+        private static long? ParseTenant(string? tenant)
+        {
+            if (string.IsNullOrWhiteSpace(tenant)) return null;
+            if (!long.TryParse(tenant, out var parsed))
+                throw new ArgumentException($"TenantId 必须为数字，收到 '{tenant}'（fail-closed，防跨租户越权）");
+            return parsed;
         }
 
         private static (int Skip, int Take) NormalizePaging(int skip, int take)

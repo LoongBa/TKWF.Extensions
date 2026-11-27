@@ -98,6 +98,11 @@ namespace TKWF.Ext.AuditLogging
             services.TryAddEnumerableConstructible<IAuditFacetReader, InvocationFacetReader>();
             services.TryAddEnumerableConstructible<IAuditFacetReader, BusinessFacetReader>();
             services.AddConstructibleService<IAuditQueryService, AuditQueryService>();
+
+            // V0.7.0：导出（G6）+ 完整性（哈希校验）+ 水位（G8 默认内存，可 Replace 持久化）
+            services.AddConstructibleService<IAuditExportService, AuditExportService>();
+            services.TryAddSingleton<IAuditIntegrityProvider, DefaultAuditIntegrityProvider>();
+            services.TryAddSingleton<IAuditWatermarkStore, InMemoryAuditWatermarkStore>();
         }
     }
 }

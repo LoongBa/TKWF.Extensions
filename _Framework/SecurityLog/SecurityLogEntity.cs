@@ -78,5 +78,9 @@ namespace TKWF.Ext.SecurityLog
         /// <summary>记录创建时间（UTC）。CanUpdate=false——只增不改语义的列级兜底。</summary>
         [FreeSql.DataAnnotations.Column(Position = 11, CanUpdate = false)]
         public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+
+        /// <summary>租户 Id（可空单义；C11 预留）。</summary>
+        [FreeSql.DataAnnotations.Column(Position = 12)]
+        public long? TenantId { get; set; }
     }
 }

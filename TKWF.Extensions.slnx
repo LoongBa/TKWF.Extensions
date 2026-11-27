@@ -18,6 +18,9 @@
   <Folder Name="/_Framework/AuditLogging.Abstractions/">
     <Project Path="_Framework/AuditLogging.Abstractions/TKWF.Ext.AuditLogging.Abstractions.csproj" />
   </Folder>
+  <Folder Name="/_Framework/AuditLogging.Web/">
+    <Project Path="_Framework/AuditLogging.Web/TKWF.Ext.AuditLogging.Web.csproj" />
+  </Folder>
   <Folder Name="/_Framework/Settings/">
     <Project Path="_Framework/Settings/TKWF.Ext.Settings.csproj" />
   </Folder>

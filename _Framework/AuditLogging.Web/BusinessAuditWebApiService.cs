@@ -3,8 +3,9 @@ using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
 using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.AuditLogging;
 
-namespace TKWF.Ext.AuditLogging
+namespace TKWF.Ext.AuditLogging.Web
 {
     /// <summary>
     /// 业务审计 Web 门面实现（<c>[GenerateController]</c> → SG1b B4 端点注册表）——委托域门面

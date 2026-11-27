@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TKWF.Ext.AuditLogging.Web</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <MinVerTagPrefix>AuditLogging.Web/v</MinVerTagPrefix>
+    <PackageId>TKWF.Ext.AuditLogging.Web</PackageId>
+    <Description>TKWF 扩展：审计业务读面 Web 端点（业务审计受控 REST——列表安全 DTO + 受控详情；默认 opt-in 启用）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AuditLogging.Abstractions\TKWF.Ext.AuditLogging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TKWF.Domain" Condition="'$(UseLocalFw)' != 'true'" />
+    <PackageReference Include="TKWF.Domain.Web" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.Domain.Web" HintPath="$(_LocalFwRefsDir)TKWF.Domain.Web.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.Domain.Web.dll')" />
+
+    <PackageReference Include="TKWF.CodeGeneration.Abstractions" Condition="'$(UseLocalFw)' != 'true'" />
+    <Reference Include="TKWF.CodeGeneration.Abstractions" HintPath="$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll" Condition="'$(UseLocalFw)' == 'true' And Exists('$(_LocalFwRefsDir)TKWF.CodeGeneration.Abstractions.dll')" />
+
+    <PackageReference Include="TKWF.CodeGeneration" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)GeneratedFiles</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TKWF.Ext.AuditLogging.Web.Tests" />
+  </ItemGroup>
+
+</Project>

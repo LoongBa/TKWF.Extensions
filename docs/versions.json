@@ -39,8 +39,8 @@
       "created": "2026-10-04"
     },
     "AuditLogging": {
-      "version": "0.7.1",
-      "tag": "AuditLogging/v0.7.1",
+      "version": "0.8.0",
+      "tag": "AuditLogging/v0.8.0",
       "created": "2026-11-27"
     },
     "AuditLogging.Abstractions": {

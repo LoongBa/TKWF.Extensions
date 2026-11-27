@@ -111,9 +111,10 @@
   - **跟随发布**：扩展在线发布只可在框架最新包已上架之后（框架组 dispatch publish job success 即视为已上架，不必等 nuget 索引传播）；
   - **提前申请**：扩展需要在线发布时，**先申请/提醒框架组发布当前框架最新**（转达文档或口头，给出期望的框架 tag 版本），框架组发布后再走扩展 `workflow_dispatch`。权威发布纪律见主框架 `docs/AE-Kit/skills/tkwf-design-principles/references/guides/迭代与发布纪律.md` §二（本仓库无独立副本）。
 - **发布后部署纪律（2026-10-09 用户裁定）**：tag push 后 **本地全量部署优先**（DLL 模式先验证，避免阻塞其它项目等 dll）；CI 发布后**不必等待 nuget.org 传播**（publish job success 即闭环——index 传播延迟是 nuget.org 侧特性，不阻塞后续工作）。
-- **扩展部署收口脚本（2026-10-26 新增，对偶框架 `_TKWF\build\build-deployment.ps1`）**：`build\build-ext-deployment.ps1`——扩展 DLL 日常由 `_PushToRefs` 构建后自动推送 `%TKWFDeployPath%\build\refs\`（与框架 DLL 混驻，消费方 DLL 模式统一引用），但**项目已删除/重命名 → refs 孤儿 DLL 永不被覆盖**（框架 -Cleanup 同型问题扩展侧无解），需脚本收口。使用场景：
+- **扩展部署收口脚本（2026-10-26 新增，对偶框架 `_TKWF\build\build-deployment.ps1`）**：`build\build-ext-deployment.ps1`——扩展 DLL 日常由 `_PushToRefs` 构建后自动推送 `%TKWFDeployPath%\build\refs\`（与框架 DLL 混驻）；**但消费方（DMP 等）csproj 对扩展实际引用 `%TKWFDeployPath%\build\extensions\refs\`——脚本收尾已补 `build\refs` → `build\extensions\refs` 同步（对齐框架 `build-deployment.ps1` 第 1b 步）；历史遗留/未同步时手动同步或跑框架脚本**），但**项目已删除/重命名 → refs 孤儿 DLL 永不被覆盖**（框架 -Cleanup 同型问题扩展侧无解），需脚本收口。使用场景：
   - **发布后/定期一致性收口**：`.\build\build-ext-deployment.ps1 -Cleanup`（清空 refs 扩展 DLL → 重建 slnx → 全量推送 → 孤儿清理）
   - **单扩展快速重推**：`.\build\build-ext-deployment.ps1 -Ext {扩展名}`（构建指定扩展 → _PushToRefs 推送）
+  - **消费方引用源同步（2026-11-27 实证）**：脚本收尾自动把 `build\refs` 扩展 DLL/`*.xml` 同步到 `%TKWFDeployPath%\build\extensions\refs\`（DMP 等 csproj 实际引用此路径；被占用时 WARN 提示重跑）
   - **只读巡检**：`.\build\build-ext-deployment.ps1 -SkipBuild -NoCleanOrphans`（孤儿只报不删）
   - **边界铁律**：只碰 `TKWF.Ext.*`/`TKWF.Federation.*` 前缀，**绝不碰框架 DLL**；孤儿判定 = refs 扩展 DLL vs 全仓库 csproj 合法产出名（排除 `Federation.Template` 占位符）；`-Zip` 仅打包扩展 DLL（框架全量 zip 归框架脚本）
 

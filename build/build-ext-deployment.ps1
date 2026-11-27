@@ -233,6 +233,29 @@ $allExt | Group-Object { $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm") } |
   Sort-Object Name |
   ForEach-Object { Write-Host ("  {0}  →  {1} 个" -f $_.Name, $_.Count) }
 
+# ── 同步消费方引用源：build\refs → build\extensions\refs（对齐框架 build-deployment.ps1 第 1b 步）──
+# 背景（2026-11-27 实证）：DMP 等消费方 csproj 对扩展统一引用 $(TKWFDeployPath)\build\extensions\refs\；
+# 而 _PushToRefs 只推 build\refs\。若不同步，消费方会引到旧 ABI（缺新 Abstractions / 旧主包）。
+$ExtRefsDir = Join-Path $DeployRoot "build\extensions\refs"
+if (Test-Path $ExtRefsDir) {
+  Write-Host "=== 同步 build\refs → build\extensions\refs（消费方引用源）===" -ForegroundColor Cyan
+  $syncFailed = @()
+  Get-ChildItem "$RefsDir\*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+    try { Copy-Item $_.FullName $ExtRefsDir -Force -ErrorAction Stop }
+    catch { $syncFailed += $_.Name }
+  }
+  Get-ChildItem "$RefsDir\*.xml" -ErrorAction SilentlyContinue | ForEach-Object {
+    try { Copy-Item $_.FullName $ExtRefsDir -Force -ErrorAction Stop } catch { }
+  }
+  if ($syncFailed.Count -gt 0) {
+    Write-Host "      [WARN] 以下 DLL 同步失败（被占用？关闭消费方/分析器后重跑）：$($syncFailed -join ', ')" -ForegroundColor Yellow
+  } else {
+    Write-Host "      → 已同步 $((Get-ChildItem $ExtRefsDir -Filter *.dll).Count) 个 DLL" -ForegroundColor Green
+  }
+} else {
+  Write-Host "[INFO] build\extensions\refs 不存在——跳过同步（由框架 build-deployment.ps1 第 1b 步创建）" -ForegroundColor Yellow
+}
+
 # ── -Zip 分发（仅扩展前缀 + 轻量说明，不打包整个部署根）──────
 if ($Zip) {
   if ($Ext) {

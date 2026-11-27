@@ -90,8 +90,8 @@ namespace TKWF.Ext.AuditLogging
             // 业务事实审计查询门面——接口 : IDomainService → AddConstructibleService
             services.AddConstructibleService<IBusinessAuditQueryService, BusinessAuditQueryService>();
 
-            // 审计访问策略（fail-closed 默认；消费方可 TryAdd 替换为按 AuditPermissionNames 判定的实现）
-            services.TryAddSingleton<IAuditAccessPolicy, DefaultAuditAccessPolicy>();
+            // 审计访问策略（fail-closed 默认）——域服务化（C9，可经 User/Permissions 判定）
+            services.AddConstructibleService<IAuditAccessPolicy, DefaultAuditAccessPolicy>();
 
             // V0.7.0：统一读模型——分面 Reader 集合（ADR92 TryAddEnumerableConstructible）+ 读门面
             //   Invocation/Business 两面由本扩展提供；Security 面由 SecurityLog 扩展注册（启用即出现）

@@ -27,7 +27,7 @@ namespace TKWF.Ext.AuditLogging
         private BusinessAuditEntityDataService DataService => _dataService ??= User.Use<BusinessAuditEntityDataService>();
 
         private IAuditAccessPolicy? _accessPolicy;
-        private IAuditAccessPolicy? AccessPolicy => _accessPolicy ??= User.GetService<IAuditAccessPolicy>();
+        private IAuditAccessPolicy? AccessPolicy => _accessPolicy ??= User.Use<IAuditAccessPolicy>();
 
         public BusinessAuditQueryService(IDomainUser user, ILogger<BusinessAuditQueryService> logger)
             : base(user)

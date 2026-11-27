@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuditLogging
 {
@@ -42,7 +43,7 @@ namespace TKWF.Ext.AuditLogging
     /// 需 <see cref="AuditPermissionNames"/> 授权，否则仅当 <c>AuditAccessPolicyOptions.AllowWithoutPermissions=true</c> 放行（默认 false → 拒绝）。
     /// 策略独立于 Permissions 扩展生效（Permissions 未启用时仍 fail-closed）。</para>
     /// </summary>
-    public interface IAuditAccessPolicy
+    public interface IAuditAccessPolicy : IDomainService
     {
         Task<AuditAccessDecision> EvaluateAsync(AuditAccessRequest request, CancellationToken ct = default);
     }

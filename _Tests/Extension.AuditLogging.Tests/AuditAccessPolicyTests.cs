@@ -8,7 +8,7 @@ namespace TKWF.Ext.AuditLogging.Tests;
 public class AuditAccessPolicyTests
 {
     private static DefaultAuditAccessPolicy CreatePolicy(bool allowWithoutPermissions)
-        => new(Options.Create(new AuditAccessPolicyOptions { AllowWithoutPermissions = allowWithoutPermissions }));
+        => new(new StubDomainUser(), Options.Create(new AuditAccessPolicyOptions { AllowWithoutPermissions = allowWithoutPermissions }));
 
     [Fact]
     public async Task QueryOwn_Authenticated_Allowed()

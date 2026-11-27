@@ -1,6 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.AuditLogging
 {
@@ -9,11 +11,11 @@ namespace TKWF.Ext.AuditLogging
     /// 其余敏感操作仅当 <see cref="AuditAccessPolicyOptions.AllowWithoutPermissions"/> 为 true 时放行，否则拒绝。
     /// <para>消费方启用 Permissions 时，可 <c>TryAdd</c> 替换为按 <see cref="AuditPermissionNames"/> 判定的实现。</para>
     /// </summary>
-    internal sealed class DefaultAuditAccessPolicy : IAuditAccessPolicy
+    internal sealed class DefaultAuditAccessPolicy : DomainServiceBase, IAuditAccessPolicy
     {
         private readonly bool _allowWithoutPermissions;
 
-        public DefaultAuditAccessPolicy(IOptions<AuditAccessPolicyOptions> options)
+        public DefaultAuditAccessPolicy(IDomainUser user, IOptions<AuditAccessPolicyOptions> options) : base(user)
         {
             _allowWithoutPermissions = options?.Value.AllowWithoutPermissions ?? false;
         }

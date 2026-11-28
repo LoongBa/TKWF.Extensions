@@ -58,6 +58,8 @@ public sealed class WeChatOpsPageContributor : TKWF.Ext.UI.IPageContributor
 ## 六、版本与发布
 
 - MinVerTagPrefix：`UI.Abstractions/v`（独立版本线）
-- V0.1.0（功能线，未打 tag）——首发 `IPageContributor`；tag 须征得用户同意（AGENTS §5），发布走 `workflow_dispatch`
+- **V0.1.1（2026-11-28，tag `UI.Abstractions/v0.1.1`）——文档修正（返回类型硬约束）**：`GetPages()` 实现体必须声明 `IReadOnlyList<PageDescriptor>`——`PageDescriptor[]` **不实现**接口成员（C# 接口隐式实现要求返回类型精确匹配，协变返回仅适用于 `override`）；实现体仍可用集合表达式 `=> [ new(...) ]`。**接口签名/二进制契约零变化**（仅包内 XML 文档 + README 示例更正）。
+- V0.1.0（2026-11-28，tag `UI.Abstractions/v0.1.0`）——首发 `IPageContributor`。⚠️ 该 tag 内 XML doc/README 含上述错误示例（`PageDescriptor[]` + "协变返回合法"），已被 V0.1.1 更正；**消费方请用 V0.1.1**。
+- 发布走 `workflow_dispatch`（tag 推送不触发 CI）；tag 须征得用户同意（AGENTS §5）
 
 <!-- EOF -->

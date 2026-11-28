@@ -12,7 +12,9 @@ namespace TKWF.Ext.UI;
 /// （SG 在消费端编译期 <c>new</c> 实例化，零反射）——违反即 <c>TKWF_SG1b_PAGE002</c>（Error）。</para>
 /// <para><b>纯元数据函数</b>：<see cref="GetPages"/> 必须在重复调用时返回等值内容，不得读取环境/时钟/
 /// 随机数/外部 IO，不得持有运行时状态；实现体请使用数组或集合字面量（如
-/// <c>public PageDescriptor[] GetPages() =&gt; [ new(…) ]</c>，协变返回合法）。
+/// <c>public IReadOnlyList&lt;PageDescriptor&gt; GetPages() =&gt; [ new(…) ]</c>）。
+/// <b>返回类型必须写 <see cref="IReadOnlyList{T}"/> of <see cref="PageDescriptor"/></b>——<c>PageDescriptor[]</c>
+/// 不实现接口成员（C# 接口实现不做协变返回）。
 /// <b>禁止</b> <c>yield return</c> 与 LINQ 延迟求值——未来 SG 将在编译期解释本方法体以产出结构化
 /// <c>PageDescriptor[]</c>（D23 §四 两阶段目标态）。</para>
 /// <para><b>归属铁律</b>：实现类只能位于 ① 消费方领域项目（主场景——SG1b 只收集当前编译自身程序集）

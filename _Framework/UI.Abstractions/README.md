@@ -40,7 +40,7 @@ namespace：`TKWF.Ext.UI`（包名带 `.Abstractions`、命名空间不带 —�
 ```csharp
 public sealed class WeChatOpsPageContributor : TKWF.Ext.UI.IPageContributor
 {
-    public PageDescriptor[] GetPages() =>            // 协变返回：数组字面量合法
+    public IReadOnlyList<PageDescriptor> GetPages() =>     // 返回类型必须为 IReadOnlyList（数组不实现接口成员）
     [
         new("wechat-ops.materials.list", "/admin/wechat-ops/materials", "wechatops.materials",
             "素材库", "file-text", "运营", PageTypes.Business,

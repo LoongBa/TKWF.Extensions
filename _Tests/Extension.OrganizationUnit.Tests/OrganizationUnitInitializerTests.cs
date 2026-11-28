@@ -13,12 +13,12 @@ using TKWF.Ext.OrganizationUnit;
 namespace TKWF.Ext.OrganizationUnit.Tests;
 
 /// <summary>
-/// D14：OrganizationUnitExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册完整、TryAddScoped 不覆盖消费方、白名单声明。
-/// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态二态：</para>
+/// D14：OrganizationUnitExtensionInitializer 测试——[TKWFExtension] 特性声明、DI 注册完整、白名单声明。
+/// <para>V4.10.53（领域自治根治，ADR90，正确路线）：</para>
 /// <list type="bullet">
 /// <item><see cref="IOrganizationUnitManager"/>（接口 : IDomainService）→ <b>AddConstructibleService</b>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外直接 DI 解析接口必抛领域架构守卫。</item>
-/// <item><see cref="IOrganizationUnitStore"/>（internal 接线型契约）→ <b>TryAddScoped 普通 DI</b>（ImplementationType + 消费方自定义优先）。</item>
+/// <item>A5 Store-debt 清理：internal thin Store 伪层已删，门面经 <c>User.Use&lt;XxxDataService&gt;()</c> 直调。</item>
 /// </list>
 /// </summary>
 public class OrganizationUnitInitializerTests
@@ -81,19 +81,15 @@ public class OrganizationUnitInitializerTests
         Assert.Contains("IOrganizationUnitManager", ex.Message);
     }
 
-    // ── Store：内部接线型 TryAddScoped（ImplementationType 普通 DI）──
+    // ── A5 Store-debt 清理回归：Initializer 不再注册任何 *Store 伪层 ──
 
     [Fact]
-    public void ConfigureServices_Registers_Store_Descriptor()
+    public void ConfigureServices_DoesNotRegister_AnyStore()
     {
         var services = new ServiceCollection();
         new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
 
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IOrganizationUnitStore));
-
-        Assert.NotNull(descriptor);
-        Assert.Equal(typeof(OrganizationUnitStore), descriptor!.ImplementationType);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+        Assert.DoesNotContain(services, d => d.ServiceType.Name.EndsWith("Store", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -109,18 +105,6 @@ public class OrganizationUnitInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerStore()
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<IOrganizationUnitStore, ConsumerOrganizationUnitStore>();
-        new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
-
-        var descriptors = services.Where(d => d.ServiceType == typeof(IOrganizationUnitStore)).ToList();
-        Assert.Single(descriptors);
-        Assert.Equal(typeof(ConsumerOrganizationUnitStore), descriptors[0].ImplementationType);
-    }
-
-    [Fact]
     public void ConsumerHostInitializer_Declares_EnabledExtensionWhitelist()
     {
         var attr = typeof(ConsumerHostInitializer)
@@ -133,23 +117,4 @@ public class OrganizationUnitInitializerTests
         Assert.Equal(typeof(OrganizationUnitExtensionInitializer<>), attr!.InitializerType);
     }
 
-    /// <summary>测试专用 IOrganizationUnitStore：标记消费方自定义实现（仅 DI 标记，不实际调用）。</summary>
-    private sealed class ConsumerOrganizationUnitStore : IOrganizationUnitStore
-    {
-        public Task<long> CreateAsync(OrganizationUnitEntity entity, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task UpdateAsync(OrganizationUnitEntity entity, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task DeleteAsync(long id, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<OrganizationUnitEntity?> GetByIdAsync(long id, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<OrganizationUnitEntity?> GetByCodeAsync(string code, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<OrganizationUnitEntity>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<OrganizationUnitEntity>> GetByPathPrefixAsync(string pathPrefix, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<OrganizationUnitEntity>> GetByCodesAsync(IReadOnlyList<string> codes, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<string>> GetUserIdsByOuPathPrefixAsync(string ouPathPrefix, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task AddUserAsync(OrganizationUnitUserEntity entity, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task RemoveUserAsync(long organizationUnitId, string userId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<string>> GetUserIdsByOrganizationUnitIdsAsync(IReadOnlyList<long> organizationUnitIds, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<long>> GetOrganizationUnitIdsForUserAsync(string userId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<long> CountUsersByOrganizationUnitIdAsync(long organizationUnitId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task DeleteUsersByOrganizationUnitIdsAsync(IReadOnlyList<long> organizationUnitIds, CancellationToken ct = default) => throw new NotImplementedException();
-    }
 }

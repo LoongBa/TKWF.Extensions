@@ -51,12 +51,12 @@ INNER JOIN ""TKWF_OrganizationUnit"" ou ON ouu.""OrganizationUnitId"" = ou.""Id"
 ///     （框架 Use 内部设 CurrentAopUser → GetRequiredService → AddConstructibleService 守卫工厂 →
 ///     ActivatorUtilities 直建实现）——<see cref="Manager"/>（匿名——IDomainUser 永不注册 DI 语义保持，
 ///     Manager 经守卫工厂由 CurrentAopUser 传入，非 DI 解析）；</item>
-/// <item><b>内部接线型 Store 普通 DI 解析</b>（TryAddScoped ImplementationType——Manager 守卫工厂 ActivatorUtilities
-///     ctor 注入解析；实现 ctor(<see cref="IServiceProvider"/>) + C1 延迟解析 DataService）——<see cref="Store"/>；</item>
-/// <item><b>DataService 可构造注册</b>（接线型 Store 的 C1 延迟解析源——测试镜像生产 ADR61 可构造工厂，
-///     非 throw-factory；ctor 需 IDomainUser + IEntityDAC 均从 DI 解析）；</item>
+/// <item><b>数据访问经门面懒加载</b>（A5 Store-debt 清理——internal thin Store 伪层已删；Manager 经
+///     <c>User.Use&lt;XxxDataService&gt;()</c> NoAop 直建 DataService）；</item>
+/// <item><b>DataService 可构造注册</b>（测试镜像生产 ADR61 可构造工厂，非 throw-factory；
+///     ctor 需 IDomainUser + IEntityDAC 均从 DI 解析）；</item>
 /// <item><b>IDomainUser 注册（测试桥接）</b>：DataService ctor 需 IDomainUser（测试注册 <see cref="TestDomainUser"/> 桩——
-///     生产 DataService 经 Use&lt;具体类&gt;() NoAop 直建不经 DI；接线型 Store 的 GetRequiredService 需要）。</item>
+///     生产 DataService 经 Use&lt;具体类&gt;() NoAop 直建不经 DI）。</item>
 /// </list>
 /// <para>每用例独立 <see cref="Create"/> 得到全新 SQLite 内存库实例（用例隔离）。
 /// <c>configure</c> 回调在扩展初始化器之后执行——可覆盖 ITransactionManager（对齐 Calendar/FileManagement 宿主模式）。</para>
@@ -72,9 +72,6 @@ internal sealed class OrganizationUnitTestHost : IDisposable
 
     /// <summary>门面——生产 AOP 路径：真实 DomainUser&lt;TestUserInfo&gt;.Use&lt;IOrganizationUnitManager&gt;()（匿名——守卫工厂直建实现）。</summary>
     public IOrganizationUnitManager Manager => _domainUser.Use<IOrganizationUnitManager>();
-
-    /// <summary>内部接线型 Store——普通 DI 解析（TryAddScoped ImplementationType；ctor IServiceProvider + C1 延迟解析 DataService）。</summary>
-    public IOrganizationUnitStore Store => _serviceProvider.GetRequiredService<IOrganizationUnitStore>();
 
     /// <summary>SG1 DataService（NoAop 路径直建——DataService 禁构造注入，DI004 零豁免；IEntityDAC 从 DI 解析）。</summary>
     public OrganizationUnitEntityDataService OuDataService => _domainUser.Use<OrganizationUnitEntityDataService>();
@@ -102,11 +99,11 @@ internal sealed class OrganizationUnitTestHost : IDisposable
         services.AddSingleton(fsql);
 
         // 测试桥接：IDomainUser 注册保留（DataService ctor 需 IDomainUser——生产经 Use<具体类>() NoAop 直建
-        // 不经 DI；接线型 Store 的 GetRequiredService<DataService>() 需 DI 可构造）——生产永不注册 IDomainUser（D01）。
+        // 不经 DI）——生产永不注册 IDomainUser（D01）。
         var user = new TestDomainUser();
         services.AddSingleton<IDomainUser>(sp => { user.Provider = sp; return user; });
 
-        // 接线型 Store 的 DataService 解析源：普通 DI 可构造（测试镜像生产 ADR61 可构造工厂，非 throw-factory）；
+        // 门面 User.Use<XxxDataService>() 的解析源：普通 DI 可构造（测试镜像生产 ADR61 可构造工厂，非 throw-factory）；
         // IEntityDAC<T> 基础设施注册同生产 Host（每 DataService 独立 UnitOfWorkManager，对齐 FileManagement 宿主语义）。
         services.AddScoped<IEntityDAC<OrganizationUnitEntity>>(sp => new FreeSqlEntityDAC<OrganizationUnitEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
         services.AddScoped<IEntityDAC<OrganizationUnitUserEntity>>(sp => new FreeSqlEntityDAC<OrganizationUnitUserEntity>(new UnitOfWorkManager(sp.GetRequiredService<IFreeSql>())));
@@ -121,7 +118,7 @@ internal sealed class OrganizationUnitTestHost : IDisposable
         // DataService 逐操作经 UnitOfWorkManager 持久化；Recording 由 configure 覆盖）
         services.AddSingleton<ITransactionManager, NoopTransactionManager>();
 
-        // 扩展初始化器注册 IOrganizationUnitStore（TryAddScoped 接线型）/IOrganizationUnitManager（AddConstructibleService 门面）
+        // 扩展初始化器注册 IOrganizationUnitManager（AddConstructibleService 门面；DataService 经 ADR61 自动注册）
         new OrganizationUnitExtensionInitializer<OrganizationUnitUserInfo>().ConfigureServices(services);
 
         configure?.Invoke(services);

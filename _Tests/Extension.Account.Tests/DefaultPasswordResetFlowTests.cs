@@ -37,7 +37,7 @@ public class DefaultPasswordResetFlowTests
         if (passwordManager != null)
             services.AddSingleton(passwordManager);
         // Store 直构真实实例注册（Flow 经 IServiceProvider 解析；守卫路径由其他测试覆盖）
-        services.AddSingleton<IPasswordResetStore>(AccountTestHost.CreatePasswordResetStore(fsql));
+        services.AddSingleton(AccountTestHost.CreatePasswordResetDataService(fsql));
         var sp = services.BuildServiceProvider();
         return (DefaultPasswordResetFlow)sp.GetRequiredService<IPasswordResetFlow>();
     }
@@ -88,7 +88,7 @@ public class DefaultPasswordResetFlowTests
 
         // 防用户枚举：用户不存在也返回 true，且不生成码
         Assert.True(result);
-        Assert.Null(await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("nobody", "NONEXIST", CancellationToken.None));
+        Assert.Null(await AccountTestHost.CreatePasswordResetDataService(fsql).GetByUserNameAndCodeAsync("nobody", "NONEXIST", CancellationToken.None));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class DefaultPasswordResetFlowTests
         var result = await flow.InitiateResetAsync("alice", CancellationToken.None);
 
         Assert.False(result);
-        Assert.Null(await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("alice", "NONEXIST", CancellationToken.None));
+        Assert.Null(await AccountTestHost.CreatePasswordResetDataService(fsql).GetByUserNameAndCodeAsync("alice", "NONEXIST", CancellationToken.None));
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class DefaultPasswordResetFlowTests
         Assert.True(result.Success, $"重置失败: {result.Message}");
         Assert.Equal("alice", manager.SavedUserName);
         Assert.Equal("CLIENT_HASH", manager.SavedHash);
-        var updated = await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("alice", saved.ResetCode, CancellationToken.None);
+        var updated = await AccountTestHost.CreatePasswordResetDataService(fsql).GetByUserNameAndCodeAsync("alice", saved.ResetCode, CancellationToken.None);
         Assert.NotNull(updated);
         Assert.True(updated!.IsUsed);
     }
@@ -159,7 +159,7 @@ public class DefaultPasswordResetFlowTests
     {
         var fsql = CreateFreeSql();
         var flow = CreateFlow(fsql, new FakePasswordManager());
-        await AccountTestHost.CreatePasswordResetStore(fsql).SaveAsync(new PasswordResetCodeEntity {
+        await AccountTestHost.CreatePasswordResetDataService(fsql).SaveAsync(new PasswordResetCodeEntity {
             UserName = "alice",
             ResetCode = "EXPIRED1",
             ExpireTime = DateTime.Now.AddMinutes(-1) // 已过期
@@ -184,7 +184,7 @@ public class DefaultPasswordResetFlowTests
         var result = await flow.CompleteResetAsync("alice", saved.ResetCode, "HASH", "SALT", CancellationToken.None);
 
         Assert.False(result.Success);
-        var updated = await AccountTestHost.CreatePasswordResetStore(fsql).GetAsync("alice", saved.ResetCode, CancellationToken.None);
+        var updated = await AccountTestHost.CreatePasswordResetDataService(fsql).GetByUserNameAndCodeAsync("alice", saved.ResetCode, CancellationToken.None);
         Assert.NotNull(updated);
         Assert.True(updated!.IsUsed); // 码已标记已用——不可重放
     }

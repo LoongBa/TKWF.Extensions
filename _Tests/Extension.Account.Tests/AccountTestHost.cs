@@ -19,18 +19,18 @@ namespace TKWF.Ext.Account.Tests;
 /// </summary>
 internal static class AccountTestHost
 {
-    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 AccountLockoutStore（分层单测用）。</summary>
-    public static AccountLockoutStore CreateLockoutStore(IFreeSql fsql)
+    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 AccountLockoutEntityDataService（分层单测用）。</summary>
+    public static AccountLockoutEntityDataService CreateLockoutDataService(IFreeSql fsql)
     {
         var user = BuildStub(fsql, typeof(AccountLockoutEntity));
-        return new AccountLockoutStore(user, NullLogger<AccountLockoutStore>.Instance);
+        return user.Use<AccountLockoutEntityDataService>();
     }
 
-    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 PasswordResetStore（分层单测用）。</summary>
-    public static PasswordResetStore CreatePasswordResetStore(IFreeSql fsql)
+    /// <summary>构建基于 SQLite 内存库 + 真实 FreeSqlEntityDAC 的 PasswordResetCodeEntityDataService（分层单测用）。</summary>
+    public static PasswordResetCodeEntityDataService CreatePasswordResetDataService(IFreeSql fsql)
     {
         var user = BuildStub(fsql, typeof(PasswordResetCodeEntity));
-        return new PasswordResetStore(user, NullLogger<PasswordResetStore>.Instance);
+        return user.Use<PasswordResetCodeEntityDataService>();
     }
 
     private static StubDomainUser BuildStub(IFreeSql fsql, params Type[] entityTypes)

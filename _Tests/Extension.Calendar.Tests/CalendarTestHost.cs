@@ -66,9 +66,6 @@ internal sealed class CalendarTestHost : IDisposable
     /// <summary>门面——生产 AOP 路径：真实 DomainUser&lt;TestUserInfo&gt;.Use&lt;ICalendarManager&gt;()（匿名——守卫工厂直建实现）。</summary>
     public ICalendarManager Manager => _domainUser.Use<ICalendarManager>();
 
-    /// <summary>内部接线型 Store——普通 DI 解析（TryAddScoped ImplementationType；ctor IServiceProvider + C1 延迟解析 DataService）。</summary>
-    public ICalendarStore Store => _serviceProvider.GetRequiredService<ICalendarStore>();
-
     /// <summary>SG1 DataService（NoAop 路径直建——DataService 禁构造注入，DI004 零豁免；IEntityDAC 从 DI 解析）。</summary>
     public CalendarEntityDataService CalendarDataService => _domainUser.Use<CalendarEntityDataService>();
 

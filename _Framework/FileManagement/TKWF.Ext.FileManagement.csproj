@@ -66,7 +66,7 @@
     <_XCG_ConfigPath>$(MSBuildProjectDirectory)\..\..\.xCodeGen\extensions\filemanagement.xCodeGen.json</_XCG_ConfigPath>
   </PropertyGroup>
 
-  <!-- 测试项目访问 internal（FileFolderStore、ManagedFileStore、DataService、FileManagementMimeMap） -->
+  <!-- 测试项目访问 internal（DataService、FileManagementMimeMap） -->
   <ItemGroup>
     <InternalsVisibleTo Include="TKWF.Ext.FileManagement.Tests" />
   </ItemGroup>

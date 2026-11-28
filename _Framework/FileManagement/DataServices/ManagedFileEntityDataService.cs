@@ -18,7 +18,15 @@ namespace TKWF.Ext.FileManagement;
 partial class ManagedFileEntityDataService(IDomainUser user, IEntityDAC<ManagedFileEntity> dac)
     : DomainDataServiceBase<ManagedFileEntity, ManagedFileEntityDto>(user, dac, hasSoftDelete: false)
 {
-    // ── Store/Manager 委托路径的业务方法（异常自然传播——唯一约束/业务规则语义由 Manager 层处理） ──
+    // ── Manager 委托路径的业务方法（异常自然传播——唯一约束/业务规则语义由 Manager 层处理） ──
+
+    /// <summary>按 Id 读取文件（不存在返回 null）——A5 Store-debt 清理：门面直调便捷方法。</summary>
+    public Task<ManagedFileEntity?> GetByIdAsync(long id, CancellationToken ct = default)
+        => EntityGetAsync(f => f.Id == id, ct);
+
+    /// <summary>按 Id 物理删除文件元数据——A5 Store-debt 清理：门面直调便捷方法。</summary>
+    public Task DeleteAsync(long id, CancellationToken ct = default)
+        => EntityDeleteBatchAsync(new[] { id }, ct);
 
     /// <summary>按目录 + 文件名查文件（UX_ManagedFile_Folder_Name 唯一约束双条件；folderId 可空 → 根级文件）。</summary>
     public Task<ManagedFileEntity?> GetByFolderAndNameAsync(long? folderId, string name, CancellationToken ct = default)

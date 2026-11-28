@@ -10,15 +10,15 @@ namespace TKWF.Ext.DataDictionary.Tests;
 /// FreeSqlDictionaryStore 测试（V0.3.0 领域自治根治重写——走生产路径）——
 /// 定义/项 CRUD、按编码查询、Upsert 幂等、异常静默。
 /// <para>生产路径：真实 DI（扩展 ConfigureServices + FreeSql 基础设施）+ <c>DomainUser&lt;TUserInfo&gt;</c> BindScope
-/// → <c>User.Use&lt;IDictionaryStore&gt;()</c> AOP 路径解析（AddConstructibleService 接口守卫工厂）。</para>
+/// → <c>User.Use&lt;DictionaryDefinitionEntityDataService&gt;()</c> AOP 路径解析（AddConstructibleService 接口守卫工厂）。</para>
 /// </summary>
 public class FreeSqlDictionaryStoreTests
 {
     /// <summary>同步建宿主 + AOP 解析 Store（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
-    private static IDictionaryStore CreateStore()
+    private static DictionaryDefinitionEntityDataService CreateStore()
     {
         var (provider, user) = DataDictionaryTestHost.CreateProductionHost();
-        return user.Use<IDictionaryStore>();
+        return user.Use<DictionaryDefinitionEntityDataService>();
     }
 
     private static DictionaryDefinitionEntity NewDefinition(string code = "Gender")

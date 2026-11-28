@@ -132,7 +132,7 @@ public class OrganizationUnitUserTests
         await host.Manager.UnassignUserAsync(ou.Id, "u_002", CancellationToken.None);
         await host.Manager.DeleteAsync(ou.Id, CancellationToken.None);
 
-        Assert.Null(await host.Store.GetByIdAsync(ou.Id, CancellationToken.None));
+        Assert.Null(await host.OuDataService.GetByIdAsync(ou.Id, CancellationToken.None));
         var remaining = await host.Manager.GetUserIdsInOrganizationUnitAsync(ou.Id, includeDescendants: false, ct: CancellationToken.None);
         Assert.Empty(remaining);
     }
@@ -174,7 +174,7 @@ public class OrganizationUnitUserTests
         Assert.Equal(new[] { "C", "A", "B" }, rootNode!.Children.Select(x => x.Code).ToArray());
 
         // A 依然存在（更新只改排序，不动其他字段）
-        var aReloaded = await host.Store.GetByIdAsync(a.Id, CancellationToken.None);
+        var aReloaded = await host.OuDataService.GetByIdAsync(a.Id, CancellationToken.None);
         Assert.NotNull(aReloaded);
         Assert.Equal("A", aReloaded!.Name);
     }
@@ -187,7 +187,7 @@ public class OrganizationUnitUserTests
 
         await host.Manager.DeleteAsync(root.Id, CancellationToken.None);
 
-        var all = await host.Store.GetAllAsync(CancellationToken.None);
+        var all = await host.OuDataService.GetAllAsync(CancellationToken.None);
         Assert.Empty(all);
     }
 

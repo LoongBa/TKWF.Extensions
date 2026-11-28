@@ -110,6 +110,9 @@ internal sealed class FileManagementTestHost : IDisposable
     /// <summary>SG1 DataService（NoAop 路径直建——DataService 禁构造注入，DI004 零豁免；IEntityDAC 从 DI 解析）。</summary>
     public ManagedFileEntityDataService FileDataService => _domainUser.Use<ManagedFileEntityDataService>();
 
+    /// <summary>版本 DataService（NoAop 路径直建——A5 Store-debt 清理后经此直查版本行）。</summary>
+    public ManagedFileVersionEntityDataService VersionDataService => _domainUser.Use<ManagedFileVersionEntityDataService>();
+
     private FileManagementTestHost(ServiceProvider serviceProvider, IFreeSql fsql, string blobRoot, TestDomainUser user, string? dbPath = null)
     {
         _serviceProvider = serviceProvider;
@@ -213,19 +216,21 @@ internal sealed class FileManagementTestHost : IDisposable
     /// <summary>
     /// 分层逻辑单测专用：直构 FileManager（internal 类 + IVT）——可配置桩经基类 <c>User</c> 精确控制
     /// IsAuthenticated/UserId/IsSystemActor（V0.3.0 用户级配额/所有权测试；skill §4.5）。
-    /// <para>经宿主 DI 解析其余参数（3 Store 接线型 TryAddScoped + IBlobStorageService + ITransactionManager +
-    /// IOptions + ILogger）——与守卫工厂 ActivatorUtilities 相同的解析源，仅用户上下文经直构传入。</para>
+    /// <para>经宿主 DI 解析其余参数（IBlobStorageService + ITransactionManager + IOptions + ILogger）——
+    /// 与守卫工厂 ActivatorUtilities 相同的解析源，仅用户上下文经直构传入；数据访问经桩
+    /// <c>Use&lt;XxxEntityDataService&gt;()</c> 懒加载（A5 Store-debt 清理）。</para>
     /// </summary>
     public IFileManager ManagerFor(TestDomainUser user)
-        => new FileManager(
+    {
+        // A5 Store-debt 清理：门面数据访问经 user.Use<XxxDataService>() 懒加载——桩须持 Provider 才能 NoAop 直建。
+        user.Provider ??= _serviceProvider;
+        return new FileManager(
             user,
-            _serviceProvider.GetRequiredService<IFileFolderStore>(),
-            _serviceProvider.GetRequiredService<IManagedFileStore>(),
-            _serviceProvider.GetRequiredService<IManagedFileVersionStore>(),
             _serviceProvider.GetRequiredService<IBlobStorageService>(),
             _serviceProvider.GetRequiredService<ITransactionManager>(),
             _serviceProvider.GetRequiredService<IOptions<FileManagementOptions>>(),
             NullLogger<FileManager>.Instance);
+    }
 
     /// <summary>快捷辅助：创建目录（委托 Manager）。</summary>
     public Task<FileFolderEntity> CreateFolderAsync(

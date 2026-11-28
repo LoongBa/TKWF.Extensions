@@ -41,6 +41,8 @@
     <!-- TrustCenter 主包 + 契约包（信任内核：token2/accesscode/client） -->
     <ProjectReference Include="..\..\_Framework\TrustCenter\TKWF.Ext.TrustCenter.csproj" />
     <ProjectReference Include="..\..\_Framework\TrustCenter.Abstractions\TKWF.Ext.TrustCenter.Abstractions.csproj" />
+    <!-- D1 测试项 3：AddSealedTicketFor<FederatedTicketPayload>() 生产路径 DI 测试所需载荷契约（测试项目引用，TrustCenter 主包仍零反向依赖） -->
+    <ProjectReference Include="..\..\_Framework\Federation.Abstractions\TKWF.Federation.Abstractions.csproj" />
     <!-- C 基座（2026-10-04）：共享测试设施 -->
     <ProjectReference Include="..\Extension.Testing.Shared\TKWF.Ext.Testing.Shared.csproj" />
     <PackageReference Include="TKWF.Core" Condition="'$(UseLocalFw)' != 'true'" />

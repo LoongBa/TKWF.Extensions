@@ -60,6 +60,27 @@ public partial class FeatureValueEntityDataService(IDomainUser user, IEntityDAC<
             await EntityDeleteBatchAsync(new[] { existing.Id }, ct);
     }
 
+    // ── A5 Store-debt cleanup：IFeatureValueStore/FeatureValueStore 已删除（DataService 薄包装伪层）──
+    // 原 Store 方法收编为本 DataService 分部公开方法，Manager/内置 Provider/自定义 Provider
+    // 统一经 User.Use<FeatureValueEntityDataService>() 取值，调用签名不变。
+
+    /// <summary>按 Name+Provider 读值（不存在返回 null）。</summary>
+    public Task<FeatureValueEntity?> GetAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)
+        => GetByKeyAsync(name, providerName, providerKey, ct);
+
+    /// <summary>管理查询（Provider 层/键可空 = 全量）。</summary>
+    public async Task<IReadOnlyList<FeatureValueEntity>> GetListAsync(
+        string? providerName, string? providerKey, CancellationToken ct = default)
+        => await GetListAsync(providerName, providerKey, 0, 100000, ct);
+
+    /// <summary>新增/更新值（写异常自然传播）。</summary>
+    public Task SetAsync(FeatureValueEntity entity, CancellationToken ct = default)
+        => UpsertByKeyAsync(entity, ct);
+
+    /// <summary>按 Name+Provider 删除（不存在静默成功）。</summary>
+    public Task DeleteAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)
+        => DeleteByKeyAsync(name, providerName, providerKey, ct);
+
     private static System.Linq.Expressions.Expression<Func<T, bool>> CombineAnd<T>(
         System.Linq.Expressions.Expression<Func<T, bool>> left,
         System.Linq.Expressions.Expression<Func<T, bool>> right)

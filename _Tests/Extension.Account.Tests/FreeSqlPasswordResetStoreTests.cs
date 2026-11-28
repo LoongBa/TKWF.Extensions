@@ -1,12 +1,11 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace TKWF.Ext.Account.Tests;
 
 /// <summary>
-/// FreeSqlPasswordResetStore 测试——重置码 CRUD + 标记使用 + 异常静默。
+/// PasswordResetCodeEntityDataService 测试（A5 Store-debt cleanup 后）——重置码 CRUD + 标记使用。
 /// </summary>
 public class FreeSqlPasswordResetStoreTests
 {
@@ -20,8 +19,8 @@ public class FreeSqlPasswordResetStoreTests
         return fsql;
     }
 
-    private static PasswordResetStore CreateStore(IFreeSql fsql)
-        => AccountTestHost.CreatePasswordResetStore(fsql);
+    private static PasswordResetCodeEntityDataService CreateStore(IFreeSql fsql)
+        => AccountTestHost.CreatePasswordResetDataService(fsql);
 
     [Fact]
     public async Task SaveAndGet_RoundTrip()
@@ -37,7 +36,7 @@ public class FreeSqlPasswordResetStoreTests
         };
         await store.SaveAsync(record, CancellationToken.None);
 
-        var loaded = await store.GetAsync("alice", "ABC12345", CancellationToken.None);
+        var loaded = await store.GetByUserNameAndCodeAsync("alice", "ABC12345", CancellationToken.None);
         Assert.NotNull(loaded);
         Assert.False(loaded!.IsUsed);
         Assert.Equal(record.Id, loaded.Id);
@@ -56,7 +55,7 @@ public class FreeSqlPasswordResetStoreTests
         };
         await store.SaveAsync(record, CancellationToken.None);
 
-        var loaded = await store.GetAsync("alice", "WRONG000", CancellationToken.None);
+        var loaded = await store.GetByUserNameAndCodeAsync("alice", "WRONG000", CancellationToken.None);
 
         Assert.Null(loaded);
     }
@@ -74,7 +73,7 @@ public class FreeSqlPasswordResetStoreTests
         };
         await store.SaveAsync(record, CancellationToken.None);
 
-        var loaded = await store.GetAsync("bob", "ABC12345", CancellationToken.None);
+        var loaded = await store.GetByUserNameAndCodeAsync("bob", "ABC12345", CancellationToken.None);
 
         Assert.Null(loaded);
     }
@@ -94,19 +93,8 @@ public class FreeSqlPasswordResetStoreTests
 
         await store.MarkUsedAsync(record.Id, CancellationToken.None);
 
-        var loaded = await store.GetAsync("alice", "ABC12345", CancellationToken.None);
+        var loaded = await store.GetByUserNameAndCodeAsync("alice", "ABC12345", CancellationToken.None);
         Assert.NotNull(loaded);
         Assert.True(loaded!.IsUsed);
-    }
-
-    [Fact]
-    public async Task Operations_FailSilently_OnNullEntity()
-    {
-        var fsql = CreateFreeSql();
-        var store = CreateStore(fsql);
-
-        await store.SaveAsync(null!, CancellationToken.None);
-
-        Assert.Null(await store.GetAsync("alice", "ABC12345", CancellationToken.None));
     }
 }

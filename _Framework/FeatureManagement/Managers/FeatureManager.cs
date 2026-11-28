@@ -25,7 +25,7 @@ namespace TKWF.Ext.FeatureManagement;
 /// 写路径发布 <see cref="FeatureValueChangedEvent"/>（Commit 后，消费方钩子——审计/跨实例联动）。</para>
 /// <para>用户契约（C2）：接收 <see cref="IDomainUser"/>（租户/认证/角色成员在其上）；匿名（user==null 或 !IsAuthenticated）直查 Global。</para>
 /// <para>Global 唯一性（C4）：ProviderKey=null 可空唯一索引 NULL 互不相同——SetValueAsync 事务包裹 + 事务内二次校验。</para>
-/// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——只经 <see cref="IFeatureValueStore"/>（委托 DataService）。</para>
+/// <para>数据访问红线：不注入 IFreeSql/IEntityDAC——只经 <see cref="FeatureValueEntityDataService"/>（委托 DataService）。</para>
 /// <para>V4.10.53（领域自治根治，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
 /// （<b>IDomainUser 永不注册 DI</b>，D01；旧 Initializer 工厂 lambda 内 <c>sp.GetRequiredService&lt;IDomainUser&gt;()</c>
 /// 生产解析必失败——v0.3.3 同根缺陷）；<c>[DiContractIgnore]</c> 豁免 DI001；域服务（IFeatureValueStore/
@@ -42,7 +42,7 @@ public sealed class FeatureManager : DomainServiceBase, IFeatureManager
 {
     private const string NotFoundSentinel = "\x02NOTFOUND\x02";
 
-    private IFeatureValueStore? _store;
+    private FeatureValueEntityDataService? _store;
     private IFeatureDefinitionRepository? _definitionRepository;
     private readonly IReadOnlyList<IFeatureValueProvider> _providers;
     private readonly FeatureCacheVersionRegistry _versionRegistry;
@@ -53,7 +53,7 @@ public sealed class FeatureManager : DomainServiceBase, IFeatureManager
     private readonly ILogger<FeatureManager> _logger;
 
     // ADR88/DI004：域服务（IFeatureValueStore/IFeatureDefinitionRepository）懒加载经基类 User.Use<T>()
-    private IFeatureValueStore Store => _store ??= User.Use<IFeatureValueStore>();
+    private FeatureValueEntityDataService Store => _store ??= User.Use<FeatureValueEntityDataService>();
     private IFeatureDefinitionRepository DefinitionRepository => _definitionRepository ??= User.Use<IFeatureDefinitionRepository>();
 
     // Provider 链缓存（Name 冲突懒校验结果 + 排序后顺序——首次解析构建，防重复检测，C4）

@@ -15,13 +15,13 @@ namespace TKWF.Ext.DataDictionary.Tests;
 public class DictionaryItemViewTests
 {
     /// <summary>同步建宿主 + AOP 解析 Store（BindScope 必须发生在测试自身上下文，禁 async helper）。</summary>
-    private static (IDictionaryStore Store, DomainUser<TestUserInfo> User) CreateStore()
+    private static (DictionaryDefinitionEntityDataService Store, DomainUser<TestUserInfo> User) CreateStore()
     {
         var (provider, user) = DataDictionaryTestHost.CreateProductionHost();
-        return (user.Use<IDictionaryStore>(), user);
+        return (user.Use<DictionaryDefinitionEntityDataService>(), user);
     }
 
-    private static async Task SeedGender(IDictionaryStore store)
+    private static async Task SeedGender(DictionaryDefinitionEntityDataService store)
     {
         var def = new DictionaryDefinitionEntity { Code = "Gender", DisplayName = "性别" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);

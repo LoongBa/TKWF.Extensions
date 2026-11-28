@@ -19,7 +19,7 @@ namespace TKWF.Ext.FeatureManagement.Tests;
 /// <summary>
 /// FeatureManagementExtensionInitializer 测试——D15 接线。
 /// <para>覆盖：[TKWFExtension] 特性声明、ConfigureServices 注册完整
-/// （IFeatureManager/IFeatureValueStore = AddConstructibleService 守卫工厂 + throw-factory + 域外抛；
+/// （IFeatureManager = AddConstructibleService 守卫工厂 + throw-factory + 域外抛；
 /// IFeatureChecker = TryAddScoped ImplementationType 接线型；4 Provider = TryAddEnumerable ×4；
 /// IFeatureDefinitionRepository/IMemoryCache/Options 绑定）、贡献者收集（FakeMetaContext 模式，镜像 ConsumerIntegrationTests）、
 /// 白名单启用反射断言（ConsumerHostInitializer）、AddFeatureCheck 过滤器注册。</para>
@@ -83,48 +83,6 @@ public class FeatureManagementInitializerTests
         var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IFeatureManager>());
         Assert.Contains("领域架构守卫", ex.Message);
         Assert.Contains("IFeatureManager", ex.Message);
-    }
-
-    // ── V4.10.53：IFeatureValueStore = AddConstructibleService（守卫工厂 + throw-factory + 域外抛） ──
-
-    [Fact]
-    public void ConfigureServices_Registers_IFeatureValueStore_GuardFactoryDescriptor()
-    {
-        var services = new ServiceCollection();
-        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
-
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IFeatureValueStore));
-
-        Assert.NotNull(descriptor);
-        Assert.Null(descriptor!.ImplementationType);
-        Assert.NotNull(descriptor.ImplementationFactory);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
-    }
-
-    [Fact]
-    public void ConfigureServices_Registers_FeatureValueStore_ThrowFactory()
-    {
-        var services = new ServiceCollection();
-        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
-
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(FeatureValueStore));
-        Assert.NotNull(descriptor);
-        Assert.NotNull(descriptor!.ImplementationFactory);
-
-        var provider = services.BuildServiceProvider();
-        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<FeatureValueStore>());
-    }
-
-    [Fact]
-    public void InterfaceFactory_IFeatureValueStore_OutsideUseScope_Throws()
-    {
-        var services = new ServiceCollection();
-        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
-        var provider = services.BuildServiceProvider();
-
-        var ex = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IFeatureValueStore>());
-        Assert.Contains("领域架构守卫", ex.Message);
-        Assert.Contains("IFeatureValueStore", ex.Message);
     }
 
     // ── IFeatureChecker = TryAddScoped ImplementationType（接线型普通 DI——框架过滤器 GetService 解析） ──
@@ -274,19 +232,6 @@ public class FeatureManagementInitializerTests
     }
 
     [Fact]
-    public void ConsumerStore_RegisteredAfterInitializer_OverridesGuardFactory()
-    {
-        var services = new ServiceCollection();
-        new FeatureManagementExtensionInitializer<FeatureManagementUserInfo>().ConfigureServices(services);
-        services.AddScoped<IFeatureValueStore, ConsumerFeatureValueStore>();
-
-        var provider = services.BuildServiceProvider();
-        var store = provider.GetRequiredService<IFeatureValueStore>();
-
-        Assert.IsType<ConsumerFeatureValueStore>(store);   // 后注册覆盖守卫工厂
-    }
-
-    [Fact]
     public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerChecker()
     {
         var services = new ServiceCollection();
@@ -351,21 +296,6 @@ public class FeatureManagementInitializerTests
 
         public Task<(string? Value, string ProviderName)> GetEffectiveValueAsync(string name, IDomainUser? user, CancellationToken ct = default)
             => Task.FromResult<(string?, string)>((null, FeatureProviders.Global));
-    }
-
-    private sealed class ConsumerFeatureValueStore : IFeatureValueStore
-    {
-        public Task<FeatureValueEntity?> GetAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)
-            => Task.FromResult<FeatureValueEntity?>(null);
-
-        public Task<IReadOnlyList<FeatureValueEntity>> GetListAsync(string? providerName, string? providerKey, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<FeatureValueEntity>>(Array.Empty<FeatureValueEntity>());
-
-        public Task SetAsync(FeatureValueEntity entity, CancellationToken ct = default)
-            => Task.CompletedTask;
-
-        public Task DeleteAsync(string name, string providerName, string? providerKey, CancellationToken ct = default)
-            => Task.CompletedTask;
     }
 
     private sealed class ConsumerFeatureChecker : IFeatureChecker

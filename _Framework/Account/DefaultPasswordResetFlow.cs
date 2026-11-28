@@ -11,7 +11,7 @@ namespace TKWF.Ext.Account
 {
     /// <summary>
     /// 密码重置流程默认实现——<see cref="IPasswordResetFlow"/>（主框架 V4.9.45 扩展点）。
-    /// <para>发起重置生成随机码存库（<see cref="IPasswordResetStore"/>，FreeSql），
+    /// <para>发起重置生成随机码存库（<see cref="PasswordResetCodeEntityDataService"/>，FreeSql），
     /// 完成重置时校验码（存在/未用/未过期）并委托 <see cref="IAccountPasswordManager"/> 落地新密码。</para>
     /// <para>新密码采用 SecurePassword 契约：客户端已计算 PBKDF2（newClientHash + salt），服务端仅存储。</para>
     /// <para><see cref="IAccountPasswordManager"/> 经 <see cref="IServiceProvider"/> 延迟解析（消费方未注册时
@@ -20,9 +20,9 @@ namespace TKWF.Ext.Account
     /// 不继承 <see cref="TKW.Framework.Domain.DomainServiceBase"/>、不注入 <see cref="TKW.Framework.Domain.Interfaces.IDomainUser"/>。
     /// 主框架契约 <see cref="IPasswordResetFlow"/> 非 IDomainService（不可修改主框架）——旧 ctor 注入 IDomainUser 致
     /// AuthController 普通 DI 构造失败；改后 ctor 全为 DI 可解析基础设施。</para>
-    /// <para><see cref="IPasswordResetStore"/> 经 <see cref="IServiceProvider"/> 延迟解析（C1 模式，对齐
-    /// LoginHistoryService/NotificationPublisher）——Store 现经 <c>AddConstructibleService</c> 注册，接线型 Policy/Flow
-    /// 不持用户上下文，改普通 DI 解析 Store。</para>
+    /// <para>A5 Store-debt cleanup：删除 IPasswordResetStore/PasswordResetStore（DataService 薄包装伪层），
+    /// 本流程直接经 <see cref="IServiceProvider"/> C1 延迟解析 <see cref="PasswordResetCodeEntityDataService"/>，
+    /// 异常静默语义保留在本流程内，对外行为不变。</para>
     /// </summary>
     internal sealed class DefaultPasswordResetFlow : IPasswordResetFlow
     {
@@ -32,8 +32,9 @@ namespace TKWF.Ext.Account
         private readonly AccountOptions _options;
         private readonly ILogger<DefaultPasswordResetFlow> _logger;
 
-        private IPasswordResetStore? _store;
-        private IPasswordResetStore Store => _store ??= _serviceProvider.GetRequiredService<IPasswordResetStore>();
+        private PasswordResetCodeEntityDataService? _dataService;
+        private PasswordResetCodeEntityDataService DataService =>
+            _dataService ??= _serviceProvider.GetRequiredService<PasswordResetCodeEntityDataService>();
 
         public DefaultPasswordResetFlow(
             IServiceProvider serviceProvider,
@@ -66,7 +67,7 @@ namespace TKWF.Ext.Account
                 if (!exists) return true;
 
                 var code = GenerateResetCode();
-                await Store.SaveAsync(new PasswordResetCodeEntity
+                await DataService.SaveAsync(new PasswordResetCodeEntity
                 {
                     UserName = userName,
                     ResetCode = code,
@@ -106,12 +107,12 @@ namespace TKWF.Ext.Account
 
             try
             {
-                var record = await Store.GetAsync(userName, resetCode, ct);
+                var record = await DataService.GetByUserNameAndCodeAsync(userName, resetCode, ct);
                 if (record == null || record.IsUsed || record.ExpireTime < DateTime.Now)
                     return new ResetResult(false, "无效或已过期的重置码");
 
                 // 先标记已用（幂等消费）——确保码一次性，即使后续改密失败也不可重用
-                await Store.MarkUsedAsync(record.Id, ct);
+                await DataService.MarkUsedAsync(record.Id, ct);
 
                 var ok = await passwordManager.SetPasswordAsync(userName, newClientHash, salt, ct);
                 if (!ok) return new ResetResult(false, "密码更新失败");

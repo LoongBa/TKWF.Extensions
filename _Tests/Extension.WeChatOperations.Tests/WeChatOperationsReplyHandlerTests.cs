@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using TKW.Framework.Domain;
@@ -126,6 +127,25 @@ public class WeChatOperationsReplyHandlerTests : WeChatOperationsTestHost
             .Where(l => l.ChannelId == ChA).FirstAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(log);
         Assert.True(log!.DurationMs is >= 0, $"DurationMs 应为非负（null 或负值即字段未记录/语义错误）：{log.DurationMs}");
+    }
+
+    /// <summary>CDATA 转义回归（2026-11-23 code-review P2）：回复文本含字面 ]]&gt; 会提前闭合 CDATA 段——
+    /// 基类 EscapeCData 拆双段后，XDocument.Parse 必须成功且 Content 文本与原值逐字相等（证明保真非丢弃）。</summary>
+    [Fact]
+    public async Task Text_ReplyContentContainsCDataTerminator_XmlParsesAndTextPreserved()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+        const string raw = "a]]>b";
+        await SeedRuleAsync(user, ChA, WeChatReplySceneTypes.Keyword, triggerKey: "cdata", matchMode: 1, replyText: raw);
+
+        var reply = await handler(user).HandleAsync(Ctx(("msg_type", "text"), ("content", "cdata"),
+            ("from_user_name", OpenId), ("channel_id", ChA)), CancellationToken.None);
+
+        Assert.NotNull(reply);
+        Assert.Contains("]]]]><![CDATA[>", reply!.Content);
+        var xml = XDocument.Parse(reply.Content);
+        Assert.Equal(raw, xml.Root!.Element("Content")!.Value);
     }
 
     // ═══════════════════ unsubscribe（回复被协议门控吞——I2-10 起统计写归编排层） ═══════════════════

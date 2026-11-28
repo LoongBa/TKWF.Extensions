@@ -12,14 +12,13 @@ namespace TKWF.Ext.FileManagement.Tests;
 
 /// <summary>
 /// D18：FileManagementExtensionInitializer 接线测试——[TKWFExtension] 特性声明、DI 注册完整
-/// （IFileManager/IFileFolderStore/IManagedFileStore/DataService/Options 绑定）、TryAddScoped 不覆盖（Store）、
-/// 白名单声明（V4.9.85 ADR47）。
+/// （IFileManager/DataService/Options 绑定）、白名单声明（V4.9.85 ADR47）。
+/// A5 Store-debt 清理后 3 个 thin Store 伪层已删，门面经 User.Use&lt;XxxDataService&gt;() 直调。
 /// <para>V4.10.53（领域自治根治，ADR90，正确路线）注册形态三态：</para>
 /// <list type="bullet">
 /// <item><see cref="IFileManager"/>（接口 : IDomainService）→ <b>AddConstructibleService</b>：接口 = 可构造守卫工厂
 ///     （非实现映射）+ 实现类 = throw-factory；域作用域外直接 DI 解析接口必抛领域架构守卫。</item>
-/// <item><see cref="IFileFolderStore"/> / <see cref="IManagedFileStore"/> / <see cref="IManagedFileVersionStore"/>
-///     （internal 接线型契约）→ <b>TryAddScoped 普通 DI</b>（ImplementationType + 消费方自定义优先）。</item>
+/// <item>数据访问经门面内 <c>User.Use&lt;XxxEntityDataService&gt;()</c> 懒加载（SG1 ADR61 自动注册，无 Store 层）。</item>
 /// </list>
 /// </summary>
 public class FileManagementInitializerTests
@@ -82,45 +81,15 @@ public class FileManagementInitializerTests
         Assert.Contains("IFileManager", ex.Message);
     }
 
-    // ── Store：内部接线型 TryAddScoped（ImplementationType 普通 DI）──
+    // ── A5 Store-debt 清理回归：Initializer 不再注册任何 *Store 伪层 ──
 
     [Fact]
-    public void ConfigureServices_Registers_FolderStore_Descriptor()
+    public void ConfigureServices_DoesNotRegister_AnyStore()
     {
         var services = new ServiceCollection();
         new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
 
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IFileFolderStore));
-
-        Assert.NotNull(descriptor);
-        Assert.Equal(typeof(FileFolderStore), descriptor!.ImplementationType);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
-    }
-
-    [Fact]
-    public void ConfigureServices_Registers_FileStore_Descriptor()
-    {
-        var services = new ServiceCollection();
-        new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
-
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IManagedFileStore));
-
-        Assert.NotNull(descriptor);
-        Assert.Equal(typeof(ManagedFileStore), descriptor!.ImplementationType);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
-    }
-
-    [Fact]
-    public void ConfigureServices_Registers_VersionStore_Descriptor()
-    {
-        var services = new ServiceCollection();
-        new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
-
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IManagedFileVersionStore));
-
-        Assert.NotNull(descriptor);
-        Assert.Equal(typeof(ManagedFileVersionStore), descriptor!.ImplementationType);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+        Assert.DoesNotContain(services, d => d.ServiceType.Name.EndsWith("Store", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -149,28 +118,6 @@ public class FileManagementInitializerTests
         var configureDescriptor = services.FirstOrDefault(d =>
             d.ServiceType == typeof(IConfigureOptions<FileManagementOptions>));
         Assert.NotNull(configureDescriptor);
-    }
-
-    [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerFolderStore()
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<IFileFolderStore>(_ => throw new NotSupportedException("consumer marker"));
-        new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
-
-        var descriptors = services.Where(d => d.ServiceType == typeof(IFileFolderStore)).ToList();
-        Assert.Single(descriptors);
-    }
-
-    [Fact]
-    public void ConfigureServices_TryAddScoped_DoesNotOverrideConsumerFileStore()
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<IManagedFileStore>(_ => throw new NotSupportedException("consumer marker"));
-        new FileManagementExtensionInitializer<FileManagementUserInfo>().ConfigureServices(services);
-
-        var descriptors = services.Where(d => d.ServiceType == typeof(IManagedFileStore)).ToList();
-        Assert.Single(descriptors);
     }
 
     [Fact]

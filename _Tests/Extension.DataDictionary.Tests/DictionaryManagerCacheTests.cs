@@ -39,10 +39,10 @@ public class DictionaryManagerCacheTests
         }, CancellationToken.None);
     }
 
-    /// <summary>经同一宿主 user 的 IDictionaryStore 生产路径播种（与 manager 共享 fsql——数据落库同源）。</summary>
+    /// <summary>经同一宿主 user 的 DictionaryDefinitionEntityDataService 生产路径播种（与 manager 共享 fsql——数据落库同源）。</summary>
     private static async Task SeedViaStoreAsync(DomainUser<TestUserInfo> user)
     {
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
         var def = new DictionaryDefinitionEntity { Code = "Gender", DisplayName = "性别" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(new DictionaryItemEntity
@@ -187,7 +187,7 @@ public class DictionaryManagerCacheTests
     public async Task GetItemsTree_CacheHit_SecondCallReturnsSame()
     {
         var (provider, user) = DataDictionaryTestHost.CreateProductionHost(o => { o.EnableTreeMode = true; o.EnableCache = true; });
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
         var def = new DictionaryDefinitionEntity { Code = "CachedTree", DisplayName = "缓存树" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
         await store.UpsertItemAsync(new DictionaryItemEntity
@@ -213,7 +213,7 @@ public class DictionaryManagerCacheTests
     public async Task GetOrLoadAggregate_ViewPath_BuildTreeThenCache_SecondCallReturnsCached()
     {
         var (provider, user) = DataDictionaryTestHost.CreateProductionHost(o => { o.EnableTreeMode = true; o.EnableCache = true; });
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
 
         var def = new DictionaryDefinitionEntity { Code = "Region", DisplayName = "地区" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);

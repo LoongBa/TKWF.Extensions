@@ -84,7 +84,7 @@ internal sealed class FeatureManagementTestHost : IDisposable
     public IFeatureChecker Checker => _serviceProvider.GetRequiredService<IFeatureChecker>();
 
     /// <summary>Feature 值存储（v0.3.0 public 契约——消费方自定义 Provider 可注入；实现类仍 internal，DI 经扩展注册——守卫工厂）。</summary>
-    public IFeatureValueStore Store => _domainUser.Use<IFeatureValueStore>();
+    public FeatureValueEntityDataService Store => _domainUser.Use<FeatureValueEntityDataService>();
 
     public IFeatureDefinitionRepository DefinitionRepository => _serviceProvider.GetRequiredService<IFeatureDefinitionRepository>();
 
@@ -130,6 +130,8 @@ internal sealed class FeatureManagementTestHost : IDisposable
         // 测试经 Use<具体类>() NoAop 路径直建，IEntityDAC 从 DI 解析）
         services.AddScoped<UnitOfWorkManager>();
         services.AddScoped<IEntityDAC<FeatureValueEntity>>(sp => new FreeSqlEntityDAC<FeatureValueEntity>(sp.GetRequiredService<UnitOfWorkManager>()));
+        services.AddScoped<FeatureValueEntityDataService>();
+        // A5 Store-debt cleanup：DataService 注册为可构造 DI 服务——消费方自定义 Provider 可经 ctor 注入（替代已删除 IFeatureValueStore）。
 
         // ITransactionManager（写路径事务包裹依赖——Noop Begin/Commit 空操作，
         // DataService 逐操作经 UnitOfWorkManager 持久化；对齐 Calendar/OrganizationUnit 宿主共识）

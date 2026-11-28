@@ -31,21 +31,6 @@ public class DataDictionaryExtensionInitializerTests
     }
 
     [Fact]
-    public void ConfigureServices_Registers_IDictionaryStore_FactoryDescriptor()
-    {
-        var services = new ServiceCollection();
-        new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
-
-        // V0.3.0：AddConstructibleService——接口注册为构造工厂（非实现映射），Scoped 生命周期
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IDictionaryStore));
-
-        Assert.NotNull(descriptor);
-        Assert.Null(descriptor!.ImplementationType);
-        Assert.NotNull(descriptor.ImplementationFactory);
-        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
-    }
-
-    [Fact]
     public void ConfigureServices_Registers_IDictionaryManager_FactoryDescriptor()
     {
         var services = new ServiceCollection();
@@ -57,21 +42,6 @@ public class DataDictionaryExtensionInitializerTests
         Assert.Null(descriptor!.ImplementationType);
         Assert.NotNull(descriptor.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
-    }
-
-    [Fact]
-    public void ConfigureServices_Registers_DictionaryStore_ThrowFactory()
-    {
-        var services = new ServiceCollection();
-        new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
-
-        // 实现类注册为 throw-factory——禁止直接 DI 解析，必须经 User.Use<IDictionaryStore>() 创建
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(DictionaryStore));
-        Assert.NotNull(descriptor);
-        Assert.NotNull(descriptor!.ImplementationFactory);
-
-        var provider = services.BuildServiceProvider();
-        Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<DictionaryStore>());
     }
 
     [Fact]
@@ -96,10 +66,6 @@ public class DataDictionaryExtensionInitializerTests
         new DataDictionaryExtensionInitializer<DataDictionaryUserInfo>().ConfigureServices(services);
         services.AddLogging();
         var provider = services.BuildServiceProvider();
-
-        var storeEx = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IDictionaryStore>());
-        Assert.Contains("领域架构守卫", storeEx.Message);
-        Assert.Contains("IDictionaryStore", storeEx.Message);
 
         var managerEx = Assert.Throws<DomainGuardException>(() => provider.GetRequiredService<IDictionaryManager>());
         Assert.Contains("领域架构守卫", managerEx.Message);

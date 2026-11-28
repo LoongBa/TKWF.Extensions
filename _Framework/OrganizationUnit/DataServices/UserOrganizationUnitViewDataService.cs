@@ -34,4 +34,11 @@ partial class UserOrganizationUnitViewDataService(IDomainUser user, IEntityReadO
         => await SelectAsync(v => v,
             predicate: v => v.OUPath.Length >= pathPrefix.Length && v.OUPath.Substring(0, pathPrefix.Length) == pathPrefix,
             orderBy: null, limit: int.MaxValue, ct: ct);
+
+    /// <summary>按 OU 物化路径前缀查关联用户 Id（A5 Store-debt 清理：视图行投影去重）。</summary>
+    public async Task<IReadOnlyList<string>> GetUserIdsByOuPathPrefixAsync(string pathPrefix, CancellationToken ct = default)
+    {
+        var rows = await GetByOuPathPrefixAsync(pathPrefix, ct);
+        return rows.Select(r => r.UserId).Distinct().ToList();
+    }
 }

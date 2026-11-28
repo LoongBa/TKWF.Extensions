@@ -13,25 +13,23 @@ namespace TKWF.Ext.Emailing
     /// <summary>
     /// SMTP 邮件发送器实现——使用 MailKit 的 <see cref="SmtpClient"/> 发送邮件。
     /// <para>异常静默处理：发送失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。
-    /// 发送成功后调用 <see cref="IEmailRecordStore.SaveAsync"/> 记录。</para>
+    /// 发送成功后调用 `IEmailRecordStore.SaveAsync` 记录。</para>
     /// <para>V0.2.0：配置化发送重试（指数退避）——<see cref="EmailingOptions.RetryCount"/> 次额外重试，
     /// 每次失败按 <see cref="EmailingOptions.RetryBaseDelayMilliseconds"/> 指数退避；取消时不再重试，
     /// 最终失败仍异常静默（记录 Failed + ErrorMessage + 保存 + Warning，不抛给调用方）。</para>
-    /// <para>V4.10.53（领域自治根治，ADR90）：**内部接线型**（skill §4.2/§4.8 #7）——<see cref="IEmailSender"/>
-    /// 契约属 Emailing.Abstractions（非 IDomainService，不可修改），消费方经普通 DI 注入本实现；
-    /// <see cref="IEmailRecordStore"/>（AddConstructibleService 守卫门面）经 <see cref="IServiceProvider"/>
-    /// C1 延迟解析（<c>GetRequiredService</c>——消费链在域作用域内调用，守卫工厂经 CurrentAopUser 解析；
-    /// 对齐 FeatureChecker 接线型先例）。旧 ctor(IDomainUser) 在普通 DI 构造时 IDomainUser 永不注册
-    /// 生产必失败（真实故障：发送记录静默丢失）。</para>
+    /// <para>A5 Store-debt cleanup：删除 IEmailRecordStore/EmailRecordStore（DataService 薄包装伪层），
+    /// 本发送器直接经 <see cref="IServiceProvider"/> C1 延迟解析 <see cref="EmailRecordEntityDataService"/>，
+    /// 并通过 <c>SaveRecordSafeAsync</c> 保留原有异常静默语义（写记录失败仅 LogWarning，不阻塞发送）。</para>
     /// </summary>
     internal sealed class SmtpEmailSender : IEmailSender
     {
         private readonly IServiceProvider _serviceProvider;
-        private IEmailRecordStore? _recordStore;
+        private EmailRecordEntityDataService? _recordDataService;
         private readonly IOptions<EmailingOptions> _options;
         private readonly ILogger<SmtpEmailSender> _logger;
 
-        private IEmailRecordStore RecordStore => _recordStore ??= _serviceProvider.GetRequiredService<IEmailRecordStore>();
+        private EmailRecordEntityDataService RecordDataService =>
+            _recordDataService ??= _serviceProvider.GetRequiredService<EmailRecordEntityDataService>();
 
         public SmtpEmailSender(
             IServiceProvider serviceProvider,
@@ -95,7 +93,7 @@ namespace TKWF.Ext.Emailing
                         // 记录发送成功
                         record.Status = "Sent";
                         record.SendTime = DateTime.Now;
-                        await RecordStore.SaveAsync(record, ct);
+                        await SaveRecordSafeAsync(record, ct);
 
                         _logger.LogInformation("邮件发送成功: To={To}, Subject={Subject}", message.To, message.Subject);
                         return;
@@ -117,12 +115,25 @@ namespace TKWF.Ext.Emailing
             {
                 // 最终失败（含重试期间取消导致的 OperationCanceledException）——异常静默：记录错误但不抛出。
                 // 终态保存用 CancellationToken.None：即使调用方已取消，也须保证 Failed 记录落库（对齐"取消时静默保存"语义）；
-                // EmailRecordStore 本身异常静默（Upsert 失败仅 LogWarning），此处不会向调用方抛出。
+                // 写记录异常静默（Upsert 失败仅 LogWarning），此处不会向调用方抛出。
                 record.Status = "Failed";
                 record.ErrorMessage = ex.Message;
-                await RecordStore.SaveAsync(record, CancellationToken.None);
+                await SaveRecordSafeAsync(record, CancellationToken.None);
 
                 _logger.LogWarning(ex, "邮件发送失败: To={To}, Subject={Subject}", message.To, message.Subject);
+            }
+        }
+
+        /// <summary>异常静默写记录——Upsert 失败仅记 Warning，不阻塞发送（替代已删除 Store 的静默语义）。</summary>
+        private async Task SaveRecordSafeAsync(EmailRecordEntity record, CancellationToken ct)
+        {
+            try
+            {
+                await RecordDataService.UpsertAsync(record, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "邮件记录保存失败: To={To}, Subject={Subject}", record.To, record.Subject);
             }
         }
 

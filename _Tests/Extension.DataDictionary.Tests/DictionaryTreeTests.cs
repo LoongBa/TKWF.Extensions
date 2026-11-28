@@ -22,10 +22,10 @@ public class DictionaryTreeTests
         return (user.Use<IDictionaryManager>(), user);
     }
 
-    /// <summary>种子：省市区三级树形数据（经同一宿主 user 的 IDictionaryStore 生产路径落库）。</summary>
+    /// <summary>种子：省市区三级树形数据（经同一宿主 user 的 DictionaryDefinitionEntityDataService 生产路径落库）。</summary>
     private static async Task SeedRegionTree(DomainUser<TestUserInfo> user)
     {
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
         var def = new DictionaryDefinitionEntity { Code = "Region", DisplayName = "地区" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -90,7 +90,7 @@ public class DictionaryTreeTests
     public async Task GetItemsTree_NullParentCode_GoesToRoot()
     {
         var (manager, user) = CreateManager();
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
         var def = new DictionaryDefinitionEntity { Code = "Flat", DisplayName = "平级" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -119,7 +119,7 @@ public class DictionaryTreeTests
     public async Task GetItemsTree_SiblingItems_NoChildren()
     {
         var (manager, user) = CreateManager();
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
         var def = new DictionaryDefinitionEntity { Code = "Siblings", DisplayName = "兄弟" };
         await store.UpsertDefinitionAsync(def, CancellationToken.None);
 
@@ -174,7 +174,7 @@ public class DictionaryTreeTests
     public async Task GetItemsTree_EmptyDictionary_ReturnsEmpty()
     {
         var (manager, user) = CreateManager();
-        var store = user.Use<IDictionaryStore>();
+        var store = user.Use<DictionaryDefinitionEntityDataService>();
         await store.UpsertDefinitionAsync(new DictionaryDefinitionEntity
         {
             Code = "Empty", DisplayName = "空"

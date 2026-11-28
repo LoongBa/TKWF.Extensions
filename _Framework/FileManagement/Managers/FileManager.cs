@@ -18,7 +18,7 @@ namespace TKWF.Ext.FileManagement
 {
     /// <summary>
     /// 文件管理实现（internal sealed，构造函数 public——AddConstructibleService 守卫工厂经 ActivatorUtilities 解析需 public 构造器；
-    /// 类 internal 因 ctor 含 internal Store 契约参数（CS0051 可访问性一致），对齐 AuditLogging QueryService 先例）——
+    /// A5 Store-debt 清理后 ctor 仅含 public 契约参数，类 internal 保留对齐 AuditLogging QueryService 先例）——
     /// 目录树生命周期 + 文件上传/下载/删除/重命名/移动门面。
     /// <para>事务包裹（对齐 OU/Approval/Calendar 范式）：目录 Create/Delete、文件 Upload/Delete 多步写经
     /// <see cref="ITransactionManager"/> BeginAsync → 业务 → CommitAsync / 失败 RollbackAsync（using scope）。</para>
@@ -28,16 +28,22 @@ namespace TKWF.Ext.FileManagement
     /// → SHA256 → 去重预查 → ContentType 服务端推导（C5）→ Blob 落盘 → 事务内元数据落库 → 失败 best-effort 清理 Blob（D16/D17）。</para>
     /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
     /// （<b>IDomainUser 永不注册 DI</b>，D01；旧 Initializer 工厂 lambda 内 <c>sp.GetRequiredService&lt;IDomainUser&gt;()</c>
-    /// 生产解析必失败——v0.3.3 同根缺陷）；<c>[DiContractIgnore]</c> 豁免 DI001；Store（internal 接线型普通 DI）经
-    /// ctor 注入解析；注册形态改 <c>AddConstructibleService&lt;IFileManager, FileManager&gt;</c>（其余参数 3 Store +
-    /// IBlobStorageService/ITransactionManager/IOptions/ILogger 由 ActivatorUtilities 从 DI 解析——Store 接线型普通注册可解析）。</para>
+    /// 生产解析必失败——v0.3.3 同根缺陷）；<c>[DiContractIgnore]</c> 豁免 DI001；数据访问经
+    /// <c>User.Use&lt;XxxEntityDataService&gt;()</c> 懒加载（A5 Store-debt 清理——删 3 个 thin Store 伪层）；
+    /// 注册形态为 <c>AddConstructibleService&lt;IFileManager, FileManager&gt;</c>（其余参数
+    /// IBlobStorageService/ITransactionManager/IOptions/ILogger 由 ActivatorUtilities 从 DI 解析）。</para>
     /// </summary>
     [DiContractIgnore]
     internal sealed class FileManager : DomainServiceBase, IFileManager
     {
-        private readonly IFileFolderStore _folderStore;
-        private readonly IManagedFileStore _fileStore;
-        private readonly IManagedFileVersionStore _versionStore;   // V0.2.0：文件版本历史（P2-2 定稿——internal Store 委托 DataService）
+        private FileFolderEntityDataService? _folderDataService;
+        private ManagedFileEntityDataService? _fileDataService;
+        private ManagedFileVersionEntityDataService? _versionDataService;
+
+        private FileFolderEntityDataService FolderDataService => _folderDataService ??= User.Use<FileFolderEntityDataService>();
+        private ManagedFileEntityDataService FileDataService => _fileDataService ??= User.Use<ManagedFileEntityDataService>();
+        private ManagedFileVersionEntityDataService VersionDataService => _versionDataService ??= User.Use<ManagedFileVersionEntityDataService>();
+
         private readonly IBlobStorageService _blobStorage;
         private readonly ITransactionManager _transactionManager;
         private readonly FileManagementOptions _options;
@@ -57,18 +63,12 @@ namespace TKWF.Ext.FileManagement
 
         public FileManager(
             IDomainUser user,
-            IFileFolderStore folderStore,
-            IManagedFileStore fileStore,
-            IManagedFileVersionStore versionStore,
             IBlobStorageService blobStorage,
             ITransactionManager transactionManager,
             IOptions<FileManagementOptions> options,
             ILogger<FileManager> logger)
             : base(user)   // V4.10.53：IDomainUser 移到首位经基类 User 取上下文（IDomainUser 永不注册 DI——D01）
         {
-            _folderStore = folderStore ?? throw new ArgumentNullException(nameof(folderStore));
-            _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
-            _versionStore = versionStore ?? throw new ArgumentNullException(nameof(versionStore));
             _blobStorage = blobStorage ?? throw new ArgumentNullException(nameof(blobStorage));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
             var opts = (options ?? throw new ArgumentNullException(nameof(options))).Value;
@@ -103,7 +103,7 @@ namespace TKWF.Ext.FileManagement
                 string targetPath;
                 if (parentId.HasValue)
                 {
-                    var parent = await _folderStore.GetByIdAsync(parentId.Value, ct);
+                    var parent = await FolderDataService.GetByIdAsync(parentId.Value, ct);
                     if (parent == null)
                         throw new InvalidOperationException($"父目录 {parentId.Value} 不存在");
 
@@ -128,7 +128,7 @@ namespace TKWF.Ext.FileManagement
                 }
                 else
                 {
-                    var all = await _folderStore.GetAllAsync(ct);
+                    var all = await FolderDataService.GetAllAsync(ct);
                     finalSortOrder = (all.Where(f => f.ParentId == parentId)
                         .Select(f => (int?)f.SortOrder).Max() ?? -1) + 1;
                 }
@@ -146,7 +146,7 @@ namespace TKWF.Ext.FileManagement
                 };
 
                 // 并发同 Code 冲突由数据库唯一索引异常自然传播（败者显式异常，对齐 OU/Approval 先例）
-                await _folderStore.CreateAsync(entity, ct);
+                await FolderDataService.CreateAsync(entity, ct);
 
                 await scope.CommitAsync(ct);
                 return entity;
@@ -161,7 +161,7 @@ namespace TKWF.Ext.FileManagement
         /// <inheritdoc />
         public async Task UpdateFolderAsync(long id, string? name = null, int? sortOrder = null, CancellationToken ct = default)
         {
-            var folder = await _folderStore.GetByIdAsync(id, ct)
+            var folder = await FolderDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"目录 {id} 不存在");
 
             // Code 不可改（C3——Path 由 Code 构建，更新不触发路径重算）
@@ -173,7 +173,7 @@ namespace TKWF.Ext.FileManagement
             if (sortOrder.HasValue) folder.SortOrder = sortOrder.Value;
             folder.UpdateTime = DateTime.UtcNow;
 
-            await _folderStore.UpdateAsync(folder, ct);
+            await FolderDataService.UpdateAsync(folder, ct);
         }
 
         /// <inheritdoc />
@@ -182,19 +182,19 @@ namespace TKWF.Ext.FileManagement
             using var scope = await _transactionManager.BeginAsync(ct: ct);
             try
             {
-                var folder = await _folderStore.GetByIdAsync(id, ct)
+                var folder = await FolderDataService.GetByIdAsync(id, ct)
                     ?? throw new InvalidOperationException($"目录 {id} 不存在");
 
                 // 删除保护（F2/D17）：事务内二次确认——子目录计数 + 文件计数均为 0 → 删；否则拒绝
-                long childCount = await _folderStore.CountChildrenByParentIdAsync(id, ct);
+                long childCount = await FolderDataService.CountChildrenByParentIdAsync(id, ct);
                 if (childCount > 0)
                     throw new InvalidOperationException($"目录含 {childCount} 个子目录，请先删除");
 
-                long fileCount = await _fileStore.CountByFolderIdAsync(id, ct);
+                long fileCount = await FileDataService.CountByFolderIdAsync(id, ct);
                 if (fileCount > 0)
                     throw new InvalidOperationException($"目录含 {fileCount} 个文件，请先删除");
 
-                await _folderStore.DeleteAsync(id, ct);
+                await FolderDataService.DeleteAsync(id, ct);
 
                 await scope.CommitAsync(ct);
             }
@@ -211,18 +211,18 @@ namespace TKWF.Ext.FileManagement
             // 新名安全校验（防穿越 + 非空）——对齐 C3：只改 Name，子树 Path 不变
             EnsureSafeName(newName, nameof(newName));
 
-            var folder = await _folderStore.GetByIdAsync(id, ct)
+            var folder = await FolderDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"目录 {id} 不存在");
 
             folder.Name = newName;
             folder.UpdateTime = DateTime.UtcNow;
-            await _folderStore.UpdateAsync(folder, ct);
+            await FolderDataService.UpdateAsync(folder, ct);
         }
 
         /// <inheritdoc />
         public async Task<FileFolderTreeNode> GetFolderTreeAsync(CancellationToken ct = default)
         {
-            var all = await _folderStore.GetAllAsync(ct);
+            var all = await FolderDataService.GetAllAsync(ct);
             if (all.Count == 0)
                 return new FileFolderTreeNode(0, "", "根", 0, Array.Empty<FileFolderTreeNode>());
 
@@ -270,7 +270,7 @@ namespace TKWF.Ext.FileManagement
 
         /// <inheritdoc />
         public Task<IReadOnlyList<FileFolderEntity>> GetSubFoldersAsync(long? parentId, CancellationToken ct = default)
-            => _folderStore.GetChildrenByParentIdAsync(parentId, ct);
+            => FolderDataService.GetChildrenByParentIdAsync(parentId, ct);
 
         // ── 文件 ──
 
@@ -299,7 +299,7 @@ namespace TKWF.Ext.FileManagement
             // 去重（Deduplicate）：同 SHA256 命中同目录同名 → 幂等返回既有（仅关预查优化，UX 唯一约束仍在）
             if (_options.Deduplicate)
             {
-                var dedupMatches = await _fileStore.GetBySha256Async(sha256, 0, DedupLookupSize, ct);
+                var dedupMatches = await FileDataService.GetBySha256Async(sha256, 0, DedupLookupSize, ct);
                 var existing = dedupMatches.FirstOrDefault(f => f.FolderId == folderId && f.Name == fileName);
                 if (existing != null)
                 {
@@ -313,7 +313,7 @@ namespace TKWF.Ext.FileManagement
             // （原 `GetByFolderAndNameAsync(null, fileName) != null → throw` 删除）
             if (folderId.HasValue)
             {
-                var folder = await _folderStore.GetByIdAsync(folderId.Value, ct)
+                var folder = await FolderDataService.GetByIdAsync(folderId.Value, ct)
                     ?? throw new InvalidOperationException($"目录 {folderId.Value} 不存在");
             }
 
@@ -340,7 +340,7 @@ namespace TKWF.Ext.FileManagement
                     // 并发兜底（P5）：事务内二次校验目录存在（预检前移后仅剩并发竞态窗口）
                     if (folderId.HasValue)
                     {
-                        var folder = await _folderStore.GetByIdAsync(folderId.Value, ct)
+                        var folder = await FolderDataService.GetByIdAsync(folderId.Value, ct)
                             ?? throw new InvalidOperationException($"目录 {folderId.Value} 不存在");
                     }
 
@@ -348,7 +348,7 @@ namespace TKWF.Ext.FileManagement
                     //   新文件 → CreateAsync 主表 + 首版 Version=1
                     //   已有文件 + 内容变化 → UpdateAsync 主表指针 + 新版本 max+1
                     //   Sha256 相同（Deduplicate=false 路径）→ 幂等返回既有（不产生冗余版本行）
-                    var existing = await _fileStore.GetByFolderAndNameAsync(folderId, fileName, ct);
+                    var existing = await FileDataService.GetByFolderAndNameAsync(folderId, fileName, ct);
 
                     if (existing == null)
                     {
@@ -367,7 +367,7 @@ namespace TKWF.Ext.FileManagement
                             UpdateTime = DateTime.UtcNow
                         };
 
-                        await _fileStore.CreateAsync(entity, ct);
+                        await FileDataService.CreateAsync(entity, ct);
                         await CreateVersionRowAsync(entity.Id, 1, blob.Path, extension, resolvedContentType, fileSize, sha256, ct);
                         await scope.CommitAsync(ct);
                         return entity;
@@ -435,7 +435,7 @@ namespace TKWF.Ext.FileManagement
                 UploaderName = null,
                 CreateTime = DateTime.UtcNow
             };
-            await _versionStore.CreateAsync(versionEntity, ct);
+            await VersionDataService.CreateAsync(versionEntity, ct);
         }
 
         /// <summary>
@@ -450,9 +450,9 @@ namespace TKWF.Ext.FileManagement
             existing.Sha256 = sha256;
             existing.Size = fileSize;
             existing.UpdateTime = DateTime.UtcNow;
-            await _fileStore.UpdateAsync(existing, ct);
+            await FileDataService.UpdateAsync(existing, ct);
 
-            int nextVersion = await _versionStore.GetMaxVersionAsync(existing.Id, ct) + 1;
+            int nextVersion = await VersionDataService.GetMaxVersionAsync(existing.Id, ct) + 1;
             await CreateVersionRowAsync(existing.Id, nextVersion, blob.Path, extension, resolvedContentType, fileSize, sha256, ct);
         }
 
@@ -467,7 +467,7 @@ namespace TKWF.Ext.FileManagement
             long? folderId, string fileName, string sha256, BlobInfo blob,
             string extension, string resolvedContentType, long fileSize, CancellationToken ct)
         {
-            var existing = await _fileStore.GetByFolderAndNameAsync(folderId, fileName, ct);
+            var existing = await FileDataService.GetByFolderAndNameAsync(folderId, fileName, ct);
             if (existing == null)
             {
                 // 防御（约束冲突必有行——理论不可达，仅并发删除竞态下可能出现）：补偿删 Blob + 业务异常
@@ -532,7 +532,7 @@ namespace TKWF.Ext.FileManagement
             {
                 if (_options.MaxUserFilesCount.HasValue)
                 {
-                    long count = await _fileStore.CountByOwnerAsync(ownerId.Value, ct);
+                    long count = await FileDataService.CountByOwnerAsync(ownerId.Value, ct);
                     if (count >= _options.MaxUserFilesCount.Value)
                         throw new InvalidOperationException(
                             $"用户文件数配额超限：当前 {count} / 上限 {_options.MaxUserFilesCount.Value}");
@@ -540,7 +540,7 @@ namespace TKWF.Ext.FileManagement
 
                 if (_options.MaxUserSizeBytes.HasValue)
                 {
-                    long current = await _fileStore.SumSizeByOwnerAsync(ownerId.Value, ct);
+                    long current = await FileDataService.SumSizeByOwnerAsync(ownerId.Value, ct);
                     if (current + contentLength > _options.MaxUserSizeBytes.Value)
                         throw new InvalidOperationException(
                             $"用户容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxUserSizeBytes.Value} 字节");
@@ -549,7 +549,7 @@ namespace TKWF.Ext.FileManagement
 
             if (_options.MaxFilesPerFolder.HasValue && folderId.HasValue)
             {
-                long count = await _fileStore.CountByFolderIdAsync(folderId, ct);
+                long count = await FileDataService.CountByFolderIdAsync(folderId, ct);
                 if (count >= _options.MaxFilesPerFolder.Value)
                     throw new InvalidOperationException(
                         $"目录文件数配额超限：当前 {count} / 上限 {_options.MaxFilesPerFolder.Value}");
@@ -557,7 +557,7 @@ namespace TKWF.Ext.FileManagement
 
             if (_options.MaxFolderSizeBytes.HasValue && folderId.HasValue)
             {
-                long current = await _fileStore.SumSizeByFolderIdAsync(folderId, ct);
+                long current = await FileDataService.SumSizeByFolderIdAsync(folderId, ct);
                 if (current + contentLength > _options.MaxFolderSizeBytes.Value)
                     throw new InvalidOperationException(
                         $"目录容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxFolderSizeBytes.Value} 字节");
@@ -565,7 +565,7 @@ namespace TKWF.Ext.FileManagement
 
             if (_options.MaxTotalSizeBytes.HasValue)
             {
-                long current = await _fileStore.SumSizeAllAsync(ct);
+                long current = await FileDataService.SumSizeAllAsync(ct);
                 if (current + contentLength > _options.MaxTotalSizeBytes.Value)
                     throw new InvalidOperationException(
                         $"全局容量配额超限：当前 {current} 字节 + 本次 {contentLength} 字节 > 上限 {_options.MaxTotalSizeBytes.Value} 字节");
@@ -602,7 +602,7 @@ namespace TKWF.Ext.FileManagement
         public async Task<(Stream Stream, ManagedFileEntity File)?> DownloadFileAsync(long id, CancellationToken ct = default)
         {
             // 元数据定位（不存在 → fail-fast）
-            var file = await _fileStore.GetByIdAsync(id, ct)
+            var file = await FileDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"文件 {id} 不存在");
 
             // 委托 Blob 读流（缺失 → fail-fast）
@@ -619,19 +619,19 @@ namespace TKWF.Ext.FileManagement
             using var scope = await _transactionManager.BeginAsync(ct: ct);
             try
             {
-                var file = await _fileStore.GetByIdAsync(id, ct)
+                var file = await FileDataService.GetByIdAsync(id, ct)
                     ?? throw new InvalidOperationException($"文件 {id} 不存在");
 
                 // V0.2.0（Oracle P1-2）：收集全部 StoredPath（主表 + 版本行，Distinct 去重——回滚指针复用
                 // 导致多行共享同一 StoredPath），事务内删主表 + 删全部版本行，随后 best-effort 删全部 Blob。
                 // Oracle P2-2：版本路径经 GetStoredPathsByFileAsync 全量拉取（非 GetByFileAsync 1000 上限——>1000 版本不留孤儿 Blob）
                 var storedPaths = new HashSet<string>(StringComparer.Ordinal) { file.StoredPath };
-                var versionPaths = await _versionStore.GetStoredPathsByFileAsync(id, ct);
+                var versionPaths = await VersionDataService.GetStoredPathsByFileAsync(id, ct);
                 foreach (var p in versionPaths)
                     storedPaths.Add(p);
 
-                await _fileStore.DeleteAsync(id, ct);
-                await _versionStore.DeleteByFileIdAsync(id, ct);
+                await FileDataService.DeleteAsync(id, ct);
+                await VersionDataService.DeleteByFileIdAsync(id, ct);
 
                 // 删 Blob（失败/返回 false → 日志警告，孤儿容忍——不阻塞事务提交）
                 foreach (var path in storedPaths)
@@ -662,7 +662,7 @@ namespace TKWF.Ext.FileManagement
         {
             EnsureSafeFileName(newName, nameof(newName));
 
-            var file = await _fileStore.GetByIdAsync(id, ct)
+            var file = await FileDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"文件 {id} 不存在");
 
             // C1：重算派生列——Extension/ContentType 由新扩展名服务端推导（对齐 C5 不变量）
@@ -677,7 +677,7 @@ namespace TKWF.Ext.FileManagement
 
             try
             {
-                await _fileStore.UpdateAsync(file, ct);
+                await FileDataService.UpdateAsync(file, ct);
             }
             catch (Exception ex) when (IsUniqueConstraintViolation(ex))
             {
@@ -689,20 +689,20 @@ namespace TKWF.Ext.FileManagement
         /// <inheritdoc />
         public async Task MoveFileAsync(long id, long? newFolderId, CancellationToken ct = default)
         {
-            var file = await _fileStore.GetByIdAsync(id, ct)
+            var file = await FileDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"文件 {id} 不存在");
 
             // 目标目录存在守卫
             if (newFolderId.HasValue)
             {
-                var folder = await _folderStore.GetByIdAsync(newFolderId.Value, ct)
+                var folder = await FolderDataService.GetByIdAsync(newFolderId.Value, ct)
                     ?? throw new InvalidOperationException($"目标目录 {newFolderId.Value} 不存在");
             }
 
             // 目标重名检查（仅跨目录移动时——同目录移动 = no-op 允许）
             if (file.FolderId != newFolderId)
             {
-                var sameName = await _fileStore.GetByFolderAndNameAsync(newFolderId, file.Name, ct);
+                var sameName = await FileDataService.GetByFolderAndNameAsync(newFolderId, file.Name, ct);
                 if (sameName != null)
                     throw new InvalidOperationException("该目录下已存在同名文件");
             }
@@ -712,7 +712,7 @@ namespace TKWF.Ext.FileManagement
 
             try
             {
-                await _fileStore.UpdateAsync(file, ct);
+                await FileDataService.UpdateAsync(file, ct);
             }
             catch (Exception ex) when (IsUniqueConstraintViolation(ex))
             {
@@ -725,13 +725,13 @@ namespace TKWF.Ext.FileManagement
 
         /// <inheritdoc />
         public Task<ManagedFileEntity?> GetFileAsync(long id, CancellationToken ct = default)
-            => _fileStore.GetByIdAsync(id, ct);
+            => FileDataService.GetByIdAsync(id, ct);
 
         /// <inheritdoc />
         public Task<IReadOnlyList<ManagedFileEntity>> GetFilesAsync(long? folderId, int skip = 0, int? take = null, CancellationToken ct = default)
         {
             int pageSize = take ?? Math.Max(1, _options.DefaultPageSize);
-            return _fileStore.GetByFolderAsync(folderId, skip, pageSize, ct);
+            return FileDataService.GetByFolderAsync(folderId, skip, pageSize, ct);
         }
 
         /// <inheritdoc />
@@ -739,7 +739,7 @@ namespace TKWF.Ext.FileManagement
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
             int pageSize = take ?? Math.Max(1, _options.DefaultPageSize);
-            return _fileStore.SearchByNameAsync(keyword, skip, pageSize, ct);
+            return FileDataService.SearchByNameAsync(keyword, skip, pageSize, ct);
         }
 
         // ── 版本（V0.2.0） ──
@@ -748,28 +748,28 @@ namespace TKWF.Ext.FileManagement
         public async Task<IReadOnlyList<ManagedFileVersionEntity>> GetFileVersionsAsync(long fileId, CancellationToken ct = default)
         {
             // 文件存在守卫（版本查询目标必须存在）
-            _ = await _fileStore.GetByIdAsync(fileId, ct)
+            _ = await FileDataService.GetByIdAsync(fileId, ct)
                 ?? throw new InvalidOperationException($"文件 {fileId} 不存在");
-            return await _versionStore.GetByFileAsync(fileId, ct);
+            return await VersionDataService.GetByFileAsync(fileId, ct);
         }
 
         /// <inheritdoc />
         public async Task<ManagedFileVersionEntity?> GetFileVersionAsync(long fileId, int version, CancellationToken ct = default)
         {
             // 文件存在守卫
-            _ = await _fileStore.GetByIdAsync(fileId, ct)
+            _ = await FileDataService.GetByIdAsync(fileId, ct)
                 ?? throw new InvalidOperationException($"文件 {fileId} 不存在");
-            return await _versionStore.GetByFileAndVersionAsync(fileId, version, ct);
+            return await VersionDataService.GetByFileAndVersionAsync(fileId, version, ct);
         }
 
         /// <inheritdoc />
         public async Task<ManagedFileEntity> RollbackFileAsync(long fileId, int version, CancellationToken ct = default)
         {
-            var file = await _fileStore.GetByIdAsync(fileId, ct)
+            var file = await FileDataService.GetByIdAsync(fileId, ct)
                 ?? throw new InvalidOperationException($"文件 {fileId} 不存在");
 
             // 目标版本定位（不存在 → 业务异常）
-            var target = await _versionStore.GetByFileAndVersionAsync(fileId, version, ct)
+            var target = await VersionDataService.GetByFileAndVersionAsync(fileId, version, ct)
                 ?? throw new InvalidOperationException($"文件 {fileId} 版本 {version} 不存在");
 
             using var scope = await _transactionManager.BeginAsync(ct: ct);
@@ -781,10 +781,10 @@ namespace TKWF.Ext.FileManagement
                 file.Sha256 = target.Sha256;
                 file.Size = target.Size;
                 file.UpdateTime = DateTime.UtcNow;
-                await _fileStore.UpdateAsync(file, ct);
+                await FileDataService.UpdateAsync(file, ct);
 
                 // 版本表插入新行（Version=max+1；StoredPath 指针复用不复制字节；回滚可追溯）
-                int nextVersion = await _versionStore.GetMaxVersionAsync(fileId, ct) + 1;
+                int nextVersion = await VersionDataService.GetMaxVersionAsync(fileId, ct) + 1;
                 await CreateVersionRowAsync(
                     fileId, nextVersion, target.StoredPath, target.Extension, target.ContentType,
                     target.Size, target.Sha256, ct);

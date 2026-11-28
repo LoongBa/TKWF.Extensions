@@ -33,7 +33,7 @@ namespace TKWF.Ext.Account
         /// 注册账户安全策略服务。
         /// <para>V4.10.53（领域自治根治，正确路线）：</para>
         /// <list type="bullet">
-        /// <item><see cref="IAccountLockoutStore"/> / <see cref="IPasswordResetStore"/> / <see cref="ILoginHistoryService"/>
+        /// <item>`IAccountLockoutStore` / `IPasswordResetStore` / <see cref="ILoginHistoryService"/>
         ///     （接口 : IDomainService）用 <c>AddConstructibleService</c>——接口可构造守卫工厂（CurrentAopUser 守卫）
         ///     + 实现类 throw-factory；消费方经 <c>User.Use&lt;IAccountLockoutStore&gt;()</c> /
         ///     <c>User.Use&lt;ILoginHistoryService&gt;()</c> 等解析。</item>
@@ -52,8 +52,9 @@ namespace TKWF.Ext.Account
             // 消费方统一经 User.Use<IAccountLockoutStore>() / User.Use<IPasswordResetStore>() / User.Use<ILoginHistoryService>() 解析
             // （AOP 路径先设 CurrentAopUser 再 GetRequiredService，工厂据此显式传入 DomainUser）。
             services.AddOptions<AccountOptions>(); // Policy/Flow ctor 依赖 IOptions<AccountOptions>（无 User 依赖）
-            services.AddConstructibleService<IAccountLockoutStore, AccountLockoutStore>();
-            services.AddConstructibleService<IPasswordResetStore, PasswordResetStore>();
+            // A5 Store-debt cleanup：IAccountLockoutStore/IPasswordResetStore（DataService 薄包装伪层）已删除——
+            // Policy/Flow 直接经 IServiceProvider 解析 AccountLockoutEntityDataService/PasswordResetCodeEntityDataService
+            // （SG1 消费方聚合自动注册，不手动注册 DataService）。
 
             // 主框架扩展点：接线型普通 DI（AuthController 经 GetOptionalService 解析；不继承 DomainServiceBase）
             services.TryAddScoped<IAccountLockoutPolicy, FreeSqlAccountLockoutPolicy>();

@@ -22,7 +22,7 @@ namespace TKWF.Ext.FeatureManagement;
 /// </list>
 /// <para>V4.10.53（领域自治根治，正确路线——ADR90）三态注册：</para>
 /// <list type="bullet">
-/// <item><b>门面（AddConstructibleService）</b>——<see cref="IFeatureValueStore"/> / <see cref="IFeatureManager"/>
+/// <item><b>门面（AddConstructibleService）</b>——`IFeatureValueStore` / <see cref="IFeatureManager"/>
 ///     （接口 : IDomainService）：接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；
 ///     消费方经 <c>User.Use&lt;IFeatureValueStore&gt;()</c> / <c>User.Use&lt;IFeatureManager&gt;()</c> 解析。
 ///     旧形态 TryAddScoped 构造注入 <see cref="IDomainUser"/>（永不注册 DI——D01）生产解析必失败（v0.3.3 同根缺陷）。</item>
@@ -90,7 +90,7 @@ public class FeatureManagementExtensionInitializer<TUserInfo> : ExtensionInitial
 
         // V4.10.53（领域自治根治）：Store/Manager 注册由 TryAddScoped 改 AddConstructibleService——
         // 接口可构造守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方经 User.Use<T>() 解析。
-        services.AddConstructibleService<IFeatureValueStore, FeatureValueStore>();
+        // A5 Store-debt cleanup：IFeatureValueStore/FeatureValueStore 已删除——Manager/Provider 经 User.Use<FeatureValueEntityDataService>() 直接取值。
         services.AddConstructibleService<IFeatureManager, FeatureManager>();
 
         // v0.2.0 Provider 扩展点——内置四层（V4.10.55 ADR92：TryAddEnumerableConstructible 集合版守卫工厂——

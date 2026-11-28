@@ -13,7 +13,7 @@ namespace TKWF.Ext.DataDictionary.Tests;
 /// 按编码聚合查询、项排序、Upsert 委托、异常静默。
 /// <para>生产路径：真实 DI（同步建宿主——BindScope 绑定当前测试上下文）+ <see cref="DomainUser{TUserInfo}"/>
 /// → <c>User.Use&lt;IDictionaryManager&gt;()</c> AOP 路径解析（AddConstructibleService 接口守卫工厂 →
-/// DictionaryManager → 懒加载 IDictionaryStore → DataService 全链真实 DI）。</para>
+/// DictionaryManager → 懒加载 DictionaryDefinitionEntityDataService → DataService 全链真实 DI）。</para>
 /// </summary>
 public class DictionaryManagerTests
 {

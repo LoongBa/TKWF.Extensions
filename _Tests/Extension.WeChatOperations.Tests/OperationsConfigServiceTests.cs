@@ -199,6 +199,24 @@ public class OperationsConfigServiceTests : WeChatOperationsTestHost
         Assert.Contains(final.TtlSeconds, new int?[] { 600, 900 });
     }
 
+    /// <summary>有界文案列服务层守卫（2026-11-23 code-review P2）：DisabledChannelReplyTemplate 超过 [MaxLength(500)]
+    /// → 友好 DomainException OPS_CONFIG_TEXT_TOO_LONG（而非落库时 Pg 22001），且不产生任何行。</summary>
+    [Fact]
+    public async Task Save_ReplyText_OverlongDisabledTemplate_ThrowsFriendlyError()
+    {
+        using var _ = this;
+        var (_, user) = BindScope();
+        var service = user.Use<IOperationsConfigService>();
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() => service.SaveReplyTextAsync(
+            new SaveOpsConfigReplyTextRequest(DisabledChannelReplyTemplate: new string('x', 501), DefaultReplyText: null, ExpectedVersion: null),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("OPS_CONFIG_TEXT_TOO_LONG", ex.ErrorCode);
+        Assert.Contains("500", ex.Message);
+        Assert.Null(await service.GetReplyTextAsync(TestContext.Current.CancellationToken));
+    }
+
     private static async Task<string?> RunAsync(Func<Task> action)
     {
         try

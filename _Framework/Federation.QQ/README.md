@@ -39,7 +39,7 @@
 
 ### 2. 注册通道（T4 已实现——库提供 `AddQqFederationChannels()`）
 
-库无 Initializer（纯库）——经库提供 `AddQqFederationChannels()` 扩展方法（`Microsoft.Extensions.DependencyInjection` 命名空间）注册：
+库无 Initializer（纯库）——经库提供 `AddQqFederationChannels()` 扩展方法（`TKWF.Federation.QQ` 命名空间，对齐 DingTalk/WeCom/WeChat 平台库；消费方 `using TKWF.Federation.QQ;` 即可发现）注册：
 
 ```csharp
 // 消费方 ConfigureServices（DomainHostConfigureServices）

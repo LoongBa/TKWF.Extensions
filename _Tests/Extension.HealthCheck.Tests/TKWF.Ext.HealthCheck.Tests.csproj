@@ -7,6 +7,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>TKWF.Ext.HealthCheck.Tests</RootNamespace>
+    <!-- HealthCheckEndpointOptions.Detailed 标 [Obsolete]（v0.3.0 死配置）——存量注册断言仍验证配置兼容，抑制 CS0618 -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -228,6 +228,12 @@ public static class OidcChannelConfigKeys
     /// <summary>private_key_jwt 签名密钥路径（企业证书认证，可空）。</summary>
     public const string ClientAssertionSigningKeyPath = "ClientAssertionSigningKeyPath";
 
+    /// <summary>
+    /// 【兼容占位·已废弃】userinfo 是否默认拉取的 Extra 键（历史死配置——零消费，恒为兼容常量）。
+    /// </summary>
+    [Obsolete("FetchUserInfo 已是死配置（无任何消费逻辑）；仅保留兼容旧消费者编译，请勿使用。")]
+    public const string FetchUserInfo = "FetchUserInfo";
+
     /// <summary>tenant 受众（Microsoft 专属——common/consumers/organizations/{id} 端点模板；其他派生平台不写）。</summary>
     public const string Tenant = "Tenant";
 }

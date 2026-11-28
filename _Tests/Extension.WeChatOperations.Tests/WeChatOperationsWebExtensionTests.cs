@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Threading.Tasks;
+using TKW.Framework.CodeGeneration;
 using TKWF.Ext.WeChatChannels;
 using TKWF.Ext.WeChatOperations.DTOs;
 using Xunit;
@@ -258,6 +260,54 @@ public sealed class WeChatOperationsWebExtensionTests
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(WeChatOperationsEndpointHost.Gateway.ForwardLogsInvoked);
+    }
+
+    // ═══════════════════ WO-1：运营配置面 10 端点（/ops-config/*） ═══════════════════
+
+    /// <summary>WO-1 路由断言：5 域 × GET/PUT 共 10 个 [ApiExpose] 相对路由 + 动词逐条锁定（防 Route 常量漂移）。</summary>
+    [Theory]
+    [InlineData(nameof(IOperationsConfigService.GetArticleReplyAsync), "/ops-config/article-reply", "GET")]
+    [InlineData(nameof(IOperationsConfigService.SaveArticleReplyAsync), "/ops-config/article-reply", "PUT")]
+    [InlineData(nameof(IOperationsConfigService.GetReplyTextAsync), "/ops-config/reply-text", "GET")]
+    [InlineData(nameof(IOperationsConfigService.SaveReplyTextAsync), "/ops-config/reply-text", "PUT")]
+    [InlineData(nameof(IOperationsConfigService.GetDegradeAsync), "/ops-config/degrade", "GET")]
+    [InlineData(nameof(IOperationsConfigService.SaveDegradeAsync), "/ops-config/degrade", "PUT")]
+    [InlineData(nameof(IOperationsConfigService.GetWeakIdentityAsync), "/ops-config/weak-identity", "GET")]
+    [InlineData(nameof(IOperationsConfigService.SaveWeakIdentityAsync), "/ops-config/weak-identity", "PUT")]
+    [InlineData(nameof(IOperationsConfigService.GetTicketAsync), "/ops-config/ticket", "GET")]
+    [InlineData(nameof(IOperationsConfigService.SaveTicketAsync), "/ops-config/ticket", "PUT")]
+    public void OpsConfig_ApiExpose_RouteAndVerb(string methodName, string route, string verb)
+    {
+        var expose = typeof(IOperationsConfigService).GetMethod(methodName)!
+            .GetCustomAttribute<ApiExposeAttribute>();
+
+        Assert.NotNull(expose);
+        Assert.Equal(route, expose!.RestRoute);
+        Assert.Equal(verb, expose.RestMethod);
+    }
+
+    /// <summary>WO-1 代表冒烟①：GET /ops-config/article-reply 已挂载（非 404）且 handler→门面绑定（Fake Invoked）。</summary>
+    [Fact]
+    public async Task GetOpsConfigArticleReply_ReturnsNull_200()
+    {
+        var client = WeChatOperationsEndpointHost.Server.CreateClient();
+        var resp = await client.GetAsync(WeChatOperationsEndpointHost.Url("/ops-config/article-reply"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.True(WeChatOperationsEndpointHost.OpsConfig.GetArticleReplyInvoked);
+    }
+
+    /// <summary>WO-1 代表冒烟②：PUT /ops-config/reply-text 绑定 SaveOpsConfigReplyTextRequest body + handler→门面绑定。</summary>
+    [Fact]
+    public async Task PutOpsConfigReplyText_BindsRequest_200()
+    {
+        var client = WeChatOperationsEndpointHost.Server.CreateClient();
+        var request = new SaveOpsConfigReplyTextRequest("服务暂停中", "感谢关注", 7);
+        var resp = await client.PutAsJsonAsync(WeChatOperationsEndpointHost.Url("/ops-config/reply-text"), request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.True(WeChatOperationsEndpointHost.OpsConfig.SaveReplyTextInvoked);
+        Assert.Equal(request, WeChatOperationsEndpointHost.OpsConfig.LastReplyTextRequest);
     }
 
     // ═══════════════════ 负向/边界 ═══════════════════

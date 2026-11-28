@@ -20,7 +20,7 @@ namespace TKWF.Ext.Calendar
     /// 日历 Delete（删除保护）经 <see cref="ITransactionManager"/> BeginAsync → 业务 → CommitAsync / 失败 RollbackAsync。</para>
     /// <para>RecurrenceEndUtc 同源推导（C2/D4）：UNTIL 直取；COUNT 用 <see cref="RecurrenceExpander"/> 展开
     /// （从 dtStart 到覆盖 COUNT 的充分范围，写入时受上限保护）取最后 occurrence——与查询展开同源，偏差构造性消除。</para>
-    /// <para>数据访问红线：不注入 IFreeSql / IEntityDAC——只经 <see cref="ICalendarStore"/>（委托 DataService）。</para>
+    /// <para>数据访问红线：不注入 IFreeSql / IEntityDAC——只经 User.Use&lt;SG1 DataService&gt;()（A5 Store-debt cleanup 后 ICalendarStore 已删除）。</para>
     /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
     /// 获取用户上下文（<b>IDomainUser 永不注册 DI</b>，D01；IDomainUser 移到 ctor 首位经基类 User）；
     /// <c>[DiContractIgnore]</c> 豁免 DI001（ctor 含 internal Store 契约参数）；Store（internal 接线型普通 DI）经
@@ -31,7 +31,6 @@ namespace TKWF.Ext.Calendar
     [DiContractIgnore]
     internal sealed class CalendarManager : DomainServiceBase, ICalendarManager
     {
-        private readonly ICalendarStore _store;
         private readonly ITransactionManager _transactionManager;
         private readonly ILogger<CalendarManager> _logger;
 
@@ -40,16 +39,78 @@ namespace TKWF.Ext.Calendar
 
         public CalendarManager(
             IDomainUser user,
-            ICalendarStore store,
             ITransactionManager transactionManager,
             ILogger<CalendarManager> logger)
             : base(user)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        private CalendarEntityDataService? _calendarDs;
+        private CalendarEventEntityDataService? _eventDs;
+        private CalendarEntityDataService CalendarDs => _calendarDs ??= User.Use<CalendarEntityDataService>();
+        private CalendarEventEntityDataService EventDs => _eventDs ??= User.Use<CalendarEventEntityDataService>();
+
+        private Task<CalendarEntity?> StoreGetByIdAsync(long id, CancellationToken ct)
+            => CalendarDs.EntityGetAsync(c => c.Id == id, ct);
+        private Task<CalendarEntity?> StoreGetByCodeAsync(string code, CancellationToken ct)
+            => CalendarDs.GetByCodeAsync(code, ct);
+        private Task<IReadOnlyList<CalendarEntity>> StoreGetAllAsync(CancellationToken ct)
+            => CalendarDs.GetAllAsync(ct);
+        private async Task<long> StoreCreateAsync(CalendarEntity entity, CancellationToken ct)
+        {
+            await CalendarDs.EntityCreateAsync(entity, ct);
+            return entity.Id;
+        }
+        private Task StoreUpdateAsync(CalendarEntity entity, CancellationToken ct)
+            => CalendarDs.EntityUpdateAsync(entity, ct);
+        private Task StoreDeleteAsync(long id, CancellationToken ct)
+            => CalendarDs.DeleteEntityAsync(id, ct);
+        private async Task<CalendarEventEntity?> StoreGetEventByIdAsync(long id, CancellationToken ct)
+            => NormalizeEvent(await EventDs.EntityGetAsync(e => e.Id == id, ct));
+        private async Task<IReadOnlyList<CalendarEventEntity>> StoreGetSingleByRangeAsync(
+            long? calendarId, DateTime? fromUtc, DateTime? toUtc, int skip, int take, CancellationToken ct)
+            => NormalizeEvents(await EventDs.GetSingleByRangeAsync(calendarId, fromUtc, toUtc, skip, take, ct));
+        private async Task<IReadOnlyList<CalendarEventEntity>> StoreGetRecurringByRangeAsync(
+            long? calendarId, DateTime? fromUtc, DateTime? toUtc, int skip, int take, CancellationToken ct)
+            => NormalizeEvents(await EventDs.GetRecurringByRangeAsync(calendarId, fromUtc, toUtc, skip, take, ct));
+        private async Task<IReadOnlyList<CalendarEventEntity>> StoreGetByCalendarIdAsync(long calendarId, CancellationToken ct)
+            => NormalizeEvents(await EventDs.GetByCalendarIdAsync(calendarId, ct));
+        private Task<long> StoreCountByCalendarIdAsync(long calendarId, CancellationToken ct)
+            => EventDs.CountByCalendarIdAsync(calendarId, ct);
+        private async Task<long> StoreCreateEventAsync(CalendarEventEntity entity, CancellationToken ct)
+        {
+            await EventDs.CreateAsync(entity, ct);
+            return entity.Id;
+        }
+        private Task StoreUpdateEventAsync(CalendarEventEntity entity, CancellationToken ct)
+            => EventDs.UpdateAsync(entity, ct);
+        private Task StoreDeleteEventAsync(long id, CancellationToken ct)
+            => EventDs.DeleteBatchAsync(new[] { id }, ct);
+
+        // SQLite DateTime 读出规范化：Unspecified 按本地墙钟语义转回 UTC（原 CalendarStore 逻辑，A5 收编）。
+        private static IReadOnlyList<CalendarEventEntity> NormalizeEvents(IReadOnlyList<CalendarEventEntity> events)
+        {
+            if (events.Count == 0) return events;
+            foreach (var e in events) NormalizeEvent(e);
+            return events;
+        }
+        private static CalendarEventEntity? NormalizeEvent(CalendarEventEntity? e)
+        {
+            if (e == null) return null;
+            e.StartUtc = NormalizeUtc(e.StartUtc);
+            if (e.EndUtc.HasValue) e.EndUtc = NormalizeUtc(e.EndUtc.Value);
+            if (e.RecurrenceEndUtc.HasValue) e.RecurrenceEndUtc = NormalizeUtc(e.RecurrenceEndUtc.Value);
+            return e;
+        }
+        private static DateTime NormalizeUtc(DateTime value)
+            => value.Kind switch
+            {
+                DateTimeKind.Utc => value,
+                DateTimeKind.Unspecified => DateTime.SpecifyKind(value, DateTimeKind.Local).ToUniversalTime(),
+                _ => value.ToUniversalTime(),
+            };
         // ── 日历 ──
 
         /// <inheritdoc />
@@ -75,7 +136,7 @@ namespace TKWF.Ext.Calendar
             try
             {
                 // 并发同 Code 冲突由数据库唯一索引异常自然传播（败者显式异常，对齐 OU/Approval 先例）
-                await _store.CreateAsync(entity, ct);
+                await StoreCreateAsync(entity, ct);
 
                 await scope.CommitAsync(ct);
                 return entity;
@@ -91,7 +152,7 @@ namespace TKWF.Ext.Calendar
         public async Task UpdateCalendarAsync(long id, string? name = null, string? description = null,
             string? color = null, bool? isEnabled = null, CancellationToken ct = default)
         {
-            var entity = await _store.GetByIdAsync(id, ct)
+            var entity = await StoreGetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"日历 {id} 不存在");
 
             if (name != null) entity.Name = name;
@@ -100,7 +161,7 @@ namespace TKWF.Ext.Calendar
             if (isEnabled.HasValue) entity.IsEnabled = isEnabled.Value;
             entity.UpdateTime = DateTime.UtcNow;
 
-            await _store.UpdateAsync(entity, ct);
+            await StoreUpdateAsync(entity, ct);
         }
 
         /// <inheritdoc />
@@ -109,15 +170,15 @@ namespace TKWF.Ext.Calendar
             using var scope = await _transactionManager.BeginAsync(ct: ct);
             try
             {
-                var calendar = await _store.GetByIdAsync(id, ct)
+                var calendar = await StoreGetByIdAsync(id, ct)
                     ?? throw new InvalidOperationException($"日历 {id} 不存在");
 
                 // 删除保护（D17/F7）：有事件 → 拒绝
-                long eventCount = await _store.CountByCalendarIdAsync(id, ct);
+                long eventCount = await StoreCountByCalendarIdAsync(id, ct);
                 if (eventCount > 0)
                     throw new InvalidOperationException($"日历含 {eventCount} 个事件，请先删除");
 
-                await _store.DeleteAsync(id, ct);
+                await StoreDeleteAsync(id, ct);
 
                 await scope.CommitAsync(ct);
             }
@@ -130,11 +191,11 @@ namespace TKWF.Ext.Calendar
 
         /// <inheritdoc />
         public Task<CalendarEntity?> GetCalendarAsync(long id, CancellationToken ct = default)
-            => _store.GetByIdAsync(id, ct);
+            => StoreGetByIdAsync(id, ct);
 
         /// <inheritdoc />
         public Task<IReadOnlyList<CalendarEntity>> GetCalendarsAsync(CancellationToken ct = default)
-            => _store.GetAllAsync(ct);
+            => StoreGetAllAsync(ct);
 
         // ── 事件 ──
 
@@ -169,7 +230,7 @@ namespace TKWF.Ext.Calendar
             try
             {
                 // 引用守卫（F2/D3）：日历必须存在
-                var calendar = await _store.GetByIdAsync(calendarId, ct)
+                var calendar = await StoreGetByIdAsync(calendarId, ct)
                     ?? throw new InvalidOperationException($"日历 {calendarId} 不存在");
 
                 var entity = new CalendarEventEntity
@@ -187,7 +248,7 @@ namespace TKWF.Ext.Calendar
                     UpdateTime = DateTime.UtcNow
                 };
 
-                await _store.CreateEventAsync(entity, ct);
+                await StoreCreateEventAsync(entity, ct);
 
                 await scope.CommitAsync(ct);
                 return entity;
@@ -208,13 +269,13 @@ namespace TKWF.Ext.Calendar
             using var scope = await _transactionManager.BeginAsync(ct: ct);
             try
             {
-                var entity = await _store.GetEventByIdAsync(id, ct)
+                var entity = await StoreGetEventByIdAsync(id, ct)
                     ?? throw new InvalidOperationException($"事件 {id} 不存在");
 
                 // calendarId 变更 → 引用守卫
                 if (calendarId.HasValue && calendarId.Value != entity.CalendarId)
                 {
-                    var target = await _store.GetByIdAsync(calendarId.Value, ct)
+                    var target = await StoreGetByIdAsync(calendarId.Value, ct)
                         ?? throw new InvalidOperationException($"日历 {calendarId.Value} 不存在");
                     entity.CalendarId = calendarId.Value;
                 }
@@ -273,7 +334,7 @@ namespace TKWF.Ext.Calendar
                 }
 
                 entity.UpdateTime = DateTime.UtcNow;
-                await _store.UpdateEventAsync(entity, ct);
+                await StoreUpdateEventAsync(entity, ct);
 
                 await scope.CommitAsync(ct);
             }
@@ -287,9 +348,9 @@ namespace TKWF.Ext.Calendar
         /// <inheritdoc />
         public async Task DeleteEventAsync(long id, CancellationToken ct = default)
         {
-            var entity = await _store.GetEventByIdAsync(id, ct)
+            var entity = await StoreGetEventByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"事件 {id} 不存在");
-            await _store.DeleteEventAsync(id, ct);
+            await StoreDeleteEventAsync(id, ct);
         }
 
         // ── occurrence 查询 ──
@@ -306,14 +367,14 @@ namespace TKWF.Ext.Calendar
                 throw new ArgumentOutOfRangeException(nameof(maxCount), "maxCount 必须大于 0");
 
             // P3/D18：IsEnabled=false 日历默认排除——先取日历集判定（先例对齐：occurrence 过滤在查询侧）
-            var calendars = await _store.GetAllAsync(ct);
+            var calendars = await StoreGetAllAsync(ct);
             var enabledCalendarIds = calendars.Where(c => c.IsEnabled).Select(c => c.Id).ToHashSet();
             if (calendarId.HasValue && !enabledCalendarIds.Contains(calendarId.Value))
                 return new EventOccurrenceList(Array.Empty<EventOccurrence>(), false);
 
             // C1 分路：单次 + 重复分别 SQL 查询（谓词下推——单次重叠判定 / 重复 RecurrenceEndUtc 预筛）
-            var singles = await _store.GetSingleByRangeAsync(calendarId, fromUtc, toUtc, 0, MaxOccurrenceFetch, ct);
-            var recurring = await _store.GetRecurringByRangeAsync(calendarId, fromUtc, toUtc, 0, MaxOccurrenceFetch, ct);
+            var singles = await StoreGetSingleByRangeAsync(calendarId, fromUtc, toUtc, 0, MaxOccurrenceFetch, ct);
+            var recurring = await StoreGetRecurringByRangeAsync(calendarId, fromUtc, toUtc, 0, MaxOccurrenceFetch, ct);
 
             var occurrences = new List<EventOccurrence>(singles.Count + recurring.Count * 8);
 

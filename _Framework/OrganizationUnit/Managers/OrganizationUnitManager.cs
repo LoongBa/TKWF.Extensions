@@ -14,24 +14,28 @@ namespace TKWF.Ext.OrganizationUnit
 {
     /// <summary>
     /// 组织单元管理实现（internal sealed，构造函数 public——AddConstructibleService 守卫工厂经 ActivatorUtilities 解析需
-    /// public 构造器；类 internal 因 ctor 含 internal Store 契约参数（CS0051 可访问性一致），对齐 AuditLogging QueryService
-    /// / FileManager 先例）——树形 OU 生命周期 + 用户关联 + 双向查询。
+    /// public 构造器；A5 Store-debt 清理后 ctor 仅含 public 契约参数）——树形 OU 生命周期 + 用户关联 + 双向查询。
     /// <para>事务包裹（C1）：Create/Move/Delete 多步写路径经 <see cref="ITransactionManager"/>
     /// BeginAsync → 业务 → CommitAsync / 失败 RollbackAsync（using scope 范式，对齐 Approval CONDITION-1）。</para>
     /// <para>删除语义（C2）：物理删除（hasSoftDelete:false + 实体不声明 IsDeleted），已删 Code 可复用。</para>
     /// <para>Code 白名单 + Path 长度守卫（C3）：拒绝 LIKE 通配符/空白；Path 超 1024 抛业务异常而非 DB Overflow。</para>
-    /// <para>数据访问红线：不注入 IFreeSql / IEntityDAC——只经 <see cref="IOrganizationUnitStore"/>（委托 DataService）。</para>
-    /// <para>V4.10.53（领域自治根治，ADR90，正确路线）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
-    /// 获取用户上下文（<b>IDomainUser 永不注册 DI</b>，D01；IDomainUser 移到 ctor 首位经基类 User）；
-    /// <c>[DiContractIgnore]</c> 豁免 DI001（ctor 含 internal Store 契约参数）；Store（internal 接线型普通 DI）经
-    /// ctor 注入解析——接线型 Store 经 TryAddScoped 普通注册可解析；注册形态改
-    /// <c>AddConstructibleService&lt;IOrganizationUnitManager, OrganizationUnitManager&gt;</c>（其余参数
-    /// ITransactionManager/ILogger 由 ActivatorUtilities 从 DI 解析）。</para>
+    /// <para>数据访问红线：不注入 IFreeSql / IEntityDAC——经 <c>User.Use&lt;XxxDataService&gt;()</c> 懒加载。</para>
+    /// <para>V4.10.53（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c>
+    /// 获取用户上下文（<b>IDomainUser 永不注册 DI</b>，D01）；<c>[DiContractIgnore]</c> 豁免 DI001；
+    /// 注册形态为 <c>AddConstructibleService&lt;IOrganizationUnitManager, OrganizationUnitManager&gt;</c>
+    /// （其余参数 ITransactionManager/ILogger 由 ActivatorUtilities 从 DI 解析）。</para>
     /// </summary>
     [DiContractIgnore]
     internal sealed class OrganizationUnitManager : DomainServiceBase, IOrganizationUnitManager
     {
-        private readonly IOrganizationUnitStore _store;
+        private OrganizationUnitEntityDataService? _ouDataService;
+        private OrganizationUnitUserEntityDataService? _userDataService;
+        private UserOrganizationUnitViewDataService? _viewDataService;
+
+        private OrganizationUnitEntityDataService OuDataService => _ouDataService ??= User.Use<OrganizationUnitEntityDataService>();
+        private OrganizationUnitUserEntityDataService UserDataService => _userDataService ??= User.Use<OrganizationUnitUserEntityDataService>();
+        private UserOrganizationUnitViewDataService ViewDataService => _viewDataService ??= User.Use<UserOrganizationUnitViewDataService>();
+
         private readonly ITransactionManager _transactionManager;
         private readonly ILogger<OrganizationUnitManager> _logger;
 
@@ -43,12 +47,10 @@ namespace TKWF.Ext.OrganizationUnit
 
         public OrganizationUnitManager(
             IDomainUser user,
-            IOrganizationUnitStore store,
             ITransactionManager transactionManager,
             ILogger<OrganizationUnitManager> logger)
             : base(user)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
             _transactionManager = transactionManager ?? throw new ArgumentNullException(nameof(transactionManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -73,7 +75,7 @@ namespace TKWF.Ext.OrganizationUnit
                 string targetPath;
                 if (parentId.HasValue)
                 {
-                    var parent = await _store.GetByIdAsync(parentId.Value, ct);
+                    var parent = await OuDataService.GetByIdAsync(parentId.Value, ct);
                     if (parent == null)
                         throw new InvalidOperationException($"父组织单元 {parentId.Value} 不存在");
 
@@ -91,7 +93,7 @@ namespace TKWF.Ext.OrganizationUnit
                     throw new InvalidOperationException("组织层级过深或 Code 过长（Path 超过 1024 字符上限）");
 
                 // SortOrder 语义（P1）：默认父下 max+1（同级追加末尾）
-                var all = await _store.GetAllAsync(ct);
+                var all = await OuDataService.GetAllAsync(ct);
                 int finalSortOrder = sortOrder ?? (all.Where(o => o.ParentId == parentId)
                     .Select(o => (int?)o.SortOrder).Max() ?? -1) + 1;
 
@@ -107,7 +109,7 @@ namespace TKWF.Ext.OrganizationUnit
                 };
 
                 // 并发同 Code 冲突由数据库唯一索引异常自然传播（败者显式异常，对齐 Approval 先例）
-                await _store.CreateAsync(entity, ct);
+                await OuDataService.EntityCreateAsync(entity, ct);
 
                 await scope.CommitAsync(ct);
                 return entity;
@@ -123,7 +125,7 @@ namespace TKWF.Ext.OrganizationUnit
         public async Task UpdateAsync(long id, string? name = null, int? sortOrder = null,
             bool? isEnabled = null, CancellationToken ct = default)
         {
-            var entity = await _store.GetByIdAsync(id, ct)
+            var entity = await OuDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"组织单元 {id} 不存在");
 
             // Code 不可改（F4——更新不触发路径重算）
@@ -132,7 +134,7 @@ namespace TKWF.Ext.OrganizationUnit
             if (isEnabled.HasValue) entity.IsEnabled = isEnabled.Value;
             entity.UpdateTime = DateTimeOffset.Now;
 
-            await _store.UpdateAsync(entity, ct);
+            await OuDataService.EntityUpdateAsync(entity, ct);
         }
 
         /// <inheritdoc />
@@ -141,23 +143,23 @@ namespace TKWF.Ext.OrganizationUnit
             using var scope = await _transactionManager.BeginAsync(ct: ct);
             try
             {
-                var ou = await _store.GetByIdAsync(id, ct)
+                var ou = await OuDataService.GetByIdAsync(id, ct)
                     ?? throw new InvalidOperationException($"组织单元 {id} 不存在");
 
                 // 删除保护（D5/F10）：事务内二次确认——无子节点（全量内存 ParentId 计数）
-                var all = await _store.GetAllAsync(ct);
+                var all = await OuDataService.GetAllAsync(ct);
                 int childCount = all.Count(o => o.ParentId == id);
                 if (childCount > 0)
                     throw new InvalidOperationException($"组织单元含 {childCount} 个子节点，请先移除");
 
                 // 删除保护：无关联用户
-                long userCount = await _store.CountUsersByOrganizationUnitIdAsync(id, ct);
+                long userCount = await UserDataService.CountByOrganizationUnitIdAsync(id, ct);
                 if (userCount > 0)
                     throw new InvalidOperationException($"组织单元含 {userCount} 个关联用户，请先解除");
 
                 // 清 junction → 物理删 OU（原子提交，任何一步失败全回滚）
-                await _store.DeleteUsersByOrganizationUnitIdsAsync(new[] { id }, ct);
-                await _store.DeleteAsync(id, ct);
+                await UserDataService.DeleteByOrganizationUnitIdsAsync(new[] { id }, ct);
+                await OuDataService.DeleteEntityAsync(id, ct);
 
                 await scope.CommitAsync(ct);
             }
@@ -175,7 +177,7 @@ namespace TKWF.Ext.OrganizationUnit
             try
             {
                 // 全量 OU 快照（事务内，D7）
-                var all = await _store.GetAllAsync(ct);
+                var all = await OuDataService.GetAllAsync(ct);
                 var ou = all.FirstOrDefault(o => o.Id == id)
                     ?? throw new InvalidOperationException($"组织单元 {id} 不存在");
 
@@ -234,7 +236,7 @@ namespace TKWF.Ext.OrganizationUnit
 
                 // 全部更新（原子提交——子树 Path/Level 要么全旧要么全新，无半更新）
                 foreach (var node in updated)
-                    await _store.UpdateAsync(node, ct);
+                    await OuDataService.EntityUpdateAsync(node, ct);
 
                 await scope.CommitAsync(ct);
             }
@@ -248,7 +250,7 @@ namespace TKWF.Ext.OrganizationUnit
         /// <inheritdoc />
         public async Task<OrganizationUnitTreeNode> GetTreeAsync(CancellationToken ct = default)
         {
-            var all = await _store.GetAllAsync(ct);
+            var all = await OuDataService.GetAllAsync(ct);
             if (all.Count == 0)
                 return new OrganizationUnitTreeNode(0, "", "根", 0, true, Array.Empty<OrganizationUnitTreeNode>());
 
@@ -298,18 +300,18 @@ namespace TKWF.Ext.OrganizationUnit
         /// <inheritdoc />
         public async Task<IReadOnlyList<OrganizationUnitEntity>> GetSubTreeAsync(long id, CancellationToken ct = default)
         {
-            var ou = await _store.GetByIdAsync(id, ct)
+            var ou = await OuDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"组织单元 {id} 不存在");
 
             // V0.2.0 SQL 下推：ou.Path 已含尾斜杠 → 前缀匹配 = 自身 + 全部子孙（单表精确前缀比较，
             // 非全量 GetAllAsync 内存过滤；LIKE 转义风险见 OrganizationUnitEntityDataService.GetByPathPrefixAsync 注记）
-            return await _store.GetByPathPrefixAsync(ou.Path, ct);
+            return await OuDataService.GetByPathPrefixAsync(ou.Path, ct);
         }
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<OrganizationUnitEntity>> GetAncestorsAsync(long id, CancellationToken ct = default)
         {
-            var ou = await _store.GetByIdAsync(id, ct)
+            var ou = await OuDataService.GetByIdAsync(id, ct)
                 ?? throw new InvalidOperationException($"组织单元 {id} 不存在");
 
             // Path 拆段反查（面包屑）："/A/B/C/" → [A, B, C]；祖先 = 除自身外各段（从根到直接父，不含自身）
@@ -322,7 +324,7 @@ namespace TKWF.Ext.OrganizationUnit
             // "for i < segments.Length-1" 逐段 Path==prefix 匹配）；
             // 返回后校验数量——缺失段抛异常，保持 GetAncestors_MissingAncestor_Throws 语义，oracle3 C-6/M3）
             var ancestorCodes = segments.Take(segments.Length - 1).ToList();
-            var ancestors = await _store.GetByCodesAsync(ancestorCodes, ct);
+            var ancestors = await OuDataService.GetByCodesAsync(ancestorCodes, ct);
             if (ancestors.Count != ancestorCodes.Count)
             {
                 var missing = ancestorCodes.Except(ancestors.Select(a => a.Code), StringComparer.Ordinal);
@@ -338,12 +340,12 @@ namespace TKWF.Ext.OrganizationUnit
             ArgumentException.ThrowIfNullOrWhiteSpace(userId);
 
             // 引用守卫（D10）：OU 必须存在
-            var ou = await _store.GetByIdAsync(ouId, ct)
+            var ou = await OuDataService.GetByIdAsync(ouId, ct)
                 ?? throw new InvalidOperationException($"组织单元 {ouId} 不存在");
 
             try
             {
-                await _store.AddUserAsync(new OrganizationUnitUserEntity
+                await UserDataService.AddAsync(new OrganizationUnitUserEntity
                 {
                     OrganizationUnitId = ouId,
                     UserId = userId
@@ -358,7 +360,7 @@ namespace TKWF.Ext.OrganizationUnit
 
         /// <inheritdoc />
         public async Task UnassignUserAsync(long ouId, string userId, CancellationToken ct = default)
-            => await _store.RemoveUserAsync(ouId, userId, ct); // 幂等：不存在静默成功
+            => await UserDataService.RemoveAsync(ouId, userId, ct); // 幂等：不存在静默成功
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<string>> GetUserIdsInOrganizationUnitAsync(
@@ -371,17 +373,17 @@ namespace TKWF.Ext.OrganizationUnit
             //   includeDescendants=false → 保留 junction 单查（仅本 OU——不存在静默返回空，D18 已删 OU 语义保持）
             if (includeDescendants)
             {
-                var ou = await _store.GetByIdAsync(ouId, ct)
+                var ou = await OuDataService.GetByIdAsync(ouId, ct)
                     ?? throw new InvalidOperationException($"组织单元 {ouId} 不存在");
-                return await _store.GetUserIdsByOuPathPrefixAsync(ou.Path, ct);
+                return await ViewDataService.GetUserIdsByOuPathPrefixAsync(ou.Path, ct);
             }
 
-            return await _store.GetUserIdsByOrganizationUnitIdsAsync(new List<long> { ouId }, ct);
+            return await UserDataService.GetUserIdsByOrganizationUnitIdsAsync(new List<long> { ouId }, ct);
         }
 
         /// <inheritdoc />
         public Task<IReadOnlyList<long>> GetOrganizationUnitIdsForUserAsync(string userId, CancellationToken ct = default)
-            => _store.GetOrganizationUnitIdsForUserAsync(userId, ct);
+            => UserDataService.GetOrganizationUnitIdsForUserAsync(userId, ct);
 
         /// <summary>递归把 childrenMap 中的子节点挂到 node 上（同级 SortOrder 升序）。</summary>
         private static OrganizationUnitTreeNode AttachChildren(

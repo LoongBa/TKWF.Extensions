@@ -17,7 +17,7 @@ namespace TKWF.Ext.DataDictionary.Tests;
 /// <list type="bullet">
 /// <item><strong>生产路径集成</strong>：<see cref="CreateProductionHost"/>——真实 DI（扩展 ConfigureServices +
 ///     FreeSql 基础设施 + AddLogging）+ 真实 <see cref="DomainUser{TUserInfo}"/>（BindScope）→
-///     <c>User.Use&lt;IDictionaryStore&gt;()</c> / <c>User.Use&lt;IDictionaryManager&gt;()</c> AOP 路径解析；</item>
+///     <c>User.Use&lt;DictionaryDefinitionEntityDataService&gt;()</c> / <c>User.Use&lt;IDictionaryManager&gt;()</c> AOP 路径解析；</item>
 /// <item><strong>分层单测</strong>：<see cref="StubDomainUser"/>——可配置用户桩，<c>Use&lt;T&gt;()</c> 按生产
 ///     NoAop 路径等价（ActivatorUtilities 直建，IDomainUser 参数显式传 this，其余从 DI 解析）。</item>
 /// <item>VEntity：建真实视图 <c>vw_DictionaryItemView</c>（SQLite 方言，来自 DictionaryItemView.ViewSqlSQLite）——

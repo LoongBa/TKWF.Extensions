@@ -5,9 +5,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using TKW.Framework.Domain;
 using TKWF.Ext.Federation;
-using TKWF.Federation.QQ;
 
-namespace Microsoft.Extensions.DependencyInjection;
+// 命名空间回归本库（对齐 DingTalk/WeCom/WeChat 平台库扩展定式，D1 审核项 2：
+// 从 Microsoft.Extensions.DependencyInjection 迁回，消费方经 using TKWF.Federation.QQ 发现扩展方法）。
+namespace TKWF.Federation.QQ;
 
 /// <summary>
 /// QQ 互联平台网关库 DI 装配扩展（库无 Initializer——库提供扩展方法，消费方/装配层调用；

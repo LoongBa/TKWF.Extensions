@@ -106,6 +106,23 @@ public class IChannelConfigServiceContractTests
         Assert.NotNull(typeof(SaveChannelRequest).GetProperty(nameof(SaveChannelRequest.EncodingAesKey)));
     }
 
+    /// <summary>源码兼容垫片（2026-11-23 code-review P2）：976c5df 删除的公开 SaveChannelResponse 已按 v0.1.1 原形状恢复
+    /// （long Id 单参 record）+ 标 [Obsolete]——存量消费方源码引用继续编译，IChannelConfigService 签名零变更。</summary>
+    [Fact]
+    public void SaveChannelResponse_CompatShim_Restored()
+    {
+#pragma warning disable CS0618 // 兼容垫片本身即被测目标（[Obsolete] 使用告警属预期）
+        var type = typeof(SaveChannelResponse);
+#pragma warning restore CS0618
+
+        Assert.Equal(Contract.Assembly, type.Assembly);
+        Assert.True(type.IsDefined(typeof(ObsoleteAttribute), inherit: false));
+        var ctor = Assert.Single(type.GetConstructors());
+        var parameter = Assert.Single(ctor.GetParameters());
+        Assert.Equal("Id", parameter.Name);
+        Assert.Equal(typeof(long), parameter.ParameterType);
+    }
+
     /// <summary>投影 DTO 不含凭证字段（Oracle P1 安全——密文/明文均不回显）。</summary>
     [Fact]
     public void ProjectionDto_No_Credential_Fields()

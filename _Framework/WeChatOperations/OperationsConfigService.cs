@@ -152,6 +152,16 @@ public sealed class OperationsConfigService : DomainServiceBase, IOperationsConf
     public async Task<long> SaveReplyTextAsync(SaveOpsConfigReplyTextRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.DisabledChannelReplyTemplate is { Length: > 500 })
+            throw new DomainException($"停用提示文案不能超过 500 字符（当前 {request.DisabledChannelReplyTemplate!.Length} 字符）")
+            {
+                ErrorCode = "OPS_CONFIG_TEXT_TOO_LONG",
+            };
+        if (request.DefaultReplyText is { Length: > 500 })
+            throw new DomainException($"兜底回复文案不能超过 500 字符（当前 {request.DefaultReplyText!.Length} 字符）")
+            {
+                ErrorCode = "OPS_CONFIG_TEXT_TOO_LONG",
+            };
         var now = TruncateToSecond(DateTime.UtcNow);
         var existing = await ReplyTextDs.EntityGetAsync(e => e.Id == 1, ct);
         if (existing is null)

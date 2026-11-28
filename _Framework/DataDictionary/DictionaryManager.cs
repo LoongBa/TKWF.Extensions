@@ -13,7 +13,7 @@ using TKW.Framework.Domain.Interfaces;
 namespace TKWF.Ext.DataDictionary
 {
     /// <summary>
-    /// 数据字典管理实现（V0.2.0）——组合 <see cref="IDictionaryStore"/> 提供按编码的聚合查询。
+    /// 数据字典管理实现（V0.2.0）——组合 <see cref="DictionaryDefinitionEntityDataService"/> 提供按编码的聚合查询。
     /// <para>V0.2.0 新增：按 Code 内存缓存（key=<c>DD:{Code}</c>）+ 树形分组组装。</para>
     /// <para>异常静默处理：操作失败时记录 Warning 日志，不抛出异常（不阻塞业务调用）。</para>
     /// <para>V0.3.0（领域自治根治，ADR90）：继承 <see cref="DomainServiceBase"/>——经基类 <c>User</c> 获取用户上下文
@@ -24,12 +24,12 @@ namespace TKWF.Ext.DataDictionary
     [DiContractIgnore]
     internal sealed class DictionaryManager : DomainServiceBase, IDictionaryManager
     {
-        private IDictionaryStore? _store;
+        private DictionaryDefinitionEntityDataService? _store;
         private readonly ILogger<DictionaryManager> _logger;
         private readonly IMemoryCache _cache;
         private readonly DataDictionaryOptions _options;
 
-        private IDictionaryStore Store => _store ??= User.Use<IDictionaryStore>();
+        private DictionaryDefinitionEntityDataService Store => _store ??= User.Use<DictionaryDefinitionEntityDataService>();
 
         private const string CacheKeyPrefix = "DD:";
 

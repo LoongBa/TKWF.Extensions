@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace TKWF.Federation.Oidc;
@@ -65,4 +66,12 @@ public sealed class OidcPlatformConfig
 
     /// <summary>private_key_jwt 认证（企业场景证书认证；null = 用 ClientSecret post 认证）。</summary>
     public string? ClientAssertionSigningKeyPath { get; set; }
+
+    /// <summary>
+    /// 【兼容占位·已废弃】是否默认拉取 userinfo（历史死配置——代码审核 2026-11-23 确认零消费，
+    /// 拉不拉取由调用方决定）。
+    /// <para>仅为让既有消费者源码继续编译而保留；读写均无任何行为影响（no-op），新代码禁止使用。</para>
+    /// </summary>
+    [Obsolete("FetchUserInfo 已是死配置（无任何消费逻辑）；仅保留兼容旧消费者编译，请勿使用。")]
+    public bool FetchUserInfo { get; set; } = true;
 }

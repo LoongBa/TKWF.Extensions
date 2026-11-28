@@ -8,7 +8,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.OrganizationUnit` |
-| 版本 | v0.2.0（VEntity 下推）+ **V0.5.0（V4.10.53 领域自治根治，ADR90——正确路线：OrganizationUnitStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ OrganizationUnitManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.5.0）** |
+| 版本 | v0.2.0（VEntity 下推）+ **V0.5.0（V4.10.53 领域自治根治，ADR90——正确路线：OrganizationUnitStore 改内部接线型（ctor IServiceProvider + C1 延迟解析 DataService）+ OrganizationUnitManager 继承 `DomainServiceBase` + `[DiContractIgnore]` + 注册改 `AddConstructibleService`；测试宿主走生产路径；V0.3.0 已为既有 tag，整改发布版升 V0.5.0）+ A5 Store-debt 清理：thin Store 删除、门面直调 DataService）** |
 | 依赖 | `TKWF.Domain` + SG1（框架既有） |
 | 数据 | 表 `TKWF_OrganizationUnit` + `TKWF_OrganizationUnitUser`（框架 `SyncTables` 统一建表） |
 
@@ -19,13 +19,13 @@ OrganizationUnitEntity / OrganizationUnitUserEntity     # SG1 声明式实体（
 ├── OrganizationUnitEntityDataService                   # SG1 DataService 骨架（GetByCode/GetAll/GetByIds）
 ├── OrganizationUnitUserEntityDataService               # SG1 DataService 骨架（关联 CRUD/查询）
 ├── UserOrganizationUnitViewDataService                 # VEntity 只读 DataService（V0.2.0 视图 JOIN 单查询下推）
-├── IOrganizationUnitStore / OrganizationUnitStore      # internal 存储抽象（V0.3.0 接线型：ctor IServiceProvider + C1 延迟解析 DataService，异常自然传播）
+├── （A5：internal thin Store 伪层已删——门面经 User.Use<XxxDataService>() 懒加载数据访问）
 └── IOrganizationUnitManager / OrganizationUnitManager  # 门面（V0.3.0 internal sealed 继承 DomainServiceBase + AddConstructibleService 注册——业务规则 + 事务包裹 + 引用守卫）
 ```
 
-- **数据访问红线**：Store/Manager 不注入 `IFreeSql`/`IEntityDAC`——全部经 DataService 委托；事务由 Manager 层统一管理（Store 不触碰 `ITransactionManager`）。
+- **数据访问红线**：Manager 不注入 `IFreeSql`/`IEntityDAC`——经 `User.Use<XxxDataService>()` 懒加载（A5 清理）；事务由 Manager 层统一管理。
 - **事务包裹（C1）**：`CreateAsync`/`MoveAsync`/`DeleteAsync` 多步写路径经 `ITransactionManager` `BeginAsync → CommitAsync / 失败 RollbackAsync`（using scope 范式，对齐 Approval CONDITION-1）。Move 子树重算与 Delete（前置检查 + 清 junction + 物理删）要么全提交要么全回滚，无半更新。
-- **异常语义**：Store 异常自然传播（不静默）；Manager 将唯一约束冲突转业务异常、将业务规则违反抛 `InvalidOperationException`。
+- **异常语义**：数据访问异常自然传播（不静默）；Manager 将唯一约束冲突转业务异常、将业务规则违反抛 `InvalidOperationException`。
 
 ## 核心能力
 
@@ -74,9 +74,9 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 | 接口 | 实现 | 注册形态 | 消费方式 |
 |------|------|---------|---------|
 | `IOrganizationUnitManager` | `OrganizationUnitManager`（internal sealed，继承 `DomainServiceBase`） | **`AddConstructibleService`**（接口可构造守卫工厂 + 实现类 throw-factory） | `User.Use<IOrganizationUnitManager>()` |
-| `IOrganizationUnitStore` | `OrganizationUnitStore`（内部接线型：ctor IServiceProvider + C1 延迟解析 DataService） | **接线型 `TryAddScoped` 普通 DI**（消费方可自定义实现优先） | Manager ctor 注入（普通 DI） |
+| （A5 清理——原 thin Store 已删） | `OrganizationUnitEntityDataService` / `OrganizationUnitUserEntityDataService` / `UserOrganizationUnitViewDataService` | SG1 ADR61 自动注册 | `OrganizationUnitManager` 内 `User.Use<XxxDataService>()` 懒加载 |
 
-> **V0.3.0（V4.10.53 领域自治根治）**：`IOrganizationUnitManager` 门面消费方统一经 `User.Use<IOrganizationUnitManager>()` 解析（AOP 路径——IDomainUser 永不注册 DI，经基类 `User` 取上下文）；`IOrganizationUnitStore` 保持 internal 接线型普通 DI（Manager 内部组合依赖，不可改可见性）。
+> **V0.3.0（V4.10.53 领域自治根治）**：`IOrganizationUnitManager` 门面消费方统一经 `User.Use<IOrganizationUnitManager>()` 解析（AOP 路径——IDomainUser 永不注册 DI，经基类 `User` 取上下文）；数据访问经门面内 `User.Use<XxxDataService>()` 懒加载（A5 清理）。
 
 ## 数据模型
 

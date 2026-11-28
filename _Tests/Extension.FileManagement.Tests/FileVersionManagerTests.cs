@@ -176,9 +176,8 @@ public class FileVersionManagerTests
 
         await host.Manager.DeleteFileAsync(file.Id, ct: TestContext.Current.CancellationToken);
 
-        // 版本行全删（文件已删——GetFileVersionsAsync 有存在守卫，经版本 Store 直查验证）
-        var versionStore = host.GetRequiredService<IManagedFileVersionStore>();
-        var versions = await versionStore.GetByFileAsync(file.Id, ct: TestContext.Current.CancellationToken);
+        // 版本行全删（文件已删——GetFileVersionsAsync 有存在守卫，经版本 DataService 直查验证）
+        var versions = await host.VersionDataService.GetByFileAsync(file.Id, ct: TestContext.Current.CancellationToken);
         Assert.Empty(versions);
         // Blob 全清（Distinct 去重——回滚共享 StoredPath 不重复删）
         Assert.Equal(0, host.BlobCount());

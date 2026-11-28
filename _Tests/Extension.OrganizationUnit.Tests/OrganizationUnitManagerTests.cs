@@ -50,7 +50,7 @@ public class OrganizationUnitManagerTests
         Assert.Equal("/HQ/", root.Path);
 
         // 持久化复验
-        var persisted = await host.Store.GetByCodeAsync("HQ", CancellationToken.None);
+        var persisted = await host.OuDataService.GetByCodeAsync("HQ", CancellationToken.None);
         Assert.NotNull(persisted);
         Assert.Equal(0, persisted!.Level);
         Assert.Equal("/HQ/", persisted.Path);
@@ -70,7 +70,7 @@ public class OrganizationUnitManagerTests
         Assert.Equal(1, child.Level);
         Assert.Equal("/HQ/DE/", child.Path);
 
-        var persisted = await host.Store.GetByCodeAsync("DE", CancellationToken.None);
+        var persisted = await host.OuDataService.GetByCodeAsync("DE", CancellationToken.None);
         Assert.Equal(1, persisted!.Level);
         Assert.Equal("/HQ/DE/", persisted.Path);
     }
@@ -111,7 +111,7 @@ public class OrganizationUnitManagerTests
         // 显式 SortOrder 打乱创建顺序，验证按 SortOrder 升序组装
         await host.Manager.CreateAsync("B", "B组", root.Id, sortOrder: 20, ct: CancellationToken.None);
         await host.Manager.CreateAsync("A", "A组", root.Id, sortOrder: 10, ct: CancellationToken.None);
-        await host.Manager.CreateAsync("G", "孙节点", (await host.Store.GetByCodeAsync("A", CancellationToken.None))!.Id, sortOrder: 1, ct: CancellationToken.None);
+        await host.Manager.CreateAsync("G", "孙节点", (await host.OuDataService.GetByCodeAsync("A", CancellationToken.None))!.Id, sortOrder: 1, ct: CancellationToken.None);
 
         var tree = await host.Manager.GetTreeAsync(CancellationToken.None);
 
@@ -180,17 +180,17 @@ public class OrganizationUnitManagerTests
         await host.Manager.MoveAsync(c.Id, d.Id, CancellationToken.None);
 
         // C 自身重算（D 为 A 子节点 Level=1 → C 移入后 Level=2）
-        var cMoved = await host.Store.GetByIdAsync(c.Id, CancellationToken.None);
+        var cMoved = await host.OuDataService.GetByIdAsync(c.Id, CancellationToken.None);
         Assert.Equal(d.Id, cMoved!.ParentId);
         Assert.Equal(2, cMoved.Level);
         Assert.Equal("/A/D/C/", cMoved.Path);
         // 孙代 E 重算（含孙代断言：C Level=2 → E Level=3）
-        var eMoved = await host.Store.GetByCodeAsync("E", CancellationToken.None);
+        var eMoved = await host.OuDataService.GetByCodeAsync("E", CancellationToken.None);
         Assert.Equal(c.Id, eMoved!.ParentId);
         Assert.Equal(3, eMoved.Level);
         Assert.Equal("/A/D/C/E/", eMoved.Path);
         // 未移动节点不受影响
-        var bStays = await host.Store.GetByCodeAsync("B", CancellationToken.None);
+        var bStays = await host.OuDataService.GetByCodeAsync("B", CancellationToken.None);
         Assert.Equal("/A/B/", bStays!.Path);
         Assert.Equal(1, bStays.Level);
     }
@@ -229,7 +229,7 @@ public class OrganizationUnitManagerTests
 
         await host.Manager.MoveAsync(b.Id, null, CancellationToken.None);
 
-        var bMoved = await host.Store.GetByIdAsync(b.Id, CancellationToken.None);
+        var bMoved = await host.OuDataService.GetByIdAsync(b.Id, CancellationToken.None);
         Assert.Null(bMoved!.ParentId);
         Assert.Equal(0, bMoved.Level);
         Assert.Equal("/B/", bMoved.Path);
@@ -294,13 +294,13 @@ public class OrganizationUnitManagerTests
         await host.Manager.DeleteAsync(a.Id, CancellationToken.None);
 
         // 全量查询不含已删 OU
-        var all = await host.Store.GetAllAsync(CancellationToken.None);
+        var all = await host.OuDataService.GetAllAsync(CancellationToken.None);
         Assert.DoesNotContain(all, e => e.Id == a.Id);
         // 子树查询引用已删 OU → 引用守卫抛异常（对齐 Create/AssignUser 引用守卫语义）
         await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => host.Manager.GetSubTreeAsync(a.Id, CancellationToken.None));
         // 按编码查无
-        Assert.Null(await host.Store.GetByCodeAsync("A", CancellationToken.None));
+        Assert.Null(await host.OuDataService.GetByCodeAsync("A", CancellationToken.None));
     }
 
     [Fact]
@@ -416,7 +416,7 @@ public class OrganizationUnitManagerTests
 
         // 事务提交后：移动子树整体换前缀——全部节点路径要么保持旧值（A/B/D），要么是新值（C/E 换到 /A/D/ 下），
         // 绝无"半更新"中间态（旧 /A/B/C/、旧 /A/B/C/E/ 残留即断言失败）
-        var all = await host.Store.GetAllAsync(CancellationToken.None);
+        var all = await host.OuDataService.GetAllAsync(CancellationToken.None);
         var actualPaths = all.Select(x => x.Path).OrderBy(p => p, StringComparer.Ordinal).ToArray();
         var expected = new[] { "/A/", "/A/B/", "/A/D/", "/A/D/C/", "/A/D/C/E/" }
             .OrderBy(p => p, StringComparer.Ordinal)
@@ -439,7 +439,7 @@ public class OrganizationUnitManagerTests
 
         // B1 移入 C（C 无子）→ 追加到 C 子级末尾 = max+1 = 0
         await host.Manager.MoveAsync(b1.Id, c.Id, CancellationToken.None);
-        var b1Moved = await host.Store.GetByIdAsync(b1.Id, CancellationToken.None);
+        var b1Moved = await host.OuDataService.GetByIdAsync(b1.Id, CancellationToken.None);
         Assert.Equal(c.Id, b1Moved!.ParentId);
         Assert.Equal(0, b1Moved.SortOrder);
 
@@ -462,7 +462,7 @@ public class OrganizationUnitManagerTests
         var a = await host.Manager.CreateAsync("A", "A", null, ct: CancellationToken.None);
 
         // Store 直插孤儿行（ParentId 指向不存在的节点）——绕过 Manager 引用守卫
-        await host.Store.CreateAsync(new OrganizationUnitEntity
+        await host.OuDataService.EntityCreateAsync(new OrganizationUnitEntity
         {
             Code = "X",
             Name = "孤儿",
@@ -484,7 +484,7 @@ public class OrganizationUnitManagerTests
 
         // Store 直改：Path 指向不存在的祖先段 X
         b.Path = "/X/B/";
-        await host.Store.UpdateAsync(b, CancellationToken.None);
+        await host.OuDataService.EntityUpdateAsync(b, CancellationToken.None);
 
         await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => host.Manager.GetAncestorsAsync(b.Id, CancellationToken.None));
@@ -553,7 +553,7 @@ public class OrganizationUnitManagerTests
         await host.Manager.CreateAsync("C", "C", b.Id, ct: CancellationToken.None);
 
         // 入参顺序无关；Code IN 下推返回按 Level 升序 = [A, B, C]（祖先链顺序）
-        var rows = await host.Store.GetByCodesAsync(new[] { "A", "C", "B" }, CancellationToken.None);
+        var rows = await host.OuDataService.GetByCodesAsync(new[] { "A", "C", "B" }, CancellationToken.None);
 
         Assert.Equal(new[] { "A", "B", "C" }, rows.Select(r => r.Code).ToArray());
     }
@@ -568,7 +568,7 @@ public class OrganizationUnitManagerTests
         var b = await host.Manager.CreateAsync("B", "B", a.Id, ct: CancellationToken.None);
 
         // 数据异常：直接物理删掉祖先 A 行（绕过 Manager 删除保护）→ B 的 Path="/A/B/" 段 A 缺失
-        await host.Store.DeleteAsync(a.Id, CancellationToken.None);
+        await host.OuDataService.DeleteEntityAsync(a.Id, CancellationToken.None);
 
         await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => host.Manager.GetAncestorsAsync(b.Id, CancellationToken.None));

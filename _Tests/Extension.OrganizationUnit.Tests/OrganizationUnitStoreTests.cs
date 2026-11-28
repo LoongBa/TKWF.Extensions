@@ -8,14 +8,14 @@ using TKWF.Ext.OrganizationUnit;
 namespace TKWF.Ext.OrganizationUnit.Tests;
 
 /// <summary>
-/// IOrganizationUnitStore 委托正确性测试——经 Store 写入 → 经 DataService 可查（红线合规：Store 仅委托 SG1 DataService，不触碰 ORM/IEntityDAC）。
+/// 组织单元 DataService 直调正确性测试（A5 Store-debt 清理——internal thin Store 伪层已删）。
+/// 门面经 User.Use&lt;XxxDataService&gt;() 懒加载；本类直接验证 DataService 委托持久化路径。
 /// </summary>
-public class OrganizationUnitStoreTests
+public class OrganizationUnitDataServiceTests
 {
     private static OrganizationUnitTestHost NewHost() => OrganizationUnitTestHost.Create();
 
-    /// <summary>经 Store 直接创建根 OU（Store 层委托 DataService 的写路径）。</summary>
-    private static async Task<OrganizationUnitEntity> CreateViaStore(IOrganizationUnitStore store, string code, CancellationToken ct = default)
+    private static async Task<OrganizationUnitEntity> CreateOu(OrganizationUnitTestHost host, string code, CancellationToken ct = default)
     {
         var entity = new OrganizationUnitEntity
         {
@@ -27,25 +27,19 @@ public class OrganizationUnitStoreTests
             Path = $"/{code}/",
             IsEnabled = true
         };
-        await store.CreateAsync(entity, ct);
+        await host.OuDataService.EntityCreateAsync(entity, ct);
         return entity;
     }
 
     [Fact]
-    public async Task StoreCreate_DelegatesToDataService_AndGetByIdReturns()
+    public async Task Create_And_GetById_Returns()
     {
         using var host = NewHost();
 
-        var created = await CreateViaStore(host.Store, "HQ", ct: TestContext.Current.CancellationToken);
+        var created = await CreateOu(host, "HQ", ct: TestContext.Current.CancellationToken);
 
         Assert.True(created.Id > 0);
-        // 经 DataService 直接查询能读到（委托转发正确）
-        var viaDataService = await host.OuDataService.EntityGetAsync(e => e.Id == created.Id, CancellationToken.None);
-        Assert.NotNull(viaDataService);
-        Assert.Equal("HQ", viaDataService!.Code);
-
-        // GetById 转发正确
-        var byId = await host.Store.GetByIdAsync(created.Id, CancellationToken.None);
+        var byId = await host.OuDataService.GetByIdAsync(created.Id, CancellationToken.None);
         Assert.NotNull(byId);
         Assert.Equal(created.Id, byId!.Id);
     }
@@ -54,26 +48,26 @@ public class OrganizationUnitStoreTests
     public async Task GetByCode_ForwardsToDataService()
     {
         using var host = NewHost();
-        var created = await CreateViaStore(host.Store, "FIN", ct: TestContext.Current.CancellationToken);
+        var created = await CreateOu(host, "FIN", ct: TestContext.Current.CancellationToken);
 
-        var byCode = await host.Store.GetByCodeAsync("FIN", CancellationToken.None);
+        var byCode = await host.OuDataService.GetByCodeAsync("FIN", CancellationToken.None);
 
         Assert.NotNull(byCode);
         Assert.Equal(created.Id, byCode!.Id);
         Assert.Equal("FIN", byCode.Code);
 
-        Assert.Null(await host.Store.GetByCodeAsync("NOT_EXISTS", CancellationToken.None));
+        Assert.Null(await host.OuDataService.GetByCodeAsync("NOT_EXISTS", CancellationToken.None));
     }
 
     [Fact]
     public async Task GetAll_ReturnsAllRows()
     {
         using var host = NewHost();
-        await CreateViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
-        await CreateViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
-        await CreateViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
+        await CreateOu(host, "A", ct: TestContext.Current.CancellationToken);
+        await CreateOu(host, "B", ct: TestContext.Current.CancellationToken);
+        await CreateOu(host, "C", ct: TestContext.Current.CancellationToken);
 
-        var all = await host.Store.GetAllAsync(CancellationToken.None);
+        var all = await host.OuDataService.GetAllAsync(CancellationToken.None);
 
         Assert.Equal(3, all.Count);
         Assert.Contains(all, e => e.Code == "A");
@@ -85,13 +79,13 @@ public class OrganizationUnitStoreTests
     public async Task Update_PersistsChanges()
     {
         using var host = NewHost();
-        var created = await CreateViaStore(host.Store, "HQ", ct: TestContext.Current.CancellationToken);
+        var created = await CreateOu(host, "HQ", ct: TestContext.Current.CancellationToken);
 
         created.Name = "总部（更新）";
         created.IsEnabled = false;
-        await host.Store.UpdateAsync(created, CancellationToken.None);
+        await host.OuDataService.EntityUpdateAsync(created, CancellationToken.None);
 
-        var reloaded = await host.Store.GetByIdAsync(created.Id, CancellationToken.None);
+        var reloaded = await host.OuDataService.GetByIdAsync(created.Id, CancellationToken.None);
         Assert.NotNull(reloaded);
         Assert.Equal("总部（更新）", reloaded!.Name);
         Assert.False(reloaded.IsEnabled);
@@ -101,70 +95,65 @@ public class OrganizationUnitStoreTests
     public async Task Delete_RemovesRow()
     {
         using var host = NewHost();
-        var created = await CreateViaStore(host.Store, "HQ", ct: TestContext.Current.CancellationToken);
+        var created = await CreateOu(host, "HQ", ct: TestContext.Current.CancellationToken);
 
-        await host.Store.DeleteAsync(created.Id, CancellationToken.None);
+        await host.OuDataService.DeleteEntityAsync(created.Id, CancellationToken.None);
 
-        Assert.Null(await host.Store.GetByIdAsync(created.Id, CancellationToken.None));
-        Assert.Empty(await host.Store.GetAllAsync(CancellationToken.None));
+        Assert.Null(await host.OuDataService.GetByIdAsync(created.Id, CancellationToken.None));
+        Assert.Empty(await host.OuDataService.GetAllAsync(CancellationToken.None));
     }
 
     [Fact]
-    public async Task UserAssociation_DelegatesToDataService_AndQueriesCorrectly()
+    public async Task UserAssociation_QueriesCorrectly()
     {
         using var host = NewHost();
-        var ou = await CreateViaStore(host.Store, "DE", ct: TestContext.Current.CancellationToken);
+        var ou = await CreateOu(host, "DE", ct: TestContext.Current.CancellationToken);
 
-        await host.Store.AddUserAsync(new OrganizationUnitUserEntity
+        await host.UserDataService.AddAsync(new OrganizationUnitUserEntity
         {
             OrganizationUnitId = ou.Id,
             UserId = "u_001"
         }, CancellationToken.None);
 
-        // 经 DataService 直查 junction 能读到（委托转发正确）
         var viaDataService = await host.UserDataService.EntityGetAsync(
             j => j.OrganizationUnitId == ou.Id && j.UserId == "u_001", CancellationToken.None);
         Assert.NotNull(viaDataService);
 
-        // 按 OU 集合查询用户
-        var userIds = await host.Store.GetUserIdsByOrganizationUnitIdsAsync(new List<long> { ou.Id }, CancellationToken.None);
+        var userIds = await host.UserDataService.GetUserIdsByOrganizationUnitIdsAsync(
+            new List<long> { ou.Id }, CancellationToken.None);
         Assert.Equal(new[] { "u_001" }, userIds);
 
-        // 按用户查询 OU
-        var ouIds = await host.Store.GetOrganizationUnitIdsForUserAsync("u_001", CancellationToken.None);
+        var ouIds = await host.UserDataService.GetOrganizationUnitIdsForUserAsync("u_001", CancellationToken.None);
         Assert.Equal(new[] { ou.Id }, ouIds);
 
-        // 计数
-        Assert.Equal(1, await host.Store.CountUsersByOrganizationUnitIdAsync(ou.Id, CancellationToken.None));
+        Assert.Equal(1, await host.UserDataService.CountByOrganizationUnitIdAsync(ou.Id, CancellationToken.None));
 
-        // RemoveUser 解绑
-        await host.Store.RemoveUserAsync(ou.Id, "u_001", CancellationToken.None);
-        Assert.Equal(0, await host.Store.CountUsersByOrganizationUnitIdAsync(ou.Id, CancellationToken.None));
+        await host.UserDataService.RemoveAsync(ou.Id, "u_001", CancellationToken.None);
+        Assert.Equal(0, await host.UserDataService.CountByOrganizationUnitIdAsync(ou.Id, CancellationToken.None));
     }
 
     [Fact]
     public async Task DeleteUsersByOrganizationUnitId_ClearsAssociation()
     {
         using var host = NewHost();
-        var ou = await CreateViaStore(host.Store, "DE", ct: TestContext.Current.CancellationToken);
-        await host.Store.AddUserAsync(new OrganizationUnitUserEntity { OrganizationUnitId = ou.Id, UserId = "u_001" }, CancellationToken.None);
-        await host.Store.AddUserAsync(new OrganizationUnitUserEntity { OrganizationUnitId = ou.Id, UserId = "u_002" }, CancellationToken.None);
+        var ou = await CreateOu(host, "DE", ct: TestContext.Current.CancellationToken);
+        await host.UserDataService.AddAsync(new OrganizationUnitUserEntity { OrganizationUnitId = ou.Id, UserId = "u_001" }, CancellationToken.None);
+        await host.UserDataService.AddAsync(new OrganizationUnitUserEntity { OrganizationUnitId = ou.Id, UserId = "u_002" }, CancellationToken.None);
 
-        await host.Store.DeleteUsersByOrganizationUnitIdsAsync(new List<long> { ou.Id }, CancellationToken.None);
+        await host.UserDataService.DeleteByOrganizationUnitIdsAsync(new List<long> { ou.Id }, CancellationToken.None);
 
-        Assert.Equal(0, await host.Store.CountUsersByOrganizationUnitIdAsync(ou.Id, CancellationToken.None));
-        Assert.Empty(await host.Store.GetUserIdsByOrganizationUnitIdsAsync(new List<long> { ou.Id }, CancellationToken.None));
+        Assert.Equal(0, await host.UserDataService.CountByOrganizationUnitIdAsync(ou.Id, CancellationToken.None));
+        Assert.Empty(await host.UserDataService.GetUserIdsByOrganizationUnitIdsAsync(new List<long> { ou.Id }, CancellationToken.None));
     }
 
     [Fact]
     public async Task GetByIds_Batch_OrderIndependent()
     {
         using var host = NewHost();
-        var a = await CreateViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
-        var b = await CreateViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
-        var c = await CreateViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
+        var a = await CreateOu(host, "A", ct: TestContext.Current.CancellationToken);
+        var b = await CreateOu(host, "B", ct: TestContext.Current.CancellationToken);
+        var c = await CreateOu(host, "C", ct: TestContext.Current.CancellationToken);
 
-        // 批量按 Id 查询：入参顺序无关，三行全回
         var result = await host.OuDataService.GetByIdsAsync(
             new List<long> { b.Id, a.Id, c.Id }, CancellationToken.None);
 

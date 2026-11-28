@@ -7,7 +7,7 @@ using TKWF.Ext.Calendar;
 namespace TKWF.Ext.Calendar.Tests;
 
 /// <summary>
-/// ICalendarStore 委托正确性测试——经 Store 写入 → 经 DataService 可查（红线合规：Store 仅委托 SG1 DataService，不触碰 ORM/IEntityDAC）
+/// Calendar DataService 委托正确性测试（A5 Store-debt cleanup 后）——经 DataService 写入 → 可读
 /// + 分路谓词正确性（C1：单次分支不含重复事件行；重复分支不含单次事件行）。
 /// </summary>
 public class CalendarStoreTests
@@ -17,17 +17,15 @@ public class CalendarStoreTests
     private static DateTime Utc(int year, int month, int day, int hour = 0, int minute = 0)
         => new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Utc);
 
-    /// <summary>经 Store 直接创建日历（Store 层委托 DataService 的写路径）。</summary>
-    private static async Task<CalendarEntity> CreateCalendarViaStore(ICalendarStore store, string code, CancellationToken ct = default)
+    private static async Task<CalendarEntity> CreateCalendarViaDataService(CalendarTestHost host, string code, CancellationToken ct = default)
     {
         var entity = new CalendarEntity { Code = code, Name = code, IsEnabled = true };
-        await store.CreateAsync(entity, ct);
+        await host.CalendarDataService.EntityCreateAsync(entity, ct);
         return entity;
     }
 
-    /// <summary>经 Store 直接创建事件行（含重复规则——规则/RecurrenceEndUtc 手动填充，Store 不推导）。</summary>
-    private static async Task<CalendarEventEntity> CreateEventViaStore(
-        ICalendarStore store, long calendarId, string title, DateTime startUtc, DateTime? endUtc,
+    private static async Task<CalendarEventEntity> CreateEventViaDataService(
+        CalendarTestHost host, long calendarId, string title, DateTime startUtc, DateTime? endUtc,
         string? recurrenceRule = null, DateTime? recurrenceEndUtc = null, CancellationToken ct = default)
     {
         var entity = new CalendarEventEntity
@@ -40,7 +38,7 @@ public class CalendarStoreTests
             RecurrenceRule = recurrenceRule,
             RecurrenceEndUtc = recurrenceEndUtc
         };
-        await store.CreateEventAsync(entity, ct);
+        await host.EventDataService.CreateAsync(entity, ct);
         return entity;
     }
 
@@ -49,14 +47,11 @@ public class CalendarStoreTests
     {
         using var host = NewHost();
 
-        // 经 Store 创建日历
-        var cal = await CreateCalendarViaStore(host.Store, "CAL", ct: TestContext.Current.CancellationToken);
+        var cal = await CreateCalendarViaDataService(host, "CAL", ct: TestContext.Current.CancellationToken);
         Assert.True(cal.Id > 0);
 
-        // 经 Store 创建事件（Store 委托 DataService 写路径，不触碰 ORM/IEntityDAC）
-        var evt = await CreateEventViaStore(host.Store, cal.Id, "E1", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: TestContext.Current.CancellationToken);
+        var evt = await CreateEventViaDataService(host, cal.Id, "E1", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: TestContext.Current.CancellationToken);
 
-        // 经 DataService 直查能读到（委托转发正确）
         var viaCalendarDs = await host.CalendarDataService.EntityGetAsync(c => c.Id == cal.Id, CancellationToken.None);
         Assert.NotNull(viaCalendarDs);
         Assert.Equal("CAL", viaCalendarDs!.Code);
@@ -71,14 +66,14 @@ public class CalendarStoreTests
     public async Task StoreCreateCalendar_GetByCode_AndGetAll_Forward()
     {
         using var host = NewHost();
-        await CreateCalendarViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
-        await CreateCalendarViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
+        await CreateCalendarViaDataService(host, "A", ct: TestContext.Current.CancellationToken);
+        await CreateCalendarViaDataService(host, "B", ct: TestContext.Current.CancellationToken);
 
-        var byCode = await host.Store.GetByCodeAsync("B", CancellationToken.None);
+        var byCode = await host.CalendarDataService.GetByCodeAsync("B", CancellationToken.None);
         Assert.NotNull(byCode);
         Assert.Equal("B", byCode!.Code);
 
-        var all = await host.Store.GetAllAsync(CancellationToken.None);
+        var all = await host.CalendarDataService.GetAllAsync(CancellationToken.None);
         Assert.Equal(2, all.Count);
         Assert.Contains(all, e => e.Code == "A");
         Assert.Contains(all, e => e.Code == "B");
@@ -88,13 +83,11 @@ public class CalendarStoreTests
     public async Task GetSingleByRangeAsync_ExcludesRecurringRows()
     {
         using var host = NewHost();
-        var cal = await CreateCalendarViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
-        // 单次 + 重复事件混建（经 Manager 走真实 RecurrenceEndUtc 推导；Store/DataService 谓词按 RecurrenceRule 分路）
+        var cal = await CreateCalendarViaDataService(host, "C", ct: TestContext.Current.CancellationToken);
         var single = await host.Manager.CreateEventAsync(cal.Id, "单次", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: CancellationToken.None);
         await host.Manager.CreateEventAsync(cal.Id, "重复", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10),
             recurrenceRule: "FREQ=DAILY;COUNT=3", ct: CancellationToken.None);
 
-        // C1 分路谓词①：单次分支（RecurrenceRule == null）——不得混入重复事件行
         var singles = await host.EventDataService.GetSingleByRangeAsync(
             cal.Id, Utc(2026, 9, 1, 0), Utc(2026, 12, 31, 0), 0, 100, CancellationToken.None);
 
@@ -107,12 +100,11 @@ public class CalendarStoreTests
     public async Task GetRecurringByRangeAsync_ExcludesSingleRows()
     {
         using var host = NewHost();
-        var cal = await CreateCalendarViaStore(host.Store, "C", ct: TestContext.Current.CancellationToken);
+        var cal = await CreateCalendarViaDataService(host, "C", ct: TestContext.Current.CancellationToken);
         var recurring = await host.Manager.CreateEventAsync(cal.Id, "重复", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10),
             recurrenceRule: "FREQ=DAILY;COUNT=3", ct: CancellationToken.None);
         await host.Manager.CreateEventAsync(cal.Id, "单次", Utc(2026, 9, 9, 9), Utc(2026, 9, 9, 10), ct: CancellationToken.None);
 
-        // C1 分路谓词②：重复分支（RecurrenceRule != null，按 RecurrenceEndUtc 预筛）——不得混入单次事件行
         var recurringRows = await host.EventDataService.GetRecurringByRangeAsync(
             cal.Id, Utc(2026, 9, 1, 0), Utc(2026, 12, 31, 0), 0, 100, CancellationToken.None);
 
@@ -125,14 +117,14 @@ public class CalendarStoreTests
     public async Task CountByCalendarIdAsync_CountsEventRows()
     {
         using var host = NewHost();
-        var cal1 = await CreateCalendarViaStore(host.Store, "A", ct: TestContext.Current.CancellationToken);
-        var cal2 = await CreateCalendarViaStore(host.Store, "B", ct: TestContext.Current.CancellationToken);
-        await CreateEventViaStore(host.Store, cal1.Id, "E1", Utc(2026, 9, 9, 9), null, ct: TestContext.Current.CancellationToken);
-        await CreateEventViaStore(host.Store, cal1.Id, "E2", Utc(2026, 9, 10, 9), null, ct: TestContext.Current.CancellationToken);
-        await CreateEventViaStore(host.Store, cal2.Id, "E3", Utc(2026, 9, 11, 9), null, ct: TestContext.Current.CancellationToken);
+        var cal1 = await CreateCalendarViaDataService(host, "A", ct: TestContext.Current.CancellationToken);
+        var cal2 = await CreateCalendarViaDataService(host, "B", ct: TestContext.Current.CancellationToken);
+        await CreateEventViaDataService(host, cal1.Id, "E1", Utc(2026, 9, 9, 9), null, ct: TestContext.Current.CancellationToken);
+        await CreateEventViaDataService(host, cal1.Id, "E2", Utc(2026, 9, 10, 9), null, ct: TestContext.Current.CancellationToken);
+        await CreateEventViaDataService(host, cal2.Id, "E3", Utc(2026, 9, 11, 9), null, ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, await host.Store.CountByCalendarIdAsync(cal1.Id, CancellationToken.None));
-        Assert.Equal(1, await host.Store.CountByCalendarIdAsync(cal2.Id, CancellationToken.None));
-        Assert.Equal(0, await host.Store.CountByCalendarIdAsync(9999, CancellationToken.None));
+        Assert.Equal(2, await host.EventDataService.CountByCalendarIdAsync(cal1.Id, CancellationToken.None));
+        Assert.Equal(1, await host.EventDataService.CountByCalendarIdAsync(cal2.Id, CancellationToken.None));
+        Assert.Equal(0, await host.EventDataService.CountByCalendarIdAsync(9999, CancellationToken.None));
     }
 }

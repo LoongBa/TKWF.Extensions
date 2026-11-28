@@ -31,3 +31,11 @@ public sealed record SaveChannelRequest(
     string? ChannelForm = null,
     string? Verification = null,
     string? Alias = null);
+
+/// <summary>保存结果响应（Id——新建返回自增主键）。
+/// <para><b>源码兼容垫片</b>（2026-11-23 code-review P2）：commit 976c5df 曾把本公开 wire DTO 删除——
+/// 对引用契约包的存量消费方属 source-breaking。此处按 v0.1.1 原形状恢复并标 <see cref="ObsoleteAttribute"/>；
+/// <see cref="IChannelConfigService.SaveChannelAsync"/> 签名从未改变（直接返回 <see cref="long"/>），
+/// 新代码继续消费该 long 返回值，无需构造本类型。</para></summary>
+[Obsolete("SaveChannelResponse 已退役——IChannelConfigService.SaveChannelAsync 直接返回 long；仅为源码兼容保留，新代码勿用。")]
+public sealed record SaveChannelResponse(long Id);

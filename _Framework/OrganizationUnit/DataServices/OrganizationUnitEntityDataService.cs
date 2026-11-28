@@ -14,7 +14,11 @@ namespace TKWF.Ext.OrganizationUnit;
 partial class OrganizationUnitEntityDataService(IDomainUser user, IEntityDAC<OrganizationUnitEntity> dac)
     : DomainDataServiceBase<OrganizationUnitEntity, OrganizationUnitEntityDto>(user, dac, hasSoftDelete: false)
 {
-    // ── Store/Manager 委托路径的业务方法（异常自然传播——事务/唯一冲突语义由 Manager 层处理） ──
+    // ── Manager 委托路径的业务方法（异常自然传播——事务/唯一冲突语义由 Manager 层处理） ──
+
+    /// <summary>按 Id 读取组织单元（不存在返回 null）——A5 Store-debt 清理：门面直调便捷方法。</summary>
+    public Task<OrganizationUnitEntity?> GetByIdAsync(long id, CancellationToken ct = default)
+        => EntityGetAsync(o => o.Id == id, ct);
 
     /// <summary>按编码查询组织单元（Code 唯一索引）。</summary>
     public async Task<OrganizationUnitEntity?> GetByCodeAsync(string code, CancellationToken ct = default)

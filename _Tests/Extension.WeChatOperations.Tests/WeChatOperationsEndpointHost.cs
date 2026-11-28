@@ -47,6 +47,7 @@ internal static class WeChatOperationsEndpointHost
     public static FakeLogQueryService LogQuery { get; } = new();
     public static FakeMessageGatewayService Gateway { get; } = new();
     public static FakeStatusService Status { get; } = new();
+    public static FakeOperationsConfigService OpsConfig { get; } = new();
 
     private static TestServer CreateServer()
     {
@@ -77,6 +78,7 @@ internal static class WeChatOperationsEndpointHost
             svc.Replace(ServiceDescriptor.Scoped<ILogQueryService>(_ => LogQuery));
             svc.Replace(ServiceDescriptor.Scoped<IMessageGatewayService>(_ => Gateway));
             svc.Replace(ServiceDescriptor.Scoped<IWeChatOperationsStatusService>(_ => Status));
+            svc.Replace(ServiceDescriptor.Scoped<IOperationsConfigService>(_ => OpsConfig));
         })
         .UseWebSession()
         .UseWebExtensions<TestUserInfo>(e =>
@@ -344,6 +346,84 @@ internal static class WeChatOperationsEndpointHost
         {
             Invoked = true;
             return Task.FromResult(new WeChatOperationsStatusDto(false, "no channel config", 0, 0, 0));
+        }
+    }
+
+    /// <summary>运营配置门面 Fake——WO-1 补 10 个 /ops-config/* 端点冒烟：Invoked/LastRequest 捕获 + null/版本号返回值。</summary>
+    internal sealed class FakeOperationsConfigService : IOperationsConfigService
+    {
+        public bool GetArticleReplyInvoked { get; private set; }
+        public bool SaveArticleReplyInvoked { get; private set; }
+        public bool GetReplyTextInvoked { get; private set; }
+        public bool SaveReplyTextInvoked { get; private set; }
+        public bool GetDegradeInvoked { get; private set; }
+        public bool SaveDegradeInvoked { get; private set; }
+        public bool GetWeakIdentityInvoked { get; private set; }
+        public bool SaveWeakIdentityInvoked { get; private set; }
+        public bool GetTicketInvoked { get; private set; }
+        public bool SaveTicketInvoked { get; private set; }
+
+        public SaveOpsConfigReplyTextRequest? LastReplyTextRequest { get; private set; }
+
+        public Task<ArticleReplyOpsConfigEntityDto?> GetArticleReplyAsync(CancellationToken ct = default)
+        {
+            GetArticleReplyInvoked = true;
+            return Task.FromResult<ArticleReplyOpsConfigEntityDto?>(null);
+        }
+
+        public Task<long> SaveArticleReplyAsync(SaveOpsConfigArticleReplyRequest request, CancellationToken ct = default)
+        {
+            SaveArticleReplyInvoked = true;
+            return Task.FromResult(1L);
+        }
+
+        public Task<ReplyTextOpsConfigEntityDto?> GetReplyTextAsync(CancellationToken ct = default)
+        {
+            GetReplyTextInvoked = true;
+            return Task.FromResult<ReplyTextOpsConfigEntityDto?>(null);
+        }
+
+        public Task<long> SaveReplyTextAsync(SaveOpsConfigReplyTextRequest request, CancellationToken ct = default)
+        {
+            SaveReplyTextInvoked = true;
+            LastReplyTextRequest = request;
+            return Task.FromResult(2L);
+        }
+
+        public Task<DegradeOpsConfigEntityDto?> GetDegradeAsync(CancellationToken ct = default)
+        {
+            GetDegradeInvoked = true;
+            return Task.FromResult<DegradeOpsConfigEntityDto?>(null);
+        }
+
+        public Task<long> SaveDegradeAsync(SaveOpsConfigDegradeRequest request, CancellationToken ct = default)
+        {
+            SaveDegradeInvoked = true;
+            return Task.FromResult(3L);
+        }
+
+        public Task<WeakIdentityOpsConfigEntityDto?> GetWeakIdentityAsync(CancellationToken ct = default)
+        {
+            GetWeakIdentityInvoked = true;
+            return Task.FromResult<WeakIdentityOpsConfigEntityDto?>(null);
+        }
+
+        public Task<long> SaveWeakIdentityAsync(SaveOpsConfigWeakIdentityRequest request, CancellationToken ct = default)
+        {
+            SaveWeakIdentityInvoked = true;
+            return Task.FromResult(4L);
+        }
+
+        public Task<TicketOpsConfigEntityDto?> GetTicketAsync(CancellationToken ct = default)
+        {
+            GetTicketInvoked = true;
+            return Task.FromResult<TicketOpsConfigEntityDto?>(null);
+        }
+
+        public Task<long> SaveTicketAsync(SaveOpsConfigTicketRequest request, CancellationToken ct = default)
+        {
+            SaveTicketInvoked = true;
+            return Task.FromResult(5L);
         }
     }
 }

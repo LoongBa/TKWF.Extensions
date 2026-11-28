@@ -45,7 +45,7 @@ public class FreeSqlAccountLockoutPolicyTests
             o.IsEnabled = options.IsEnabled;
         });
         // Store 直构真实实例注册（Policy 经 IServiceProvider 解析；守卫路径由其他测试覆盖）
-        services.AddSingleton<IAccountLockoutStore>(AccountTestHost.CreateLockoutStore(fsql));
+        services.AddSingleton(AccountTestHost.CreateLockoutDataService(fsql));
         var sp = services.BuildServiceProvider();
         return (FreeSqlAccountLockoutPolicy)sp.GetRequiredService<IAccountLockoutPolicy>();
     }
@@ -72,7 +72,7 @@ public class FreeSqlAccountLockoutPolicyTests
 
         var locked = await policy.IsLockedAsync("alice", CancellationToken.None);
         Assert.False(locked);
-        var rec = await AccountTestHost.CreateLockoutStore(fsql).GetAsync("alice", CancellationToken.None);
+        var rec = await AccountTestHost.CreateLockoutDataService(fsql).GetByUserNameAsync("alice", CancellationToken.None);
         Assert.NotNull(rec);
         Assert.Equal(2, rec!.FailedCount);
         Assert.Null(rec.LockoutEnd);
@@ -89,7 +89,7 @@ public class FreeSqlAccountLockoutPolicyTests
 
         var locked = await policy.IsLockedAsync("alice", CancellationToken.None);
         Assert.True(locked);
-        var rec = await AccountTestHost.CreateLockoutStore(fsql).GetAsync("alice", CancellationToken.None);
+        var rec = await AccountTestHost.CreateLockoutDataService(fsql).GetByUserNameAsync("alice", CancellationToken.None);
         Assert.NotNull(rec);
         Assert.NotNull(rec!.LockoutEnd);
         Assert.True(rec.LockoutEnd > DateTime.Now);
@@ -107,7 +107,7 @@ public class FreeSqlAccountLockoutPolicyTests
         await policy.OnSuccessfulLoginAsync("alice", CancellationToken.None);
 
         Assert.False(await policy.IsLockedAsync("alice", CancellationToken.None));
-        Assert.Null(await AccountTestHost.CreateLockoutStore(fsql).GetAsync("alice", CancellationToken.None));
+        Assert.Null(await AccountTestHost.CreateLockoutDataService(fsql).GetByUserNameAsync("alice", CancellationToken.None));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class FreeSqlAccountLockoutPolicyTests
         await policy.UnlockAsync("alice", CancellationToken.None);
 
         Assert.False(await policy.IsLockedAsync("alice", CancellationToken.None));
-        Assert.Null(await AccountTestHost.CreateLockoutStore(fsql).GetAsync("alice", CancellationToken.None));
+        Assert.Null(await AccountTestHost.CreateLockoutDataService(fsql).GetByUserNameAsync("alice", CancellationToken.None));
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class FreeSqlAccountLockoutPolicyTests
     {
         var fsql = CreateFreeSql();
         var policy = CreatePolicy(fsql);
-        await AccountTestHost.CreateLockoutStore(fsql).SaveAsync(new AccountLockoutEntity {
+        await AccountTestHost.CreateLockoutDataService(fsql).UpsertAsync(new AccountLockoutEntity {
             UserName = "alice",
             FailedCount = 1,
             LockoutEnd = DateTime.Now.AddMinutes(-1) // 已过期
@@ -146,7 +146,7 @@ public class FreeSqlAccountLockoutPolicyTests
     {
         var fsql = CreateFreeSql();
         var policy = CreatePolicy(fsql, new AccountOptions { MaxFailedAttempts = 2 });
-        await AccountTestHost.CreateLockoutStore(fsql).SaveAsync(new AccountLockoutEntity {
+        await AccountTestHost.CreateLockoutDataService(fsql).UpsertAsync(new AccountLockoutEntity {
             UserName = "alice",
             FailedCount = 1,
             LockoutEnd = DateTime.Now.AddMinutes(-1)
@@ -154,7 +154,7 @@ public class FreeSqlAccountLockoutPolicyTests
 
         await policy.OnFailedLoginAsync("alice", CancellationToken.None);
 
-        var rec = await AccountTestHost.CreateLockoutStore(fsql).GetAsync("alice", CancellationToken.None);
+        var rec = await AccountTestHost.CreateLockoutDataService(fsql).GetByUserNameAsync("alice", CancellationToken.None);
         Assert.NotNull(rec);
         Assert.Equal(2, rec!.FailedCount); // 续计（过期不重置计数，仅解锁判定过期）
     }

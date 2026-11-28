@@ -20,6 +20,13 @@ partial class OrganizationUnitUserEntityDataService(IDomainUser user, IEntityDAC
     public async Task<IReadOnlyList<OrganizationUnitUserEntity>> GetByUserAsync(string userId, CancellationToken ct = default)
         => await EntitySelectAsync(t => t.UserId == userId, 0, MaxBatchRead, q => q.OrderBy(t => t.Id), ct);
 
+    /// <summary>按用户 Id 查其所属 OU Id（A5 Store-debt 清理：关联行投影去重）。</summary>
+    public async Task<IReadOnlyList<long>> GetOrganizationUnitIdsForUserAsync(string userId, CancellationToken ct = default)
+    {
+        var rows = await GetByUserAsync(userId, ct);
+        return rows.Select(r => r.OrganizationUnitId).Distinct().ToList();
+    }
+
     /// <summary>按 OU Id 集合查关联行，投影 UserId 去重。</summary>
     public async Task<IReadOnlyList<string>> GetUserIdsByOrganizationUnitIdsAsync(IReadOnlyList<long> ouIds, CancellationToken ct = default)
     {

@@ -8,7 +8,7 @@ namespace TKWF.Ext.DataDictionary
     /// <summary>
     /// 数据字典扩展初始化器（V0.2.0，V0.3.0 领域自治根治）——经 [TKWFExtension] 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
-    /// <item><see cref="ConfigureServices"/>——注册 <see cref="IDictionaryStore"/> + <see cref="IDictionaryManager"/>（AddConstructibleService）
+    /// <item><see cref="ConfigureServices"/>——注册 `IDictionaryStore` + <see cref="IDictionaryManager"/>（AddConstructibleService）
     /// + <see cref="IMemoryCache"/>（AddMemoryCache，内部 TryAddSingleton）+ <see cref="DataDictionaryOptions"/> 绑定</item>
     /// <item>ConfigureFilters——不调用（V0.2.0 无过滤器）</item>
     /// <item>InitializeAsync——不调用（V0.2.0 无种子）</item>
@@ -47,7 +47,7 @@ namespace TKWF.Ext.DataDictionary
 
             // V0.3.0（领域自治根治，ADR90）：AddConstructibleService——接口可构造守卫工厂（CurrentAopUser 守卫）+
             // 实现类 throw-factory；消费方统一经 User.Use<IDictionaryStore>() / User.Use<IDictionaryManager>() 解析
-            services.AddConstructibleService<IDictionaryStore, DictionaryStore>();
+            // A5 Store-debt cleanup：IDictionaryStore/DictionaryStore 已删除——Manager 经 User.Use<DictionaryDefinitionEntityDataService>() 直接组合。
             services.AddConstructibleService<IDictionaryManager, DictionaryManager>();
         }
     }

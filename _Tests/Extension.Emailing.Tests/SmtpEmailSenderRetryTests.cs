@@ -1,27 +1,27 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FreeSql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.FreeSql;
 using TKW.Framework.Domain.Interfaces;
 
 namespace TKWF.Ext.Emailing.Tests;
 
 /// <summary>
-/// SmtpEmailSender 发送重试测试（V0.2.0）——覆盖配置化指数退避重试 + 取消语义。
-/// <para>不真实连接 SMTP，使用 Fake 模式（同 <see cref="SmtpEmailSenderTests"/>）：
-/// 连接 127.0.0.1:19999（未监听端口）必然失败，验证重试分支与最终失败记录。</para>
+/// SmtpEmailSender 发送重试测试（A5 Store-debt cleanup 后）——记录写入经真实 EmailRecordEntityDataService + SQLite。
 /// </summary>
 public class SmtpEmailSenderRetryTests
 {
-    /// <summary>创建 SmtpEmailSender 实例（使用 Fake 依赖 + 重试配置 + 能力容器桩）。</summary>
-    private static (SmtpEmailSender Sender, FakeEmailRecordStore Store, FakeLogger<SmtpEmailSender> Logger) CreateSender(
+    private static (SmtpEmailSender Sender, IFreeSql Fsql, FakeLogger<SmtpEmailSender> Logger) CreateSender(
         int retryCount,
         int retryBaseDelayMilliseconds = 1)
     {
-        var store = new FakeEmailRecordStore();
         var logger = new FakeLogger<SmtpEmailSender>();
         var options = Options.Create(new EmailingOptions
         {
@@ -34,32 +34,44 @@ public class SmtpEmailSenderRetryTests
             RetryCount = retryCount,
             RetryBaseDelayMilliseconds = retryBaseDelayMilliseconds
         });
-        // ADR88/DI004：SmtpEmailSender 不再注入 IEmailRecordStore——V4.10.53 改内部接线型
-        // （ctor(IServiceProvider)，经 GetRequiredService 懒加载 Store——接口 key 精确匹配）。
-        var stub = new StubDomainUser();
+
+        var fsql = new FreeSql.FreeSqlBuilder()
+            .UseConnectionString(FreeSql.DataType.Sqlite, "Data Source=:memory:")
+            .UseAutoSyncStructure(true)
+            .Build();
+        fsql.CodeFirst.SyncStructure<EmailRecordEntity>();
+
         var services = new ServiceCollection();
-        services.AddSingleton<IEmailRecordStore>(store);
-        stub.ServiceProvider = services.BuildServiceProvider();
-        var sender = new SmtpEmailSender(stub.ServiceProvider!, options, logger);
-        return (sender, store, logger);
+        services.AddSingleton<IFreeSql>(fsql);
+        services.AddSingleton<UnitOfWorkManager>();
+        services.AddSingleton<IEntityDAC<EmailRecordEntity>, FreeSqlEntityDAC<EmailRecordEntity>>();
+        services.AddSingleton(sp =>
+        {
+            var user = new StubDomainUser { ServiceProvider = sp };
+            return (EmailRecordEntityDataService)ActivatorUtilities.CreateInstance(
+                sp, typeof(EmailRecordEntityDataService), user);
+        });
+        var provider = services.BuildServiceProvider();
+        var sender = new SmtpEmailSender(provider, options, logger);
+        return (sender, fsql, logger);
     }
+
+    private static List<EmailRecordEntity> SavedRecords(IFreeSql fsql)
+        => fsql.Select<EmailRecordEntity>().ToList();
 
     [Fact]
     public async Task SendAsync_RetryCount2_AllAttemptsFail_RecordsFailedWithRetryCount2()
     {
-        // Arrange — RetryCount=2 → 总尝试 3 次，全部连接失败
-        var (sender, store, logger) = CreateSender(retryCount: 2);
+        var (sender, fsql, logger) = CreateSender(retryCount: 2);
         var message = new EmailMessage { To = "test@example.com", Subject = "Test", Body = "Hello" };
 
-        // Act — should not throw
         await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
-        // Assert — 最终失败记录 + RetryCount 反映实际重试次数（= RetryCount 配置 = 2）
-        Assert.Single(store.SavedRecords);
-        Assert.Equal("Failed", store.SavedRecords[0].Status);
-        Assert.Equal(2, store.SavedRecords[0].RetryCount);
-        Assert.NotNull(store.SavedRecords[0].ErrorMessage);
-        // 2 次重试警告 + 1 次最终失败警告
+        var records = SavedRecords(fsql);
+        Assert.Single(records);
+        Assert.Equal("Failed", records[0].Status);
+        Assert.Equal(2, records[0].RetryCount);
+        Assert.NotNull(records[0].ErrorMessage);
         Assert.Equal(2, logger.Warnings.Count(w => w.Contains("重试")));
         Assert.Single(logger.Warnings, w => w.Contains("邮件发送失败") && !w.Contains("重试"));
     }
@@ -67,17 +79,15 @@ public class SmtpEmailSenderRetryTests
     [Fact]
     public async Task SendAsync_RetryCount0_Default_NoRetry_RecordsFailedOnce()
     {
-        // Arrange — RetryCount=0（默认）→ 总尝试 1 次，行为与 V0.1.x 一致
-        var (sender, store, logger) = CreateSender(retryCount: 0);
+        var (sender, fsql, logger) = CreateSender(retryCount: 0);
         var message = new EmailMessage { To = "test@example.com", Subject = "Test", Body = "Hello" };
 
-        // Act — should not throw
         await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
 
-        // Assert — 单次失败记录，RetryCount 保持 0，无重试警告
-        Assert.Single(store.SavedRecords);
-        Assert.Equal("Failed", store.SavedRecords[0].Status);
-        Assert.Equal(0, store.SavedRecords[0].RetryCount);
+        var records = SavedRecords(fsql);
+        Assert.Single(records);
+        Assert.Equal("Failed", records[0].Status);
+        Assert.Equal(0, records[0].RetryCount);
         Assert.DoesNotContain(logger.Warnings, w => w.Contains("重试"));
         Assert.Single(logger.Warnings, w => w.Contains("邮件发送失败"));
     }
@@ -85,47 +95,41 @@ public class SmtpEmailSenderRetryTests
     [Fact]
     public async Task SendAsync_RetryBaseDelayZero_FastExecution_AllAttemptsFail()
     {
-        // Arrange — RetryBaseDelayMilliseconds=0 → 无等待快速执行（避免拖慢测试）
-        var (sender, store, logger) = CreateSender(retryCount: 2, retryBaseDelayMilliseconds: 0);
+        var (sender, fsql, _) = CreateSender(retryCount: 2, retryBaseDelayMilliseconds: 0);
         var message = new EmailMessage { To = "test@example.com", Subject = "Test", Body = "Hello" };
 
-        // Act — should not throw，且不应因退避等待而拖慢（base=0 无等待；本机每次连接尝试约 2s）
         var sw = System.Diagnostics.Stopwatch.StartNew();
         await sender.SendAsync(message, ct: TestContext.Current.CancellationToken);
         sw.Stop();
 
-        // Assert — 防挂起软断言（配置错误导致无限重试/长退避时会远超该值）+ 最终失败 + RetryCount=2
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(15), $"重试执行过慢: {sw.Elapsed}");
-        Assert.Single(store.SavedRecords);
-        Assert.Equal("Failed", store.SavedRecords[0].Status);
-        Assert.Equal(2, store.SavedRecords[0].RetryCount);
+        var records = SavedRecords(fsql);
+        Assert.Single(records);
+        Assert.Equal("Failed", records[0].Status);
+        Assert.Equal(2, records[0].RetryCount);
     }
 
     [Fact]
     public async Task SendAsync_CancelledDuringRetry_NoFurtherRetry_SilentlySavesFailed()
     {
-        // Arrange — RetryCount=2 + 大退避基数，便于在第一次重试的退避等待中取消
-        var (sender, store, logger) = CreateSender(retryCount: 2, retryBaseDelayMilliseconds: 5000);
+        var (sender, fsql, logger) = CreateSender(retryCount: 2, retryBaseDelayMilliseconds: 5000);
         var message = new EmailMessage { To = "test@example.com", Subject = "Test", Body = "Hello" };
         using var cts = new CancellationTokenSource();
 
-        // Act — 启动发送，等待进入第一次重试退避后取消
         var sendTask = sender.SendAsync(message, cts.Token);
         await WaitUntilAsync(
             () => logger.Warnings.Any(w => w.Contains("重试")),
             TimeSpan.FromSeconds(10));
         cts.Cancel();
 
-        // should not throw（取消走最终失败分支，异常静默）
         await sendTask;
 
-        // Assert — 取消后不再重试：仅 1 次重试已计数（被中断），静默保存 Failed
-        Assert.Single(store.SavedRecords);
-        Assert.Equal("Failed", store.SavedRecords[0].Status);
-        Assert.Equal(1, store.SavedRecords[0].RetryCount);
+        var records = SavedRecords(fsql);
+        Assert.Single(records);
+        Assert.Equal("Failed", records[0].Status);
+        Assert.Equal(1, records[0].RetryCount);
     }
 
-    /// <summary>轮询等待条件成立（带超时防挂起）。</summary>
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
@@ -137,23 +141,9 @@ public class SmtpEmailSenderRetryTests
         }
     }
 
-    // ── Test helpers（与 SmtpEmailSenderTests 相同的 Fake 桩） ──
-
-    /// <summary>最小 IDomainUser 桩——Use&lt;T&gt;()/GetService&lt;T&gt;() 从注入的 ServiceProvider 容器解析
-    /// （测试工厂经 <see cref="ServiceProvider"/> 注入；未注入时抛 NotSupportedException）。</summary>
     private sealed class StubDomainUser : IDomainUser
     {
-        private IServiceProvider? _provider;
-        private readonly object _gate = new();
-        private readonly Dictionary<Type, object?> _cache = new();
-
-        /// <summary>ServiceProvider（测试工厂注册时注入——懒加载 Use&lt;T&gt; 解析源，线程安全）。</summary>
-        public IServiceProvider ServiceProvider
-        {
-            set { lock (_gate) _provider = value; }
-            get { lock (_gate) return _provider!; }
-        }
-
+        public IServiceProvider? ServiceProvider { get; set; }
         public string SessionKey => "test-session";
         public bool IsAuthenticated => false;
         public bool IsSystemActor => false;
@@ -166,32 +156,20 @@ public class SmtpEmailSenderRetryTests
 
         public TDomainService Use<TDomainService>() where TDomainService : IDomainService
         {
-            IServiceProvider provider;
-            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: Use<T> not supported in unit tests");
-            if (_cache.TryGetValue(typeof(TDomainService), out var cached) && cached is TDomainService svc)
-                return svc;
-            lock (_gate)
-            {
-                if (_cache.TryGetValue(typeof(TDomainService), out cached) && cached is TDomainService svc2)
-                    return svc2;
-                var resolved = provider.GetRequiredService<TDomainService>();
-                _cache[typeof(TDomainService)] = resolved;
-                return resolved;
-            }
+            if (ServiceProvider is null) throw new NotSupportedException("Stub: Use<T> 未注入 ServiceProvider");
+            return (TDomainService)ActivatorUtilities.CreateInstance(ServiceProvider, typeof(TDomainService), this);
         }
 
         public TService GetService<TService>() where TService : notnull
         {
-            IServiceProvider provider;
-            lock (_gate) provider = _provider ?? throw new NotSupportedException("Stub: GetService<T> not supported in unit tests");
-            return provider.GetRequiredService<TService>();
+            if (ServiceProvider is null) throw new NotSupportedException("Stub: GetService<T> 未注入 ServiceProvider");
+            return ServiceProvider.GetRequiredService<TService>();
         }
 
         public TService GetOptionalService<TService>() where TService : class => null!;
         public IEnumerable<TService> GetServices<TService>() where TService : notnull => [];
     }
 
-    /// <summary>简化 ILogger 桩：捕获 Warning 和 Information 日志。</summary>
     private sealed class FakeLogger<T> : ILogger<T>
     {
         public List<string> Warnings { get; } = [];
@@ -201,29 +179,8 @@ public class SmtpEmailSenderRetryTests
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            if (logLevel == LogLevel.Warning)
-                Warnings.Add(formatter(state, exception));
-            else if (logLevel == LogLevel.Information)
-                Informations.Add(formatter(state, exception));
-        }
-    }
-
-    /// <summary>简化 IEmailRecordStore 桩：捕获保存的记录。</summary>
-    private sealed class FakeEmailRecordStore : IEmailRecordStore
-    {
-        public List<EmailRecordEntity> SavedRecords { get; } = [];
-
-        public Task<EmailRecordEntity?> GetAsync(long id, CancellationToken ct = default)
-            => Task.FromResult<EmailRecordEntity?>(null);
-
-        public Task<IReadOnlyList<EmailRecordEntity>> GetListAsync(string? status = null, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<EmailRecordEntity>>(Array.Empty<EmailRecordEntity>());
-
-        public Task SaveAsync(EmailRecordEntity entity, CancellationToken ct = default)
-        {
-            if (entity != null)
-                SavedRecords.Add(entity);
-            return Task.CompletedTask;
+            if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception));
+            else if (logLevel == LogLevel.Information) Informations.Add(formatter(state, exception));
         }
     }
 }

@@ -10,10 +10,10 @@ namespace TKWF.Ext.FeatureManagement;
 [DiContractIgnore]
 internal sealed class RoleFeatureValueProvider : DomainServiceBase, IFeatureValueProvider
 {
-    private IFeatureValueStore? _store;
+    private FeatureValueEntityDataService? _store;
 
     // ADR92/DI004：IFeatureValueStore 懒加载经基类 User.Use（TryAddEnumerableConstructible 帧内供给）
-    private IFeatureValueStore Store => _store ??= User.Use<IFeatureValueStore>();
+    private FeatureValueEntityDataService Store => _store ??= User.Use<FeatureValueEntityDataService>();
 
     public RoleFeatureValueProvider(IDomainUser user) : base(user)
     {

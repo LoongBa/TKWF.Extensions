@@ -51,4 +51,56 @@ partial class DictionaryDefinitionEntityDataService(IDomainUser user, IEntityDAC
         if (existing != null)
             await EntityDeleteBatchAsync(new[] { id }, ct);
     }
+
+    // ── A5 Store-debt cleanup：IDictionaryStore/DictionaryStore 已删除（DataService 薄包装伪层）──
+    // 原 Store 的组合方法收编为本 DataService 分部业务方法（User.Use<> 懒加载其它 DataService），
+    // 消费方与测试改经 User.Use<DictionaryDefinitionEntityDataService>() 单一入口，调用签名不变。
+
+    private DictionaryItemEntityDataService? _itemDs;
+    private DictionaryItemViewDataService? _viewDs;
+    private DictionaryItemEntityDataService ItemDs => _itemDs ??= User.Use<DictionaryItemEntityDataService>();
+    private DictionaryItemViewDataService ViewDs => _viewDs ??= User.Use<DictionaryItemViewDataService>();
+
+    /// <summary>按编码读取字典定义。</summary>
+    public Task<DictionaryDefinitionEntity?> GetDefinitionByCodeAsync(string code, CancellationToken ct = default)
+        => GetByCodeAsync(code, ct);
+
+    /// <summary>按 Id 读取字典定义。</summary>
+    public Task<DictionaryDefinitionEntity?> GetDefinitionByIdAsync(long id, CancellationToken ct = default)
+        => GetEntityByIdAsync(id, ct);
+
+    /// <summary>按 Id 读取字典项。</summary>
+    public Task<DictionaryItemEntity?> GetItemByIdAsync(long id, CancellationToken ct = default)
+        => ItemDs.GetEntityByIdAsync(id, ct);
+
+    /// <summary>分页读取字典定义列表。</summary>
+    public async Task<IReadOnlyList<DictionaryDefinitionEntity>> GetDefinitionsAsync(int skip = 0, int take = 20, CancellationToken ct = default)
+        => await GetDefinitionsPagedAsync(skip, take, ct);
+
+    /// <summary>读取指定字典定义的所有项。</summary>
+    public async Task<IReadOnlyList<DictionaryItemEntity>> GetItemsAsync(long definitionId, CancellationToken ct = default)
+        => await ItemDs.GetItemsByDefinitionIdAsync(definitionId, ct);
+
+    /// <summary>按定义编码读取项（VEntity JOIN 视图）。</summary>
+    public Task<List<DictionaryItemView>> GetItemsByDefinitionCodeAsync(string code, CancellationToken ct = default)
+        => ViewDs.GetByDefinitionCodeAsync(code, ct);
+
+    /// <summary>新增或更新字典定义（按 Code 定位，null 静默跳过）。</summary>
+    public Task UpsertDefinitionAsync(DictionaryDefinitionEntity definition, CancellationToken ct = default)
+        => definition == null ? Task.CompletedTask : UpsertByCodeAsync(definition, ct);
+
+    /// <summary>新增或更新字典项（按 DefinitionId+Code 定位，null 静默跳过）。</summary>
+    public Task UpsertItemAsync(DictionaryItemEntity item, CancellationToken ct = default)
+        => item == null ? Task.CompletedTask : ItemDs.UpsertByKeyAsync(item, ct);
+
+    /// <summary>删除字典定义（先级联删项）。</summary>
+    public async Task DeleteDefinitionAsync(long id, CancellationToken ct = default)
+    {
+        await ItemDs.DeleteItemsByDefinitionIdAsync(id, ct);
+        await DeleteEntityAsync(id, ct);
+    }
+
+    /// <summary>删除字典项。</summary>
+    public Task DeleteItemAsync(long id, CancellationToken ct = default)
+        => ItemDs.DeleteEntityAsync(id, ct);
 }

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TKW.Framework.CodeGeneration;
 using TKW.Framework.Domain;
+using TKW.Framework.Domain.Exceptions;
 using TKW.Framework.Domain.Interfaces;
 using TKWF.Ext.Permissions.Abstractions;
 using TKWF.Ext.WeChatOperations.DTOs;
@@ -82,6 +83,11 @@ public sealed class ReplyRuleService : DomainServiceBase, IReplyRuleService
         if (rule.SceneType is < 1 or > 11) throw new ArgumentException("SceneType 无效（1..11）", nameof(rule));
         if (rule.SceneType == 2 && string.IsNullOrWhiteSpace(rule.TriggerKey)) throw new ArgumentException("Keyword 场景须填 TriggerKey", nameof(rule));
         if (rule.SceneType == 3 && string.IsNullOrWhiteSpace(rule.TriggerKey)) throw new ArgumentException("Click 场景须填 TriggerKey（菜单 key）", nameof(rule));
+        if (rule.ReplyText is { Length: > 2000 })
+            throw new DomainException($"回复文本不能超过 2000 字符（当前 {rule.ReplyText!.Length} 字符）")
+            {
+                ErrorCode = "WECHAT_REPLY_TEXT_TOO_LONG",
+            };
 
         var now = DateTime.UtcNow;
         if (rule.Id == 0)

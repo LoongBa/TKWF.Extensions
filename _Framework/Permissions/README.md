@@ -30,7 +30,7 @@
 
 - **检查级 (`IPermissionChecker`)**：运行时判断当前用户是否拥有指定权限。默认 `PermissionChecker<TUserInfo>` 继承 `DomainServiceBase<TUserInfo>`（V0.9.1 ADR90 领域自治），经基类 `User` 取当前用户上下文；**V0.8.1 起批量加载 + Scoped 授权集缓存**——按 provider 一次性批量查询已授予权限名（用户级 + 角色级各 1 次），后续检查 `HashSet.Contains` 内存判定（角色变更需新请求生效）。fail-closed：未知权限名 → 拒绝。
 
-- **持久化级 (`IPermissionStore`)**：权限授予的 CRUD 抽象。扩展自带 `NoOpPermissionStore`（默认回退，读恒拒绝）——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store 层，职责与 `PermissionGrantEntityDataService` 重叠）；真实持久化由消费方实现 `IPermissionStore`（继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4）或自定义 `IEntityDAC<T>`。
+- **持久化级 (`IPermissionStore`)**：权限授予的**领域服务契约**（`: IDomainService`），不是实体契约。扩展自带 `NoOpPermissionStore`（默认回退，读恒拒绝）——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store 层，职责与 `PermissionGrantEntityDataService` 重叠）；真实持久化由消费方实现 `IPermissionStore`（继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4）。**实体不得实现 `IPermissionStore`**：实体只承载持久化字段，Store 是服务行为；自有表场景先用 `tkwf-entity` 声明实体、`tkwf-service` 生成 DataService，再由桥接 Store 委托该 DataService。
 
 - **过滤器级 (`PermissionFilterAttribute`)**：`[RequirePermission]` 标记方法/控制器，PreProceed 阶段调 checker 检查。无标记 → 短路跳过（零开销）。
 
@@ -100,45 +100,104 @@ public interface IOrderService
 
 无权限时抛 `DomainException`（`ErrorCode = FORBIDDEN`）。
 
+> **已知框架缺陷（Async 方法名匹配）**：部分框架版本 `DomainHost.PopulateFlagsFromInterface` 以 StripAsyncSuffix 后的短名匹配接口方法（`Get` vs `GetAsync`）失败，导致方法级 flags 为空、扩展 Filter 短路放行。消费方若实测“标注未拦截”，不要压诊断/改生成物；临时用直读真实控制器特性的自定义过滤器绕行，并转达框架组。
+
 ### 4. 真实启用权限（注册持久化）
 
-默认 NoOp store 恒拒绝——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store——DataService 薄包装）。真实启用权限二选一：
+默认 NoOp store 恒拒绝——**V0.9.1（V4.10.53 ADR90）起 `EntityDACPermissionStore` 已删除**（伪 Store——DataService 薄包装）。真实启用权限必须由消费方注册一个**接线型** `IPermissionStore`：
 
 ```csharp
-// 方案 A（推荐——自定义 IPermissionStore，继承 DomainServiceBase 的领域服务）：
-public sealed class MyDbPermissionStore : DomainServiceBase, IPermissionStore
+using System.Transactions;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions;
+using TKWF.Ext.Permissions.Abstractions;
+using TKWF.Ext.Permissions.DTOs;
+
+internal sealed class MyDbPermissionStore : DomainServiceBase, IPermissionStore
 {
     private PermissionGrantEntityDataService? _ds;
     private PermissionGrantEntityDataService Ds => _ds ??= User.Use<PermissionGrantEntityDataService>();
-    public MyDbPermissionStore(IDomainUser user) : base(user) { }
-    // 实现 IPermissionStore 四方法——委托 Ds（GetGrantAsync/SetGrantAsync/GetGrantedNamesByProviderAsync/GetGrantedNamesByProviderKeyAsync）
-}
-// DomainInitializer / ConfigureServices 中：
-services.AddConstructibleService<IPermissionStore, MyDbPermissionStore>();
 
-// 方案 B（自定义存储缝——SG1 DataService 是 DAC 驱动的 ORM 无关缝）：
-services.AddScoped<IEntityDAC<PermissionGrantEntity>>( /* FreeSql/EF Core 自定义 DAC */ );
+    public MyDbPermissionStore(IDomainUser user) : base(user) { }
+
+    public async Task<PermissionGrantResult> GetAsync(
+        string permissionName, string providerName, string providerKey)
+    {
+        var dto = await Ds.GetGrantAsync(permissionName, providerName, providerKey);
+        return dto is { IsGranted: true }
+            ? PermissionGrantResult.Granted
+            : PermissionGrantResult.Denied;
+    }
+
+    public async Task SetAsync(
+        string permissionName, string providerName, string providerKey, bool isGranted)
+    {
+        using var ts = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+        await Ds.SetGrantAsync(permissionName, providerName, providerKey, isGranted);
+        ts.Complete();
+    }
+
+    public async Task<HashSet<string>> GetGrantedPermissionNamesAsync(
+        string providerName, IEnumerable<string>? providerKeys = null)
+        => await Ds.GetGrantedNamesByProviderAsync(providerName, providerKeys);
+
+    public async Task<Dictionary<string, HashSet<string>>> GetGrantedPermissionsByProviderKeyAsync(
+        string providerName, IEnumerable<string>? providerKeys = null)
+        => await Ds.GetGrantedNamesByProviderKeyAsync(providerName, providerKeys);
+}
+
+// DomainInitializer.OnRegisterDomainServices（在扩展 ConfigureServices 之后执行）：
+services.AddConstructibleService<IPermissionStore, MyDbPermissionStore>();
 ```
 
-消费方调用 `UseFreeSqlEntityDAC()` 注册 `FreeSqlEntityDAC<PermissionGrantEntity>` 后，方案 A 的 store 经 `Use<DataService>()` 自动接线真实持久化。
+要点：
 
-### 5. 权限检查 API
+1. **不要**用 `AddSingleton`/`AddScoped` 直接注册 Store。`IPermissionStore : IDomainService`，必须经 `AddConstructibleService` 的守卫工厂 + `User.Use<IPermissionStore>()` 解析；Scoped 生命周期参与 UoW。
+2. **不要**让 `PermissionGrantEntity` 实现 `IPermissionStore`。实体是持久化模型，Store 是服务契约；正确分工是「实体 + 生成 DataService + 桥接 Store」。
+3. 扩展已有 `PermissionGrantEntity` + `PermissionGrantEntityDataService`，通常直接用上述桥接即可，不需要新建实体。
+4. 若确实需要消费方自有表：用 `tkwf-entity` 声明实体、`tkwf-service` 生成 DataService，再由 `MyDbPermissionStore` 委托该 DataService；桥接层仍只是适配，不是新的 CRUD Store。
+5. 真实持久化需注册 `IEntityDAC<PermissionGrantEntity>`（如 `UseFreeSqlEntityDAC()`）；未注册时初始化器跳过种子，NoOp 继续 fail-closed。
+6. 种子角色要生效，消费方登录用户必须填充 `IUserInfo.Roles`，且 `TKWF:Permissions:SeedAdminRoleName` 与该角色名一致；非 Web/无 `TKWFRole` 宿主须显式 `Bind` `PermissionOptions`，否则回退默认 `admin`。
+7. 方法级 `[RequirePermission]` 如遇框架 `PopulateFlagsFromInterface` 的 Async 方法名匹配缺陷，可在消费方用直读真实控制器特性的自定义过滤器绕行；不要压诊断或改生成物。
+
+### 5. 消费方接入最小清单
+
+| # | 动作 | 判据 |
+|:-:|---|---|
+| 1 | 引主包 + `Abstractions` | `TKWF.Ext.Permissions` + `TKWF.Ext.Permissions.Abstractions` 双模式成对引用 |
+| 2 | 白名单 + Enable | `[TKWFEnabledExtension(typeof(PermissionExtensionInitializer<>))]` + `registry.Enable("Permissions")` |
+| 3 | 声明权限定义 | 实现 `IPermissionDefinitionContributor`，覆盖所有 `[RequirePermission]` 名称 |
+| 4 | 注册桥接 Store | `services.AddConstructibleService<IPermissionStore, XxxPermissionStore>()` |
+| 5 | 真实持久化 | 注册 `IEntityDAC<PermissionGrantEntity>`（`UseFreeSqlEntityDAC()`） |
+| 6 | 填充用户角色 | `IUserInfo.Roles` 包含 `SeedAdminRoleName`（SuperAdmin/admin）才命中 `Admin.All` |
+| 7 | 绑定 Options | 非 Web/无 `TKWFRole` 宿主显式 `Bind` `TKWF:Permissions`；否则默认 `admin` |
+| 8 | 验证三态 | 未登录 401 / 有权限通过 / 无权限 FORBIDDEN |
+
+### 6. 权限检查 API
+
+`IPermissionChecker : IDomainService`，**不要构造函数注入**（DI004）；在领域服务内用 `User.Use<T>()` 懒加载：
 
 ```csharp
-public class MyService
-{
-    private readonly IPermissionChecker _checker;
-    public MyService(IPermissionChecker checker) => _checker = checker;
+using TKW.Framework.Domain;
+using TKW.Framework.Domain.Interfaces;
+using TKWF.Ext.Permissions.Abstractions;
 
-    public async Task DoSomethingAsync()
+internal sealed class MyService : DomainServiceBase
+{
+    private IPermissionChecker? _checker;
+    private IPermissionChecker Checker => _checker ??= User.Use<IPermissionChecker>();
+
+    public MyService(IDomainUser user) : base(user) { }
+
+    public async Task DoSomethingAsync(CancellationToken ct = default)
     {
-        if (await _checker.IsGrantedAsync("Order.Create"))
+        if (await Checker.IsGrantedAsync("Order.Create"))
         {
             // 有权限
         }
 
-        // 批量检查
-        var results = await _checker.IsGrantedAsync("Order.Create", "Order.Delete");
+        var results = await Checker.IsGrantedAsync("Order.Create", "Order.Delete");
     }
 }
 ```
@@ -154,7 +213,7 @@ public class MyService
 | **`IPermissionDefinitionContributor`** | 业务模块声明权限定义的接口 | 消费方实现接口（v4.10.31 A+ 阶段 3 起纯接口判定，无特性） |
 | **`IPermissionDefinitionRepository`** | 权限定义仓库（查询/校验） | `InMemoryPermissionDefinitionRepository`（内部） |
 | **`IPermissionChecker`** | 运行时权限检查（fail-closed；V0.8.1 批量加载 + Scoped 授权集缓存） | `PermissionChecker<TUserInfo>`（内部，泛型化，继承 `DomainServiceBase<TUserInfo>`） |
-| **`IPermissionStore`** | 权限授予持久化（Get/Set） | `NoOpPermissionStore`（内部，读恒拒绝）+ **消费方自定义实现**（V0.9.1 起 `EntityDACPermissionStore` 已删除——继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4） |
+| **`IPermissionStore`** | 权限授予持久化**领域服务契约**（`: IDomainService`；Get/Set/批量归因四方法） | `NoOpPermissionStore`（内部，读恒拒绝）+ **消费方接线型实现**（V0.9.1 起 `EntityDACPermissionStore` 已删除——继承 `DomainServiceBase` + `AddConstructibleService` 注册，方案见 §三.4；**实体不得实现此接口**） |
 | **`PermissionFilterAttribute<TUserInfo>`** | 方法级权限门（`[RequirePermission]`） | 内置，注册到 Tier-S |
 | **`PermissionExtensionInitializer<TUserInfo>`** | 扩展初始化器（三钩子） | 内置，`[TKWFExtension]` SG1 发现（能力清单）+ 消费方 `[TKWFEnabledExtension]` 白名单启用 |
 | **`PermissionGrantEntity`** | 权限授予表实体（SG1 声明式） | 内置，`partial class` + `[DomainGenerateCode]`（SubDomain=Permissions） |
@@ -192,17 +251,17 @@ public class MyService
 
 ### 4. 生产部署（建表迁移）
 
-`PermissionGrant` 扩展实体的建表由**主框架统一托管**（**V4.9.92 ADR49**）——SG 编译期 `EntityAssemblies` 清单（消费方 + 框架内置 + 已启用扩展程序集）经 `SyncTables` 统一遍历建表，消费方经 `[TKWFEnabledExtension(typeof(PermissionExtensionInitializer<>))]` 白名单声明后扩展程序集自动进入清单。**扩展初始化器不再自建表**（弃用 V0.7.0 W1）。**生产部署仍建议用迁移脚本**（V0.7.0 W2，随 NuGet 发布至 `scripts\PermissionGrant.sql`，DBA/CI 执行）：
+`TKWF_PermissionGrant` 扩展实体的建表由**主框架统一托管**（**V4.9.92 ADR49**）——SG 编译期 `EntityAssemblies` 清单（消费方 + 框架内置 + 已启用扩展程序集）经 `SyncTables` 统一遍历建表，消费方经 `[TKWFEnabledExtension(typeof(PermissionExtensionInitializer<>))]` 白名单声明后扩展程序集自动进入清单。**扩展初始化器不再自建表**（弃用 V0.7.0 W1）。**生产部署仍建议用迁移脚本**（V0.7.0 W2，随 NuGet 发布至 `scripts\PermissionGrant.sql`，DBA/CI 执行）：
 
 ```sql
--- PermissionGrant 表结构（参考，完整脚本见包内 scripts\PermissionGrant.sql）
-CREATE TABLE [PermissionGrant] (
+-- TKWF_PermissionGrant 表结构（参考，完整脚本见包内 scripts\PermissionGrant.sql）
+CREATE TABLE [TKWF_PermissionGrant] (
     [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
     [PermissionName] NVARCHAR(200) NOT NULL,
     [ProviderName] NVARCHAR(64) NOT NULL,
     [ProviderKey] NVARCHAR(128) NOT NULL,
     [IsGranted] BIT NOT NULL DEFAULT 0,
-    CONSTRAINT UK_PermissionGrant UNIQUE ([PermissionName], [ProviderName], [ProviderKey])
+    CONSTRAINT [TKWFIX_PermissionGrant_Provider] UNIQUE ([PermissionName], [ProviderName], [ProviderKey])
 );
 ```
 
@@ -289,7 +348,7 @@ CREATE TABLE [PermissionGrant] (
 
 5. **FreeSql `[Column]` 全限定**：列映射必须用 `FreeSql.DataAnnotations.Column`（避免与 BCL `System.ComponentModel.DataAnnotations.Schema.Column` 冲突）。
 
-6. **`[Table]` 保留**：BCL `[Table("PermissionGrant")]` 不可删除——`FreeSqlTableStructureSynchronizer` 依赖它发现实体建表。
+6. **`[Table]` 保留**：BCL `[Table("TKWF_PermissionGrant")]` 不可删除——`FreeSqlTableStructureSynchronizer` 依赖它发现实体建表。
 
 ---
 
@@ -336,10 +395,10 @@ CREATE TABLE [PermissionGrant] (
 ### 7. 版本与发布
 
 - 扩展独立版本（MinVer），tag 前缀 `Permissions/v`，**须征得同意**才打 tag。**已发布 v0.9.9**——既有 tag 沿革：v0.1.0~v0.6.0（早期线，README §六.4 历史表述）→ v0.9.0~v0.9.9（V0.9.x 整改线，10 个 `Permissions/v0.9.x` tag，见 §一 状态行逐版说明）。
-- 生产建表：`PermissionGrant` 建表由主框架 `SyncTables` 统一托管（V4.9.92 ADR49），生产 DDL 仍建议走迁移脚本（见 §五.4）。
+- 生产建表：`TKWF_PermissionGrant` 建表由主框架 `SyncTables` 统一托管（V4.9.92 ADR49），生产 DDL 仍建议走迁移脚本（见 §五.4）。
 
 ### 文档信息
 
-- **归档日期**: 2026-08-31
+- **最后同步**: 2026-11-28（V0.9.x：Store 桥接、种子角色/Options 绑定、实体不得实现 Store）
 - **维护团队**: play / TKW Framework Team
-- **审批状态**: 定稿 (V0.4.0)
+- **审批状态**: 定稿 (V0.9.x)

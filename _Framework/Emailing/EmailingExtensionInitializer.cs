@@ -8,7 +8,7 @@ namespace TKWF.Ext.Emailing
     /// <summary>
     /// 邮件发送扩展初始化器——经 [TKWFExtension] 被 SG1 发现，三钩子接线：
     /// <list type="bullet">
-    /// <item><see cref="ConfigureServices"/>——注册 <see cref="IEmailSender"/> + <see cref="IEmailRecordStore"/>（TryAddScoped）</item>
+    /// <item><see cref="ConfigureServices"/>——注册 <see cref="IEmailSender"/> + `IEmailRecordStore`（TryAddScoped）</item>
     /// <item>ConfigureFilters——不调用（V0.1.0 无过滤器）</item>
     /// <item>InitializeAsync——不调用（V0.1.0 无种子）</item>
     /// </list>
@@ -27,7 +27,7 @@ namespace TKWF.Ext.Emailing
         /// 注册邮件发送与记录存储服务。
         /// <para>V4.10.53（领域自治根治，ADR90）：</para>
         /// <list type="bullet">
-        /// <item><see cref="IEmailRecordStore"/>（接口 : IDomainService）用 <c>AddConstructibleService</c>——接口可构造
+        /// <item>`IEmailRecordStore`（接口 : IDomainService）用 <c>AddConstructibleService</c>——接口可构造
         ///     守卫工厂（CurrentAopUser 守卫）+ 实现类 throw-factory；消费方经 <c>User.Use&lt;IEmailRecordStore&gt;()</c> 解析
         ///     （AOP 路径——旧 TryAddScoped 构造注入 IDomainUser 生产解析必失败）。</item>
         /// <item><see cref="IEmailSender"/>（Emailing.Abstractions 契约非 IDomainService）保持 <c>TryAddScoped</c>
@@ -36,7 +36,8 @@ namespace TKWF.Ext.Emailing
         /// </summary>
         public override void ConfigureServices(IServiceCollection services)
         {
-            services.AddConstructibleService<IEmailRecordStore, EmailRecordStore>();
+            // A5 Store-debt cleanup：IEmailRecordStore/EmailRecordStore（DataService 薄包装伪层）已删除——
+            // SmtpEmailSender 直接经 IServiceProvider 解析 EmailRecordEntityDataService（SG1 自动注册）。
             services.TryAddScoped<IEmailSender, SmtpEmailSender>();
         }
     }

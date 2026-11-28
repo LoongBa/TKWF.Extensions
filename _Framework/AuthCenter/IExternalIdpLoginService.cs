@@ -27,6 +27,7 @@ public interface IExternalIdpLoginService : IDomainService
     /// EXTERNAL_CHANNEL_ID_REQUIRED 等）；Federation 未装配 → <see cref="TKW.Framework.Domain.Exceptions.ServiceNotConfiguredException"/>（503）。
     /// <paramref name="parameters"/> 原样透传桥接（含 code/channel_id 等平台协议字段）。</summary>
     [AllowAnonymousFlag]
-    [ApiExpose(RestRoute = "/login/external/{channelType}", RestMethod = "POST", AllowAnonymous = true)]
+    // 与 PasswordLoginService.Login 同名字段（WARN004）；外部 IdP 登录 REST-first，关闭 GraphQL
+    [ApiExpose(RestRoute = "/login/external/{channelType}", RestMethod = "POST", AllowAnonymous = true, ExposeGraphQL = false)]
     Task<TokenResponse> LoginAsync(string channelType, IReadOnlyDictionary<string, string?> parameters, CancellationToken ct = default);
 }

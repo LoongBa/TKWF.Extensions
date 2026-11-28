@@ -35,6 +35,7 @@ public interface IFederatedLoginOrchestrator : IDomainService
     /// ACCOUNT_NOT_FOUND/ACCOUNT_NOT_PROVISIONED/ACCOUNT_CREATE_FAILED 等）。</para>
     /// <para><c>ExposeRest=false</c>：共享子编排为内部服务（code 通道/票据通道经 <c>User.Use</c> 委托），不生成端点。</para></summary>
     [AllowAnonymousFlag]
-    [ApiExpose(ExposeRest = false)]
+    // 内部共享编排不对外暴露；GraphQL 默认开会产生 Login 字段名冲突（WARN004），双通道显式关闭
+    [ApiExpose(ExposeRest = false, ExposeGraphQL = false)]
     Task<TokenResponse> LoginAsync(FederatedIdentity identity, CancellationToken ct = default);
 }

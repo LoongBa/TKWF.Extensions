@@ -21,6 +21,7 @@ public interface ISmsLoginService : IDomainService
     /// 失败抛 <see cref="TKW.Framework.Domain.Exceptions.DomainException"/>（SMS_PROVIDER_NOT_ENABLED / 认证失败语义码 / ACCOUNT_NOT_FOUND）。
     /// <paramref name="request"/>：<c>{phone, code}</c>（body 绑定）。</summary>
     [AllowAnonymousFlag]
-    [ApiExpose(RestRoute = "/login/sms", RestMethod = "POST", AllowAnonymous = true)]
+    // 与 PasswordLoginService.Login 同名字段（WARN004）；短信登录 REST-first，关闭 GraphQL
+    [ApiExpose(RestRoute = "/login/sms", RestMethod = "POST", AllowAnonymous = true, ExposeGraphQL = false)]
     Task<TokenResponse> LoginAsync(SmsLoginRequest request, CancellationToken ct = default);
 }

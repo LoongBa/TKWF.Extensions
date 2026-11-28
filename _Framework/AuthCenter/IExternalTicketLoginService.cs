@@ -32,6 +32,7 @@ public interface IExternalTicketLoginService : IExternalTicketLoginServiceContra
     /// 频控 IP 维度在门面内经 <see cref="Microsoft.AspNetCore.Http.IHttpContextAccessor"/> 取服务端
     /// <c>RemoteIpAddress</c>（不为客户端可伪造输入——B3b 生成端点无法注入 Web 层参数，IP 取读下沉门面）。</summary>
     [AllowAnonymousFlag]
-    [ApiExpose(RestRoute = "/login/ticket", RestMethod = "POST", AllowAnonymous = true)]
+    // GraphQL 字段与 IExternalIdpLoginService.Login 同名（WARN004）；票据登录是 REST-first，关闭 GraphQL 保留端点
+    [ApiExpose(RestRoute = "/login/ticket", RestMethod = "POST", AllowAnonymous = true, ExposeGraphQL = false)]
     new Task<TokenResponse> LoginAsync(ExternalTicketLoginRequest request, CancellationToken ct = default);
 }

@@ -1,6 +1,6 @@
 # QQ 互联连接器-使用指南
 
-> **库**: `TKWF.Federation.QQ`（QQ 互联连接器——平台网关库/大使馆）| **版本**: V0.1.0 | **框架**: .NET 10
+> **库**: `TKWF.Federation.QQ`（QQ 互联连接器——平台网关库/大使馆）| **版本**: V0.4.1 | **框架**: .NET 10
 > **定位**: 认证中心**对外（上游）**接 QQ IdP 的出站网关——OAuth **跳转授权**（身份获取，`qq_oauth`）；作为 **RP/OAuth Client** 消费 QQ，把 `(channel_id, openid) → uid` 归一认证中心 Federation token2。**SSO 是认证中心对下游的能力，不是本库的协议**（归层命名说明见 §六）
 > **关联文档**: 技术规范见 `_Framework/Federation.QQ/README.md`；N3 开发方案 `docs/Federation/N3-QQ平台网关-开发方案.md`（Oracle PASS WITH CONDITIONS，P1 五项）；N1 平台网关通用模板 `docs/Federation/平台网关模板-开发指南.md`
 

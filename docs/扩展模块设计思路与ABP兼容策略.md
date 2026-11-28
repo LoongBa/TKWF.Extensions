@@ -5,7 +5,9 @@
 > 定位：本文档为**设计文档**（公开）——说明 TKWF 扩展模块的设计立场、与 ABP 的关系、各模块的设计思路分类。
 > 内部状态跟踪（版本演进、Oracle 评审、测试数、全量回归）与开发计划见**主框架私有** `_TKWF/docs/03_扩展模块/总览和跟踪.md`。
 >
-> 最后更新：2026-09-15
+> 扩展**启用语义**（`[TKWFEnabledExtension]` 编译期白名单 + `registry.Enable` 运行期启用，发现≠启用）与机制设计原理见 [`docs/扩展模块机制-设计原理与审核经验.md`](./扩展模块机制-设计原理与审核经验.md) 和 [`docs/扩展模块通用指南.md`](./扩展模块通用指南.md)。
+>
+> 最后更新：2026-11-28
 
 ---
 
@@ -34,6 +36,8 @@ TKWF 扩展实体体系（SG1 + 自建 UserType + FreeSql [Table] + DataService 
 
 ## 二、已实现扩展设计思路分类
 
+> 版本口径：下表 2.1–2.3 的「版本」列为**初始落地版本**（历史）；当前已发布版本以 [`docs/versions.json`](./versions.json) 与 README「扩展模块一览」为准。
+>
 > 分类标准：
 > - **自然兼容（记录）**——碰巧对齐 ABP 接口/数据模型，仅记录，便于迁移用户参考；
 > - **借鉴但更优**——借 ABP 功能定位/概念命名，实现走 TKWF 原生路径（编译期/DataService 红线/ITransactionManager 等）；
@@ -83,6 +87,25 @@ TKWF 扩展实体体系（SG1 + 自建 UserType + FreeSql [Table] + DataService 
 
 ---
 
+## 2.4 认证/联邦/平台库与新兴扩展（2026-11-28 补齐）
+
+> 2026-09 后新增或归层的扩展，按同一分类标准登记；当前版本见 `docs/versions.json` / README 表。
+
+| 扩展 | 设计定位 | 关键设计 / ABP 关系 |
+|------|---------|---------------------|
+| **AuthCenter**（`TKWF.Ext.AuthCenter`） | 认证中心（原 Authentication 归层） | 借鉴 ABP Account/Identity 定位；手写 RS256 JWT + kid 轮换 + 黑名单 + Refresh rotation + TokenVersion + 登录保护；内建 11 端点契约化（`[ApiExpose]` + `DeclareEndpoints`/`MapGenerated`）；配置分层 `TKWF:AuthCenter` / `TKWF:AuthCenter:Web` |
+| **AuthSurface** | 授权面（TKWF 独有） | 兑换码 SHA256 + CAS 原子兑换 + `IRateLimitCheck` 频控 + 两跨扩展 VEntity；ABP 无对应 |
+| **TrustCenter** | 应用间信任中枢（TKWF 独有） | token2 ES256 独立密钥域 + kid 轮换 + JWKS + accesscode CAS/PKCE；信任内核纯签发零编排（与 Federation 连接层分离） |
+| **MFA** | 多因素认证（借鉴 ABP 定位，实现自研） | TOTP RFC 6238 零第三方 + 挑战票据单次消费 + 恢复码；secret AES-GCM 密文落库 |
+| **SmsCode / Captcha** | 短信验证码 / 人机验证（TKWF 独有） | SHA256 存储 + 单次消费 CAS + 频控独立桶；SVG CAPTCHA 零第三方依赖 + 恒 fail-closed |
+| **Federation + `Federation.*` 平台库** | 对外连接层（三层架构，TKWF 独有） | `feberation` 路由前缀 + 通道抽象（`ISsoChannel`/`IChannelRegistry` 契约下沉 Abstractions）+ 平台库纯库形态（WeChat/QQ/Alipay/DingTalk/WeCom/Oidc/Google/Microsoft）；ABP 无对应 |
+| **WeChatOperations / WeChatChannels** | 公众号运营 + 通道底座（TKWF 独有） | 实体型 SG1 + 生成端点；通道底座拆分下沉，运营侧只引 Abstractions |
+| **Analytics** | 分析服务（TKWF 独有） | spec 文件驱动 + flint JsonDocument 单一真相透传；核心在 Utility 零依赖 |
+| **UI.Abstractions** | 页面装配契约（ADR106 / D23） | `IPageContributor` 纯元数据；贡献者禁放 `{Ext}.UI.{TechStack}` RCL；与 ABP UI 无对应关系 |
+| **AuditLogging.Web** | 审计受控读面（借鉴 ABP 定位） | opt-in 仅引 AuditLogging.Abstractions；列表安全 DTO + 受控详情 |
+
+---
+
 ## 三、设计思路演进观察
 
 1. **最优设计为默认已全面落地**——绝大多数扩展借 ABP 功能定位/概念命名（Provider/Store/Manager/Contributor），但实现走 TKWF 原生路径，ABP 仅作为需求梳理参照系。
@@ -112,3 +135,4 @@ TKWF 扩展实体体系（SG1 + 自建 UserType + FreeSql [Table] + DataService 
 | 日期 | 变更内容 |
 |------|---------|
 | 2026-09-15 | 初始建立：设计原则（用户裁定——最优设计为默认、兼容 ABP 为特殊需求、碰巧兼容只记录）+ 已实现 24 扩展分类（自然兼容 2 / 借鉴更优 14 / 全新 8）+ 演进观察 + 兼容落地路径 |
+| 2026-11-28 | 机制复核同步：补 §2.4 认证/联邦/平台库/新兴扩展分类；明确 2.1–2.3 版本列为初始落地版本（当前版本以 `docs/versions.json` / README 为准）；补扩展启用语义与机制经验文档链接 |

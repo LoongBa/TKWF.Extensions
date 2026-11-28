@@ -27,7 +27,7 @@
 | **Permissions**              | V0.9.10 | 细粒度权限定义 / fail-closed 检查 / 编译期权限名校验（PERM001）/ **多用户批量权限检查（V0.9.0：`IPermissionBatchChecker`——单权限×多用户，按 ProviderKey 分组归因）** | `Permissions/v0.9.10` | [README](./_Framework/Permissions/README.md) | [指南](./docs/Permissions/权限扩展-使用指南.md) |
 | **Permissions.Abstractions** | V0.2.2 | 权限契约抽象（`IPermissionChecker`/`RequirePermission`/`IRoleProvider`；**V0.2.2 补标 `IDomainService`**——`IPermissionChecker`/`IPermissionBatchChecker` 对齐 `User.Use<T>()` 解析 + `AddConstructibleService` 注册形态，v4.10.53 领域自治整改补发） | —                       | —                                        | —（并入 Permissions）                    |
 | **Permissions.Validation**   | V0.8.0（规则集）／0.1.1（包线，未发布） | 扩展侧 PERM001 DiagnosticAnalyzer（从内核移除耦合）；`IsPackable=false` 从不发布独立包（源码 ProjectReference 接线），V0.8.0 为规则集功能线版本，0.1.x 为 MinVer 包线 tag | —                       | —                                        | —（并入 Permissions）                    |
-| **Identity**                 | V0.5.3 | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.3.0）+ **REST 直接暴露（V0.4.0：`UserRoleViewQueryService`——`GET /api/identity/user-roles` 仅本人，VEntity DTO 一等公民含 DisplayName/IsSystemRole）**| `Identity/v0.5.3` | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
+| **Identity**                 | V0.5.3 | 用户 / 角色 / 用户角色分配 + PasswordHasher 凭据验证；`GetRolesAsync` VEntity 跨表 JOIN（V0.3.0）+ **REST 直接暴露（V0.4.0：`UserRoleViewQueryService`——`GET /identity/user-roles` 仅本人，VEntity DTO 一等公民含 DisplayName/IsSystemRole；完整路径 = 消费方 `TKWF:Api:RestBasePath` + 模块前缀）**| `Identity/v0.5.3` | [README](./_Framework/Identity/README.md)      | [指南](./docs/Identity/身份管理扩展-使用指南.md) |
 | **Account**                  | V0.5.0 | 账户锁定 + 密码重置流程（主框架 V4.9.45 缺口补齐）+ **登录历史与异常检测（V0.3.0，消费 SecurityLog 查询）+ 依赖倒置（V0.4.0，SecurityLog 契约改引 Abstractions）** | `Account/v0.5.0` | [README](./_Framework/Account/README.md)       | [指南](./docs/Account/账户管理扩展-使用指南.md) |
 | **Account.Abstractions**     | V0.1.2 | 账户契约抽象（`IAccountPasswordManager` 等——ADR48 D7 依赖倒置，零框架引用纯 BCL）            | —                       | —                                        | —（并入 Account）                    |
 | **AuthCenter**               | V0.15.0 | 认证中心（2026-10-06 归层：`Authentication` → `AuthCenter` 全面归层 + 内建标准对内端点；令牌体系手写 RS256 JWT + kid 轮换 + 黑名单落库 + Refresh rotation + TokenVersion 闭环 / 认证矩阵 Provider（短信 + 密码）+ **外部 IdP 桥接（T5 2026-10-09：`IExternalIdpLoginService` 借道 Federation——微信双源 Provider/ApiClient/LoginService 已删，协议单源归平台网关库）** / 登录保护 / 票据换令牌（PKCE）/ 身份适配层（JwtDomainUserParser/ITokenVerifier/IAuthorizationMapper/UserHelperBase/中间件）/ 跨系统映射 / 平台凭证 / 账号查询写契约 + **档案能力（V0.9.0 起 UserCenter 基础功能并入——`UserProfile` 1:1 档案表 + `GetProfileByUIdAsync`）**）+ **V0.14.0（2026-11-11 功能线——业务兑票端点 `POST /login/ticket/redeem`：DMP ADR05 方案 B 冻结契约——`IExternalTicketRedeemService` 独立门面纯兑票返 `FederatedTicketPayload` 明文（11 字段+extensions，**不建会话不发 token 不触编排**）、L2 账号状态检查（禁用/冻结 400 与编排守卫同序）、频控独立桶 `ext:ticket-redeem:{ip}`（`TicketRedeemServicePerMinutePerIp` 默认 60——服务间调用容量）、F1 闭环（v4.10.118 `DomainGuardException` 类型判定取代字符串匹配）；测试 274 用例全绿（+20））** + **V0.13.1（2026-11-09 功能线——频控接线与签发守卫**：五条评审闭环——AC-02 登录门面 IP 频控接线（`login-ip:{ip}`/`sms-ip:{ip}` 单桶）/ AC-04 票据换发冻结+禁用双守卫（`ACCOUNT_DISABLED`/`ACCOUNT_FROZEN`）/ AC-08 Long-lived 契约实现（`IsLongLived` + `long_lived` claim + 黑名单 TTL 适配）/ AC-14 `ResetAsync` 补 TokenVersion++ / AC-10 票据 authType 归因保留）** + **V0.6.0（归层迭代：包名/命名空间/契约包 `AuthCenter.Abstractions` 统一归层——Federation 同步；登录门面升级 `LoginResult`（门面内认证→取账号→签发全编排，表现层零编排）；`AuthCenterWebExtension`（原 JwtAuthenticationWebExtension）`ConfigureEndpoints` 内建 6 标准对内端点（sms 验证码/短信登录/外部 IdP 登录（T5：`/login/external/{channelType}` 替代 `/login/wechat`）/refresh/logout/票据换令牌——minimal API + 游客帧 + 免认证 + `AuthCenterEndpointOptions` `TKWF:AuthCenter:Web` 路径可配置，配置分层 AGENTS §8））** + **V0.7.0（E4 密钥管理抽象（CPM 4.10.61）——删 `PlatformCredentialKeyStore`/`DevRsaKeyCache` 静态类，`PlatformCredentialService` 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.AuthCenter`，`FileSymmetricKeyProvider` 构造即加载：生产 fail-fast / 开发两分支）+ `DevKeyCache<RsaKeySet>` 单例（dev 密钥缓存非静态）；`PlatformCredentialEntityDataService` 加密上移服务层（回归纯持久化，消除唯一 SG1 ctor 阻塞点）；AES-GCM 单段规范格式（委托 `AeadEncryptionUtil`）；测试并行化恢复（去 `DisableTestParallelization`））** + **V0.8.0（认证 API 补全——内建 3 端点：`/verify`（已认证内省，判别器=中间件验签产物，无效 Bearer 401 非 RFC 7662）/ `/grants`（应用授权状态，`AuthGrantEntity` 数据底座唯一索引 UX(UserId,AppId,Source) + `IAuthGrantQueryService`/`IAuthGrantCommandService` 双门面）/ `/sms/verify`（验证码独立校验）；B5 票据绑定缺口闭环——`OAuthTicketIssueRequest.UserId` 签发即绑 + `BindTicketAsync` 已认证帧补绑（userId 取 User 不经请求体，CAS 条件更新）；exchange 成功落登录授权（best-effort）；配置分层 3 新开关）** + **V0.9.0（身份域重构与密码能力——ADR-AuthCenter-身份域数据模型与密码能力边界：A.1-A.8 凭据/档案表级分离（`AuthAccount` 瘦身凭据白名单 + `UserProfile` 1:1 档案 + 表名 `TKWF_AuthAccount`/`TKWF_UserProfile`）/ `AuthLevel` 泛化（1=手机号/2=联邦快捷，剔 3=教师核实）/ `TeacherVerified` 迁出（令牌移除 `teacher_verified` claim）/ 联邦 Id 归一化（微信 3 列删 → `PlatformAccountMap` 通道）/+ B.9-B.11 密码三件套 + **密码策略（SecurePassword 协议 决策 1——客户端算 clientHash+salt 服务端零明文 + `PasswordPolicyOptions` 历史防重用 + 初始强制改密 + 账号冻结 + `IRateLimitCheck` 频控 v4.10.67）**（`PasswordAuthenticationProvider` + `IPasswordLoginService` + `SetPasswordAsync`（CAS+TokenVersion++）+ `IPasswordResetService` 找回三通道 SMS/Email/扫码，不实现 `IAccountPasswordManager` 第二实现）/ C.14 UserCenter 退役（`IUserProfileSource` 标 Obsolete）/ `EnabledAuthTypes` fail-closed 生效；134 用例全绿）** + **Web 装配钩子（v4.10.45：`AuthCenterWebExtension<TUserInfo>`——RestoreUser 委托直传 + BeforeAuthentication 锚点 + 内建端点，旧 `AddJwtAuthentication`/`UseTkfwJwtAuthentication` 删除；短路判定 IsAuthenticated 门控 + 黑盒哨兵冒烟）** + **ITokenVerifier 无帧消费 500 修复（V0.5.2 游客帧）+ 开发模式临时 RSA 密钥修复（V0.5.3 `DevRsaKeyCache`）+ Development 启动崩溃修复（V0.5.4 不传参）** + **V0.10.0 外部 IdP 票据 SPA 兑现（2026-10-19——方案 Oracle PASS WITH CONDITIONS 用户裁定全局最优解：独立路由端点 `POST /login/ticket`（事件取 OpenId 链路"票 → token1"前端兑换面）+ 共享编排 `IFederatedLoginOrchestrator`（code 通道与票据通道统一委托——P1-1 UId 直读/映射/建号 fallback，接口不变）+ `IExternalTicketLoginService` 验票（P1-3 统一 `TICKET_INVALID`/P1-2 仅 null-claimant 票/P2-4 强制频控 `ext:ticket:{ip}`）；测试 177 用例全绿（146→177 +31））** + **V0.10.1（2026-10-20 契约键名双收——`2be7bb9` 起：请求 DTO 双收 snake_case 文档键别名 + `TokenResponse` 双发 camelCase/snake_case 键并存，测试 181 用例全绿）** + **V0.12.0（2026-10-25 端点契约化 B3a/B3b——MapGenerated 生成化，Oracle1 §9.18/9.19 裁定实施，破坏性：错误体 `ErrorResponse`→RFC 9457 `ProblemDetails` 信封（errorCode 值存活）/`logout` 204→200/`grants` `?app_id`→`?appId`；9 门面契约下沉（DTO 首参 + 类型化异常 ErrorCode 覆写 + `LoginResult` 删除）+ 11 端点 `[ApiExpose]` + `DeclareEndpoints`+`MapGenerated`（11 手写 handler 删除）+ `EndpointContracts.cs` 13 DTO 迁主包；框架 B4 三连修 v4.10.82/83 + 门控精化 v4.10.84；测试 198 用例全绿（+errorCode 存活 + 门控锁定 2））** | `AuthCenter/v0.15.0` | [README](./_Framework/AuthCenter/README.md) | [指南](./docs/AuthCenter/认证中心-使用指南.md) |
@@ -35,7 +35,7 @@
 | **AuthSurface** | V0.3.1 | 授权面（口令兑换体系 + 我的应用聚合）——兑换码 **SHA256 哈希** + **CAS 原子兑换** + **`IRateLimitCheck` 频控** + 两跨扩展 VEntity（`TKWFV_UserRedemptionHistory`/`TKWFV_UserApps`）+ 4 门面（`IRedemptionCommandService`/`IRedemptionQueryService`/`IUserAppsQueryService`/`IAuthAppService`）+ **V0.2.0 兑换码附加信息（PayloadEncrypted AES-GCM 密文 + CreateCodeAsync(payload:) + 兑换取回明文）** + **V0.3.0 批次管理端 + 码侧契约（T-0~T-8：`CodeBatch` 批次域 / BatchId 软引用 / Revoked 状态 / expireAt 参数 / 按明文读码 / 分页 / payload 解密；AuthCenter `RecordGrantAsync` 泛化协同）** + **V0.3.1 批次查询性能整改（分组统计 `GroupByAsync` 单查询 + 明细分页 SQL 下推；框架 4.10.121 GroupByAsync 整键排序 NRE 修复响应）** | `AuthSurface/v0.3.1` | [README](./_Framework/AuthSurface/README.md) | [指南](./docs/授权面/授权面扩展-使用指南.md) |
 | **Federation**               | V0.19.0 | 认证体系**三层架构**的**对外连接层壳**（2026-10-09 TrustCenter 剥离后重定位；原 V0.2.0 泛内核形态随信任内核迁出）——平台 IdP 连接 + 编排 + `/feberation/*` 端点：`ISsoChannel` 集合编排（`ISsoLogin`/`ISsoChannelFactory`，**I2-1 契约迁 Federation.Abstractions**）/ **`FederationWebExtension`**（`POST {prefix}/login[ /{channelId}]`/`GET {prefix}/jwks`/`POST {prefix}/event/{channelId}`——`TKWF:Federation:Web` 配置分层）/ 多通道设施（`IChannelRegistry` 系列 + `SsoChannelRegistryEntity` DB 动态权威 + `ChannelAlias` 双键）/ `ExternalIdpAuthenticator` 外部 IdP 借道桥接（AuthCenter.Abstractions 契约，委托平台库通道**非双实现**——根因修复）/ profile API（scope 强制 + 审计）/ **事件回复链**（`EventOrchestrator` 双桶迭代 + `IEventReplyHandler` 集合 + `EventReplyHandlerBase` 签票基类——**V0.9.0：`TestEventReplyHandler` 删除迁移平台层，handler 迭代权统一编排器（W3 绑定桶对微信可达）**）；经 `TrustCenter.Abstractions` 契约调签发 token2/accesscode（合法 L2）；配置节拆分为 `TKWF:Federation:ChannelRegistry`/`:Web`（签发配置迁 `TKWF:TrustCenter`）；历史版本线 V0.2.0（E4 密钥抽象）/V0.3.0（多通道 Phase 1）/V0.4.0（Phase 2/3 DB 动态权威 + ChannelAlias）/V0.7.0（对外路由命名空间）/V0.8.x（外部身份联邦 E3）已发布；**V0.11.0（Iteration 2 渠道关注关系域，已发布 v0.11.x）**：关注域（`IFollowStateService` + `FollowEventEntity`/`FollowStateEntity` + `FollowChangedEvent` 域事件——仅状态变化发布）+ 编排记录在后（R3）+ 免登入口（`ILoginEntryService` + `TKWF:Federation:LoginEntry`）+ 传输/语义分层（`ChannelInboundContext`/`ChannelEvent`/`ChannelCapabilities`） | `Federation/v0.19.0` | [README](./_Framework/Federation/README.md) | [指南](./docs/Federation/联邦互联-使用指南.md) |
 | **Federation.Abstractions**  | V0.7.0 | 联邦通道编排**契约抽象包**（V0.1.0 首发——2026-10-18 ④ 裁定：通道编排契约自 Federation 主包收口独立契约包，对齐 AuthCenter.Abstractions/TrustCenter.Abstractions 先例）：`IChannelRegistry`（按 ChannelId/alias 选区）/`IChannelSource`（平台库投影统一 `ChannelConfig`）/`ChannelConfig`（公共列 + Extra 扩展字典）/`IEventReplyHandler`（事件回复处理器——消费方实现 first-non-null-wins）/`IEventOrchestrator`（事件编排门面——平台回复 → handler 迭代 → null 兜底）；namespace 保持 `TKWF.Ext.Federation`（跨程序集同 namespace——**消费方零 using 迁移，仅 csproj 改引**）；最小依赖 `TKWF.Domain`（IDomainService）+ `TrustCenter.Abstractions`（SsoChannelEventContext/EventReplyResult——纯 BCL 契约包）；零实体零 SG1 零 Initializer；实现（`CompositeChannelRegistry`/`StaticChannelRegistry`/`EventOrchestrator`）留 Federation 主包；9 平台库 + WeChatOperations 改引本包（替代直引 Federation 主包）；**V0.2.0（Iteration 2 契约收口，已发布 v0.2.x）**：`ISsoChannel.cs` 自 TrustCenter.Abstractions **迁入**（通道契约归属纠正，FA 解除 TC 引用）+ 关注域契约（`IFollowStateService`/`IFollowChannelQuery`/`FollowChangedEvent`/`ILoginEntryService`+`FederationLoginEntryOptions`）+ `ChannelEvent` 系列/`ChannelCapabilities`（[Flags] DIM None fail-closed）/`ChannelInboundContext`（替代 `SsoChannelEventContext`） | `Federation.Abstractions/v0.7.0` | [README](./_Framework/Federation.Abstractions/README.md) | —（并入联邦互联指南） |
-| **TrustCenter**             | V0.3.3 | 认证体系**三层架构**的**应用间信任中枢**（纯信任内核——2026-10-09 自 Federation 剥离，2026-10-10 用户裁定 `SymmetricKeyProviderKeys.TrustCenter` 等框架组适配后统一发布）：应用注册（`SsoClientEntity` origin 白名单 + scope + AES-GCM credential + per-channel HMAC + **`RegisterAsync` 返回一次性明文 client_secret（V0.2.2——OAuth 动态注册 RFC 7591，注册契约缺口修复）**）/ **token2 手写 ES256 独立密钥域 + kid 轮换 + JWKS**（与 AuthCenter RS256 完全独立）/ accesscode（120s 原子 CAS + SHA256 + PKCE + **安全数据投递增强**——Payload AES-GCM 密文落库（容量 ~4068） + ExpectedClaimant 进原子 CAS 无 TOCTOU + Issue/Peek/Redeem/CleanupExpiredAsync）/ `ISsoChannel` 契约定义（**契约在此、编排在 Federation**）；`TrustCenter.Abstractions` 契约包（`ISsoChannel`/`IToken2Service`/`IAccessCodeService` + DTO，零实体零 SG1）；信任内核纯签发零编排（Federation 连接层经契约调签发）；内网中枢零外部协议库引用；配置 `TKWF:TrustCenter` 节；表 `TKWF_SsoClient`/`TKWF_AccessCode` | `TrustCenter/v0.4.0` | [README](./_Framework/TrustCenter/README.md) | [指南](./docs/TrustCenter/信任中心-使用指南.md) |
+| **TrustCenter**             | V0.4.0 | 认证体系**三层架构**的**应用间信任中枢**（纯信任内核——2026-10-09 自 Federation 剥离，2026-10-10 用户裁定 `SymmetricKeyProviderKeys.TrustCenter` 等框架组适配后统一发布）：应用注册（`SsoClientEntity` origin 白名单 + scope + AES-GCM credential + per-channel HMAC + **`RegisterAsync` 返回一次性明文 client_secret（V0.2.2——OAuth 动态注册 RFC 7591，注册契约缺口修复）**）/ **token2 手写 ES256 独立密钥域 + kid 轮换 + JWKS**（与 AuthCenter RS256 完全独立）/ accesscode（120s 原子 CAS + SHA256 + PKCE + **安全数据投递增强**——Payload AES-GCM 密文落库（容量 ~4068） + ExpectedClaimant 进原子 CAS 无 TOCTOU + Issue/Peek/Redeem/CleanupExpiredAsync）/ `ISsoChannel` 契约定义（**契约在此、编排在 Federation**）；`TrustCenter.Abstractions` 契约包（`ISsoChannel`/`IToken2Service`/`IAccessCodeService` + DTO，零实体零 SG1）；信任内核纯签发零编排（Federation 连接层经契约调签发）；内网中枢零外部协议库引用；配置 `TKWF:TrustCenter` 节；表 `TKWF_SsoClient`/`TKWF_AccessCode` | `TrustCenter/v0.4.0` | [README](./_Framework/TrustCenter/README.md) | [指南](./docs/TrustCenter/信任中心-使用指南.md) |
 | **TrustCenter.Abstractions** | V0.4.0 | 信任中枢契约抽象（`IToken2Service`/`IAuthorizationCodeService`/`ISsoClientQueryService` + DTO——ADR48 D7 依赖倒置；`ISsoChannel` 契约已迁 Federation.Abstractions） | `TrustCenter.Abstractions/v0.4.0` | [README](./_Framework/TrustCenter.Abstractions/README.md) | —（并入 TrustCenter） |
 | **Federation.WeChat** | V0.18.0 | 微信公众平台连接器（大使馆/平台网关库——纯库无装配无持久化，方向对外接微信 IdP）：`WeChatApiClient` 出站（access_token L1 缓存+并发锁+提前 5min 刷新+code→openid+sns/userinfo 降级）+ `WeChatOptions`（`TKWF:Federation:WeChat` 节，凭证自持 Oracle P2-4）+ 双通道（`WeChatOauthChannel` wechat_oauth / `WeChatEventChannel` wechat_event + `WeChatEventCrypto` 事件验签——信任根 `msg_signature`+AES 一票否决）+ **事件回复 Handler 三件套（V0.4.0）**：`WechatEventReplyHandlerBase` 平台基类（MsgType/Event **二级分发** + 图文工具多图文 + **协议门控** unsubscribe/MASSSENDJOBFINISH 禁回复）+ `WechatTemplateEventReplyHandler`（模板驱动，消费方显式注册）+ `WechatProbeEventReplyHandler`（探针，`ProbeEventReplyHandlerEnabled` 默认 false 门控）+ **`WeChatEventChannel` 编排放权（V0.4.0）**（`HandleEventAsync` 验签解密富化 `__decrypted_xml` 返回 null——被动回复 XML 信封上移平台基类）+ **V0.4.1 增强**：菜单出站 3 API（`CreateMenuAsync`/`GetCurrentSelfMenuInfoAsync` 结构化 poco/`DeleteMenuAsync`——自实现不引 Senparc）+ `IWeChatCredentialResolver` 凭证解析可插拔契约（缺省 Options 实现 DI 注册，扩展 DB 实现两源并存）+ template 多图文升级（`NewsReplyTemplateV2` articles 数组优先 + 单图文兼容）+ `AddWeChatFederationChannels()` 注册；+ **V0.4.2（RawXml 逃逸口）**：`WechatReplyPayload` 增可选 `RawXml` 字段（第三位置可选参——完整微信被动回复 XML **原样透传跳过 text/news 重组**（防双重信封——SyncProxy 下游自组信封 XML 原样回复预备）；优先级 RawXml > News > Content，默认 null 存量零破坏）；**V0.17.1（sub_button 双形状修复，2026-11-05 发布）**：`WeChatMenuButton.SubButton` 属性级 `WeChatSubButtonListConverter` Read 双形状归一（官方 `{"list":[...]}`/数组/null 变体）+ Write 恒数组 + `Type`→`string?`（父按钮无 type 非破坏）——DMP 菜单 500 根治；+ **V0.18.0（需求 B，2026-11-05 发布）**：`{ticket_value}` 裸票免登占位符——`ReplacePlaceholders` 6 参重载（`{ticket}` 完整 URL 与 `{ticket_value}` 裸票**并存同票**，`ResolveTicketAsync` 一次签票双值 `TicketIssueResult?`，非二选一）+ 基址三级全空产相对路径（非 fail-closed null）+ 裸票零日志；不引 AspNetCore（端点归装配层）、零持久化零 Store；测试 **141 用例全绿**（136→141：+1 Theory×5） | `Federation.WeChat/v0.18.0` | [README](./_Framework/Federation.WeChat/README.md) | [指南](./docs/Federation.WeChat/微信公众平台连接器-使用指南.md) |
 | **Federation.WeChat.MessageGateway** | V0.1.1 | 微信公众号消息网关**核心判定运行库**（纯逻辑零实体零持久化零 DI 零 DB——用户三部分分层裁定 ①，对齐 DataPort/Tagging 运行库提炼先例）：`WeChatMessageRouteRuleMatcher` 路由规则判定（MatchMode None/Exact/Contains + **MsgType 通配/逗号分隔多值（V0.1.1 消息类型多选）**/Event 仅 event 参与 + SortOrder 升序首命中）/ `WeChatMessageIdempotencyKeyBuilder` 幂等键规范化（`msg:`/`evt:` 前缀类型隔离 + ChannelId 入键——消息 MsgId / 事件 FromUserName+CreateTime 双形态）/ `WeChatMessageForwardDecider` 转发决策与降级链（LocalOnly/AsyncCopy/SyncProxy/PreprocessSync 决策 + 失败降级 LocalFallback——降级链步进 LocalRender→Template→DefaultReplyText）/ `WeChatCircuitBreaker` 熔断状态机（关→开→半开→关，每 Endpoint 独立计数，默认阈值 3 / 开窗 60s）/ 常量（`WeChatMessageTypes`/`WeChatMessageMatchModes`/`WeChatMessageForwardModes`/`WeChatEndpointAuthTypes`）；零依赖纯 BCL；被领域扩展 `TKWF.Ext.WeChatOperations` V0.3.0 消费（② 装配）；测试 57 用例全绿 | `Federation.WeChat.MessageGateway/v0.1.1` | [README](./_Framework/Federation.WeChat.MessageGateway/README.md) | —（并入 WeChatOperations 指南） |
@@ -54,7 +54,7 @@
 | **MFA**                      | V0.3.0 | 多因素认证（TOTP RFC 6238 自研零第三方 + 短信验证码双方法：绑定/解绑 + 挑战-验证流（一次性 TTL 票据 + 单次消费防重放）+ 尝试频控（内存滑动窗口）+ 恢复码；独立扩展零依赖——短信渠道经消费方 `IMfaSmsSender` 注入，登录编排归消费方；secret AES-GCM 密文落库）+ **V0.2.0（E4 密钥管理抽象（CPM 4.10.61）——删 `MfaSecretKeyStore` 静态类，`TotpMfaMethod` ctor 注入 keyed `ISymmetricKeyProvider`（`SymmetricKeyProviderKeys.Mfa`，消费点即注入点——修正 Initialize/消费跨类分裂）；删 MFA 测试反射 `ResetMfaSecretKeyStore`（GetField("_key")）改注入式 internal Reset；修正 `MfaSecretEntityDataService` 陈旧注释；AES-GCM 单段规范格式）** | `MFA/v0.3.0` | [README](./_Framework/MFA/README.md) | [指南](./docs/MFA/MFA多因素认证-使用指南.md) |
 | **Navigation**               | V0.1.2 | 菜单数据模型 / 贡献机制 / 权限过滤（从主框架迁出）                       | `Navigation/v0.1.2` | [README](./_Framework/Navigation/README.md) | [指南](./docs/Navigation/导航扩展-使用指南.md)  |
 | **Navigation.Abstractions**  | V0.1.0 | 导航契约抽象（`IMenuContributor`/`MenuItemDefinition`/`MenuConfigurationContext`——ADR48 D7 依赖倒置，零框架引用纯 BCL）| — | — | —（并入 Navigation）|
-| **AuditLogging**             | V0.9.0 | 审计日志 FreeSql 存储 + SG1 实体 + 查询 API + 统计聚合与清理（V0.3.0）+ **管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD + 5 REST 端点）** + **聚合 SQL 下推（V0.4.2：TopN 经 `GroupCountAsync`——V4.10.39 分组聚合 API）** | `AuditLogging/v0.9.0` | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
+| **AuditLogging**             | V0.9.0 | 审计日志 FreeSql 存储 + SG1 实体 + 查询 API + 统计聚合与清理（V0.3.0）+ **管理 API（V0.4.0：`[GenerateController]` + ExcludeMethods 排除含 ArgumentsJson 标准 CRUD + 4 REST 端点；V0.6.0 起 append-only 收敛，删除类方法不暴露）** + **聚合 SQL 下推（V0.4.2：TopN 经 `GroupCountAsync`——V4.10.39 分组聚合 API）** | `AuditLogging/v0.9.0` | [README](./_Framework/AuditLogging/README.md)  | [指南](./docs/AuditLogging/审计日志扩展-使用指南.md) |
 | **AuditLogging.Web** | V0.1.0 | 审计业务读面 Web 端点（业务审计受控 REST——列表安全 DTO + 受控详情；opt-in，仅引 AuditLogging.Abstractions） | `AuditLogging.Web/v0.1.0` | — | —（并入 AuditLogging 指南） |
 | **Settings**                 | V0.3.1 | 全局/用户级配置持久化 + 分层读取                                         | `Settings/v0.3.1` | [README](./_Framework/Settings/README.md)      | [指南](./docs/Settings/设置管理扩展-使用指南.md) |
 | **BlobStoring**              | V0.3.1 | 二进制大对象本地文件系统存储 + FreeSql 记录 + **FileStream 流式下载（V0.2.0）** | `BlobStoring/v0.3.1` | [README](./_Framework/BlobStoring/README.md)   | [指南](./docs/BlobStoring/二进制存储扩展-使用指南.md) |
@@ -246,30 +246,37 @@ _TKWF.Extensions/
 ```
 扩展项目（net10.0）
 ├── Entity（partial class + [Table] + [DomainGenerateCode] + FreeSql [Column]）
-├── Store 抽象 + FreeSql 实现（internal sealed + 异常静默）
-├── Manager 门面（internal sealed + 聚合查询）
-├── ExtensionInitializer（[TKWFExtension] + TryAddScoped 三钩子）
+├── DataServices（SG1 生成 .g.cs 基座 + 手写业务分部；禁手写 Store CRUD 包装）
+├── 门面 Service（DomainServiceBase + IDomainService 接口 + AddConstructibleService 注册）
+├── ExtensionInitializer（[TKWFExtension] + 三钩子；扩展 Options/接线型服务在此注册）
 └── README.md（技术规范）
 
 测试项目（xunit.v3 + FreeSql SQLite 内存）
-├── ConsumerHostInitializer（[TKWFEnabledExtension] 白名单样板）
-└── 测试类（Store CRUD + Manager 聚合 + Initializer DI + 异常静默）
+├── ConsumerHostInitializer（[TKWFEnabledExtension] 白名单 + TestMetaContext）
+└── 测试类（门面 Use<T> 路径 + DataService + Initializer 注册形态 + 异常静默）
 ```
 
 > 测试事务约定：SQLite 物理事务边界 + Noop 事务限制 + PG 测试容器评估见 [`docs/测试约定-SQLite物理事务与Noop限制.md`](./docs/测试约定-SQLite物理事务与Noop限制.md)（2026-10-02，转达登记落地）。
 
-### 扩展启用（v4.9.85+ 必需）
+### 扩展启用（v4.9.85+ 必需，两处声明）
 
-扩展不再"发现即启用"——消费方须在领域初始化器上显式声明白名单：
+扩展不再"发现即启用"——消费方须**两处**显式声明（编译期白名单 + 运行期启用）：
 
 ```csharp
 using TKWF.Ext.Identity;
 
-[TKWFEnabledExtension(typeof(IdentityExtensionInitializer<>))]
-public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
+[TKWFEnabledExtension(typeof(IdentityExtensionInitializer<>))]   // ① 编译期白名单（能力清单聚合）
+public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
+{
+    protected override void ConfigureExtensions(ITkExtensionRegistry registry, IServiceCollection services)
+    {
+        registry.Enable("Identity");                              // ② 运行期启用（三钩子执行）
+    }
+}
 ```
 
-声明后扩展三钩子（`ConfigureServices`/`ConfigureFilters`/`InitializeAsync`）自动接线。
+- `[TKWFEnabledExtension]` 只负责编译期聚合（控制器/页面能力清单）；`IsEnabled` 默认 false，**三钩子只对 `registry.Enable` 过的扩展执行**。只写 ① 不写 ② = 服务未注册/过滤器不生效。
+- 详见 [`docs/扩展模块通用指南.md`](./docs/扩展模块通用指南.md) §二 第 2 步与 [`docs/扩展模块机制-设计原理与审核经验.md`](./docs/扩展模块机制-设计原理与审核经验.md)。
 
 ### 依赖倒置（ADR48 D7）
 
@@ -307,15 +314,22 @@ Navigation → Permissions（❌ TKWF0022 Error）
 ### 启用 + 使用
 
 ```csharp
-// 1. 白名单声明（v4.9.85+）
+// 1. 白名单 + 运行期启用（v4.9.85+；两处都要）
 [TKWFEnabledExtension(typeof(IdentityExtensionInitializer<>))]
-public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
-
-// 2. 注入 + 使用
-public class AuthService(IUserManager userManager)
+public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo>
 {
-    public async Task<UserEntity?> LoginAsync(string name, string password)
-        => await userManager.VerifyCredentialsAsync(name, password);
+    protected override void ConfigureExtensions(ITkExtensionRegistry registry, IServiceCollection services)
+        => registry.Enable("Identity");
+}
+
+// 2. 使用（门面须经 User.Use<T>() 在域作用域内解析）
+public class AuthService(IDomainUser user) : DomainServiceBase(user)
+{
+    private IUserManager? _userManager;
+    private IUserManager UserManager => _userManager ??= User.Use<IUserManager>();
+
+    public Task<MyUserInfo?> LoginAsync(string name, string password)
+        => UserManager.VerifyCredentialsAsync(name, password);
 }
 ```
 
@@ -364,7 +378,7 @@ Tag 纪律：必须有开发方案 + 审核报告，且征得用户同意
 - ✅ **WeChatChannels 通道底座拆分发布闭环（2026-11-05，run 41931855000 全绿）**——4 tag 攒批 workflow_dispatch 发布成功（`Federation.WeChat/v0.17.1` + `WeChatChannels.Abstractions/v0.1.0` + `WeChatChannels/v0.1.0` + `WeChatOperations/v0.9.0`；publish job 日志逐包 Pushing + `=== OK` + `All 4 tag(s) published successfully`，`--skip-duplicate` 幂等）；拆分形态 = 通道底座（WeChatChannels 主包 + Abstractions 契约包）+ 运营扩展 V0.9.0 破坏性（通道面迁出，Merchant 双白名单）；code-reviewer BLOCKER（MapGenerated 程序集错位）经非 Web 形态修复闭环；验证 slnx 0 错误 + WeChatChannels 15 + WeChatOperations 206 + L1（Federation 167/WeChat 136/Gateway 57/Feature 135）全绿
 - ✅ **Federation 系列持续发布（2026-10-21~27，Iteration 2 关注域 + 微信测试反馈增强）**——`Federation/v0.11.0~v0.15.0`（I2 渠道关注关系域 + 复查修复 + 审核 P1/P2 + 测试端点 HTML 化）+ `Federation.Abstractions/v0.2.0~v0.5.0`（I2 契约收口 + 联动 bump）+ `Federation.WeChat/v0.6.0~v0.16.1`（明文模式 + 图文模板解析链 4 级 + 免登链接基址 + `{text}` 占位符动态化）+ `WeChatOperations/v0.5.0~v0.6.1`（I2-10 订阅统计派生改造 + 事件回复排他单模型）+ `Federation.WeChat.MessageGateway/v0.1.1`；当前 57 包最新发布版本见 `docs/versions.json`（`build/gen-versions.ps1` 生成）。
 
-> 设计思路与 ABP 兼容策略（最优设计为默认、兼容 ABP 为特殊需求、碰巧兼容只记录）+ 各扩展设计分类见 [`docs/扩展模块设计思路与ABP兼容策略.md`](./docs/扩展模块设计思路与ABP兼容策略.md)；状态跟踪见主框架私有 [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](https://github.com/LoongBa/TKW.Framework/blob/master/docs/03_扩展模块/总览和跟踪.md)。
+> 设计思路与 ABP 兼容策略（最优设计为默认、兼容 ABP 为特殊需求、碰巧兼容只记录）+ 各扩展设计分类见 [`docs/扩展模块设计思路与ABP兼容策略.md`](./docs/扩展模块设计思路与ABP兼容策略.md)；扩展机制的设计原理 / 审核清单 / 门控矩阵 / 反例库见 [`docs/扩展模块机制-设计原理与审核经验.md`](./docs/扩展模块机制-设计原理与审核经验.md)；状态跟踪见主框架私有 [`_TKWF/docs/03_扩展模块/总览和跟踪.md`](https://github.com/LoongBa/TKW.Framework/blob/master/docs/03_扩展模块/总览和跟踪.md)。
 
 ---
 

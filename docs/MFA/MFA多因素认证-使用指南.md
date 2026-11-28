@@ -10,7 +10,7 @@
 | 项 | 说明 |
 |----|------|
 | 包名 | `TKWF.Ext.MFA` |
-| 版本 | v0.1.0（+ **V0.1.2** V4.10.53 领域自治根治 / **V0.1.3** V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂 / **V0.2.0** E4 密钥管理抽象——删 `MfaSecretKeyStore`、`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider` / **V0.2.1** v4.10.67 IRateLimitCheck 迁移 / **V0.2.2** v4.10.66 表名前缀 `TKWF_*`） |
+| 版本 | V0.3.0（历史线：V0.1.2 V4.10.53 领域自治根治 / V0.1.3 V4.10.55 ADR92——IMfaMethod 双实现 TryAddEnumerableConstructible 集合版守卫工厂 / V0.2.0 E4 密钥管理抽象——删 `MfaSecretKeyStore`、`TotpMfaMethod` 注入 keyed `ISymmetricKeyProvider` / V0.2.1 v4.10.67 IRateLimitCheck 迁移 / V0.2.2 v4.10.66 表名前缀 `TKWF_*`） |
 | 依赖 | 主框架 `TKWF.Domain`（CPM）+ SG1（框架既有）；**零扩展间依赖**（短信渠道经消费方抽象 `IMfaSmsSender` 注入） |
 | 数据 | 表 `TKWF_MfaSecret` + `TKWF_MfaChallenge` + `TKWF_MfaRecoveryCode`（框架 `SyncTables` 统一建表） |
 | 职责 | 第二因素验证服务（绑定管理 + 挑战验证 + 频控 + 恢复码）；**不签发令牌、不维护登录状态、不做主认证** |
@@ -70,7 +70,12 @@ public class MyDomainInitializer : DomainHostInitializerBase<MyUserInfo> { ... }
 ### 3.1 TOTP 绑定（验证器扫码）
 
 ```csharp
-var mfa = sp.GetRequiredService<IMfaService>();   // 或注入
+// 门面经 User.Use<T>() 帧内解析（IMfaService : IDomainService，AddConstructibleService 守卫工厂；禁止构造注入/sp 直取）
+var mfa = User.Use<IMfaService>();
+
+// 以下示例中 userId 均为 string（用户标识，非自增 Id）
+string userId = "u_123";
+string userName = "alice";
 
 // ① 发起绑定——生成 secret + provisioning URI（前端转 QR）
 var enroll = await mfa.EnrollAsync(userId, "totp", new MfaEnrollContext(Issuer: "MyApp", DisplayName: userName));
@@ -147,7 +152,7 @@ await mfa.DisableAsync(userId, "totp");   // 级联删除：绑定 + 未消费�
 
 | 扩展 | 边界 |
 |------|------|
-| `TKWF.Ext.Authentication` | 认证中心做主认证 + 令牌——MFA **不引**其契约（零扩展间依赖，ADR48 D7 L2 门控零违规）；短信渠道经消费方 `IMfaSmsSender` 抽象（可包装 Authentication 的 `ISmsSender` 或自有短信） |
+| `TKWF.Ext.AuthCenter` | 认证中心做主认证 + 令牌——MFA **不引**其契约（零扩展间依赖，ADR48 D7 L2 门控零违规）；短信渠道经消费方 `IMfaSmsSender` 抽象（可包装 AuthCenter 的 `ISmsSender` 或自有短信） |
 | `TKWF.Ext.Account` | 账户锁定/密码重置（首因素域）——MFA 是第二因素，正交 |
 | 主框架 `AuthController.RequestChallengeAsync` | ⚠️ 是**密码传输加固**（PBKDF2/HMAC 防重放），非第二因素——MFA 挑战用独立方法/独立票据，勿混用 |
 

@@ -125,7 +125,7 @@ namespace TKWF.Ext.RateLimiting;
 public sealed class SqlCountRateLimitCheck : IRateLimitCheck
 {
     // 独立计数表 RateLimitCounterEntity（[DomainGenerateCode]，partial DataService）：
-    //   Id, Key(唯一约束 UX_RateLimitCounter_Key), Count, WindowStartUtc, WindowEndUtc
+    //   Id, Key(唯一约束 TKWFIX_RateLimitCounter_Key), Count, WindowStartUtc, WindowEndUtc
     // TryAcquire 原子语义（红线合规——经 DataService + ADR89 UpdateWhereAsync CAS，非读-改-写 TOCTOU）：
     //   A. 首插：Insert(Key, Count=1, WindowStartUtc=now, WindowEndUtc=now+window)
     //        → 唯一约束冲突（并发首插）→ 捕获后走 B

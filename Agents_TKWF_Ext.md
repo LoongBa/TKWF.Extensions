@@ -172,7 +172,7 @@ public class TaggingInitializer : ExtensionInitializer<MyUserInfo>
 }
 ```
 
-- `[TKWFExtension]` 特性 + 继承 `ExtensionInitializer<TUserInfo>` → SG1 编译期发现（生成能力清单）；**是否启用由消费方在领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明决定**（发现不自动启用，IsEnabled 默认 false）。消费方声明后三钩子自动接线
+- `[TKWFExtension]` 特性 + 继承 `ExtensionInitializer<TUserInfo>` → SG1 编译期发现（生成能力清单）；**是否启用由消费方两处声明决定**：① 领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 编译期白名单（能力清单聚合）；② `ConfigureExtensions` 内 `registry.Enable("Name")` 运行期启用（`IsEnabled` 默认 false，**仅 Enable 后三钩子执行**）。只写①不写② = 服务未注册/过滤器不生效（2026-11-28 机制复核修正）
 - 三钩子：`ConfigureServices`（DI 注册）、`ConfigureFilters`（过滤器注册）、`InitializeAsync`（异步初始化）
 
 ### 项目模板
@@ -236,7 +236,7 @@ _Tests/Extension.{扩展名}.Tests/
 >
 > **与"预编译库"模式的关系**：两种模式并存——简单横切扩展（如 Tagging，纯内存服务）保持预编译库；有持久化 + 管理 API 的扩展（如 Permissions V0.2.0）可升级为 SG1 原生。
 >
-> **扩展启用（V4.9.85）**：扩展 DLL 被消费方引用后，SG1 经 `ReferencedAssemblySymbols` 发现 `[TKWFExtension]` 初始化器（生成能力清单）；但**发现 ≠ 启用**——扩展的 `IsEnabled` 默认 false，三钩子默认不执行。消费方须在自身 `DomainHostInitializerBase<T>` 派生类上标注 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明（AllowMultiple），扩展才真正启用、三钩子才执行。未声明 → 发现但默认不启用。
+> **扩展启用（V4.9.85，2026-11-28 机制复核修正）**：扩展 DLL 被消费方引用后，SG1 经 `ReferencedAssemblySymbols` 发现 `[TKWFExtension]` 初始化器（生成能力清单）；但**发现 ≠ 启用**——`IsEnabled` 默认 false，三钩子默认不执行。消费方须**两处声明**：① 在 `DomainHostInitializerBase<T>` 派生类上标注 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]`（编译期白名单，AllowMultiple）；② 覆写 `ConfigureExtensions(ITkExtensionRegistry, IServiceCollection)` 并 `registry.Enable("{扩展名}")`（运行期启用，三钩子才执行）。**只写①不写② = 能力清单聚合但服务未注册**（实测语义；生产先例 DMP-Lite）；纯扩展宿主（自身零领域类型）另有 SG1a 空壳边界，见机制文档 §7。
 
 **csproj 接线要点**（2026-09-15 迁移为 PackageReference 独立构建——主框架包版本集中 `Directory.Packages.props` CPM）：
 
@@ -280,7 +280,7 @@ _Tests/Extension.{扩展名}.Tests/
 **注意**：
 - SG1 自诊断门禁（V4.9.15+）编译语义判断，不依赖 `TKWFRole`——扩展无需设 TKWFRole 即可接入
 - 主框架发布新版本后，升级 `Directory.Packages.props` 中 `TKWF.*` 版本并重新构建验证（PackageReference 模式）
-- 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存。发现 ≠ 启用：消费方须 `[TKWFEnabledExtension]` 白名单声明后三钩子才执行（V4.9.85 ADR47）
+- 扩展作为 DLL 被消费方引用时，SG1 经 `ReferencedAssemblySymbols` 发现扩展内 `[TKWFExtension]` 初始化器——与业务领域 SG1 生成不冲突，二者并存。发现 ≠ 启用：消费方须 `[TKWFEnabledExtension]` 白名单声明 **+ `ConfigureExtensions` 内 `registry.Enable("Name")`** 后三钩子才执行（V4.9.85 ADR47；2026-11-28 复核确认属性不自动置 IsEnabled）
 
 ### xCodeGen 生成物管理（.g.cs 入库政策，2026-09-14 裁定）
 

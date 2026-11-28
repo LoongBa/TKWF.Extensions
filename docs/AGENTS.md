@@ -24,6 +24,7 @@
 | 扩展路线图、跟踪执行状态？ | 主框架私有 `../_TKWF/docs/03_扩展模块/总览和跟踪.md` |
 | 设计思路 / ABP 兼容策略？ | `docs/扩展模块设计思路与ABP兼容策略.md` |
 | 扩展机制基座（TKWFExtension/三钩子/扩展包发现）？ | 主框架 `_TKWF/docs/D17-*.md` + `ADR37-39` |
+| 扩展机制设计原理 / 复核清单 / 门控矩阵 / 反例库？ | `docs/扩展模块机制-设计原理与审核经验.md` |
 | 扩展通用接入/启用/接线（消费方视角、公共内容单一事实源）？ | `docs/扩展模块通用指南.md` |
 | 某个扩展怎么用？ | `_Framework/{扩展名}/README.md`（技术规范）；`docs/{扩展名}/`（使用指南） |
 | 消费方接入认证方式（选型/密码/短信/外部 IdP/MFA 组合）？ | `docs/AuthCenter/消费方认证方式接入-使用指南.md`（决策总纲）——细分再指向 `认证中心-使用指南.md`（平台能力）/ `H5应用登录对接-使用指南.md`（四通道+IdentitySession）/ `docs/MFA/`（第二因素）/ `docs/SmsCode/`（短信+CAPTCHA） |
@@ -45,4 +46,4 @@
 - **扩展 ADR 命名**：`ADR-{扩展名称}-{title}.md`（不走主框架 ADR01-39 序号），三问必填
 - **Commit 纪律**：避免频繁，积累后统一提交（一次迭代 1-4 个）
 - **Tag 纪律**：必须有开发方案 + 审核报告且征得同意，才能打 tag
-- **扩展初始化器**：继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性 → SG1 编译期发现（生成能力清单）；**启用须消费方在领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 白名单声明**（发现不自动启用，V4.9.85 ADR47），声明后三钩子自动接线（ConfigureServices/ConfigureFilters/InitializeAsync）；Web 类扩展另需 `UseWebExtensions(e => e.Add<XxxWebExtension>(...))` 装配（v4.10.45 正交，DNS 机制公共内容见 `docs/扩展模块通用指南.md`）
+- **扩展初始化器**：继承 `ExtensionInitializer<TUserInfo>` + `[TKWFExtension]` 特性 → SG1 编译期发现（生成能力清单）；**启用须消费方两处声明**：① 领域初始化器上 `[TKWFEnabledExtension(typeof(XxxExtensionInitializer<>))]` 编译期白名单；② `ConfigureExtensions` 内 `registry.Enable("Name")` 运行期启用（`IsEnabled` 默认 false，仅 Enable 后三钩子执行；2026-11-28 机制复核修正）；Web 类扩展另需 `UseWebExtensions(e => e.Add<XxxWebExtension>(...))` 装配（v4.10.45 正交，机制公共内容见 `docs/扩展模块通用指南.md`）
